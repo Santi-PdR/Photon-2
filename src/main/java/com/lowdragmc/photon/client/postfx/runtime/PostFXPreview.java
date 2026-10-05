@@ -2,12 +2,11 @@ package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL30;
 
 /**
  * The shared scene capture behind the render-graph editor preview: a color+depth copy of the
@@ -48,15 +47,15 @@ public final class PostFXPreview {
         if (!captureWanted()) return;
         long frame = PostFXTargetPool.currentFrame();
         if (capturedFrame == frame) return;
-        capturedFrame = frame;
         // resize() hands the binding and viewport back untouched, so this snapshot is the caller's
         SOURCE = RenderPassPipeline.resize(SOURCE, cleanScene.width, cleanScene.height, true);
-        // the blit copy ends on framebuffer 0 — restore what the caller had (raw bind, not bindWrite:
-        // the viewport must stay untouched). A caller that returns right after us would otherwise
-        // leave the world drawing into the backbuffer.
-        int boundFramebuffer = GL30.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
-        SOURCE.copyDepthAndColorFrom(cleanScene);
-        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, boundFramebuffer);
+        var framebufferState = FramebufferState.capture();
+        try {
+            SOURCE.copyDepthAndColorFrom(cleanScene);
+        } finally {
+            framebufferState.restore();
+        }
+        capturedFrame = frame;
         hasCapture = true;
     }
 

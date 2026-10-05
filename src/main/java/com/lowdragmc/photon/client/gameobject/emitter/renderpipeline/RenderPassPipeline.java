@@ -14,6 +14,7 @@ import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -63,7 +64,8 @@ public class RenderPassPipeline {
     @Getter
     private IrisFrameTarget irisTarget;
     /** The framebuffer + viewport the pack had bound when it handed us the particle pass. */
-    private int entryFramebuffer;
+    @Nullable
+    private FramebufferState entryFramebufferState;
     private PositionedRect entryViewport = PositionedRect.of(0, 0, 0, 0);
     /** Scissor state owned by the caller at the particle-pass boundary. */
     private boolean entryScissorEnabled;
@@ -188,7 +190,7 @@ public class RenderPassPipeline {
         // resets the viewport to the target's full size; an editor Scene is commonly rendered in
         // a sub-viewport of the UI framebuffer, so losing this rectangle makes particles render at
         // the window centre and makes the subsequent write-back overwrite unrelated UI pixels.
-        entryFramebuffer = GlStateManager.getBoundFramebuffer();
+        entryFramebufferState = FramebufferState.capture();
         entryViewport = PositionedRect.of(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(),
                 GlStateManager.Viewport.width(), GlStateManager.Viewport.height());
         entryScissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
@@ -491,19 +493,22 @@ public class RenderPassPipeline {
         if (target != null && !forceResize && target.width == width && target.height == height) {
             return target; // no allocation, nothing to restore
         }
-        int framebuffer = GlStateManager.getBoundFramebuffer();
+        var framebufferState = FramebufferState.capture();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
-        if (target == null) {
-            target = new HDRTarget(width, height, GL11.GL_LINEAR, useDepth);
-            target.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        } else {
-            target.resize(width, height, Minecraft.ON_OSX);
+        try {
+            if (target == null) {
+                target = new HDRTarget(width, height, GL11.GL_LINEAR, useDepth);
+                target.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            } else {
+                target.resize(width, height, Minecraft.ON_OSX);
+            }
+        } finally {
+            framebufferState.restore();
+            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
         }
-        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
-        RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
         return target;
     }
 
@@ -804,12 +809,8 @@ public class RenderPassPipeline {
      * not re-armed.
      */
     private void restoreEntryState() {
-        var mainTarget = UISurface.currentTarget();
-        if (entryFramebuffer == mainTarget.frameBufferId) {
-            mainTarget.bindWrite(false);
-        } else {
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, entryFramebuffer);
-        }
+        var framebufferState = entryFramebufferState;
+        if (framebufferState != null) framebufferState.restore();
         RenderSystem.viewport(entryViewport.position.x, entryViewport.position.y,
                 entryViewport.size.width, entryViewport.size.height);
         GlStateManager._scissorBox(entryScissorBox[0], entryScissorBox[1],
@@ -854,7 +855,7 @@ public class RenderPassPipeline {
         // where the active target may be an Iris surface or an embedded editor surface rather than
         // the logical UI target. Capture before bloom: its blits bind their own output target.
         var entryTarget = UISurface.currentTarget();
-        int framebuffer = GlStateManager.getBoundFramebuffer();
+        var framebufferState = FramebufferState.capture();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
@@ -869,13 +870,7 @@ public class RenderPassPipeline {
             entryTarget.bindWrite(true);
             SceneBlit.compositePremultipliedToBound(colorTexture, layer.getColorTextureId(), false);
         } finally {
-            // Iris tracks main-target binding through RenderTarget.bindWrite; a raw GL bind
-            // restores pixels but silently leaves its shader interception disabled afterward.
-            if (framebuffer == entryTarget.frameBufferId) {
-                entryTarget.bindWrite(false);
-            } else {
-                GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
-            }
+            framebufferState.restore();
             RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
             GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
             if (scissorEnabled) {

@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.compat.iris.internal;
 
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.platform.GlStateManager;
 import org.lwjgl.opengl.GL30;
 
@@ -32,9 +33,7 @@ final class IrisCompositeFbo {
             attachedTexture = 0;
         }
         if (attachedTexture != colorTexture) {
-            // Keep Iris' read and draw targets independent; GL_FRAMEBUFFER binds overwrite both.
-            int savedReadFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
-            int savedDrawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+            var savedFramebufferState = FramebufferState.capture();
             GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo);
             try {
                 GlStateManager._glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
@@ -42,8 +41,7 @@ final class IrisCompositeFbo {
                 GL30.glDrawBuffers(GL30.GL_COLOR_ATTACHMENT0);
                 GL30.glReadBuffer(GL30.GL_NONE);
             } finally {
-                GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, savedReadFramebuffer);
-                GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, savedDrawFramebuffer);
+                savedFramebufferState.restore();
             }
             attachedTexture = colorTexture;
         }

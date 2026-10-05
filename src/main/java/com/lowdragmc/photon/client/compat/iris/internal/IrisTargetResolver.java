@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.compat.iris.internal;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonParticleManager;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.lowdragmc.photon.client.compat.iris.IrisCompositeMode;
 import com.lowdragmc.photon.client.compat.iris.IrisFrameTarget;
 import com.lowdragmc.photon.core.mixins.iris.BlendOverrideAccessors;
@@ -181,10 +182,7 @@ final class IrisTargetResolver {
         int[] drawBuffers = new int[maxDrawBuffers];
         Arrays.fill(colortexIndices, -1);
 
-        // Iris may have different read and draw targets bound here. Binding GL_FRAMEBUFFER below
-        // replaces both, so preserve each one rather than restoring the draw binding to both.
-        int savedReadFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
-        int savedDrawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        var savedFramebufferState = FramebufferState.capture();
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo.getId());
         try {
             for (int i = 0; i < maxAttachments; i++) {
@@ -279,8 +277,7 @@ final class IrisTargetResolver {
                     key.getProgram() == null ? "?" : key.getProgram().getSourceName(),
                     isFloatFormat(internalFormat), accumulates, drawBufferCount, mode);
         } finally {
-            GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, savedReadFramebuffer);
-            GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, savedDrawFramebuffer);
+            savedFramebufferState.restore();
         }
     }
 

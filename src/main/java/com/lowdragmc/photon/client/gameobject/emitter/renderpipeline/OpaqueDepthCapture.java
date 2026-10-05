@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.renderpipeline;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
@@ -10,7 +11,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 /**
@@ -71,8 +71,7 @@ public final class OpaqueDepthCapture {
         // rest of the level render (the translucent chunk layer, i.e. water, then clouds and
         // weather) into the default framebuffer. Every other caller in Photon happens to bindWrite
         // immediately afterwards, which is why this only ever bit the one that did not.
-        int readFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
-        int drawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        var framebufferState = FramebufferState.capture();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
@@ -85,8 +84,7 @@ public final class OpaqueDepthCapture {
         } finally {
             // Iris can keep independent read and draw framebuffers bound. Preserve both even when
             // allocation or the depth blit fails, and leave the caller's viewport untouched.
-            GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
-            GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+            framebufferState.restore();
             RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
         }
     }

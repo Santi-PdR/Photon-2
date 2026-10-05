@@ -9,13 +9,13 @@ import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
+import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL30;
 import com.mojang.blaze3d.platform.GlStateManager;
 
 import java.util.Map;
@@ -143,7 +143,7 @@ public final class PhotonPostFX {
         }
         if (!stack.hasPending() || stack.isConsumedThisFrame()) return;
         var mainTarget = UISurface.currentTarget();
-        int framebuffer = GlStateManager.getBoundFramebuffer();
+        var framebufferState = FramebufferState.capture();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
@@ -162,7 +162,7 @@ public final class PhotonPostFX {
             }
         } finally {
             PostFXTargetPool.release(chain);
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
+            framebufferState.restore();
             RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
             GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
             if (scissorEnabled) {
