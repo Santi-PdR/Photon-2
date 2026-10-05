@@ -6,8 +6,13 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
+import java.util.List;
+
 @Mixin(ShaderInstance.class)
 public interface ShaderInstanceAccessor {
+    @Accessor("samplerNames")
+    List<String> photon$getSamplerNames();
+
     @Accessor("blend")
     BlendMode photon$getBlend();
 

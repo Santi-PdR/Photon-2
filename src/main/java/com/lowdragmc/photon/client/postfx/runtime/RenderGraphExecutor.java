@@ -1,6 +1,8 @@
 package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.kilagraph.rendertype.RenderTypeGraphTypes;
+import com.lowdragmc.kilagraph.rendertype.compiler.KGSamplerGl;
+import com.lowdragmc.kilagraph.rendertype.runtime.KGSamplerBinder;
 import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
 import com.lowdragmc.kilagraph.rendertype.compiler.GlslType;
 import com.lowdragmc.kilagraph.rendertype.runtime.KGBuiltinUniforms;
@@ -12,6 +14,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.postfx.shadergraph.PhotonFullscreenCompiler;
 import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.core.mixins.accessor.ShaderInstanceAccessor;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -26,7 +29,10 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL46;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -223,6 +229,7 @@ public final class RenderGraphExecutor {
                     }
                 }
 
+                stageExternalSamplers(shader, pass, params);
                 PhotonPostProcessing.blitShader(shader, targets[out], false);
 
                 // aliasing: anything last consumed by this pass goes straight back to the pool
@@ -307,6 +314,42 @@ public final class RenderGraphExecutor {
             location = RenderTypeGraphTypes.Sampler2DValue.defaultValue().location();
         }
         return Minecraft.getInstance().getTextureManager().getTexture(ResourceLocation.parse(location)).getId();
+    }
+
+    /** Apply each external texture's sampler state for this draw. KilaGraph's ShaderInstance mixin
+     *  binds staged OpenGL sampler objects after ShaderInstance.apply() and clears them afterward. */
+    private static void stageExternalSamplers(ShaderInstance shader, CompiledEffect.CompiledPass pass,
+                                              Map<String, Object> params) {
+        var names = ((ShaderInstanceAccessor) shader).photon$getSamplerNames();
+        var bindings = new ArrayList<KGSamplerGl.Binding>();
+        for (var entry : pass.textures().entrySet()) {
+            var ref = entry.getValue();
+            RenderTypeGraphTypes.Sampler2DValue sampler = switch (ref.source()) {
+                case ASSET -> ref.asset();
+                case PARAM -> {
+                    var value = params.get(ref.param());
+                    yield value instanceof RenderTypeGraphTypes.Sampler2DValue s ? s : null;
+                }
+                default -> null;
+            };
+            if (!names.contains(entry.getKey())) continue;
+            if (sampler == null || !LDLib2.isValidResourceLocation(sampler.location())) {
+                sampler = RenderTypeGraphTypes.Sampler2DValue.defaultValue();
+            }
+            bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), samplerState(sampler)));
+        }
+        KGSamplerBinder.stage(shader, bindings);
+    }
+
+    static KGSamplerGl.GlSampler samplerState(RenderTypeGraphTypes.Sampler2DValue sampler) {
+        boolean linear = sampler.filter() == RenderTypeGraphTypes.SamplerFilter.LINEAR;
+        int filter = linear ? GL11.GL_LINEAR : GL11.GL_NEAREST;
+        int minFilter = sampler.mipmap()
+                ? (linear ? GL11.GL_LINEAR_MIPMAP_LINEAR : GL11.GL_NEAREST_MIPMAP_NEAREST)
+                : filter;
+        int address = sampler.address() == RenderTypeGraphTypes.SamplerAddress.REPEAT
+                ? GL11.GL_REPEAT : GL12.GL_CLAMP_TO_EDGE;
+        return new KGSamplerGl.GlSampler(minFilter, filter, address, address);
     }
 
     /** Reset a custom-shader uniform to its json defaults (1..4 floats). */
