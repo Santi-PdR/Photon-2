@@ -12,6 +12,8 @@ With Java 17 installed, run:
 
 The build output is written to `build/libs/`. Unit tests run as part of `build`; `./gradlew test` runs only the tests. The project requires the bundled LDLib2 and KilaGraph Forge libraries in `libs/`.
 
+GitHub Actions builds this branch with Java 17 and publishes the JAR as a downloadable workflow artifact after a successful build. The workflow artifact is a test build, not a final release.
+
 ## License
 
 See [LICENSE](LICENSE) for the upstream license and port distribution conditions. Photon is developed by Low-Drag-MC.
