@@ -5,6 +5,7 @@ import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
 import com.lowdragmc.kilagraph.rendertype.compiler.GlslType;
 import com.lowdragmc.kilagraph.rendertype.compiler.ShaderGraphCompiler;
 import com.lowdragmc.kilagraph.rendertype.runtime.KGBuiltinUniforms;
+import com.lowdragmc.kilagraph.rendertype.runtime.KGSamplerBinder;
 import com.lowdragmc.kilagraph.rendertype.runtime.KGMaterialValues;
 import com.lowdragmc.kilagraph.rendertype.runtime.SceneCaptureManager;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
@@ -23,6 +24,8 @@ import com.lowdragmc.lowdraglib2.nodegraphtookit.api.type.TypeHandle;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.PhotonShaders;
+import com.lowdragmc.photon.client.PhotonSamplerState;
+import com.lowdragmc.photon.core.mixins.accessor.ShaderInstanceAccessor;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.shadergraph.PhotonShaderCompiler;
 import com.lowdragmc.photon.client.shadergraph.runtime.ShaderGraphRuntime;
@@ -194,6 +197,12 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
         var materialValues = renderingPreview ? previewValues : values;
         if (materialValues != null) {
             materialValues.apply(shader);
+            if (PhotonSamplerState.hasValidSamplerOverride(overrides)) {
+                var samplerOverrides = PhotonSamplerState.overrides(
+                        ((ShaderInstanceAccessor) shader).photon$getSamplerNames(),
+                        compiled.variableSamplers(), compiled.samplerDefaults(), overrides);
+                KGSamplerBinder.stage(shader, samplerOverrides);
+            }
         }
         return shader;
     }

@@ -11,6 +11,7 @@ import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.PhotonSamplerState;
 import com.lowdragmc.photon.client.postfx.shadergraph.PhotonFullscreenCompiler;
 import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
@@ -29,8 +30,6 @@ import org.joml.Vector3f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL46;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL12;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -336,20 +335,9 @@ public final class RenderGraphExecutor {
             if (sampler == null || !LDLib2.isValidResourceLocation(sampler.location())) {
                 sampler = RenderTypeGraphTypes.Sampler2DValue.defaultValue();
             }
-            bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), samplerState(sampler)));
+            bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), PhotonSamplerState.from(sampler)));
         }
         KGSamplerBinder.stage(shader, bindings);
-    }
-
-    static KGSamplerGl.GlSampler samplerState(RenderTypeGraphTypes.Sampler2DValue sampler) {
-        boolean linear = sampler.filter() == RenderTypeGraphTypes.SamplerFilter.LINEAR;
-        int filter = linear ? GL11.GL_LINEAR : GL11.GL_NEAREST;
-        int minFilter = sampler.mipmap()
-                ? (linear ? GL11.GL_LINEAR_MIPMAP_LINEAR : GL11.GL_NEAREST_MIPMAP_NEAREST)
-                : filter;
-        int address = sampler.address() == RenderTypeGraphTypes.SamplerAddress.REPEAT
-                ? GL11.GL_REPEAT : GL12.GL_CLAMP_TO_EDGE;
-        return new KGSamplerGl.GlSampler(minFilter, filter, address, address);
     }
 
     /** Reset a custom-shader uniform to its json defaults (1..4 floats). */

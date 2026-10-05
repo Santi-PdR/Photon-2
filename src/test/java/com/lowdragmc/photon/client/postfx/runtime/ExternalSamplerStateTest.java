@@ -1,7 +1,12 @@
 package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.kilagraph.rendertype.RenderTypeGraphTypes;
+import com.lowdragmc.kilagraph.rendertype.compiler.SamplerDefault;
+import com.lowdragmc.photon.client.PhotonSamplerState;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -23,11 +28,26 @@ class ExternalSamplerStateTest {
         assertEquals(0x812F, nearestClamp.wrapT());
     }
 
+    @Test
+    void appliesMaterialSamplerOverrideToItsCompiledSamplerUnit() {
+        var override = new RenderTypeGraphTypes.Sampler2DValue("minecraft:textures/misc/unknown.png",
+                RenderTypeGraphTypes.SamplerMode.CUSTOM, RenderTypeGraphTypes.SamplerFilter.NEAREST,
+                RenderTypeGraphTypes.SamplerAddress.REPEAT, false);
+
+        var bindings = PhotonSamplerState.overrides(List.of("Sampler0"), Map.of("Albedo", "Sampler0"),
+                Map.of("Sampler0", SamplerDefault.missing()), Map.of("Albedo", override));
+
+        assertEquals(1, bindings.size());
+        assertEquals(0, bindings.get(0).unit());
+        assertEquals(0x2600, bindings.get(0).sampler().minFilter()); // override replaced graph default
+        assertEquals(0x2901, bindings.get(0).sampler().wrapS());
+    }
+
     private static com.lowdragmc.kilagraph.rendertype.compiler.KGSamplerGl.GlSampler sampler(
             RenderTypeGraphTypes.SamplerFilter filter,
             RenderTypeGraphTypes.SamplerAddress address, boolean mipmap) {
         var value = new RenderTypeGraphTypes.Sampler2DValue("minecraft:textures/misc/unknown.png",
                 RenderTypeGraphTypes.SamplerMode.CUSTOM, filter, address, mipmap);
-        return RenderGraphExecutor.samplerState(value);
+        return PhotonSamplerState.from(value);
     }
 }
