@@ -12,7 +12,9 @@ import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.AnimatedGltfModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.GltfModelSource;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.IModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.ResourceMeshSource;
@@ -113,7 +115,7 @@ public class MeshResource extends Resource<MeshData> {
             // an obj/glTF is parsed straight off the pack when the mesh is first drawn — no bakery, no
             // reload. The location keeps its extension, that is how those sources open it.
             ResourceFileImport.resolveOrImport(context.getOwner(), file, "models", location -> {
-                var source = gltf ? new GltfModelSource(location) : new ObjModelSource(location);
+                var source = gltf ? gltfSourceFor(location) : new ObjModelSource(location);
                 // the path is normally fresh, but re-importing a file already in the pack could hit a
                 // cached failure from an earlier load attempt
                 source.invalidate();
@@ -127,6 +129,14 @@ public class MeshResource extends Resource<MeshData> {
             context.complete(new MeshData(new JsonModelSource(modelLocationOf(location))));
             Minecraft.getInstance().reloadResourcePacks();
         }, context::cancel);
+    }
+
+    /** Select the animated glTF source when an imported file contains a rig and playable clips. */
+    public static IModelSource gltfSourceFor(ResourceLocation location) {
+        var animated = new AnimatedGltfModelSource(location);
+        // Re-importing an existing pack file may otherwise reuse a cached parse failure.
+        animated.invalidate();
+        return animated.hasAnimation() ? animated : new GltfModelSource(location);
     }
 
     /**
