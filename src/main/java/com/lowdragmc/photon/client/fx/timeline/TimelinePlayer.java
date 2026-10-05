@@ -108,6 +108,11 @@ public class TimelinePlayer {
         localTime += frameRate;
     }
 
+    /** Keep render interpolation in step when the owning runtime changes its playback rate mid-tick. */
+    public void setFrameRate(float rate) {
+        frameRate = Float.isFinite(rate) ? Math.max(0f, rate) : 1f;
+    }
+
     /**
      * Whether this playback has no future content: the timeline is empty, {@link #stop()} was called,
      * or the master clock passed the content end. Boundary: {@link #tick()} evaluates at {@code localTime}

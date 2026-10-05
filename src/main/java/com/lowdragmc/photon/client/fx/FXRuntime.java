@@ -97,6 +97,7 @@ public class FXRuntime implements IScene {
     public void setRate(float rate) {
         this.rate = normalizeRate(rate);
         root.setSelfTimeScale(this.rate);
+        timelinePlayer.setFrameRate(this.rate);
     }
 
     static float normalizeRate(float rate) {
