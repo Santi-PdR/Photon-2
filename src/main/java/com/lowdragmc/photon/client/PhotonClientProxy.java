@@ -1,0 +1,83 @@
+package com.lowdragmc.photon.client;
+
+import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.PhotonCommonProxy;
+import com.lowdragmc.photon.client.fx.FXHelper;
+import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
+import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
+import net.minecraft.world.item.Item;
+import net.minecraftforge.event.AddPackFindersEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.client.ConfigScreenHandler;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
+import java.util.function.Function;
+import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
+import net.minecraftforge.client.event.RegisterShadersEvent;
+import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+
+
+@OnlyIn(Dist.CLIENT)
+public class PhotonClientProxy extends PhotonCommonProxy {
+    public static final DeferredRegister<Item> TEST_ITEMS =
+            DeferredRegister.create(ForgeRegistries.ITEMS, Photon.MOD_ID);
+    public static final RegistryObject<Item> BLADE_TEST_ITEM =
+            TEST_ITEMS.register("blade_test", BladeTestItem::new);
+
+    public static Function<IEventBus, ?> factory() {
+        return PhotonClientProxy::new;
+    }
+
+    public PhotonClientProxy(IEventBus eventBus) {
+        super(eventBus);
+        ModLoadingContext.get().registerExtensionPoint(ConfigScreenHandler.ConfigScreenFactory.class,
+                () -> new ConfigScreenHandler.ConfigScreenFactory(
+                        (minecraft, parent) -> new PhotonConfigScreen(parent)));
+        TEST_ITEMS.register(eventBus);
+        eventBus.addListener(this::clientSetup);
+        eventBus.addListener(this::shaderRegistry);
+        eventBus.addListener(this::registerReloadListeners);
+        eventBus.addListener(this::addPackFinders);
+        eventBus.addListener(PhotonEditorKeyMappings::register);
+    }
+
+    /** Mount every .fxpack as a hidden, always-on, lowest-priority resource pack; see {@link FXPacks}. */
+    @SubscribeEvent
+    public void addPackFinders(AddPackFindersEvent event) {
+        if (event.getPackType() == PackType.CLIENT_RESOURCES) {
+            event.addRepositorySource(FXPacks.repositorySource());
+        }
+    }
+
+    @SubscribeEvent
+    public void registerReloadListeners(RegisterClientReloadListenersEvent event) {
+        event.registerReloadListener(PhotonMeshCache.INSTANCE);
+        // both the loaded effects and the list of loadable ones are answers about the packs, so a reload
+        // (a pack toggled, an .fxpack mounted, F3+T) is exactly when they stop being true
+        event.registerReloadListener((ResourceManagerReloadListener) manager -> FXHelper.clearCache());
+    }
+
+    @SubscribeEvent
+    public void clientSetup(final FMLClientSetupEvent e) {
+        e.enqueueWork(PhotonShaders::init);
+        // Touch the registry to trigger annotation scanning; classes annotated with @NodeAttribute
+        // bound to ShaderGraph self-register (mirrors KilaGraph's own registry bootstrap).
+        Photon.LOGGER.info("Photon shader graph nodes loaded: {}",
+                com.lowdragmc.photon.client.shadergraph.ShaderGraph.NODE_REGISTRY.getNodeClasses().size());
+    }
+
+    @SubscribeEvent
+    public void shaderRegistry(RegisterShadersEvent event) {
+        PhotonShaders.registerShaders(event);
+    }
+
+}

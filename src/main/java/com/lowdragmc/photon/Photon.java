@@ -1,13 +1,55 @@
 package com.lowdragmc.photon;
 
+import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.photon.client.PhotonClientProxy;
+import com.lowdragmc.photon.client.compat.iris.IrisCompat;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.DistExecutor;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/** Forge entry point; Photon systems are ported in subsequent implementation steps. */
+import java.io.File;
+import java.util.function.Function;
+
 @Mod(Photon.MOD_ID)
-public final class Photon {
+public class Photon {
     public static final String MOD_ID = "photon";
+    public static final String NAME = "Photon";
+    public static final Logger LOGGER = LoggerFactory.getLogger(NAME);
 
     public Photon() {
-        // Keep common initialization free of client-only class references.
+        IEventBus eventBus = FMLJavaModLoadingContext.get().getModEventBus();
+        Photon.init();
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, PhotonConfig.CONFIG_SPEC);
+        Function<IEventBus, ?> proxyFactory = DistExecutor.safeRunForDist(
+                () -> PhotonClientProxy::factory,
+                () -> PhotonCommonProxy::factory);
+        proxyFactory.apply(eventBus);
+    }
+
+    public static void init() {
+        LOGGER.info("{} is initializing on platform: {}", NAME, Platform.platformName());
+        if (new File(LDLib2.getAssetsDir(), "photon").mkdirs()) {
+            LOGGER.info("Created photon assets folder");
+        }
+    }
+
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+    }
+
+    /** @see com.lowdragmc.photon.client.compat.iris.IrisCompat */
+    public static boolean isUsingShaderPack() {
+        // Keep the Iris/client implementation behind Forge's physical-side gate. In particular,
+        // common materials can call this helper while the dedicated server has no client classes.
+        return Boolean.TRUE.equals(DistExecutor.safeCallWhenOn(Dist.CLIENT,
+                () -> IrisCompat::isUsingShaderPack));
     }
 }
