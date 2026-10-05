@@ -32,13 +32,19 @@ final class IrisCompositeFbo {
             attachedTexture = 0;
         }
         if (attachedTexture != colorTexture) {
-            int saved = GlStateManager.getBoundFramebuffer();
+            // Keep Iris' read and draw targets independent; GL_FRAMEBUFFER binds overwrite both.
+            int savedReadFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+            int savedDrawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
             GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo);
-            GlStateManager._glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
-                    GL30.GL_TEXTURE_2D, colorTexture, 0);
-            GL30.glDrawBuffers(GL30.GL_COLOR_ATTACHMENT0);
-            GL30.glReadBuffer(GL30.GL_NONE);
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, saved);
+            try {
+                GlStateManager._glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                        GL30.GL_TEXTURE_2D, colorTexture, 0);
+                GL30.glDrawBuffers(GL30.GL_COLOR_ATTACHMENT0);
+                GL30.glReadBuffer(GL30.GL_NONE);
+            } finally {
+                GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, savedReadFramebuffer);
+                GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, savedDrawFramebuffer);
+            }
             attachedTexture = colorTexture;
         }
         return fbo;

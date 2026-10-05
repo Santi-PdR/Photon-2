@@ -181,7 +181,10 @@ final class IrisTargetResolver {
         int[] drawBuffers = new int[maxDrawBuffers];
         Arrays.fill(colortexIndices, -1);
 
-        int saved = GlStateManager.getBoundFramebuffer();
+        // Iris may have different read and draw targets bound here. Binding GL_FRAMEBUFFER below
+        // replaces both, so preserve each one rather than restoring the draw binding to both.
+        int savedReadFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int savedDrawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo.getId());
         try {
             for (int i = 0; i < maxAttachments; i++) {
@@ -276,7 +279,8 @@ final class IrisTargetResolver {
                     key.getProgram() == null ? "?" : key.getProgram().getSourceName(),
                     isFloatFormat(internalFormat), accumulates, drawBufferCount, mode);
         } finally {
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, saved);
+            GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, savedReadFramebuffer);
+            GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, savedDrawFramebuffer);
         }
     }
 
