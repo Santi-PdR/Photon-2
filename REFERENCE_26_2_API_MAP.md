@@ -56,4 +56,4 @@ The reference metadata requires NeoForge 26.2+, Minecraft 26.2, LDLib2 `[26.2.2.
 | Editor/timeline/FX Packs | Package/resource inventory only | NO IMPLEMENTATION |
 | Dedicated-server/client compatibility | Common/client initialization split inspected; not tested in target | NO IMPLEMENTATION |
 
-Original-code port implementation remains pending the upstream author's stated written-authorization condition for versions outside 1.21.x.
+Private implementation may proceed. Public distribution/release remains subject to the upstream author's prior written-consent condition for versions outside 1.21.x; any distributed port must also retain CC BY-NC-SA 4.0, attribution, and non-commercial use.

@@ -35,24 +35,24 @@ An unofficial LDLib2 Forge 1.20.1 port exists publicly, which may provide a cand
 | Model/mesh sources and FX Packs | Upstream project and JAR | None | NO IMPLEMENTADO | Port loaders, formats, pack/resource handling | None |
 | Networking, client/server split, persistence | Upstream source/JAR references | None | NO IMPLEMENTADO | Audit packets and side-only loading; add persistence/sync | None |
 | Assets, shaders, localization, examples | 135 packaged assets in supplied JAR; no data entries | None | NO IMPLEMENTADO | Trace resources to source references and port compatible assets | None |
-| Dependency/API compatibility | Artifact requires LDLib2 26.2 and KilaGraph 26.2, Java 21 | Candidate community LDLib2 Forge 1.20.1 source build inspected | PARCIAL | Pin/reproducibly build the candidate; resolve KotlinForForge and other runtime deps; verify Photon API compatibility after permission gate | Candidate library build + its 237 unit tests pass; Photon integration not tested |
+| Dependency/API compatibility | Artifact requires LDLib2 26.2 and KilaGraph 26.2, Java 25 bytecode | Candidate community LDLib2 Forge 1.20.1 source build inspected | PARCIAL | Pin/reproducibly build the candidate; resolve KotlinForForge and other runtime deps; verify Photon API compatibility | Candidate library build + its 237 unit tests pass; Photon integration not tested |
 | Tests and runtime validation | None in target repo | No test sources yet | NO IMPLEMENTADO | Add focused tests and run Forge client/server checks | `./gradlew test` passed with `NO-SOURCE`; no gameplay/runtime behavior verified |
 
 ## Technical path
 
-1. Obtain written authorization from Photon copyright holder KilaBash for the Minecraft 1.20.1 port. The upstream project states ports outside 1.21.x require prior written consent, and modified versions must remain open source under CC BY-NC-SA 4.0, credit Photon, and must not be monetized.
-2. Select a compatible source baseline. The target repo contains no source; the supplied JAR is for Minecraft 26.2 / NeoForge / Java 21 and the public upstream branch inspected documents 1.21.1 / NeoForge. Neither is a 1.20.1 Forge source baseline. Do not substitute Photon 1.x for the requested Photon 2.
+1. Develop the port privately from the authorized source/JAR. Before public distribution or publication of derivative code, obtain prior written consent from Photon copyright holder KilaBash. A distributed port must be open source under CC BY-NC-SA 4.0, credit Photon, and remain non-commercial.
+2. Select a compatible source baseline. The target repo contains no source; the supplied JAR is for Minecraft 26.2 / NeoForge / Java 25 and the public upstream branch inspected documents 1.21.1 / NeoForge. Neither is a 1.20.1 Forge source baseline. Do not substitute Photon 1.x for the requested Photon 2.
 3. Inventory source, libraries, APIs, classes, assets, and data from the authorized baseline, then map Forge 1.20.1 equivalents and dependency compatibility. Evaluate LDLib2 commit `a8b70b84a36cf9162a95aee7c043b95418315a80` as a UI/editor candidate; it builds but has no published Forge 1.20.1 artifact coordinate.
 4. Port the runtime and content formats first, then render pipeline, editor, integrations, and compatibility; verify client and dedicated-server loading and multiplayer synchronization.
 5. Build and inspect the final JAR, run requested tests and runtime checks, and record any features that could not be exercised.
 
-## Current blockers and decision
+## Current release gate and implementation state
 
 - The target repository is only a README, so there is no existing implementation to continue or compare.
 - The supplied JAR is not the requested Minecraft/loader version and does not include project source or example FX data.
-- The supplied artifact’s Java 21 / NeoForge 26.2 and LDLib2/KilaGraph 26.2 dependency line must be replaced or ported for the Java 17 / Forge 47 target; no compatibility is assumed.
+- The supplied artifact’s Java 25 / NeoForge 26.2 and LDLib2/KilaGraph 26.2 dependency line must be replaced or ported for the Java 17 / Forge 47 target; no compatibility is assumed.
 - The Forge shell build is verified, but it contains only the entrypoint and `pack.mcmeta`; it is not a usable Photon port or release artifact.
-- **Implementation based on Photon source or bytecode is on hold pending the upstream author's required written permission for a 1.20.1 port.** The user's authorization to modify this repository does not itself grant that permission.
+- Private implementation may proceed. **Public distribution/release of the derivative port is gated on prior written consent from KilaBash.** No Photon-derived implementation has been pushed to the public repository; the published branch currently contains only build bootstrap and technical documentation.
 - A client/server runtime launch has not been done. `test` currently has no test sources; no Photon behavior is verified.
 
 ## Bootstrap build evidence
