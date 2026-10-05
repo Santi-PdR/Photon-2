@@ -40,6 +40,7 @@ Six Photon registries are initialized through LDLib2: FX object types, materials
 - Four packet types are registered for client playback/removal: block effect, entity effect, remove block effect, and remove entity effect. The inspected packet registrar sends these to clients; handlers then resolve FX data and create/stop client runtimes. No C2S Photon payload is registered by the inspected network class.
 - The 26.2 reference uses NeoForge `RegisterPayloadHandlersEvent`, `CustomPacketPayload`, `StreamCodec`, and `PacketDistributor`.
 - The Forge 1.20.1 port now uses a versioned `SimpleChannel`, explicit message IDs, `FriendlyByteBuf` encode/decode, and side-aware handlers. All four S2C payloads have been compared field-by-field with the reference; multiplayer delivery, malformed-payload handling, and dedicated-server classloading remain runtime-unverified. Forge's SimpleImpl supports client, tracking-chunk, and all-player sends.
+- The registered entity auto-rotation argument now uses common `AutoRotateMode`; the client-facing `EntityEffectExecutor.AutoRotate` and constructor remain available, mapped by enum name. Tests lock the shared ordinal order and S2C round trip. `javap` confirms the registered command argument class no longer references the client executor; no dedicated-server process was launched.
 
 ## Client runtime, resources, and rendering
 

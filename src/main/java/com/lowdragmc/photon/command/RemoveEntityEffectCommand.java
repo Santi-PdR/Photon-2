@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.command;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import com.lowdragmc.photon.client.fx.BlockEffectExecutor;
@@ -21,6 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import javax.annotation.Nullable;
 import java.util.List;
@@ -91,9 +91,7 @@ public class RemoveEntityEffectCommand {
     }
 
     public static void execute(RemoveEntityEffectCommand packet, Supplier<NetworkEvent.Context> context) {
-        if (LDLib2.isClient()) {
-            Client.execute(packet);
-        }
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> Client.execute(packet));
         context.get().setPacketHandled(true);
     }
 

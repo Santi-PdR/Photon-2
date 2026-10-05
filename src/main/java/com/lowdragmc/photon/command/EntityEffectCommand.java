@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.command;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import com.lowdragmc.photon.client.fx.BlockEffectExecutor;
@@ -29,6 +28,7 @@ import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.world.entity.Entity;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import java.util.Arrays;
 import java.util.Collection;
@@ -48,21 +48,21 @@ public class EntityEffectCommand extends EffectCommand {
     // client
     private int[] ids = new int[0];
     @Setter
-    private EntityEffectExecutor.AutoRotate autoRotate = EntityEffectExecutor.AutoRotate.NONE;
+    private AutoRotateMode autoRotate = AutoRotateMode.NONE;
 
-    public static class AutoRotateType implements ArgumentType<EntityEffectExecutor.AutoRotate> {
+    public static class AutoRotateType implements ArgumentType<AutoRotateMode> {
         private static final Collection<String> EXAMPLES = Arrays.asList("none", "forward", "look", "xrot");
 
         public AutoRotateType() {
         }
 
-        public static EntityEffectExecutor.AutoRotate getValue(final CommandContext<?> context, final String name) {
-            return context.getArgument(name, EntityEffectExecutor.AutoRotate.class);
+        public static AutoRotateMode getValue(final CommandContext<?> context, final String name) {
+            return context.getArgument(name, AutoRotateMode.class);
         }
 
         @Override
-        public EntityEffectExecutor.AutoRotate parse(final StringReader reader) throws CommandSyntaxException {
-            return EntityEffectExecutor.AutoRotate.valueOf(reader.readString().toUpperCase());
+        public AutoRotateMode parse(final StringReader reader) throws CommandSyntaxException {
+            return AutoRotateMode.valueOf(reader.readString().toUpperCase());
         }
 
         @Override
@@ -165,7 +165,7 @@ public class EntityEffectCommand extends EffectCommand {
     @Override
     public void decode(FriendlyByteBuf buf) {
         super.decode(buf);
-        autoRotate = buf.readEnum(EntityEffectExecutor.AutoRotate.class);
+        autoRotate = buf.readEnum(AutoRotateMode.class);
         ids = new int[buf.readVarInt()];
         for (int i = 0; i < ids.length; i++) {
             ids[i] = buf.readVarInt();
@@ -179,9 +179,7 @@ public class EntityEffectCommand extends EffectCommand {
     }
 
     public static void execute(EntityEffectCommand packet, Supplier<NetworkEvent.Context> context) {
-        if (LDLib2.isClient()) {
-            Client.execute(packet);
-        }
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> Client.execute(packet));
         context.get().setPacketHandled(true);
     }
 

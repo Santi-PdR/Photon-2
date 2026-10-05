@@ -1,6 +1,5 @@
 package com.lowdragmc.photon;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.lowdraglib2.registry.LDLRegistry;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
@@ -15,6 +14,7 @@ import com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyType;
 import com.lowdragmc.photon.gui.editor.view.timeline.TrackType;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.fml.DistExecutor;
 
 import java.util.function.Supplier;
 
@@ -48,9 +48,7 @@ public class PhotonRegistries {
     public static LDLRegistry.String<AnimatedPropertyType> ANIMATED_PROPERTIES;
 
     static {
-        if (LDLib2.isClient()) {
-            Client.load();
-        }
+        DistExecutor.safeRunWhenOn(Dist.CLIENT, () -> Client::load);
     }
 
     public static void init() {

@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.fx;
 
 import com.lowdragmc.photon.client.gameobject.IFXObject;
+import com.lowdragmc.photon.command.AutoRotateMode;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.entity.Entity;
@@ -18,12 +19,14 @@ import java.util.*;
  */
 @OnlyIn(Dist.CLIENT)
 public class EntityEffectExecutor extends FXEffectExecutor {
+    /** Client API retained for mods that construct entity effects directly. */
     public enum AutoRotate {
         NONE,
         FORWARD,
         LOOK,
         XROT,
     }
+
     public static Map<Entity, List<EntityEffectExecutor>> CACHE = new HashMap<>();
     public final Entity entity;
     public final AutoRotate autoRotate;
@@ -32,6 +35,10 @@ public class EntityEffectExecutor extends FXEffectExecutor {
         super(fx, level);
         this.entity = entity;
         this.autoRotate = autoRotate;
+    }
+
+    public EntityEffectExecutor(FX fx, Level level, Entity entity, AutoRotateMode autoRotate) {
+        this(fx, level, entity, AutoRotate.valueOf(autoRotate.name()));
     }
 
     @Override

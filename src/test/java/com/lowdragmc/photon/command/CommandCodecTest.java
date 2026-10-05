@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -15,6 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class CommandCodecTest {
     private static final ResourceLocation EFFECT = ResourceLocation.fromNamespaceAndPath("photon", "test_effect");
+
+    @Test
+    void commonWireEnumPreservesThePublicClientEnumOrder() {
+        assertArrayEquals(
+                Arrays.stream(EntityEffectExecutor.AutoRotate.values()).map(Enum::name).toArray(String[]::new),
+                Arrays.stream(AutoRotateMode.values()).map(Enum::name).toArray(String[]::new));
+    }
 
     @Test
     void blockEffectCodecRoundTripsEveryField() {
@@ -43,7 +51,7 @@ class CommandCodecTest {
         command.setForcedDeath(true);
         command.setAllowMulti(false);
         command.setEntities(List.of());
-        command.setAutoRotate(EntityEffectExecutor.AutoRotate.XROT);
+        command.setAutoRotate(AutoRotateMode.XROT);
 
         assertRoundTrip(command, EntityEffectCommand::encode, EntityEffectCommand::decodePacket,
                 decoded -> decoded.setEntities(List.of()));
