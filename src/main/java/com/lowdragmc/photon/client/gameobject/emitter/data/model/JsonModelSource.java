@@ -84,6 +84,11 @@ public class JsonModelSource implements IModelSource {
             var fallbackLocation = ResourceLocation.withDefaultNamespace("block/stone");
             bakedModel = PhotonModelBaker.bake(fallbackLocation);
         }
+        // The model cache treats null as "not ready; try again next frame". A resource reload can
+        // begin after the LoadingOverlay check above, leaving even the fallback temporarily unavailable.
+        if (bakedModel == null) {
+            return null;
+        }
         var quads = new ArrayList<Pair<BakedQuad, Float>>();
         for (var side : TileParticle.MODEL_SIDES) {
             var brightness = side == null ? 1f : switch (side) {
