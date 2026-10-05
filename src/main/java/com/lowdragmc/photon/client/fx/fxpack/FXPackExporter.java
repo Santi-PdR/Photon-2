@@ -146,13 +146,20 @@ public final class FXPackExporter {
     static String sanitizeNamespace(String name) {
         var sanitized = name.toLowerCase().replaceAll("[^a-z0-9._-]", "_");
         // A namespace with no usable characters must not be empty; ResourceLocation rejects it.
-        return sanitized.isBlank() ? "fx" : sanitized;
+        return sanitized.isBlank() || sanitized.equals(".") || sanitized.equals("..") ? "fx" : sanitized;
     }
 
-    /** Resource paths may contain slash-separated directories, unlike namespaces. */
+    /** Resource paths may contain directories, but dot segments must not escape the pack's fx folder. */
     static String sanitizePath(String name) {
-        var sanitized = name.toLowerCase().replaceAll("[^a-z0-9/._-]", "_");
-        return sanitized.isBlank() ? "fx" : sanitized;
+        var sanitized = name.toLowerCase().replaceAll("[^a-z0-9/._-]", "_")
+                .replaceAll("/{2,}", "/").replaceAll("^/|/$", "");
+        if (sanitized.isBlank()) return "fx";
+        var segments = sanitized.split("/");
+        for (int i = 0; i < segments.length; i++) {
+            if (segments[i].equals(".")) segments[i] = "_";
+            else if (segments[i].equals("..")) segments[i] = "__";
+        }
+        return String.join("/", segments);
     }
 
     // ---- the walk --------------------------------------------------------------------------------

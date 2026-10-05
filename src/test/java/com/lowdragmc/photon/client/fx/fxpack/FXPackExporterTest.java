@@ -9,11 +9,13 @@ class FXPackExporterTest {
     void namespaceReplacesCharactersThatMinecraftDoesNotAllow() {
         assertEquals("team_effects", FXPackExporter.sanitizeNamespace("Team/Effects"));
         assertEquals("___", FXPackExporter.sanitizeNamespace("///"));
+        assertEquals("fx", FXPackExporter.sanitizeNamespace(".."));
     }
 
     @Test
     void pathPreservesDirectoriesButSanitizesEachSegment() {
         assertEquals("effects/boss_attack", FXPackExporter.sanitizePath("Effects/Boss Attack"));
-        assertEquals("///", FXPackExporter.sanitizePath("///"));
+        assertEquals("fx", FXPackExporter.sanitizePath("///"));
+        assertEquals("__/__/outside/__", FXPackExporter.sanitizePath("/../../outside/.."));
     }
 }
