@@ -309,9 +309,11 @@ public abstract class PhotonFXRenderPass {
         }
 
         int[] order = distanceToOrigin ? PhotonDistanceSort.farToNear(primitiveCount) : sorting.sort(centers);
+        int orderedPrimitiveCount = distanceToOrigin ? primitiveCount : order.length;
         ByteBuffer destination = vertices.duplicate();
         destination.position(0);
-        for (int primitive : order) {
+        for (int i = 0; i < orderedPrimitiveCount; i++) {
+            int primitive = order[i];
             destination.put(original, primitive * primitiveBytes, primitiveBytes);
         }
     }

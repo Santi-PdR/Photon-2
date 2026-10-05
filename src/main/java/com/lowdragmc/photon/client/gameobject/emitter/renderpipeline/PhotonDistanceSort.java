@@ -16,7 +16,10 @@ final class PhotonDistanceSort {
         return keys;
     }
 
-    /** Returns indices far-to-near, retaining the original order for equal distances. */
+    /**
+     * Returns a reusable index buffer ordered far-to-near, retaining input order for equal distances.
+     * Only elements {@code [0, count)} are valid; callers must not iterate the buffer's full capacity.
+     */
     static int[] farToNear(int count) {
         if (packed.length < count) packed = new long[Math.max(count, packed.length * 2)];
         var distances = keys;
