@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.lowdraglib2.configurator.ui.ArrayConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
@@ -75,6 +76,16 @@ public abstract class AdditionalGPUDataSetting extends ToggleGroup {
 
     /** Max user custom-data streams per emitter — mirrored by {@code PHOTON_CUSTOM_TEXELS} in particle.glsl. */
     public static final int MAX_CUSTOM_DATA = 4;
+
+    /** OpenGL 3.2 guarantees at least sixteen vertex attribute locations. */
+    static final int MAX_VERTEX_ATTRIBUTES = 16;
+
+    /** One custom-shader attribute at its location and byte offset in the instance record. */
+    record TailAttrib(int location, int floats, int byteOffset) {
+    }
+
+    private static final Set<PhotonGpuChannels.Kind> WARNED_ATTRIB_OVERFLOW =
+            EnumSet.noneOf(PhotonGpuChannels.Kind.class);
 
     /** Channel → float offset inside the packed TBO record of one instance. */
     protected record PlannedChannel(PhotonGpuChannels.Channel channel, int floatOffset) {
@@ -208,6 +219,32 @@ public abstract class AdditionalGPUDataSetting extends ToggleGroup {
     }
 
     /**
+     * Pure layout planner shared by the GL setup and unit tests. Payload offsets advance for every
+     * requested channel even after the location budget is exhausted, so the instance record remains
+     * aligned with {@link #uploadAttribs}; unsupported tail locations are simply left undeclared.
+     */
+    static List<TailAttrib> planAttribs(PhotonGpuChannels.Kind kind, long mask, int customCount, int byteOffset) {
+        var attributes = new ArrayList<TailAttrib>();
+        int location = kind.baseAttribLocation;
+        for (var channel : PhotonGpuChannels.CHANNELS) {
+            if ((mask & channel.bit()) == 0 || !channel.supported().contains(kind) || !channel.uploadable()) continue;
+            if (location < MAX_VERTEX_ATTRIBUTES) {
+                attributes.add(new TailAttrib(location, channel.floats(), byteOffset));
+            }
+            byteOffset += channel.floats() * Float.BYTES;
+            location++;
+        }
+        for (int i = 0; i < Math.min(customCount, MAX_CUSTOM_DATA); i++) {
+            if (location < MAX_VERTEX_ATTRIBUTES) {
+                attributes.add(new TailAttrib(location, 4, byteOffset));
+            }
+            byteOffset += 4 * Float.BYTES;
+            location++;
+        }
+        return List.copyOf(attributes);
+    }
+
+    /**
      * Defines one divisor-1 attribute per enabled channel, sequentially from the kind's base
      * location, in registry order (the legacy layout), then one {@code vec4} attribute per custom-data
      * stream after them. The instance VBO is bound. Rebuilds the upload plan. Call unconditionally when
@@ -218,27 +255,26 @@ public abstract class AdditionalGPUDataSetting extends ToggleGroup {
         var mask = attribMask();
         lastAttribMask = mask;
         attribPlan.clear();
-
-        int attribIndex = kind.baseAttribLocation;
+        int customCount = customDataCount();
+        var plannedAttribs = planAttribs(kind, mask, customCount, offset);
+        int requestedAttribs = customCount;
         for (var channel : PhotonGpuChannels.CHANNELS) {
             if ((mask & channel.bit()) == 0 || !channel.supported().contains(kind) || !channel.uploadable()) continue;
-            glVertexAttribPointer(attribIndex, channel.floats(), GL_FLOAT, false, stride, offset);
-            glEnableVertexAttribArray(attribIndex);
-            glVertexAttribDivisor(attribIndex, 1);
-            offset += channel.floats() * Float.BYTES;
-            attribIndex++;
+            requestedAttribs++;
             attribPlan.add(channel);
         }
-
-        // custom-data streams: one vec4 divisor-1 attribute each, appended after the registry channels
-        int customCount = customDataCount();
         lastCustomDataCount = customCount;
-        for (int i = 0; i < customCount; i++) {
-            glVertexAttribPointer(attribIndex, 4, GL_FLOAT, false, stride, offset);
-            glEnableVertexAttribArray(attribIndex);
-            glVertexAttribDivisor(attribIndex, 1);
-            offset += 4 * Float.BYTES;
-            attribIndex++;
+        for (var attribute : plannedAttribs) {
+            glVertexAttribPointer(attribute.location(), attribute.floats(), GL_FLOAT, false, stride,
+                    attribute.byteOffset());
+            glEnableVertexAttribArray(attribute.location());
+            glVertexAttribDivisor(attribute.location(), 1);
+        }
+        if (kind.baseAttribLocation + requestedAttribs > MAX_VERTEX_ATTRIBUTES
+                && WARNED_ATTRIB_OVERFLOW.add(kind)) {
+            Photon.LOGGER.warn("{}: custom-shader additional-GPU-data attributes exceed the OpenGL minimum of {} "
+                    + "vertex locations; overflow attributes will be unavailable. Read additional data from a "
+                    + "shader graph instead.", kind, MAX_VERTEX_ATTRIBUTES);
         }
     }
 
