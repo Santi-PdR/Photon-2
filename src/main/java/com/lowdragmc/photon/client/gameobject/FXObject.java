@@ -60,8 +60,8 @@ public abstract class FXObject extends Particle implements IFXObject {
     /** Timeline playback-speed flag (this node only; see hierarchical {@link #timeScale()}). Default 1. */
     @Setter
     protected float selfTimeScale = 1;
-    /** Max sim sub-steps per tick (bounds cost at extreme speed; speed>this is capped per tick). */
-    private static final int MAX_SUBSTEPS = 16;
+    /** Max sim sub-steps per tick and therefore the fastest synchronized global playback rate. */
+    public static final int MAX_SUBSTEPS = 16;
     /** Timeline visibility flag (this node only; folded into hierarchical {@link #isVisible()}). */
     @Setter
     protected boolean selfTimelineVisible = true;
