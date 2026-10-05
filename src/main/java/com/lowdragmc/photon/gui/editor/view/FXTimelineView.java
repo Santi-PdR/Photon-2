@@ -28,6 +28,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.timeline.AnimatedProperty;
+import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
 import com.lowdragmc.photon.client.fx.timeline.AnimationTrack;
 import com.lowdragmc.photon.client.fx.timeline.property.ColorAnimatedProperty;
 import com.lowdragmc.photon.client.fx.timeline.property.ConfigAnimatedProperty;
@@ -1729,7 +1730,7 @@ public class FXTimelineView extends View implements TimelineContext {
     }
 
     private void onKeyDown(UIEvent event) {
-        if (event.target instanceof TextField) return;
+        if (PhotonEditorKeyMappings.isTyping(event)) return;
         if (event.keyCode == GLFW.GLFW_KEY_DELETE) {
             deleteSelection();
             event.stopPropagation();

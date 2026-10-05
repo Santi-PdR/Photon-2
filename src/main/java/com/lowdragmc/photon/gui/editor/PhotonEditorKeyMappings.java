@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.gui.editor;
 
+import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
+import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import net.minecraft.client.KeyMapping;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -65,5 +67,13 @@ public final class PhotonEditorKeyMappings {
 
     public static boolean matches(KeyMapping mapping, int keyCode, int scanCode) {
         return mapping.isActiveAndMatches(com.mojang.blaze3d.platform.InputConstants.getKey(keyCode, scanCode));
+    }
+
+    /** True when this key event belongs to a text editor, including a nested text input child. */
+    public static boolean isTyping(UIEvent event) {
+        for (UIElement target = event.target; target != null; target = target.getParent()) {
+            if (EditorTextInputPolicy.isTextInput(target.getClass())) return true;
+        }
+        return false;
     }
 }

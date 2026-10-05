@@ -5,7 +5,6 @@ import com.lowdragmc.lowdraglib2.editor.project.IProject;
 import com.lowdragmc.lowdraglib2.editor.ui.Editor;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.utils.TransformGizmo;
 import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
-import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.client.fx.FXRuntime;
@@ -51,7 +50,7 @@ public class FXEditor extends Editor {
 
     /** Default FX-editor shortcuts, guarded so text editing and camera flight keep their keys. */
     private void onEditorKeyDown(UIEvent event) {
-        if (event.target instanceof TextField) return;
+        if (PhotonEditorKeyMappings.isTyping(event)) return;
 
         var scene = sceneView;
         var gizmo = scene.sceneEditor.getTransformGizmo();
