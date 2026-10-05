@@ -850,12 +850,10 @@ public class RenderPassPipeline {
         var layer = pendingLateLayer;
         if (layer == null) return;
         pendingLateLayer = null;
-        // Nothing else will ever see these pixels, so no other bloom can reach them — ours is the
-        // only one they can get. It runs here, once, on the layer both queues finished accumulating.
-        int colorTexture = bloomedColorOf(layer, pendingLateBloom);
         // Keep the caller's target, viewport and clip intact. This hook runs at the world/UI seam,
         // where the active target may be an Iris surface or an embedded editor surface rather than
-        // the logical UI target.
+        // the logical UI target. Capture before bloom: its blits bind their own output target.
+        var entryTarget = UISurface.currentTarget();
         int framebuffer = GlStateManager.getBoundFramebuffer();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
@@ -865,10 +863,19 @@ public class RenderPassPipeline {
         int[] scissorBox = new int[4];
         GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
         try {
-            UISurface.currentTarget().bindWrite(true);
+            // Nothing else will ever see these pixels, so no other bloom can reach them — ours is
+            // the only one they can get. Run it once on the layer both queues finished accumulating.
+            int colorTexture = bloomedColorOf(layer, pendingLateBloom);
+            entryTarget.bindWrite(true);
             SceneBlit.compositePremultipliedToBound(colorTexture, layer.getColorTextureId(), false);
         } finally {
-            GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
+            // Iris tracks main-target binding through RenderTarget.bindWrite; a raw GL bind
+            // restores pixels but silently leaves its shader interception disabled afterward.
+            if (framebuffer == entryTarget.frameBufferId) {
+                entryTarget.bindWrite(false);
+            } else {
+                GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
+            }
             RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
             GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
             if (scissorEnabled) {
