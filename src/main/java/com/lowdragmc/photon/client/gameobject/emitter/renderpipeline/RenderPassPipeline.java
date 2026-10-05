@@ -51,6 +51,7 @@ public class RenderPassPipeline {
      *  with its OWN depth, pre-filled from the scene. */
     @Nullable
     private static com.lowdragmc.photon.client.postfx.runtime.FormatTarget MASK_TARGET;
+    private static long loggedMaskAllocationFailure = Long.MIN_VALUE;
     /** This frame's mask textures for the post-effect chain (-1 = no mask was written). */
     @Getter
     private static int maskColorTexture = -1;
@@ -383,20 +384,36 @@ public class RenderPassPipeline {
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
-        if (MASK_TARGET == null) {
-            MASK_TARGET = new FormatTarget(
-                    DRAW_TARGET.width, DRAW_TARGET.height, GL11.GL_LINEAR,
-                    TargetFormat.R8, true);
-        } else if (MASK_TARGET.width != DRAW_TARGET.width || MASK_TARGET.height != DRAW_TARGET.height) {
-            MASK_TARGET.resize(DRAW_TARGET.width, DRAW_TARGET.height, Minecraft.ON_OSX);
+        long sizeKey = ((long) DRAW_TARGET.width << 32) | (DRAW_TARGET.height & 0xffffffffL);
+        try {
+            if (MASK_TARGET == null) {
+                MASK_TARGET = new FormatTarget(
+                        DRAW_TARGET.width, DRAW_TARGET.height, GL11.GL_LINEAR,
+                        TargetFormat.R8, true);
+            } else if (MASK_TARGET.width != DRAW_TARGET.width || MASK_TARGET.height != DRAW_TARGET.height) {
+                MASK_TARGET.resize(DRAW_TARGET.width, DRAW_TARGET.height, Minecraft.ON_OSX);
+            }
+            MASK_TARGET.setClearColor(0f, 0f, 0f, 0f);
+            MASK_TARGET.clear(Minecraft.ON_OSX);
+            // Whatever depth the FX themselves were clipped against — the live scene depth in place, the
+            // opaque-only snapshot on the late path — so the mask lines up with what is on screen instead
+            // of being cut by a water surface the effect is allowed to draw through.
+            MASK_TARGET.copyDepthFrom(DRAW_TARGET);
+            MASK_TARGET.bindWrite(false);
+        } catch (RuntimeException failure) {
+            maskColorTexture = -1;
+            maskDepthTexture = -1;
+            if (loggedMaskAllocationFailure != sizeKey) {
+                com.lowdragmc.photon.Photon.LOGGER.error(
+                        "Could not prepare {}x{} custom mask target; skipping mask effects for this frame",
+                        DRAW_TARGET.width, DRAW_TARGET.height, failure);
+                loggedMaskAllocationFailure = sizeKey;
+            }
+            DRAW_TARGET.bindWrite(false);
+            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+            return;
         }
-        MASK_TARGET.setClearColor(0f, 0f, 0f, 0f);
-        MASK_TARGET.clear(Minecraft.ON_OSX);
-        // Whatever depth the FX themselves were clipped against — the live scene depth in place, the
-        // opaque-only snapshot on the late path — so the mask lines up with what is on screen instead
-        // of being cut by a water surface the effect is allowed to draw through.
-        MASK_TARGET.copyDepthFrom(DRAW_TARGET);
-        MASK_TARGET.bindWrite(false);
+        loggedMaskAllocationFailure = Long.MIN_VALUE;
         RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
         maskSubPass = true;
         renderQueuedPasses();
