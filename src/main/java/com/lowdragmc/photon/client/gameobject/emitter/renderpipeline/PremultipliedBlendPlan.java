@@ -143,7 +143,9 @@ public final class PremultipliedBlendPlan {
 
     private static boolean isDestinationFree(SourceFactor factor) {
         return switch (factor) {
-            case DST_COLOR, ONE_MINUS_DST_COLOR, DST_ALPHA, ONE_MINUS_DST_ALPHA -> false;
+            // SRC_ALPHA_SATURATE also reads destination alpha (GL computes min(src alpha, 1 - dst alpha)),
+            // so it cannot be reproduced against the separate layer's coverage alpha.
+            case DST_COLOR, ONE_MINUS_DST_COLOR, DST_ALPHA, ONE_MINUS_DST_ALPHA, SRC_ALPHA_SATURATE -> false;
             default -> true;
         };
     }
