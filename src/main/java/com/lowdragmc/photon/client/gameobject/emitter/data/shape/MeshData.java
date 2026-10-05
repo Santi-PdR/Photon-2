@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurator;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Scene;
 import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
+import com.lowdragmc.lowdraglib2.math.Size;
 import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.utils.data.BlockInfo;
@@ -234,16 +235,13 @@ public final class MeshData implements RegistryAwareNBTSerializable<CompoundTag>
 
     @OnlyIn(Dist.CLIENT)
     public Scene createPreviewScene() {
-        var level = new TrackedDummyWorld();
-        level.addBlock(BlockPos.ZERO, BlockInfo.fromBlock(Blocks.AIR));
-        var scene = new Scene();
-        scene.setRenderFacing(false);
-        scene.setRenderSelect(false);
-        scene.createScene(level);
-        assert scene.getRenderer() != null;
-        scene.getRenderer().setOnLookingAt(null); // better performance
-        scene.setRenderedCore(Collections.singleton(BlockPos.ZERO), null);
-        scene.setAfterWorldRender(s -> drawLineFrames(new PoseStack()));
+        return createInspectorPreview();
+    }
+
+    /** The editable preview shown in this mesh's inspector. */
+    @OnlyIn(Dist.CLIENT)
+    public Scene createInspectorPreview() {
+        var scene = buildPreview(null);
         scene.layout(layout -> {
             layout.setAspectRatio(1.0f);
             layout.widthPercent(80);
@@ -254,6 +252,62 @@ public final class MeshData implements RegistryAwareNBTSerializable<CompoundTag>
         scene.moveInlineAsDefault();
         scene.addClass("preview_bg");
         return scene;
+    }
+
+    /**
+     * A low-resolution, non-interactive preview for resource-browser tiles. Keeping each thumbnail
+     * at 128px bounds render-target memory while leaving camera orbit/zoom available in the inspector.
+     */
+    @OnlyIn(Dist.CLIENT)
+    public Scene createTilePreview() {
+        return buildPreview(Size.of(128, 128)).setIntractable(false);
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private Scene buildPreview(@Nullable Size fboSize) {
+        var level = new TrackedDummyWorld();
+        level.addBlock(BlockPos.ZERO, BlockInfo.fromBlock(Blocks.AIR));
+        var scene = new Scene();
+        scene.setRenderFacing(false);
+        scene.setRenderSelect(false);
+        scene.setTickWorld(false);
+        scene.createScene(level, fboSize != null, fboSize);
+        var renderer = scene.getRenderer();
+        assert renderer != null;
+        renderer.setOnLookingAt(null);
+        if (fboSize != null) renderer.setFov(40);
+        scene.setRenderedCore(Collections.singleton(BlockPos.ZERO), null);
+        var framedMesh = new PhotonMesh[]{null};
+        scene.setBeforeWorldRender(s -> {
+            var mesh = source.getMesh();
+            if (mesh == framedMesh[0]) return;
+            framedMesh[0] = mesh;
+            frame(s);
+        });
+        scene.setAfterWorldRender(s -> drawLineFrames(new PoseStack()));
+        return scene;
+    }
+
+    /** Keep the mesh framed after a source switch, import, or resource reload. */
+    @OnlyIn(Dist.CLIENT)
+    private void frame(Scene scene) {
+        var min = new Vector3f(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE);
+        var max = new Vector3f(-Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE);
+        var meshVertices = getVertices();
+        if (meshVertices.isEmpty()) {
+            min.set(0, 0, 0);
+            max.set(1, 1, 1);
+        } else {
+            for (var vertex : meshVertices) {
+                min.min(vertex);
+                max.max(vertex);
+            }
+        }
+        var center = new Vector3f((min.x + max.x) / 2f + 0.5f,
+                (min.y + max.y) / 2f + 0.5f, (min.z + max.z) / 2f + 0.5f);
+        var extent = Math.max(Math.max(max.x - min.x + 1, max.y - min.y + 1), max.z - min.z + 1);
+        var zoom = (float) (3.5 * Math.sqrt(Math.max(extent, 1)));
+        scene.getRenderer().setCameraLookAt(center, zoom, Math.toRadians(-135), Math.toRadians(25));
     }
 
     @OnlyIn(Dist.CLIENT)
