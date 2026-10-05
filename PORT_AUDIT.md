@@ -71,4 +71,5 @@ An unofficial LDLib2 Forge 1.20.1 port exists publicly, which may provide a cand
 - `./gradlew build --no-daemon --console=plain` with Temurin Java `17.0.20.1`: **BUILD SUCCESSFUL**.
 - Unit tests: **237 passed, 0 failed, 0 skipped** across 20 suites.
 - Candidate all-in-one JAR: `ldlib2-forge-1.20.1-2.2.28-forge-1.20.1-all.jar`, 5,046,634 bytes; SHA-256 `19df2af170079c73becc4ed859444f5bdf779286d1132cc63103cc2c5a4a54a7`.
-- Its metadata requires Forge 47+, Minecraft 1.20.1, and KotlinForForge 4+; the artifact has not been launched in Minecraft or integrated into this Photon project.
+- Its metadata requires Forge 47+, Minecraft 1.20.1, and KotlinForForge 4+; it has not been integrated into this Photon project. Runtime smoke evidence is recorded below.
+- A `runClient` smoke launch with Forge 47.4.10 / Java 17 loaded LDLib2 on the mod-loading worker, reloaded `ldlib2` resources, initialized sound and texture atlases, and loaded LDLib2 shaders. It did not reach a confirmed main-menu checkpoint before Mojang auth and Forge version-check requests timed out; the development client was stopped after this network timeout. The log also has development `ldlib2.refmap.json` and test-model warnings. Treat this as **startup progress only**, not a successful functional/editor or multiplayer test.
