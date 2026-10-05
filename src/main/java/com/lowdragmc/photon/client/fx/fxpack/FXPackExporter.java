@@ -111,7 +111,7 @@ public final class FXPackExporter {
         exporter.walk(root);
         root.putInt("version", FXProject.VERSION);
 
-        var fxId = ResourceLocation.fromNamespaceAndPath(sanitize(namespace), sanitize(fxName));
+        var fxId = ResourceLocation.fromNamespaceAndPath(sanitizeNamespace(namespace), sanitizePath(fxName));
         var fxBytes = new ByteArrayOutputStream();
         NbtIo.writeCompressed(root, fxBytes);
 
@@ -142,11 +142,16 @@ public final class FXPackExporter {
         Files.write(path, bytes);
     }
 
-    /** Lowercase + replace everything outside {@code [a-z0-9/._-]} so ids are always valid. */
-    private static String sanitize(String name) {
+    /** Minecraft namespaces do not allow slashes; replace everything outside {@code [a-z0-9._-]}. */
+    static String sanitizeNamespace(String name) {
+        var sanitized = name.toLowerCase().replaceAll("[^a-z0-9._-]", "_");
+        // A namespace with no usable characters must not be empty; ResourceLocation rejects it.
+        return sanitized.isBlank() ? "fx" : sanitized;
+    }
+
+    /** Resource paths may contain slash-separated directories, unlike namespaces. */
+    static String sanitizePath(String name) {
         var sanitized = name.toLowerCase().replaceAll("[^a-z0-9/._-]", "_");
-        // a name with no usable characters (e.g. a file literally called ".fxpack") must not
-        // produce an empty namespace/path — ResourceLocation would reject it and abort the export
         return sanitized.isBlank() ? "fx" : sanitized;
     }
 
