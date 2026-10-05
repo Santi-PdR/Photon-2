@@ -266,7 +266,10 @@ public class ForceFieldObject extends FXObject {
 
         RenderBufferUtils.drawEdges(poseStack, buffer, edges, color);
 
-        BufferUploader.drawWithShader(buffer.end());
+        var meshData = buffer.endOrDiscardIfEmpty();
+        if (meshData != null) {
+            BufferUploader.drawWithShader(meshData);
+        }
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
     }
