@@ -117,8 +117,9 @@ public class MeshResource extends Resource<MeshData> {
             ResourceFileImport.resolveOrImport(context.getOwner(), file, "models", location -> {
                 var source = gltf ? gltfSourceFor(location) : new ObjModelSource(location);
                 // the path is normally fresh, but re-importing a file already in the pack could hit a
-                // cached failure from an earlier load attempt
-                source.invalidate();
+                // cached failure from an earlier load attempt. gltfSourceFor invalidates before it
+                // probes the file; invalidating again here would throw away the parsed animation data.
+                if (!gltf) source.invalidate();
                 context.complete(new MeshData(source));
             }, context::cancel);
             return;
