@@ -191,6 +191,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     public boolean usesPerParticlePhase() { return perParticlePhase; }
 
     @Nullable
+    @Override
     public synchronized BakedVertexAnimation vertexAnimation() {
         if (!perParticlePhase) return null;
         SkinnedModel model = model();

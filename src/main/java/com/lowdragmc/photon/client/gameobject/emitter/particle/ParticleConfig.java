@@ -10,7 +10,6 @@ import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
 import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
-import com.lowdragmc.photon.client.gameobject.emitter.data.model.AnimatedGltfModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
@@ -229,11 +228,13 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
         @Override
         protected boolean useInstancing() {
             if (!renderRuntime.isUseGPUInstance() || renderRuntime.getRenderMode() == ParticleRendererSetting.Mode.None) return false;
-            if (renderRuntime.getRenderMode() == ParticleRendererSetting.Mode.Model
-                    && renderRuntime.getModelSource() instanceof AnimatedGltfModelSource animated
-                    && animated.usesPerParticlePhase()) {
-                var vat = animated.vertexAnimation();
-                return vat == null || TileParticleRenderer.vatFitsGpuBuffer(vat);
+            if (renderRuntime.getRenderMode() == ParticleRendererSetting.Mode.Model) {
+                var source = renderRuntime.getModelSource();
+                var vat = source.vertexAnimation();
+                if (vat != null) return TileParticleRenderer.vatFitsGpuBuffer(vat);
+                // A per-frame CPU deformation needs freshly baked vertices, while the instanced
+                // backend keeps one static VBO. Fall back to the CPU path until a VAT is available.
+                if (source.asDynamic() != null) return false;
             }
             return true;
         }

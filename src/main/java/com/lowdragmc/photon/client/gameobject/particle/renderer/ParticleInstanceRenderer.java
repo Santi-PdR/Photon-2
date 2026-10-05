@@ -1,7 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.particle.renderer;
 
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
-import com.lowdragmc.photon.client.gameobject.emitter.data.model.AnimatedGltfModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
 import org.jetbrains.annotations.Nullable;
@@ -95,8 +94,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         this.builtWithTangent = wantsTangent;
         if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model) {
             var source = renderer.getModelSource();
-            var mesh = source instanceof AnimatedGltfModelSource animated && animated.vertexAnimation() != null
-                    ? animated.topology() : source.getMesh();
+            var mesh = source.vertexAnimation() == null ? source.getMesh() : source.topology();
             var remapUV = source.hasAtlasUV() && !renderer.isUseBlockUV();
             var shade = renderer.isShade();
 

@@ -92,9 +92,8 @@ public class TileParticleRenderer {
 
     private ModelPass modelPass() {
         IModelSource source = renderer.getModelSource();
-        var vat = source instanceof AnimatedGltfModelSource animated ? animated.vertexAnimation() : null;
-        PhotonMesh mesh = vat == null ? source.getMesh()
-                : source instanceof IDynamicMesh dynamic ? dynamic.topology() : source.getMesh();
+        var vat = source.vertexAnimation();
+        PhotonMesh mesh = vat == null ? source.getMesh() : source.topology();
         return new ModelPass(mesh, source.hasAtlasUV() && !renderer.isUseBlockUV(), renderer.isShade(),
                 renderer.getModelPivot(), vat == null ? source.asDynamic() : null, vat);
     }
@@ -304,8 +303,7 @@ public class TileParticleRenderer {
         var buffer = instanceBackend.beginUpload(particles.size());
         if (buffer == null) return false;
         var vat = renderMode == ParticleRendererSetting.Mode.Model
-                && renderer.getModelSource() instanceof AnimatedGltfModelSource animated
-                ? animated.vertexAnimation() : null;
+                ? renderer.getModelSource().vertexAnimation() : null;
         instancedVatActive = vat != null;
         instanceBackend.setVertexAnimation(vat == null ? null : vat.table(),
                 vat == null ? 0 : vat.vertexCount(), vat == null ? 0 : vat.frames(),
@@ -410,19 +408,17 @@ public class TileParticleRenderer {
 
     public void drawInstanced(ShaderInstance shader) {
         instanceBackend.drawWithAppliedShader(shader);
+        var dynamic = renderer.getModelSource().asDynamic();
         if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model
                 && !instancedVatActive
-                && renderer.getModelSource() instanceof IDynamicMesh dynamic) {
+                && dynamic != null) {
             dynamic.onDrawn();
         }
     }
 
     private PhotonMesh instancedMesh() {
         IModelSource source = renderer.getModelSource();
-        if (source instanceof AnimatedGltfModelSource animated && animated.vertexAnimation() != null) {
-            return animated.topology();
-        }
-        return source.getMesh();
+        return source.vertexAnimation() == null ? source.getMesh() : source.topology();
     }
 
     /**

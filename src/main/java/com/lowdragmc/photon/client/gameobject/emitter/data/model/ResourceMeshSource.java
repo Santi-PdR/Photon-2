@@ -77,6 +77,26 @@ public final class ResourceMeshSource implements IModelSource {
     }
 
     @Override
+    @Nullable
+    public IDynamicMesh asDynamic() {
+        var source = resolveRaw();
+        return source == null ? null : source.asDynamic();
+    }
+
+    @Override
+    @Nullable
+    public AnimatedGltfModelSource.BakedVertexAnimation vertexAnimation() {
+        var source = resolveRaw();
+        return source == null ? null : source.vertexAnimation();
+    }
+
+    @Override
+    public PhotonMesh topology() {
+        var source = resolveRaw();
+        return source == null ? PhotonMesh.EMPTY : source.topology();
+    }
+
+    @Override
     public IModelSource copy() {
         return new ResourceMeshSource(getResourcePath());
     }

@@ -73,6 +73,18 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable, ILD
         return this instanceof IDynamicMesh dynamic ? dynamic : null;
     }
 
+    /** Baked per-particle animation data when this source supports VAT rendering. */
+    @Nullable
+    default AnimatedGltfModelSource.BakedVertexAnimation vertexAnimation() {
+        return null;
+    }
+
+    /** Stable source topology for dynamic CPU deformation or baked vertex animation. */
+    default PhotonMesh topology() {
+        var dynamic = asDynamic();
+        return dynamic == null ? getMesh() : dynamic.topology();
+    }
+
     /** Drop this source's cache entry so the next {@link #getMesh()} reloads. */
     void invalidate();
 
