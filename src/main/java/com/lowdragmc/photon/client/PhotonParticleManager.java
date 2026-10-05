@@ -199,6 +199,9 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         var chain = com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool
                 .acquire(mainTarget.width, mainTarget.height);
         try {
+            // Pool exhaustion or an unsupported framebuffer size skips this editor-only chain for
+            // the frame; never dereference a failed nullable allocation or disturb the scene target.
+            if (chain == null) return;
             chain.copyColorFrom(mainTarget);
             var output = stack.consumeAndExecute(chain, false, mainTarget);
             if (output != chain) {
