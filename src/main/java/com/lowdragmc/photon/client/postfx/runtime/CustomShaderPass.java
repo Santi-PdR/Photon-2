@@ -39,7 +39,8 @@ public final class CustomShaderPass {
     private static final List<String> ENGINE_UNIFORMS = List.of(
             "ScreenSize", "GameTime", "ProjMat", "ModelViewMat",
             // bound per dispatch from the captured render camera / pass target — see PostFXCamera
-            "U_ViewPort", "kg_CameraBlockPos", "kg_CameraOffset", "kg_Time",
+            "U_ViewPort", "U_InverseProjectionMatrix", "U_InverseViewMatrix",
+            "U_CameraPosition", "U_DepthParams", "kg_CameraBlockPos", "kg_CameraOffset", "kg_Time",
             "kg_ViewMat", "kg_IViewMat", "kg_IModelViewMat", "kg_IProjMat");
 
     /** The shipped pass library (shaders/core/postfx/*) — offered by the pass node's shader
@@ -113,7 +114,7 @@ public final class CustomShaderPass {
         return info;
     }
 
-    private static Info parse(JsonObject json) {
+    static Info parse(JsonObject json) {
         var samplers = new ArrayList<String>();
         for (var element : GsonHelper.getAsJsonArray(json, "samplers", new com.google.gson.JsonArray())) {
             var name = GsonHelper.getAsString(element.getAsJsonObject(), "name");

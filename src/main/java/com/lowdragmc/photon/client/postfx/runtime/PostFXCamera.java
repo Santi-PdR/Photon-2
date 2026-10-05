@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.photon.client.shadergraph.PhotonShaderCompiler;
+import com.lowdragmc.photon.client.render.PhotonDepthParams;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.shaders.Uniform;
 import net.minecraft.client.Minecraft;
@@ -9,6 +10,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 /**
@@ -92,6 +94,7 @@ public final class PostFXCamera {
         private final Matrix4f projection = new Matrix4f();
         private final Matrix4f inverseView = new Matrix4f();
         private final Matrix4f inverseProjection = new Matrix4f();
+        private final Vector4f depthParams = PhotonDepthParams.fromProjection(projection);
         private Vec3 position = Vec3.ZERO;
         /** The inverses are only needed by passes that declared them — invert lazily, once per capture. */
         private boolean inversesDirty = true;
@@ -101,6 +104,7 @@ public final class PostFXCamera {
         void set(Matrix4f modelView, Matrix4f projectionMatrix, Vec3 cameraPosition) {
             view.set(modelView);
             projection.set(projectionMatrix);
+            depthParams.set(PhotonDepthParams.fromProjection(projection));
             position = cameraPosition;
             inversesDirty = true;
         }
@@ -138,6 +142,15 @@ public final class PostFXCamera {
             setMatrix(shader, "kg_IViewMat", inverseView);
             setMatrix(shader, "kg_IModelViewMat", inverseView);
             setMatrix(shader, "kg_IProjMat", inverseProjection);
+            setMatrix(shader, "U_InverseViewMatrix", inverseView);
+            setMatrix(shader, "U_InverseProjectionMatrix", inverseProjection);
+
+            Uniform cameraPosition = shader.getUniform("U_CameraPosition");
+            if (cameraPosition != null) {
+                cameraPosition.set((float) position.x, (float) position.y, (float) position.z, 1f);
+            }
+            Uniform depthParams = shader.getUniform("U_DepthParams");
+            if (depthParams != null) depthParams.set(this.depthParams);
 
             Uniform blockPos = shader.getUniform("kg_CameraBlockPos");
             Uniform offset = shader.getUniform("kg_CameraOffset");
