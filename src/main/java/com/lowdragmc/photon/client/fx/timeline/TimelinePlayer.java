@@ -58,15 +58,13 @@ public class TimelinePlayer {
     /** When recording (editor only), the per-frame re-apply is frozen so gizmo/inspector edits to the
      *  target persist between ticks instead of being stomped by the sampled pose. */
     private boolean recording = false;
-    /** Whether signal tracks fire. Default true (in-world); the editor gates it to live playback only. */
-    private boolean dispatchSignals = true;
+    /** Executor permission is refreshed per playback; editor controls remain independent. */
+    private final TimelineEventDispatch eventDispatch = new TimelineEventDispatch();
     /** Highest tick already dispatched signals for, so a forward window never re-fires (reset on begin). */
     private double lastSignalTick = -1;
     /** Per-audio-track currently-playing sound instance and the clip that spawned it. */
     private final Map<AudioTrack, TimelineSoundInstance> audioInstances = new HashMap<>();
     private final Map<AudioTrack, AudioClip> audioClips = new HashMap<>();
-    /** Whether audio tracks play. Default true (in-world); the editor gates it to live playback only. */
-    private boolean audioEnabled = true;
     /** Editor preview: force non-positional audio so 3D/attenuated clips are still audible in the editor
      *  (the preview listener isn't at the clip's world position). Stays false in-world for real 3D. */
     private boolean editorPreview = false;
@@ -84,6 +82,7 @@ public class TimelinePlayer {
     public void begin(IEffectExecutor effect) {
         postProcessFrame = Long.MIN_VALUE;
         this.effect = effect;
+        eventDispatch.begin(effect.allowTimelineEvents());
         this.localTime = 0;
         this.frameRate = runtime.getRate();
         this.duration = timeline.getDuration();
@@ -179,13 +178,13 @@ public class TimelinePlayer {
 
     /** Editor gate: only dispatch signals during live forward playback (not scrub/preview replays). */
     public void setSignalDispatch(boolean dispatchSignals) {
-        this.dispatchSignals = dispatchSignals;
+        eventDispatch.setSignalsEnabled(dispatchSignals);
     }
 
     /** Editor gate: only play audio during live forward playback. Turning it off stops all sounds now. */
     public void setAudioDispatch(boolean audioEnabled) {
-        if (this.audioEnabled == audioEnabled) return;
-        this.audioEnabled = audioEnabled;
+        if (eventDispatch.audioEnabled() == audioEnabled) return;
+        eventDispatch.setAudioEnabled(audioEnabled);
         if (!audioEnabled) stopAllAudio();
     }
 
@@ -268,11 +267,10 @@ public class TimelinePlayer {
      * the clip end, a longer clip loops (the sound engine handles the looping).
      */
     private void applyAudio(List<Track> leaves, double time) {
-        if (!audioEnabled) {
+        if (!eventDispatch.canDispatchAudio()) {
             stopAllAudio();
             return;
         }
-        var soundManager = Minecraft.getInstance().getSoundManager();
         var seen = new HashSet<AudioTrack>();
         for (var track : leaves) {
             if (track.mute() || !(track instanceof AudioTrack audioTrack)) {
@@ -296,7 +294,7 @@ public class TimelinePlayer {
                         var local = time - clip.start();
                         var newInstance = new TimelineSoundInstance(soundEvent, clip.category(),
                                 clip.volumeAt(local), clip.pitchAt(local), supplier != null, supplier);
-                        soundManager.queueTickingSound(newInstance);
+                        Minecraft.getInstance().getSoundManager().queueTickingSound(newInstance);
                         audioInstances.put(audioTrack, newInstance);
                     }
                 }
@@ -373,7 +371,7 @@ public class TimelinePlayer {
      * any double-fire (the {@code evaluate(0)} repeat, or a replay seek).
      */
     private void dispatchSignals(java.util.List<Track> leaves, double time) {
-        if (!dispatchSignals || time <= lastSignalTick) return;
+        if (!eventDispatch.canDispatchSignals() || time <= lastSignalTick) return;
         for (var track : leaves) {
             if (track.mute() || !(track instanceof SignalTrack signalTrack)) continue;
             var channel = signalTrack.displayName();
