@@ -3,7 +3,7 @@
 // maps sampled depth to NDC with (2, -1), then carries the projection's near/far distances.
 uniform mat4 U_InverseProjectionMatrix;
 uniform mat4 U_InverseViewMatrix;
-uniform vec3 U_CameraPosition;
+uniform vec4 U_CameraPosition;
 uniform vec4 U_ViewPort;
 uniform vec4 U_DepthParams;
 

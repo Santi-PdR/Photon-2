@@ -227,7 +227,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                     var camera = RenderPassPipeline.getCurrent().getCamera();
                     if (camera != null) {
                         var pos = camera.getPosition();
-                        uniform.set((float) pos.x, (float) pos.y, (float) pos.z);
+                        uniform.set((float) pos.x, (float) pos.y, (float) pos.z, 1f);
                     }
                 }
             });
