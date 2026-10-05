@@ -71,19 +71,24 @@ public final class OpaqueDepthCapture {
         // rest of the level render (the translucent chunk layer, i.e. water, then clouds and
         // weather) into the default framebuffer. Every other caller in Photon happens to bindWrite
         // immediately afterwards, which is why this only ever bit the one that did not.
-        int framebuffer = GlStateManager.getBoundFramebuffer();
+        int readFramebuffer = GlStateManager._getInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int drawFramebuffer = GlStateManager._getInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
-
-        allocate(mainTarget.width, mainTarget.height);
-        assert target != null;
-        target.copyDepthFrom(mainTarget);
-        capturedFrame = frame;
-
-        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
-        RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        try {
+            allocate(mainTarget.width, mainTarget.height);
+            assert target != null;
+            target.copyDepthFrom(mainTarget);
+            capturedFrame = frame;
+        } finally {
+            // Iris can keep independent read and draw framebuffers bound. Preserve both even when
+            // allocation or the depth blit fails, and leave the caller's viewport untouched.
+            GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, readFramebuffer);
+            GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        }
     }
 
     /**
