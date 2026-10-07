@@ -15,6 +15,7 @@ import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
 import com.lowdragmc.photon.client.util.FramebufferState;
+import com.lowdragmc.photon.client.render.PhotonStage;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -306,8 +307,7 @@ public class RenderPassPipeline {
      * it keeps drawing in place, with the vanilla artefacts, rather than being silently approximated.
      */
     private static boolean isLatePass(PhotonFXRenderPass pass) {
-        return pass.renderer.getCompositeMode().resolve() == FXCompositeMode.LATE
-                && PremultipliedBlendPlan.areLayerSafe(pass.renderer.getMaterials());
+        return pass.renderer.effectiveStage() == PhotonStage.DEFERRED;
     }
 
     /**

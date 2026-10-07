@@ -9,7 +9,10 @@ import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
+import com.lowdragmc.photon.client.PhotonParticleManager;
+import com.lowdragmc.photon.client.render.PhotonStage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import lombok.EqualsAndHashCode;
@@ -35,8 +38,14 @@ import java.util.function.Supplier;
 public class RendererSetting {
 
     public enum Layer {
-        Opaque,
-        Translucent
+        Opaque(PhotonStage.AFTER_OPAQUE_FEATURES),
+        Translucent(PhotonStage.AFTER_TRANSLUCENT_PARTICLES);
+
+        public final PhotonStage stage;
+
+        Layer(PhotonStage stage) {
+            this.stage = stage;
+        }
     }
 
     public enum SortMode {
@@ -241,6 +250,17 @@ public class RendererSetting {
         public float getMaskAlphaCutoff() { return maskAlphaCutoff.get(); }
 
         /**
+         * The logical frame stage for this emitter. A compatible translucent LATE pass draws in the
+         * normal particle slot but its separate layer is composited after level rendering. Opaque
+         * passes and editor scenes always stay in their ordinary layer stage.
+         */
+        public PhotonStage effectiveStage() {
+            return resolveEffectiveStage(getLayer(), getCompositeMode().resolve(),
+                    PremultipliedBlendPlan.areLayerSafe(getMaterials()),
+                    PhotonParticleManager.isEditorSceneRendering());
+        }
+
+        /**
          * Whether a PASS-LEVEL slot is overridden — i.e. this emitter needs its own render pass instead
          * of sharing the config's. Only fields the {@code RenderPass}/its renderer read at pass level (the
          * batching-key set = {@link #effectiveEquals}) count. {@code cull} is deliberately excluded: it is
@@ -287,6 +307,14 @@ public class RendererSetting {
             return Objects.hash(getMaterials(), getLayer(), getOrderInLayer(), getVertexSortingMode(),
                     getCompositeMode(), isWriteCustomMask(), getMaskGroup(), getMaskAlphaCutoff());
         }
+    }
+
+    static PhotonStage resolveEffectiveStage(Layer layer, FXCompositeMode compositeMode,
+                                             boolean layerSafe, boolean editorScene) {
+        if (editorScene || layer != Layer.Translucent || compositeMode != FXCompositeMode.LATE || !layerSafe) {
+            return layer.stage;
+        }
+        return PhotonStage.DEFERRED;
     }
 
 }
