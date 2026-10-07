@@ -151,6 +151,10 @@ public final class PostFXCamera {
             }
             Uniform depthParams = shader.getUniform("U_DepthParams");
             if (depthParams != null) depthParams.set(this.depthParams);
+            Uniform zNear = shader.getUniform("ZNear");
+            if (zNear != null) zNear.set(this.depthParams.z);
+            Uniform zFar = shader.getUniform("ZFar");
+            if (zFar != null) zFar.set(this.depthParams.w);
 
             Uniform blockPos = shader.getUniform("kg_CameraBlockPos");
             Uniform offset = shader.getUniform("kg_CameraOffset");

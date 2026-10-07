@@ -38,6 +38,7 @@ public final class CustomShaderPass {
      *  skipped by the float-only type filter in {@link #parse}; they are listed as documentation.) */
     private static final List<String> ENGINE_UNIFORMS = List.of(
             "ScreenSize", "GameTime", "ProjMat", "ModelViewMat",
+            "ZNear", "ZFar",
             // bound per dispatch from the captured render camera / pass target — see PostFXCamera
             "U_ViewPort", "U_InverseProjectionMatrix", "U_InverseViewMatrix",
             "U_CameraPosition", "U_DepthParams", "kg_CameraBlockPos", "kg_CameraOffset", "kg_Time",

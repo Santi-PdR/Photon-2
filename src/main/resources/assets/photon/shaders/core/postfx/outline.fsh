@@ -1,8 +1,8 @@
 #version 150
 
 // Depth + luma Sobel edge overlay: edges tint the scene with OutlineColor (rgb, a = strength).
-// DepthThreshold gates raw-depth gradients (small values pick up nearby silhouettes),
-// LumaThreshold gates color edges, Thickness widens the kernel in texels.
+// DepthThreshold gates reciprocal-depth gradients, LumaThreshold gates color edges, and
+// Thickness widens the kernel in texels.
 
 uniform sampler2D DiffuseSampler;
 uniform sampler2D DepthSampler;
@@ -11,6 +11,9 @@ uniform vec4 OutlineColor;
 uniform float DepthThreshold;
 uniform float LumaThreshold;
 uniform float Thickness;
+uniform float ZNear;
+uniform float ZFar;
+uniform mat4 ProjMat;
 
 in vec2 texCoord;
 out vec4 fragColor;
@@ -19,25 +22,32 @@ float lumaAt(vec2 uv) {
     return dot(texture(DiffuseSampler, uv).rgb, vec3(0.299, 0.587, 0.114));
 }
 
-float depthAt(vec2 uv) {
-    return texture(DepthSampler, uv).r;
+// Both branches return 2*ZNear*ZFar / eyeDistance. Perspective depth has a reciprocal
+// linear form; orthographic depth is linear in eye distance and needs one divide per tap.
+float invDepthScaledAt(vec2 uv) {
+    float d = texture(DepthSampler, uv).r;
+    if (abs(ProjMat[2][3]) < 0.5) {
+        float eyeDistance = mix(ZNear, ZFar, d);
+        return (2.0 * ZNear * ZFar) / max(eyeDistance, 1e-6);
+    }
+    return 2.0 * (ZFar - d * (ZFar - ZNear));
 }
 
 void main() {
     vec2 o = DiffuseSampler_TexelSize.zw * max(Thickness, 0.01);
     // 3x3 Sobel over both depth and luma
-    float d00 = depthAt(texCoord + vec2(-o.x,  o.y)); float l00 = lumaAt(texCoord + vec2(-o.x,  o.y));
-    float d01 = depthAt(texCoord + vec2( 0.0,  o.y)); float l01 = lumaAt(texCoord + vec2( 0.0,  o.y));
-    float d02 = depthAt(texCoord + vec2( o.x,  o.y)); float l02 = lumaAt(texCoord + vec2( o.x,  o.y));
-    float d10 = depthAt(texCoord + vec2(-o.x,  0.0)); float l10 = lumaAt(texCoord + vec2(-o.x,  0.0));
-    float d12 = depthAt(texCoord + vec2( o.x,  0.0)); float l12 = lumaAt(texCoord + vec2( o.x,  0.0));
-    float d20 = depthAt(texCoord + vec2(-o.x, -o.y)); float l20 = lumaAt(texCoord + vec2(-o.x, -o.y));
-    float d21 = depthAt(texCoord + vec2( 0.0, -o.y)); float l21 = lumaAt(texCoord + vec2( 0.0, -o.y));
-    float d22 = depthAt(texCoord + vec2( o.x, -o.y)); float l22 = lumaAt(texCoord + vec2( o.x, -o.y));
+    float d00 = invDepthScaledAt(texCoord + vec2(-o.x,  o.y)); float l00 = lumaAt(texCoord + vec2(-o.x,  o.y));
+    float d01 = invDepthScaledAt(texCoord + vec2( 0.0,  o.y)); float l01 = lumaAt(texCoord + vec2( 0.0,  o.y));
+    float d02 = invDepthScaledAt(texCoord + vec2( o.x,  o.y)); float l02 = lumaAt(texCoord + vec2( o.x,  o.y));
+    float d10 = invDepthScaledAt(texCoord + vec2(-o.x,  0.0)); float l10 = lumaAt(texCoord + vec2(-o.x,  0.0));
+    float d12 = invDepthScaledAt(texCoord + vec2( o.x,  0.0)); float l12 = lumaAt(texCoord + vec2( o.x,  0.0));
+    float d20 = invDepthScaledAt(texCoord + vec2(-o.x, -o.y)); float l20 = lumaAt(texCoord + vec2(-o.x, -o.y));
+    float d21 = invDepthScaledAt(texCoord + vec2( 0.0, -o.y)); float l21 = lumaAt(texCoord + vec2( 0.0, -o.y));
+    float d22 = invDepthScaledAt(texCoord + vec2( o.x, -o.y)); float l22 = lumaAt(texCoord + vec2( o.x, -o.y));
 
     float dgx = (d00 + 2.0 * d10 + d20) - (d02 + 2.0 * d12 + d22);
     float dgy = (d00 + 2.0 * d01 + d02) - (d20 + 2.0 * d21 + d22);
-    float depthEdge = step(DepthThreshold, length(vec2(dgx, dgy)));
+    float depthEdge = step(DepthThreshold * (2.0 * ZNear * ZFar), length(vec2(dgx, dgy)));
 
     float lgx = (l00 + 2.0 * l10 + l20) - (l02 + 2.0 * l12 + l22);
     float lgy = (l00 + 2.0 * l01 + l02) - (l20 + 2.0 * l21 + l22);
