@@ -104,8 +104,14 @@ public class TimelinePlayer {
     /** Advance the master clock by one game tick at the runtime's playback rate. */
     public void tick(float rate) {
         frameRate = Float.isFinite(rate) ? Math.max(0f, rate) : 1f;
+        double nextTime = localTime + frameRate;
         evaluate(localTime);
-        localTime += frameRate;
+        // A rate larger than the remaining duration can step over its final signal window. Flush
+        // through the content boundary before isFinished() lets the root leave the particle engine.
+        if (!isStartDelayed() && localTime <= duration && nextTime > duration) {
+            dispatchSignals(timeline.leafTracks(false), duration);
+        }
+        localTime = nextTime;
     }
 
     /** Keep render interpolation in step when the owning runtime changes its playback rate mid-tick. */
@@ -117,7 +123,8 @@ public class TimelinePlayer {
      * Whether this playback has no future content: the timeline is empty, {@link #stop()} was called,
      * or the master clock passed the content end. Boundary: {@link #tick()} evaluates at {@code localTime}
      * <i>then</i> increments, so content exactly at the duration (e.g. a signal at t=D, fired in the
-     * window {@code (last, D]}) is evaluated before this turns true.
+     * window {@code (last, D]}) is evaluated before this turns true, including when a high playback
+     * rate steps past the final content boundary.
      * <p>
      * Objects keep-alive on this (see {@code FXRuntime}): while unfinished, timeline objects must stay
      * in the particle engine for future clips to reactivate/restart them.
