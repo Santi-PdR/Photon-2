@@ -57,7 +57,9 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
     }
 
     public void removeCurve(Curve curve) {
-        this.curves.remove(curve);
+        if (this.curves.remove(curve)) {
+            markAsDirty();
+        }
     }
 
     public DynamicTexture getCurveTexture() {
