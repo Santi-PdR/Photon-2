@@ -5,8 +5,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,10 +22,9 @@ final class AnimationFileListNbt {
         return result;
     }
 
-    /** Returns null when no animation list field is present, and an empty list for an explicit empty list. */
-    @Nullable
+    /** A missing or malformed list is empty, matching the source's clear-before-load behavior. */
     static List<ResourceLocation> read(Tag tag) {
-        if (!(tag instanceof CompoundTag compound) || !compound.contains(KEY, Tag.TAG_LIST)) return null;
+        if (!(tag instanceof CompoundTag compound) || !compound.contains(KEY, Tag.TAG_LIST)) return List.of();
         var serialized = compound.getList(KEY, Tag.TAG_STRING);
         var locations = new ArrayList<ResourceLocation>(serialized.size());
         for (int i = 0; i < serialized.size(); i++) {

@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 class AnimationFileListNbtTest {
     @Test
@@ -26,7 +25,7 @@ class AnimationFileListNbtTest {
     }
 
     @Test
-    void skipsInvalidResourceLocationsAndDistinguishesMissingField() {
+    void skipsInvalidResourceLocationsAndTreatsMissingFieldAsEmpty() {
         var serialized = new CompoundTag();
         var files = new ListTag();
         files.add(StringTag.valueOf("example:animations/idle.gltf"));
@@ -35,6 +34,7 @@ class AnimationFileListNbtTest {
 
         assertEquals(List.of(ResourceLocation.fromNamespaceAndPath("example", "animations/idle.gltf")),
                 AnimationFileListNbt.read(serialized));
-        assertNull(AnimationFileListNbt.read(new CompoundTag()));
+        assertEquals(List.of(), AnimationFileListNbt.read(new CompoundTag()));
+        assertEquals(List.of(), AnimationFileListNbt.read(StringTag.valueOf("not a compound")));
     }
 }

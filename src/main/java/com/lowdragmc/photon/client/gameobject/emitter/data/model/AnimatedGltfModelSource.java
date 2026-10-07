@@ -163,7 +163,6 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         var locations = AnimationFileListNbt.read(tag);
         // The upstream clears this list before decoding. An omitted field means an empty list,
         // which matters when a source instance is reused while loading older/default NBT.
-        if (locations == null) locations = List.of();
         setAnimationFiles(locations.stream().map(ResourceLocation::toString)
                 .collect(java.util.stream.Collectors.joining(",")));
     }
