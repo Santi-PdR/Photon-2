@@ -77,6 +77,35 @@ class GltfMeshParserTest {
     }
 
     @Test
+    void generatesIndependentFaceNormalsForUnindexedGeometryWithoutNormals() throws Exception {
+        ByteBuffer binary = ByteBuffer.allocate(18 * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        for (float value : new float[]{
+                0,0,0, 1,0,0, 0,1,0,
+                0,0,0, 0,0,1, 1,0,0
+        }) binary.putFloat(value);
+        String gltf = """
+                {"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],
+                 "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],
+                 "accessors":[{"bufferView":0,"componentType":5126,"count":6,"type":"VEC3"}],
+                 "bufferViews":[{"buffer":0,"byteLength":72}],
+                 "buffers":[{"byteLength":72,"uri":"data:application/octet-stream;base64,%s"}]}
+                """.formatted(Base64.getEncoder().encodeToString(binary.array()));
+
+        PhotonMesh mesh = GltfMeshParser.parse(
+                new ByteArrayInputStream(gltf.getBytes(StandardCharsets.UTF_8)), false);
+
+        assertEquals(2, mesh.quadCount());
+        int firstFace = PhotonMesh.vertexOffset(0, 0);
+        int secondFace = PhotonMesh.vertexOffset(1, 0);
+        assertEquals(0f, mesh.vertices()[firstFace + 5], 1e-6f);
+        assertEquals(0f, mesh.vertices()[firstFace + 6], 1e-6f);
+        assertEquals(1f, mesh.vertices()[firstFace + 7], 1e-6f);
+        assertEquals(0f, mesh.vertices()[secondFace + 5], 1e-6f);
+        assertEquals(1f, mesh.vertices()[secondFace + 6], 1e-6f);
+        assertEquals(0f, mesh.vertices()[secondFace + 7], 1e-6f);
+    }
+
+    @Test
     void parsesAnimationClipsAndSamplesTranslation() throws Exception {
         String gltf = triangle(true);
 
