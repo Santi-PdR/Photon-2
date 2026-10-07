@@ -85,7 +85,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     }
 
     public record BakedVertexAnimation(float[] table, int vertexCount, int frames, float phase,
-                                       PhaseSource phaseSource, boolean interpolate) {}
+                                       PhaseSource phaseSource, boolean interpolate, boolean loop) {}
 
     @Nullable private AnimatedPose posed;
     @Nullable private SkinnedModel combinedModel;
@@ -175,6 +175,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @ConfigSetter(field = "loop")
     public void setLoop(boolean value) {
         loop = value;
+        dropBake();
     }
 
     @ConfigSetter(field = "perParticlePhase")
@@ -199,7 +200,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         AnimationClip clip = selectedClip(model);
         if (!model.isAnimated()) return null;
         if (bakedTable == null || bakedFrom != model || !Objects.equals(bakedAnimation, animation)) {
-            bakedTable = VertexAnimationBake.bake(model, clip, frames);
+            bakedTable = VertexAnimationBake.bake(model, clip, frames, loop);
             bakedFrom = model;
             bakedAnimation = animation;
             if (bakedTable == null) {
@@ -210,7 +211,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         float duration = clip == null ? 0f : clip.duration();
         float phase = duration <= 0f ? 0f : clipTime(clip) / duration;
         return new BakedVertexAnimation(bakedTable, model.mesh().quadCount() * 4, frames, phase,
-                phaseSource, interpolate);
+                phaseSource, interpolate, loop);
     }
 
     private void dropBake() {

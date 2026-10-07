@@ -85,8 +85,6 @@ public class TileParticleRenderer {
         }
     }
 
-    private record VatPose(int frame, int nextFrame, float blend) {}
-
     private record ModelPass(PhotonMesh mesh, boolean remapUV, boolean shade, Vector3f pivot,
                              @Nullable IDynamicMesh dynamicSource,
                              @Nullable AnimatedGltfModelSource.BakedVertexAnimation vat) {
@@ -209,7 +207,7 @@ public class TileParticleRenderer {
 
     private void putMeshQuad(Matrix4f transform, Matrix3f normalMat, Vector3f pivotPoint,
                              VertexConsumer buffer, PhotonMesh mesh, int quad,
-                             @Nullable AnimatedGltfModelSource.BakedVertexAnimation vat, @Nullable VatPose vatPose,
+                             @Nullable AnimatedGltfModelSource.BakedVertexAnimation vat, @Nullable VertexAnimationBake.PlaybackFrame vatPose,
                              boolean shade, float red, float green, float blue, float alpha, int light,
                              boolean remapUV) {
         var vertices = mesh.vertices();
@@ -268,14 +266,12 @@ public class TileParticleRenderer {
         }
     }
 
-    private static VatPose vatPose(AnimatedGltfModelSource.BakedVertexAnimation vat, IParticle particle, float partialTicks) {
+    private static VertexAnimationBake.PlaybackFrame vatPose(AnimatedGltfModelSource.BakedVertexAnimation vat, IParticle particle, float partialTicks) {
         float phase = vat.phaseSource() == AnimatedGltfModelSource.PhaseSource.Lifetime
                 ? particle.getT(partialTicks)
                 : vat.phase() + particle.getMemRandom("instance_random");
-        phase -= (float) Math.floor(phase);
-        float cursor = phase * vat.frames();
-        int frame = (int) Math.floor(cursor);
-        return new VatPose(frame, (frame + 1) % vat.frames(), vat.interpolate() ? cursor - frame : 0f);
+        var playback = VertexAnimationBake.playbackFrame(phase, vat.frames(), vat.loop(), vat.interpolate());
+        return playback;
     }
 
     // ---------------------------------------------------------------------
@@ -312,7 +308,7 @@ public class TileParticleRenderer {
                 vat == null ? 0 : vat.vertexCount(), vat == null ? 0 : vat.frames(),
                 vat == null ? 0 : vat.phase(),
                 vat != null && vat.phaseSource() == AnimatedGltfModelSource.PhaseSource.Lifetime,
-                vat != null && vat.interpolate(), renderer.getModelPivot());
+                vat != null && vat.interpolate(), vat != null && vat.loop(), renderer.getModelPivot());
         var setting = config.additionalGPUDataSetting;
         var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(particles.size()) : null;
         var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(particles.size()) : null;

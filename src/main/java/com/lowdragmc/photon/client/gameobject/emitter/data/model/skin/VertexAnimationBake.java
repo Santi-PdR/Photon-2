@@ -14,6 +14,11 @@ public final class VertexAnimationBake {
 
     @Nullable
     public static float[] bake(SkinnedModel model, @Nullable AnimationClip clip, int frames) {
+        return bake(model, clip, frames, true);
+    }
+
+    @Nullable
+    public static float[] bake(SkinnedModel model, @Nullable AnimationClip clip, int frames, boolean loop) {
         if (!model.isAnimated() || frames <= 0 || model.mesh().isEmpty()) return null;
         int vertices = model.mesh().quadCount() * 4;
         long texels = (long) frames * vertices;
@@ -23,7 +28,8 @@ public final class VertexAnimationBake {
         SkinDeformer deformer = new SkinDeformer(model.skeleton());
         float duration = clip == null ? 0f : clip.duration();
         for (int frame = 0; frame < frames; frame++) {
-            deformer.pose(clip, duration * frame / frames);
+            float sample = loop || frames == 1 ? (float) frame / frames : (float) frame / (frames - 1);
+            deformer.pose(clip, duration * sample);
             deformer.deform(model.mesh(), model.skin(), pose, null);
             int dst = frame * vertices * FLOATS_PER_VERTEX;
             for (int vertex = 0; vertex < vertices; vertex++) {
@@ -36,6 +42,25 @@ public final class VertexAnimationBake {
         }
         return table;
     }
+
+    /** Resolves a normalized animation phase to table frames without wrapping non-looping clips. */
+    public static PlaybackFrame playbackFrame(float phase, int frames, boolean loop, boolean interpolate) {
+        if (frames <= 1) return new PlaybackFrame(0, 0, 0);
+        float normalized = Float.isFinite(phase) ? phase : 0f;
+        if (loop) {
+            normalized -= (float) Math.floor(normalized);
+            float cursor = normalized * frames;
+            int frame = (int) Math.floor(cursor);
+            return new PlaybackFrame(frame, (frame + 1) % frames, interpolate ? cursor - frame : 0f);
+        }
+        normalized = Math.max(0f, Math.min(1f, normalized));
+        float cursor = normalized * (frames - 1);
+        int frame = (int) Math.floor(cursor);
+        int next = Math.min(frame + 1, frames - 1);
+        return new PlaybackFrame(frame, next, interpolate ? cursor - frame : 0f);
+    }
+
+    public record PlaybackFrame(int frame, int nextFrame, float blend) {}
 
     public static float packNormal(float nx, float ny, float nz) {
         float sum = Math.abs(nx) + Math.abs(ny) + Math.abs(nz);

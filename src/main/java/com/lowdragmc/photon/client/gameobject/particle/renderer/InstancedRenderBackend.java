@@ -172,6 +172,7 @@ abstract class InstancedRenderBackend {
     private int vatFrames;
     private float vatPhase, vatRandomWeight, vatLifetimeWeight;
     private boolean vatInterpolate;
+    private boolean vatLoop;
     private float boundVatPivotX = Float.NaN, boundVatPivotY = Float.NaN, boundVatPivotZ = Float.NaN;
 
     /** Uploads the static base mesh into {@code resource.modelVbo}/{@code modelEbo} (the VAO is bound), sets the static attribute pointers and {@link #modelEboSize}. */
@@ -544,13 +545,14 @@ abstract class InstancedRenderBackend {
 
     /** Upload a baked animation table once, then update only its per-draw phase uniforms. */
     void setVertexAnimation(@Nullable float[] table, int vertexCount, int frames, float phase,
-                            boolean lifetimePhase, boolean interpolate, Vector3f pivot) {
+                            boolean lifetimePhase, boolean interpolate, boolean loop, Vector3f pivot) {
         vatVertexCount = table == null ? 0 : vertexCount;
         vatFrames = table == null ? 0 : frames;
         vatPhase = phase;
         vatRandomWeight = lifetimePhase || table == null ? 0f : 1f;
         vatLifetimeWeight = lifetimePhase && table != null ? 1f : 0f;
         vatInterpolate = interpolate;
+        vatLoop = loop;
         boolean pivotChanged = pivot.x != boundVatPivotX || pivot.y != boundVatPivotY || pivot.z != boundVatPivotZ;
         if (resource == null) return;
         if (table == null) {
@@ -652,7 +654,8 @@ abstract class InstancedRenderBackend {
             lastVatParamsLocation = glGetUniformLocation(shader.getId(), "PhotonVatParams");
         }
         if (lastVatParamsLocation >= 0) {
-            glUniform4f(lastVatParamsLocation, vatPhase, vatRandomWeight, vatLifetimeWeight, vatInterpolate ? 1f : 0f);
+            glUniform4f(lastVatParamsLocation, vatPhase, vatRandomWeight, vatLifetimeWeight,
+                    (vatInterpolate ? 1f : 0f) + (vatLoop ? 2f : 0f));
         }
     }
 

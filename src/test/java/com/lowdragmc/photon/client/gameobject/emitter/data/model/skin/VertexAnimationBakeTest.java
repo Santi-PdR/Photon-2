@@ -54,6 +54,35 @@ class VertexAnimationBakeTest {
         assertNull(VertexAnimationBake.bake(staticModel, null, 0));
     }
 
+    @Test
+    void nonLoopingBakeIncludesTheClipEndAndPlaybackClampsThere() {
+        var meshBuilder = new PhotonMesh.Builder();
+        meshBuilder.quad(vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), 0, 0, 1, 1, 1);
+        var skeletonBuilder = new Skeleton.Builder();
+        skeletonBuilder.joint(0, -1, "root", new float[]{0, 0, 0, 0, 0, 0, 1, 1, 1, 1}, 0);
+        Skeleton[] skeleton = new Skeleton[1];
+        skeletonBuilder.sortInto(skeleton);
+        var skin = new MeshSkin(new int[16], new float[]{
+                1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0
+        });
+        var clip = new AnimationClip("translate", List.of(new AnimationClip.Channel(
+                0, AnimationClip.Path.TRANSLATION, AnimationClip.Interpolation.LINEAR,
+                new float[]{0, 2}, new float[]{0, 0, 0, 2, 0, 0})));
+        var model = new SkinnedModel(meshBuilder.build(), skin, skeleton[0], List.of(clip));
+
+        float[] table = VertexAnimationBake.bake(model, clip, 2, false);
+        int lastFrame = 4 * VertexAnimationBake.FLOATS_PER_VERTEX;
+        assertEquals(2f, table[lastFrame], 1e-6f);
+
+        var end = VertexAnimationBake.playbackFrame(1f, 2, false, true);
+        assertEquals(1, end.frame());
+        assertEquals(1, end.nextFrame());
+        assertEquals(0f, end.blend());
+        var wrapped = VertexAnimationBake.playbackFrame(1f, 2, true, true);
+        assertEquals(0, wrapped.frame());
+        assertEquals(1, wrapped.nextFrame());
+    }
+
     private static float[] vertex(float x, float y) {
         return new float[]{x, y, 0, x, y, 0, 0, 1};
     }

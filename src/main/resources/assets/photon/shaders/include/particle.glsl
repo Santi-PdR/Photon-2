@@ -60,7 +60,7 @@ uniform samplerBuffer PhotonData;
 // Baked vertex-animation table: one RGBA32F texel (position + packed normal) per vertex/frame.
 uniform samplerBuffer PhotonVat;
 uniform ivec2 PhotonVatSize; // vertex count, frame count
-uniform vec4 PhotonVatParams; // shared phase, random weight, particle-life weight, interpolate
+uniform vec4 PhotonVatParams; // shared phase, random weight, particle-life weight, flags: interpolate=1, loop=2
 
 // user custom data: pulled from PhotonCustomData by gl_InstanceID (see photon_custom_data()).
 // Constant stride — MIRRORED FROM AdditionalGPUDataSetting.MAX_CUSTOM_DATA (keep in lockstep).
@@ -245,15 +245,19 @@ ParticleData getParticleData() {
     vec3 modelNormal = aNormal.xyz;
     if (PhotonVatSize.x > 0 && PhotonVatSize.y > 0) {
         vec4 instanceAnimation = texelFetch(PhotonData, PHOTON_INSTANCE_ID * PHOTON_DATA_TEXELS);
-        float phase = fract(PhotonVatParams.x + instanceAnimation.x * PhotonVatParams.y
-                + instanceAnimation.y * PhotonVatParams.z);
-        float cursor = phase * float(PhotonVatSize.y);
+        float rawPhase = PhotonVatParams.x + instanceAnimation.x * PhotonVatParams.y
+                + instanceAnimation.y * PhotonVatParams.z;
+        bool loopAnimation = PhotonVatParams.w >= 2.0;
+        float phase = loopAnimation ? fract(rawPhase) : clamp(rawPhase, 0.0, 1.0);
+        float cursor = phase * float(loopAnimation ? PhotonVatSize.y : max(PhotonVatSize.y - 1, 0));
         int frame = clamp(int(cursor), 0, PhotonVatSize.y - 1);
         vec4 pose = texelFetch(PhotonVat, frame * PhotonVatSize.x + gl_VertexID);
         modelPosition = pose.xyz;
         modelNormal = photon_vat_unpack_normal(pose.w);
-        if (PhotonVatParams.w > 0.5) {
-            int nextFrame = frame + 1 == PhotonVatSize.y ? 0 : frame + 1;
+        if (mod(PhotonVatParams.w, 2.0) > 0.5) {
+            int nextFrame = loopAnimation
+                    ? (frame + 1 == PhotonVatSize.y ? 0 : frame + 1)
+                    : min(frame + 1, PhotonVatSize.y - 1);
             vec4 nextPose = texelFetch(PhotonVat, nextFrame * PhotonVatSize.x + gl_VertexID);
             float blend = cursor - floor(cursor);
             modelPosition = mix(modelPosition, nextPose.xyz, blend);
