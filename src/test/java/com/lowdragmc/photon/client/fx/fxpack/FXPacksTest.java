@@ -89,6 +89,33 @@ class FXPacksTest {
         }
     }
 
+    @Test
+    void corruptShaderMetadataAbortsSweepInsteadOfDeletingUnmarkedFiles() throws Exception {
+        var pack = tempDir.resolve("corrupt-shader.fxpack");
+        var removedId = ResourceLocation.fromNamespaceAndPath("demo", "remove_me");
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of("create", "true"))) {
+            var fxDir = zip.getPath("assets/demo/fx");
+            var shaderDir = zip.getPath("assets/demo/shaders/core");
+            var textureDir = zip.getPath("assets/demo/textures");
+            Files.createDirectories(fxDir);
+            Files.createDirectories(shaderDir);
+            Files.createDirectories(textureDir);
+            writeFx(fxDir.resolve("remove_me.fx"), "demo:textures/remove.png");
+            writeShaderFx(fxDir.resolve("keep_me.fx"), "demo:broken");
+            Files.writeString(shaderDir.resolve("broken.json"), "{ malformed json");
+            Files.write(textureDir.resolve("unmarked.png"), new byte[]{7});
+        }
+
+        FXPacks.removeFx(pack.toFile(), removedId);
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of())) {
+            assertTrue(Files.exists(zip.getPath("assets/demo/fx/keep_me.fx")));
+            assertTrue(Files.exists(zip.getPath("assets/demo/shaders/core/broken.json")));
+            assertTrue(Files.exists(zip.getPath("assets/demo/textures/unmarked.png")));
+        }
+    }
+
     private static void writeShader(FileSystem zip, String shaderId, String programId, String vertexSource) throws Exception {
         var shader = ResourceLocation.tryParse(shaderId);
         var shaderPath = zip.getPath("assets", shader.getNamespace(), "shaders/core", shader.getPath() + ".json");
