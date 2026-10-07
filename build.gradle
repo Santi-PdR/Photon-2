@@ -216,6 +216,62 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
+def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
+    group = 'verification'
+    description = 'Rejects direct client-only Minecraft/Blaze3D links from common classes in the reobfuscated mod JAR.'
+    dependsOn tasks.named('reobfJar')
+    doLast {
+        def artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        if (!artifact.isFile()) {
+            throw new GradleException("Reobfuscated Photon artifact is missing: ${artifact}")
+        }
+
+        def scanned = 0
+        def violations = []
+        def zip = new java.util.zip.ZipFile(artifact)
+        try {
+            def entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                def entry = entries.nextElement()
+                if (entry.directory || !entry.name.startsWith('com/lowdragmc/photon/') || !entry.name.endsWith('.class')) {
+                    continue
+                }
+                def relative = entry.name.substring('com/lowdragmc/photon/'.length())
+                def path = relative.toLowerCase(java.util.Locale.ROOT)
+                if (path.startsWith('client/') || path.startsWith('gui/') || path.startsWith('uitest/')
+                        || path.startsWith('core/mixins/') || path.endsWith('$client.class')
+                        || path == 'integration/photonldlibclientplugin.class') {
+                    continue
+                }
+
+                scanned++
+                def bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
+                def constantPool = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                if (constantPool.contains('net/minecraft/client/')) {
+                    violations << "${entry.name} references net/minecraft/client"
+                }
+                if (constantPool.contains('com/mojang/blaze3d/')) {
+                    violations << "${entry.name} references com/mojang/blaze3d"
+                }
+            }
+        } finally {
+            zip.close()
+        }
+
+        if (scanned == 0) {
+            throw new GradleException("No common Photon classfiles were found in ${artifact}")
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Common-side client API links in ${artifact}:\n - ${violations.join('\n - ')}")
+        }
+        logger.lifecycle("Verified ${scanned} common Photon classfiles in ${artifact.name}; no direct client-only Minecraft or Blaze3D links.")
+    }
+}
+
+tasks.named('check') {
+    dependsOn verifyCommonSideArtifact
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
