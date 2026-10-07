@@ -65,6 +65,11 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
         return model == null ? SkinnedModel.EMPTY : model;
     }
 
+    /** 26.2 API name for the shared skinned-model lookup. */
+    public SkinnedModel getModel(Object key, Function<Object, @Nullable SkinnedModel> loader) {
+        return getSkinnedModel(key, loader);
+    }
+
     /** Changes whenever any cache entry is invalidated, including resource or editable-file reloads. */
     public long generation() {
         return generation;

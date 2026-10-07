@@ -342,7 +342,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
 
     private SkinnedModel baseModel() {
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) return SkinnedModel.EMPTY;
-        return PhotonMeshCache.INSTANCE.getSkinnedModel(key(), ignored -> load());
+        return PhotonMeshCache.INSTANCE.getModel(key(), ignored -> load());
     }
 
     private PhotonMeshCache.GltfKey key() {
