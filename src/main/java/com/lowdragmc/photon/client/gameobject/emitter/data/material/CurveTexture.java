@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
@@ -8,6 +9,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -15,12 +17,14 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.resources.ResourceLocation;
 import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -34,6 +38,9 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
     private boolean isDirty = false;
     @Nullable
     private DynamicTexture curveTexture;
+    @Nullable
+    private ResourceLocation registeredId;
+    private static final AtomicInteger ID_SEQ = new AtomicInteger();
 
     public CurveTexture(int width, int height) {
         this.width = width;
@@ -58,9 +65,30 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
         return curveTexture;
     }
 
+    /**
+     * Uploads the current curve texture and returns a texture-manager identifier for integrations
+     * that bind samplers by resource location instead of accepting a {@link DynamicTexture} supplier.
+     * Render-thread only.
+     */
+    @Nullable
+    public ResourceLocation textureId() {
+        RenderSystem.assertOnRenderThread();
+        var texture = getCurveTexture();
+        if (texture == null) return null;
+        if (registeredId == null) {
+            registeredId = Photon.id("dynamic/curve/" + ID_SEQ.getAndIncrement());
+            Minecraft.getInstance().getTextureManager().register(registeredId, texture);
+        }
+        return registeredId;
+    }
+
     @Override
     public void close() {
-        if (curveTexture != null) {
+        if (registeredId != null) {
+            Minecraft.getInstance().getTextureManager().release(registeredId);
+            registeredId = null;
+            curveTexture = null;
+        } else if (curveTexture != null) {
             curveTexture.close();
             curveTexture = null;
         }
@@ -70,6 +98,13 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
         if (!isDirty) return;
         RenderSystem.assertOnRenderThread();
         if (curveTexture == null || curveTexture.getPixels() == null)  {
+            if (registeredId != null) {
+                Minecraft.getInstance().getTextureManager().release(registeredId);
+                registeredId = null;
+                curveTexture = null;
+            } else if (curveTexture != null) {
+                curveTexture.close();
+            }
             this.curveTexture = new DynamicTexture(width, height, false);
         }
         var pixels = curveTexture.getPixels();

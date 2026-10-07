@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
@@ -8,11 +9,13 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.math.GradientColor;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.GradientColorConfigurator;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
 import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 
@@ -20,6 +23,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -33,6 +37,9 @@ public class GradientTexture implements AutoCloseable, IConfigurable, RegistryAw
     private boolean isDirty = false;
     @Nullable
     private DynamicTexture gradientTexture;
+    @Nullable
+    private ResourceLocation registeredId;
+    private static final AtomicInteger ID_SEQ = new AtomicInteger();
 
     public GradientTexture(int width, int height) {
         this.width = width;
@@ -57,9 +64,30 @@ public class GradientTexture implements AutoCloseable, IConfigurable, RegistryAw
         return gradientTexture;
     }
 
+    /**
+     * Uploads the current gradient texture and returns a texture-manager identifier for integrations
+     * that bind samplers by resource location instead of accepting a {@link DynamicTexture} supplier.
+     * Render-thread only.
+     */
+    @Nullable
+    public ResourceLocation textureId() {
+        RenderSystem.assertOnRenderThread();
+        var texture = getGradientTexture();
+        if (texture == null) return null;
+        if (registeredId == null) {
+            registeredId = Photon.id("dynamic/gradient/" + ID_SEQ.getAndIncrement());
+            Minecraft.getInstance().getTextureManager().register(registeredId, texture);
+        }
+        return registeredId;
+    }
+
     @Override
     public void close() {
-        if (gradientTexture != null) {
+        if (registeredId != null) {
+            Minecraft.getInstance().getTextureManager().release(registeredId);
+            registeredId = null;
+            gradientTexture = null;
+        } else if (gradientTexture != null) {
             gradientTexture.close();
             gradientTexture = null;
         }
@@ -69,6 +97,13 @@ public class GradientTexture implements AutoCloseable, IConfigurable, RegistryAw
         if (!isDirty) return;
         RenderSystem.assertOnRenderThread();
         if (gradientTexture == null || gradientTexture.getPixels() == null)  {
+            if (registeredId != null) {
+                Minecraft.getInstance().getTextureManager().release(registeredId);
+                registeredId = null;
+                gradientTexture = null;
+            } else if (gradientTexture != null) {
+                gradientTexture.close();
+            }
             this.gradientTexture = new DynamicTexture(width, height, false);
         }
         var pixels = gradientTexture.getPixels();
