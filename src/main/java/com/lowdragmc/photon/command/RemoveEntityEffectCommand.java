@@ -23,6 +23,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -100,27 +101,19 @@ public class RemoveEntityEffectCommand {
         public static void execute(RemoveEntityEffectCommand packet) {
             var level = Minecraft.getInstance().level;
             if (level == null) return;
+            var targets = new ArrayList<Entity>(packet.ids.length);
             for (var id : packet.ids) {
                 var entity = level.getEntity(id);
                 if (entity != null) {
-                    var effects = EntityEffectExecutor.CACHE.get(entity);
-                    if (effects == null) return;
-                    var iter = effects.iterator();
-                    while (iter.hasNext()) {
-                        var effect = iter.next();
-                        if (packet.location == null || packet.location.equals(effect.getFx().getFxLocation())) {
-                            iter.remove();
-                            var runtime = effect.getRuntime();
-                            if (runtime != null && runtime.isAlive()) {
-                                runtime.destroy(packet.force);
-                            }
-                        }
-                    }
-                    if (effects.isEmpty()) {
-                        EntityEffectExecutor.CACHE.remove(entity);
-                    }
+                    targets.add(entity);
                 }
             }
+            EffectRemoval.removeMatching(targets, EntityEffectExecutor.CACHE,
+                    effect -> packet.location == null || packet.location.equals(effect.getFx().getFxLocation()),
+                    effect -> {
+                        var runtime = effect.getRuntime();
+                        if (runtime != null && runtime.isAlive()) runtime.destroy(packet.force);
+                    });
         }
     }
 
