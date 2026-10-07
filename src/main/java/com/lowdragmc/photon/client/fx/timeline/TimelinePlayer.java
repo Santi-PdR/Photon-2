@@ -109,7 +109,7 @@ public class TimelinePlayer {
         // A rate larger than the remaining duration can step over its final state. Evaluate the
         // content boundary before isFinished() lets the root leave the particle engine, so final
         // signals fire and control, animation, speed, and audio tracks all settle at their end state.
-        if (!isStartDelayed() && localTime <= duration && nextTime > duration) {
+        if (TimelineBoundaryPolicy.shouldEvaluateDuration(localTime, nextTime, duration, isStartDelayed())) {
             evaluate(duration);
         }
         localTime = nextTime;
