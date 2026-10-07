@@ -19,8 +19,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Loads and caches {@link FX} definitions from {@code assets/<ns>/fx/<path>.fx} resources (resource
@@ -32,19 +30,14 @@ import java.util.concurrent.ConcurrentHashMap;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public class FXHelper {
-    // concurrent: sub-emitter spawns may query the cache while other threads do (never mutate mid-load;
-    // loadFX does not re-enter getFX, so computeIfAbsent cannot recurse)
-    private final static Map<ResourceLocation, FX> CACHE = new ConcurrentHashMap<>();
-    // volatile: listAllFX is called from search worker threads as well as the game thread
-    @Nullable
-    private static volatile List<ResourceLocation> idCache = null;
+    // Loads run outside each cache's lock; completions from before a resource reload are discarded.
+    private static final ReloadableValueCache<ResourceLocation, FX> CACHE = new ReloadableValueCache<>();
+    private static final ReloadableValueCache<String, List<ResourceLocation>> ID_CACHE = new ReloadableValueCache<>();
     public static final String FX_PATH = "fx/";
 
     public static int clearCache() {
-        var count = CACHE.size();
-        CACHE.clear();
-        idCache = null;
-        return count;
+        ID_CACHE.invalidate();
+        return CACHE.invalidate();
     }
 
     @Nullable
@@ -61,30 +54,26 @@ public class FXHelper {
      * reload listener calls that. The returned list is immutable and shared.
      */
     public static List<ResourceLocation> listAllFX() {
-        var cached = idCache;
-        if (cached != null) {
-            return cached;
-        }
-        var result = new ArrayList<ResourceLocation>();
-        Minecraft.getInstance().getResourceManager()
-                .listResources("fx", location -> location.getPath().endsWith(FX.SUFFIX))
-                .forEach((location, resource) -> {
-                    var path = location.getPath(); // fx/<name>.fx
-                    result.add(ResourceLocation.fromNamespaceAndPath(location.getNamespace(),
-                            path.substring(FX_PATH.length(), path.length() - FX.SUFFIX.length())));
-                });
-        // by namespace first, so the list reads the way it is displayed ("ns:path") and every effect from
-        // one pack sits together. ResourceLocation's own order is path-first, which interleaves packs.
-        result.sort(Comparator.comparing(ResourceLocation::getNamespace).thenComparing(ResourceLocation::getPath));
-        var listing = Collections.unmodifiableList(result);
-        idCache = listing;
-        return listing;
+        return ID_CACHE.get("all", () -> {
+            var result = new ArrayList<ResourceLocation>();
+            Minecraft.getInstance().getResourceManager()
+                    .listResources("fx", location -> location.getPath().endsWith(FX.SUFFIX))
+                    .forEach((location, resource) -> {
+                        var path = location.getPath(); // fx/<name>.fx
+                        result.add(ResourceLocation.fromNamespaceAndPath(location.getNamespace(),
+                                path.substring(FX_PATH.length(), path.length() - FX.SUFFIX.length())));
+                    });
+            // by namespace first, so the list reads the way it is displayed ("ns:path") and every effect from
+            // one pack sits together. ResourceLocation's own order is path-first, which interleaves packs.
+            result.sort(Comparator.comparing(ResourceLocation::getNamespace).thenComparing(ResourceLocation::getPath));
+            return Collections.unmodifiableList(result);
+        });
     }
 
 
     @Nullable
     public static FX getFX(ResourceLocation fxLocation, boolean useCache) {
-        return useCache ? CACHE.computeIfAbsent(fxLocation, location -> loadFX(fxLocation)) : loadFX(fxLocation);
+        return useCache ? CACHE.get(fxLocation, () -> loadFX(fxLocation)) : loadFX(fxLocation);
     }
 
     @Nullable
