@@ -14,6 +14,7 @@ import com.lowdragmc.photon.client.gameobject.IFXObject;
 import com.lowdragmc.photon.client.gameobject.RuntimeBinding;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.CustomDataBindings;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.gameobject.particle.BeamParticle;
@@ -130,6 +131,11 @@ public class BeamEmitter extends Emitter {
             runtime = new BeamRuntime(config);
         }
         return runtime;
+    }
+
+    @Override
+    public RendererSetting.Runtime rendererRuntime() {
+        return runtime().renderer;
     }
 
     @Override

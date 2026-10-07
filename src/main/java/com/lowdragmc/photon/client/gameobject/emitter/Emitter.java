@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.gameobject.emitter;
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.DummyWorld;
 import com.lowdragmc.photon.client.gameobject.FXObject;
 import com.lowdragmc.photon.client.gameobject.IFXObject;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType;
 import lombok.Getter;
 import net.minecraft.client.particle.ParticleRenderType;
@@ -25,6 +26,9 @@ import java.util.function.Function;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public abstract class Emitter extends FXObject implements IParticleEmitter {
+    /** Effective per-emitter renderer settings, including any timeline overrides. */
+    public abstract RendererSetting.Runtime rendererRuntime();
+
     // runtime
     @Nullable
     protected Vector3f previousPosition;

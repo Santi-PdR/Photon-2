@@ -297,6 +297,11 @@ public class ParticleEmitter extends Emitter {
     }
 
     @Override
+    public RendererSetting.Runtime rendererRuntime() {
+        return runtime().renderer;
+    }
+
+    @Override
     public IGuiTexture getIcon() {
         return ICON;
     }

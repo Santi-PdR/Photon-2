@@ -136,6 +136,11 @@ public class TrailEmitter extends Emitter {
         return runtime;
     }
 
+    @Override
+    public RendererSetting.Runtime rendererRuntime() {
+        return runtime().renderer;
+    }
+
 
     @Override
     public IGuiTexture getIcon() {
