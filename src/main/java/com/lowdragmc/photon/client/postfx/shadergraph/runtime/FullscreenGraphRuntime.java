@@ -127,6 +127,19 @@ public final class FullscreenGraphRuntime {
         if (entry != null) entry.close();
     }
 
+    /** Close cached GL programs before resource reloads, including entries no longer referenced by a pass. */
+    public static void invalidateAll() {
+        var entries = CACHE.values().toArray(Entry[]::new);
+        CACHE.clear();
+        for (var entry : entries) {
+            try {
+                entry.close();
+            } catch (Throwable e) {
+                Photon.LOGGER.error("Failed to close fullscreen graph cache entry", e);
+            }
+        }
+    }
+
     private static Entry compile(@Nullable CompoundTag tag) {
         if (tag == null) {
             return new Entry(null, null, null, "fullscreen graph resource not found");

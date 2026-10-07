@@ -189,6 +189,19 @@ public final class ShaderGraphRuntime {
         if (entry != null) entry.close();
     }
 
+    /** Close all cached GL variants and preview scene captures before a resource reload. */
+    public static void invalidateAll() {
+        var entries = CACHE.values().toArray(Entry[]::new);
+        CACHE.clear();
+        for (var entry : entries) {
+            try {
+                entry.close();
+            } catch (Throwable e) {
+                Photon.LOGGER.error("Failed to close shader graph cache entry", e);
+            }
+        }
+    }
+
     private static Entry compile(@Nullable CompoundTag tag) {
         if (tag == null) {
             return new Entry(null, null, null, null, "shader graph resource not found");

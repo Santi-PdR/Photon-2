@@ -5,6 +5,8 @@ import com.lowdragmc.lowdraglib2.client.shader.management.Shader;
 import com.lowdragmc.lowdraglib2.client.shader.management.ShaderProgram;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
+import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
+import com.lowdragmc.photon.client.shadergraph.runtime.ShaderGraphRuntime;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import lombok.Getter;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -68,6 +70,10 @@ public class PhotonShaders {
         com.lowdragmc.photon.client.postfx.runtime.MaskGroups.clearAll();
         // compiled effects embed custom-shader port bindings — recompile against the fresh files
         com.lowdragmc.photon.client.postfx.runtime.RenderGraphRuntime.invalidateAll();
+        // graph shader programs own GL resources too; close even cache entries whose resources were
+        // removed from the pack and therefore will never be resolved again by their old path.
+        ShaderGraphRuntime.invalidateAll();
+        FullscreenGraphRuntime.invalidateAll();
         // a resource reload can follow a shader-pack reload, which recreates every Iris render
         // target — drop the resolved layout and the composite framebuffer with it
         IrisCompat.invalidate();
