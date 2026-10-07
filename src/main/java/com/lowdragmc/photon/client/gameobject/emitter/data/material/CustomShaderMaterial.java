@@ -105,8 +105,13 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Override
     public IMaterial copy() {
         var copied = new CustomShaderMaterial(shaderLocation);
-        var data = serializeAdditionalNBT(Platform.getFrozenRegistry());
-        copied.deserializeAdditionalNBT(data, Platform.getFrozenRegistry());
+        var provider = Platform.getFrozenRegistry();
+        // These configurable sampler inputs are not part of additional NBT. This override of
+        // IMaterial.copy() intentionally avoids round-tripping the whole configurable object,
+        // so copy the two editable texture definitions explicitly as well.
+        copied.curveTexture.deserializeNBT(provider, curveTexture.serializeNBT(provider));
+        copied.gradientTexture.deserializeNBT(provider, gradientTexture.serializeNBT(provider));
+        copied.deserializeAdditionalNBT(serializeAdditionalNBT(provider), provider);
         return copied;
     }
 
