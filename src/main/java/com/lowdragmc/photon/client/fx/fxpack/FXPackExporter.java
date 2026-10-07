@@ -361,13 +361,13 @@ public final class FXPackExporter {
         var jsonLocation = ResourceLocation.fromNamespaceAndPath(shaderId.getNamespace(),
                 "shaders/core/" + shaderId.getPath() + ".json");
         if (!handledAssets.add(jsonLocation)) return;
-        var jsonBytes = readPackableAsset(jsonLocation);
-        if (jsonBytes == null) return;
-        files.put(jsonLocation, jsonBytes);
+        var jsonAsset = readAsset(jsonLocation);
+        if (jsonAsset == null) return;
+        if (jsonAsset.packable()) files.put(jsonLocation, jsonAsset.bytes());
 
         // the json names the program files: "vertex"/"fragment" are shader ids like "photon:particle"
         try {
-            var json = JsonParser.parseString(new String(jsonBytes, StandardCharsets.UTF_8)).getAsJsonObject();
+            var json = JsonParser.parseString(new String(jsonAsset.bytes(), StandardCharsets.UTF_8)).getAsJsonObject();
             packProgramStage(json, "vertex", ".vsh");
             packProgramStage(json, "fragment", ".fsh");
         } catch (Exception e) {
@@ -383,9 +383,21 @@ public final class FXPackExporter {
         var fileLocation = ResourceLocation.fromNamespaceAndPath(programId.getNamespace(),
                 "shaders/core/" + programId.getPath() + extension);
         if (!handledAssets.add(fileLocation)) return;
-        var bytes = readPackableAsset(fileLocation);
-        if (bytes != null) { // null: provided by a mod/vanilla on the recipient, or missing (warned)
-            files.put(fileLocation, bytes);
+        var asset = readAsset(fileLocation);
+        if (asset == null) return;
+        if (asset.packable()) files.put(fileLocation, asset.bytes());
+        packShaderIncludes(asset.bytes());
+    }
+
+    /** Follow nested includes too; author resource packs often split helpers across several GLSL files. */
+    private void packShaderIncludes(byte[] sourceBytes) {
+        var source = new String(sourceBytes, StandardCharsets.UTF_8);
+        for (var include : ShaderIncludeResolver.imports(source)) {
+            if (!handledAssets.add(include)) continue; // dedupe and break include cycles
+            var asset = readAsset(include);
+            if (asset == null) continue;
+            if (asset.packable()) files.put(include, asset.bytes());
+            packShaderIncludes(asset.bytes());
         }
     }
 
@@ -395,6 +407,15 @@ public final class FXPackExporter {
      * asset dir, resource packs, other fx packs) → bytes.
      */
     private byte @Nullable [] readPackableAsset(ResourceLocation location) {
+        var asset = readAsset(location);
+        return asset == null || !asset.packable() ? null : asset.bytes();
+    }
+
+    private record Asset(byte[] bytes, boolean packable) {
+    }
+
+    @Nullable
+    private Asset readAsset(ResourceLocation location) {
         var resource = Minecraft.getInstance().getResourceManager().getResource(location).orElse(null);
         if (resource == null) {
             warnings.add("referenced asset %s does not resolve — the export will look wrong wherever it's missing"
@@ -402,11 +423,8 @@ public final class FXPackExporter {
             return null;
         }
         var packId = resource.sourcePackId();
-        if ("vanilla".equals(packId) || packId.startsWith("mod")) {
-            return null; // ships with the game / a mod — no need to carry it
-        }
         try (var in = resource.open()) {
-            return in.readAllBytes();
+            return new Asset(in.readAllBytes(), !("vanilla".equals(packId) || packId.startsWith("mod")));
         } catch (IOException e) {
             warnings.add("failed to read asset %s (%s)".formatted(location, e.getMessage()));
             return null;
