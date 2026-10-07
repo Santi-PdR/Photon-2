@@ -139,6 +139,8 @@ public class SubEmittersSetting extends ToggleGroup {
         Tick
     }
 
+    @Setter
+    @Getter
     public static class Emitter implements IConfigurable, IPersistedSerializable {
         @Nullable
         @Persisted
@@ -224,6 +226,7 @@ public class SubEmittersSetting extends ToggleGroup {
                     v -> fxLocation = (v == null || v.isEmpty()) ? null : ResourceLocation.parse(v),
                     "", true,
                     (word, handler) -> {
+                        if (Thread.currentThread().isInterrupted()) return;
                         var search = word.toLowerCase(Locale.ROOT);
                         for (var candidate : candidates) {
                             // the search runs off-thread and is cancelled when the query moves on
