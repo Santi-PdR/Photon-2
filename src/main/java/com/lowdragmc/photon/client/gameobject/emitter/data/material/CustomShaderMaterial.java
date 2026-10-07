@@ -31,8 +31,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.FloatTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraftforge.api.distmarker.Dist;
@@ -119,30 +117,18 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             shaderData.put("shaderData", shaderHolder.serializeNBT(provider));
         }
         if (!uniformOverrides.isEmpty()) {
-            var uniforms = new CompoundTag();
-            uniformOverrides.forEach((name, components) -> {
-                var values = new ListTag();
-                for (float component : components) values.add(FloatTag.valueOf(component));
-                uniforms.put(name, values);
-            });
-            shaderData.put("uniformOverrides", uniforms);
+            shaderData.put("uniformOverrides", CustomShaderUniformNbt.write(uniformOverrides));
         }
         return shaderData;
     }
 
     @Override
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
-        if (!(tag instanceof CompoundTag shaderData)) return;
-        uniformOverrides.clear();
-        var savedOverrides = shaderData.getCompound("uniformOverrides");
-        for (String name : savedOverrides.getAllKeys()) {
-            if (!(savedOverrides.get(name) instanceof ListTag values) || values.isEmpty() || values.size() > 16) continue;
-            var components = new float[values.size()];
-            for (int i = 0; i < components.length; i++) components[i] = values.getFloat(i);
-            uniformOverrides.put(name, components);
-        }
-        recompile();
-        if (shaderHolder != null && shaderData.contains("shaderData", Tag.TAG_COMPOUND)) {
+        CustomShaderUniformNbt.readInto(uniformOverrides,
+                tag instanceof CompoundTag shaderData ? shaderData.get("uniformOverrides") : tag);
+        if (tag instanceof CompoundTag || shaderHolder != null) recompile();
+        if (shaderHolder != null && tag instanceof CompoundTag shaderData
+                && shaderData.contains("shaderData", Tag.TAG_COMPOUND)) {
             shaderHolder.deserializeNBT(provider, shaderData.getCompound("shaderData"));
             attachDynamicSamplers(shaderHolder);
             attachDynamicUniforms(shaderHolder);
@@ -290,6 +276,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public void setUniformValue(String name, float... components) {
         if (name == null || name.isBlank() || name.startsWith("U_") || components == null
                 || components.length == 0 || components.length > 16) return;
+        for (float component : components) if (!Float.isFinite(component)) return;
         uniformOverrides.put(name, components.clone());
         if (shaderHolder != null) applyUniformOverrides(shaderHolder.baseInstance);
     }
