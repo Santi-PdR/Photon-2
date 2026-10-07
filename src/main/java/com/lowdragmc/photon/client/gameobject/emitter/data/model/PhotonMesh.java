@@ -9,6 +9,7 @@ import net.minecraftforge.client.model.IQuadTransformer;
 import org.apache.commons.lang3.tuple.Pair;
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,7 +35,8 @@ public final class PhotonMesh {
     public static final int FLOATS_PER_TANGENT = MeshTangents.FLOATS_PER_TANGENT;
     /** Floats per corner in {@link #spriteBounds()}: u0, v0, u1, v1. */
     public static final int FLOATS_PER_SPRITE = 4;
-    public static final PhotonMesh EMPTY = new PhotonMesh(new float[0], new float[0], new float[0], new float[0]);
+    public static final PhotonMesh EMPTY = new PhotonMesh(new float[0], new float[0], new float[0],
+            new float[0], new float[0]);
 
     /** quadCount * 4 * {@link #FLOATS_PER_VERTEX}: x,y,z,u,v,nx,ny,nz per corner. */
     private final float[] vertices;
@@ -42,6 +44,8 @@ public final class PhotonMesh {
     private final float[] spriteBounds;
     /** quadCount: per-face directional shade factor (all 1 when the source has no face directions). */
     private final float[] shadeBrightness;
+    /** Per-corner brightness for the 26.2 indexed mesh API; ordinary Forge faces repeat one value. */
+    private final float[] cornerBrightness;
     /**
      * quadCount * 4 * {@link #FLOATS_PER_TANGENT}: tx,ty,tz,w per corner, derived from positions + UVs
      * ({@link MeshTangents}). Kept in a parallel array rather than widening {@link #vertices} so the
@@ -65,15 +69,18 @@ public final class PhotonMesh {
     @Nullable private volatile int[] indexView;
 
     private PhotonMesh(float[] vertices, float[] spriteBounds, float[] shadeBrightness,
+                       float[] cornerBrightness,
                        @Nullable float[] suppliedTangents) {
-        this(vertices, spriteBounds, shadeBrightness, suppliedTangents, 0L);
+        this(vertices, spriteBounds, shadeBrightness, cornerBrightness, suppliedTangents, 0L);
     }
 
     private PhotonMesh(float[] vertices, float[] spriteBounds, float[] shadeBrightness,
+                       float[] cornerBrightness,
                        @Nullable float[] suppliedTangents, long geometryRevision) {
         this.vertices = vertices;
         this.spriteBounds = spriteBounds;
         this.shadeBrightness = shadeBrightness;
+        this.cornerBrightness = cornerBrightness;
         // A source that carries real tangents (glTF's TANGENT attribute) seeds the cache, so tangents()
         // hands those back and never generates. Null = nothing supplied them; generate on demand.
         this.tangents = suppliedTangents;
@@ -83,10 +90,12 @@ public final class PhotonMesh {
     }
 
     private PhotonMesh(float[] vertices, float[] spriteBounds, float[] shadeBrightness,
+                       float[] cornerBrightness,
                        @Nullable float[] suppliedTangents, SamplingTopology samplingTopology) {
         this.vertices = vertices;
         this.spriteBounds = spriteBounds;
         this.shadeBrightness = shadeBrightness;
+        this.cornerBrightness = cornerBrightness;
         this.tangents = suppliedTangents;
         this.geometryRevision = 0L;
         this.topology = this;
@@ -97,6 +106,7 @@ public final class PhotonMesh {
         this.vertices = vertices;
         this.spriteBounds = base.spriteBounds;
         this.shadeBrightness = base.shadeBrightness;
+        this.cornerBrightness = base.cornerBrightness;
         this.geometryRevision = geometryRevision;
         this.topology = base.topology;
         this.samplingTopology = base.samplingTopology;
@@ -225,7 +235,7 @@ public final class PhotonMesh {
                 int target = vertex * FLOATS_PER_ATTRIBUTE;
                 result[target] = vertices[source + 3];
                 result[target + 1] = vertices[source + 4];
-                result[target + 2] = shadeBrightness[vertex / 4];
+                result[target + 2] = cornerBrightness[vertex];
             }
             attributeView = result;
         }
@@ -271,7 +281,7 @@ public final class PhotonMesh {
         return result;
     }
 
-    /** True for the two triangles produced from one quad; a degenerate triangle returns false. */
+    /** True only for the first triangle in a pair that came from one authored quad. */
     public boolean quadPaired(int triangle) {
         if (triangle < 0 || triangle >= triangleCount()) throw new IndexOutOfBoundsException(triangle);
         int current = 0;
@@ -279,7 +289,8 @@ public final class PhotonMesh {
             if (isTriangle(quad)) {
                 if (current++ == triangle) return false;
             } else {
-                if (current == triangle || current + 1 == triangle) return true;
+                if (current == triangle) return true;
+                if (current + 1 == triangle) return false;
                 current += 2;
             }
         }
@@ -316,6 +327,10 @@ public final class PhotonMesh {
 
     public float shadeBrightness(int quad) {
         return shadeBrightness[quad];
+    }
+
+    public float shadeBrightness(int quad, int corner) {
+        return cornerBrightness[quad * 4 + corner];
     }
 
     /** Offset of {@code corner} (0..3) of {@code quad} into {@link #vertices()}. */
@@ -377,13 +392,32 @@ public final class PhotonMesh {
         private final FloatArrayList vertices = new FloatArrayList();
         private final FloatArrayList spriteBounds = new FloatArrayList();
         private final FloatArrayList shadeBrightness = new FloatArrayList();
+        private final FloatArrayList cornerBrightness = new FloatArrayList();
         /** Author-supplied per-corner tangents, {@link #FLOATS_PER_TANGENT} each. Only used when EVERY
          *  face supplied one — {@link #build()} checks the count, so a mesh mixing sources (a glTF whose
          *  primitives disagree about TANGENT) falls back to generating the whole array. */
         private final FloatArrayList tangents = new FloatArrayList();
         private final IntArrayList samplingCorners = new IntArrayList();
+        private final IntArrayList cornerVertexIndices = new IntArrayList();
         private final Map<Object, Integer> samplingIds = new HashMap<>();
+        private final List<IndexedVertex> indexedVertices = new ArrayList<>();
+        private final Map<Integer, float[]> explicitTangents = new HashMap<>();
         private int nextSamplingGroup;
+        private int indexedSamplingGroup = -1;
+        private int lastFaceStart = -1;
+        private int lastFaceCount;
+        private boolean anySprite;
+
+        private static final class IndexedVertex {
+            final float[] data;
+            final float brightness;
+            float[] tangent;
+
+            IndexedVertex(float[] data, float brightness) {
+                this.data = data;
+                this.brightness = brightness;
+            }
+        }
 
         /** Allocate a namespace for vertices from one OBJ object or glTF primitive instance. */
         public int newSamplingGroup() { return nextSamplingGroup++; }
@@ -398,11 +432,110 @@ public final class PhotonMesh {
             return samplingIds.computeIfAbsent(sourceIdentity, ignored -> samplingIds.size());
         }
 
+        /** Add a source vertex and return its index for {@link #triangle(int, int, int)} or {@link #quad(int, int, int, int)}. */
+        public int vertex(float x, float y, float z, float u, float v,
+                          float nx, float ny, float nz, float shade) {
+            if (indexedSamplingGroup < 0) indexedSamplingGroup = newSamplingGroup();
+            int index = indexedVertices.size();
+            indexedVertices.add(new IndexedVertex(new float[]{x, y, z, u, v, nx, ny, nz}, shade));
+            samplingIds.putIfAbsent(new GroupVertex(indexedSamplingGroup, index), samplingIds.size());
+            return index;
+        }
+
+        /** Add a triangle using previously added vertices. */
+        public Builder triangle(int a, int b, int c) {
+            lastFaceStart = -1;
+            lastFaceCount = 0;
+            var va = indexedVertex(a);
+            var vb = indexedVertex(b);
+            var vc = indexedVertex(c);
+            int ia = samplingVertex(indexedSamplingGroup, a);
+            int ib = samplingVertex(indexedSamplingGroup, b);
+            int ic = samplingVertex(indexedSamplingGroup, c);
+            quad(va.data, vb.data, vc.data, vc.data, 0f, 0f, 1f, 1f,
+                    (va.brightness + vb.brightness + vc.brightness) / 3f,
+                    ia, ib, ic, ic);
+            setLastCornerBrightness(va.brightness, vb.brightness, vc.brightness, vc.brightness);
+            setLastCornerVertexIndices(a, b, c, c);
+            lastFaceStart = -1;
+            lastFaceCount = 0;
+            return this;
+        }
+
+        /** Add a quad using previously added vertices. */
+        public Builder quad(int a, int b, int c, int d) {
+            lastFaceStart = -1;
+            lastFaceCount = 0;
+            var va = indexedVertex(a);
+            var vb = indexedVertex(b);
+            var vc = indexedVertex(c);
+            var vd = indexedVertex(d);
+            quad(va.data, vb.data, vc.data, vd.data, 0f, 0f, 1f, 1f,
+                    (va.brightness + vb.brightness + vc.brightness + vd.brightness) / 4f,
+                    samplingVertex(indexedSamplingGroup, a), samplingVertex(indexedSamplingGroup, b),
+                    samplingVertex(indexedSamplingGroup, c), samplingVertex(indexedSamplingGroup, d));
+            setLastCornerBrightness(va.brightness, vb.brightness, vc.brightness, vd.brightness);
+            setLastCornerVertexIndices(a, b, c, d);
+            lastFaceStart = -1;
+            lastFaceCount = 0;
+            return this;
+        }
+
+        private IndexedVertex indexedVertex(int index) {
+            if (index < 0 || index >= indexedVertices.size()) throw new IndexOutOfBoundsException(index);
+            return indexedVertices.get(index);
+        }
+
+        private void setLastCornerBrightness(float a, float b, float c, float d) {
+            int start = cornerBrightness.size() - 4;
+            cornerBrightness.set(start, a);
+            cornerBrightness.set(start + 1, b);
+            cornerBrightness.set(start + 2, c);
+            cornerBrightness.set(start + 3, d);
+        }
+
+        private void setLastCornerVertexIndices(int a, int b, int c, int d) {
+            int start = cornerVertexIndices.size() - 4;
+            cornerVertexIndices.set(start, a);
+            cornerVertexIndices.set(start + 1, b);
+            cornerVertexIndices.set(start + 2, c);
+            cornerVertexIndices.set(start + 3, d);
+        }
+
+        /** First flattened corner of the last face made from fresh corner arrays, or -1 for indexed faces. */
+        public int lastFaceStart() { return lastFaceStart; }
+
+        /** Apply atlas bounds to the last fresh-corner face. */
+        public Builder sprite(float u0, float v0, float u1, float v1) {
+            if (lastFaceCount == 0) return this;
+            int offset = (lastFaceStart / 4) * FLOATS_PER_SPRITE;
+            spriteBounds.set(offset, u0);
+            spriteBounds.set(offset + 1, v0);
+            spriteBounds.set(offset + 2, u1);
+            spriteBounds.set(offset + 3, v1);
+            anySprite = true;
+            return this;
+        }
+
+        /** Attach an authored tangent to an indexed source vertex (or a fresh face corner). */
+        public Builder tangent(int vertex, float tx, float ty, float tz, float w) {
+            float[] value = new float[]{tx, ty, tz, w};
+            if (!indexedVertices.isEmpty()) {
+                indexedVertex(vertex).tangent = value;
+            } else {
+                if (vertex < 0 || vertex >= cornerVertexIndices.size()) throw new IndexOutOfBoundsException(vertex);
+                explicitTangents.put(vertex, value);
+            }
+            return this;
+        }
+
         private record GroupVertex(int group, int sourceIndex) { }
 
         /** Each corner is {@link #FLOATS_PER_VERTEX} floats: x,y,z,u,v,nx,ny,nz. */
         public Builder quad(float[] a, float[] b, float[] c, float[] d,
                             float u0, float v0, float u1, float v1, float brightness) {
+            lastFaceStart = vertices.size() / FLOATS_PER_VERTEX;
+            lastFaceCount = 4;
             int group = newSamplingGroup();
             int ia = samplingVertex(group, 0);
             int ib = samplingVertex(group, 1);
@@ -418,6 +551,8 @@ public final class PhotonMesh {
             vertices.addElements(vertices.size(), b, 0, FLOATS_PER_VERTEX);
             vertices.addElements(vertices.size(), c, 0, FLOATS_PER_VERTEX);
             vertices.addElements(vertices.size(), d, 0, FLOATS_PER_VERTEX);
+            for (int corner = 0; corner < 4; corner++) cornerBrightness.add(brightness);
+            for (int corner = 0; corner < 4; corner++) cornerVertexIndices.add(-1);
             spriteBounds.add(u0);
             spriteBounds.add(v0);
             spriteBounds.add(u1);
@@ -436,7 +571,19 @@ public final class PhotonMesh {
 
         /** One triangle stored as a degenerate quad (corner 3 == corner 2), raw 0..1 UVs, no shade. */
         public Builder triangle(float[] a, float[] b, float[] c) {
-            return quad(a, b, c, c, 0f, 0f, 1f, 1f, 1f);
+            quad(a, b, c, c, 0f, 0f, 1f, 1f, 1f);
+            lastFaceCount = 3;
+            return this;
+        }
+
+        public Builder triangle(float[] a, float[] b, float[] c, float shade) {
+            quad(a, b, c, c, 0f, 0f, 1f, 1f, shade);
+            lastFaceCount = 3;
+            return this;
+        }
+
+        public Builder quad(float[] a, float[] b, float[] c, float[] d, float shade) {
+            return quad(a, b, c, d, 0f, 0f, 1f, 1f, shade);
         }
 
         public Builder triangle(float[] a, float[] b, float[] c, int ia, int ib, int ic) {
@@ -453,8 +600,10 @@ public final class PhotonMesh {
             tangents.addElements(tangents.size(), ta, 0, FLOATS_PER_TANGENT);
             tangents.addElements(tangents.size(), tb, 0, FLOATS_PER_TANGENT);
             tangents.addElements(tangents.size(), tc, 0, FLOATS_PER_TANGENT);
+            lastFaceCount = 3;
             // corner 3 repeats corner 2, exactly as the position/uv/normal copy above does
             tangents.addElements(tangents.size(), tc, 0, FLOATS_PER_TANGENT);
+            lastFaceCount = 3;
             return this;
         }
 
@@ -472,12 +621,24 @@ public final class PhotonMesh {
             if (shadeBrightness.isEmpty()) {
                 return EMPTY;
             }
-            var supplied = tangents.size() == shadeBrightness.size() * 4 * FLOATS_PER_TANGENT
-                    ? tangents.toFloatArray() : null;
+            float[] supplied = null;
+            if (tangents.size() == cornerBrightness.size() * FLOATS_PER_TANGENT) {
+                supplied = tangents.toFloatArray();
+            } else if (!explicitTangents.isEmpty() || indexedVertices.stream().anyMatch(v -> v.tangent != null)) {
+                boolean complete = true;
+                var values = new float[cornerBrightness.size() * FLOATS_PER_TANGENT];
+                for (int corner = 0; corner < cornerVertexIndices.size(); corner++) {
+                    int source = cornerVertexIndices.getInt(corner);
+                    float[] tangent = source >= 0 ? indexedVertex(source).tangent : explicitTangents.get(corner);
+                    if (tangent == null) { complete = false; break; }
+                    System.arraycopy(tangent, 0, values, corner * FLOATS_PER_TANGENT, FLOATS_PER_TANGENT);
+                }
+                if (complete) supplied = values;
+            }
             var sampling = buildSamplingTopology(samplingCorners.toIntArray(),
                     samplingIds.size(), shadeBrightness.size());
             return new PhotonMesh(vertices.toFloatArray(), spriteBounds.toFloatArray(),
-                    shadeBrightness.toFloatArray(), supplied, sampling);
+                    shadeBrightness.toFloatArray(), cornerBrightness.toFloatArray(), supplied, sampling);
         }
 
         private static SamplingTopology buildSamplingTopology(int[] corners, int vertexCount, int quadCount) {

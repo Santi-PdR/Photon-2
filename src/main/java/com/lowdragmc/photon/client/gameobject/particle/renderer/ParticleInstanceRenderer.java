@@ -121,7 +121,6 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
             var triangles = new ArrayList<Integer>();
 
             for (int quad = 0; quad < quadCount; quad++) {
-                var brightness = shade ? mesh.shadeBrightness(quad) : 1f;
                 float u0 = 0, v0 = 0, uw = 1, vh = 1;
                 if (remapUV) {
                     u0 = bounds[quad * 4];
@@ -145,7 +144,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
                             .put(vertices[off + 2] + pivotPoint.z); // pos
                     vertexBuffer.put(u).put(v); // uv
                     vertexBuffer.put(vertices[off + 5]).put(vertices[off + 6]).put(vertices[off + 7]); // normal
-                    vertexBuffer.put(brightness); // brightness (aNormal.w when tangents are on)
+                    vertexBuffer.put(shade ? mesh.shadeBrightness(quad, corner) : 1f); // brightness (aNormal.w when tangents are on)
                     if (wantsTangent) {
                         // tangent.xyz + handedness in w. The atlas->sprite UV remap above is a positive
                         // per-axis scale, so it can't rotate the tangent — no remap needed here.

@@ -138,12 +138,12 @@ public class TileParticleRenderer {
             var mesh = model.mesh();
             var remapUV = model.remapUV();
             var shade = model.shade();
-            var pivot = model.pivot();
-            var vatPose = model.vat() == null ? null : vatPose(model.vat(), particle, partialTicks);
-            var normalMat = transform.normal(new Matrix3f());
-            for (int quad = 0; quad < mesh.quadCount(); quad++) {
-                putMeshQuad(transform, normalMat, pivot, buffer, mesh, quad, model.vat(), vatPose,
-                        shade ? mesh.shadeBrightness(quad) : 1f, r, g, b, a, light, remapUV);
+                var pivot = model.pivot();
+                var vatPose = model.vat() == null ? null : vatPose(model.vat(), particle, partialTicks);
+                var normalMat = transform.normal(new Matrix3f());
+                for (int quad = 0; quad < mesh.quadCount(); quad++) {
+                    putMeshQuad(transform, normalMat, pivot, buffer, mesh, quad, model.vat(), vatPose,
+                            shade, r, g, b, a, light, remapUV);
             }
         } else {
             Quaternionf quaternion;
@@ -210,7 +210,7 @@ public class TileParticleRenderer {
     private void putMeshQuad(Matrix4f transform, Matrix3f normalMat, Vector3f pivotPoint,
                              VertexConsumer buffer, PhotonMesh mesh, int quad,
                              @Nullable AnimatedGltfModelSource.BakedVertexAnimation vat, @Nullable VatPose vatPose,
-                             float brightness, float red, float green, float blue, float alpha, int light,
+                             boolean shade, float red, float green, float blue, float alpha, int light,
                              boolean remapUV) {
         var vertices = mesh.vertices();
 
@@ -260,6 +260,7 @@ public class TileParticleRenderer {
 
             var pos = transform.transform(new Vector4f(x, y, z, 1.0F));
             var normal = new Vector3f(nx, ny, nz).mul(normalMat).normalize();
+            float brightness = shade ? mesh.shadeBrightness(quad, corner) : 1f;
 
             buffer.vertex(pos.x, pos.y, pos.z)
                     .color(red * brightness, green * brightness, blue * brightness, alpha)
