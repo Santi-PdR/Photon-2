@@ -9,9 +9,8 @@
 // pack composites our FX the same way it composites water.
 uniform sampler2D DiffuseSampler;
 
-// Coverage source, kept separate from the colour source so bloom can run in between: the bloom
-// chain ends on an opaque alpha, which would destroy the coverage the composite depends on. When
-// no bloom runs the caller binds the same texture to both and this is a no-op.
+// Coverage comes from the unprocessed layer so color effects cannot change the alpha the composite
+// depends on. When no color processing runs the caller binds the same texture to both.
 uniform sampler2D AlphaSampler;
 
 // rgb = colour-space / tint correction, a = exposure. Identity by default; the seam for a per-pack

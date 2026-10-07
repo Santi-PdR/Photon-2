@@ -803,8 +803,8 @@ public class RenderPassPipeline {
 
     /**
      * The texture the composite should read <b>colour</b> from: the bloom result when bloom is on,
-     * the layer itself otherwise. Coverage always stays with the layer — the bloom chain ends on an
-     * opaque alpha, which would destroy the coverage the premultiplied composite depends on.
+     * the layer itself otherwise. Coverage stays with the original layer so color processing cannot
+     * change the alpha the premultiplied composite depends on.
      *
      * <p>Must be called <b>before</b> the destination framebuffer is bound: the bloom chain binds
      * its own targets and would otherwise leave the wrong one active for the composite.
