@@ -808,7 +808,7 @@ public class FXTimelineView extends View implements TimelineContext {
             DrawerHelper.drawSolidRect(graphics, mx, y, 1, height, ColorPattern.GRAY.color);
             var label = String.valueOf(Math.round(t));
             var labelX = mx + 2;
-            if (TimelineRulerLayout.labelFits(labelX, Minecraft.getInstance().font.width(label), x, width)) {
+            if (rulerLabelFits(label, labelX, x, width)) {
                 DrawerHelper.drawText(graphics, label, labelX, y + 3, 1f, ColorPattern.WHITE.color);
             }
         }
@@ -834,6 +834,11 @@ public class FXTimelineView extends View implements TimelineContext {
         var n = raw / pow;
         var nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
         return nice * pow;
+    }
+
+    /** Whether a tick label fits inside the visible ruler bounds, matching the 26.2 editor API. */
+    public static boolean rulerLabelFits(String label, float labelX, float x, float width) {
+        return TimelineRulerLayout.labelFits(labelX, Minecraft.getInstance().font.width(label), x, width);
     }
 
     private void drawGuideLine(GuiGraphics graphics, double tick, float x, float y, float width, float height) {
@@ -1665,7 +1670,7 @@ public class FXTimelineView extends View implements TimelineContext {
 
     // ------------------------------------------------------------------ transport / preview / keys
 
-    private boolean isPlaying() { return fxEditor.sceneView.particleManager.isPlaying(); }
+    public boolean isPlaying() { return fxEditor.sceneView.particleManager.isPlaying(); }
 
     /** Signals fire only during live forward playback — keep the player gated to {@link #isPlaying()} so
      *  scrub/preview replays (which re-run from tick 0) never spam listeners. */
