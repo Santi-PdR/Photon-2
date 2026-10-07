@@ -90,58 +90,53 @@ public class PhotonPostProcessing {
 
     private static void renderBloom(RenderTarget srcTarget, TargetSet targets) {
         var mips = targets.mips;
-        if (Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug) {
+        boolean debugGroup = Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug;
+        if (debugGroup) {
             GL46.glPushDebugGroup(GL46.GL_DEBUG_SOURCE_APPLICATION, 0, "photon_bloom");
         }
+        try {
+            var brightPassShader = PhotonShaders.getBrightPassShader();
+            var finalCombinePassShader = PhotonShaders.getBloomFinalScatterPassShader();
 
-        var brightPassShader = PhotonShaders.getBrightPassShader();
-//        var separableBlur = PhotonShaders.getSeparableBlurShader();
-//        var combinePassShader = PhotonConfig.INSTANCE.bloomMode.get() == PhotonConfig.BloomMode.ADD ?
-//                PhotonShaders.getBloomAddPassShader() : PhotonShaders.getBloomScatterPassShader();
-        var finalCombinePassShader = PhotonShaders.getBloomFinalScatterPassShader();
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.disableDepthTest();
+            RenderSystem.depthMask(false);
+            RenderSystem.disableBlend();
+            RenderSystem.defaultBlendFunc();
 
-        RenderSystem.colorMask(true, true, true, true);
-        RenderSystem.disableDepthTest();
-        RenderSystem.depthMask(false);
-        RenderSystem.disableBlend();
-        RenderSystem.defaultBlendFunc();
+            brightPassShader.setSampler("inputSampler", srcTarget);
+            brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
+            blitShader(brightPassShader, mips.get(0), false);
 
-        brightPassShader.setSampler("inputSampler", srcTarget);
-        brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
-        blitShader(brightPassShader, mips.get(0), false);
+            // down-sampling
+            var downSampling = PhotonShaders.getDownSamplingShader();
+            for (int i = 1; i < mips.size(); i++) {
+                var input = mips.get(i - 1);
+                downSampling.setSampler("inputSampler", input);
+                downSampling.safeGetUniform("inputResolution").set((float) input.width, (float) input.height);
+                blitShader(downSampling, mips.get(i), false);
+            }
 
-        // down-sampling
-        var downSampling = PhotonShaders.getDownSamplingShader();
-        for (int i = 1; i < mips.size(); i++) {
-            var input = mips.get(i - 1);
-            downSampling.setSampler("inputSampler", input);
-            downSampling.safeGetUniform("inputResolution").set((float) input.width, (float) input.height);
-            blitShader(downSampling, mips.get(i), false);
-        }
+            // up-sampling: add each lower-resolution contribution into the existing higher-resolution mip.
+            var upSampling = PhotonShaders.getUpSamplingShader();
+            upSampling.safeGetUniform("filterRadius").set(0.005f);
+            for (int i = mips.size() - 2; i >= 0; i--) {
+                upSampling.setSampler("inputSampler", mips.get(i + 1));
+                blitShaderAdditive(upSampling, mips.get(i));
+            }
 
-
-        // up-sampling: add each lower-resolution contribution into the existing higher-resolution mip.
-        var upSampling = PhotonShaders.getUpSamplingShader();
-        upSampling.safeGetUniform("filterRadius").set(0.005f);
-        for (int i = mips.size() - 2; i >= 0; i--) {
-            upSampling.setSampler("inputSampler", mips.get(i + 1));
-            blitShaderAdditive(upSampling, mips.get(i));
-        }
-
-        RenderSystem.disableBlend();
-        RenderSystem.defaultBlendFunc();
-        finalCombinePassShader.setSampler("inputA", mips.get(0));
-        finalCombinePassShader.setSampler("inputB", srcTarget);
-        finalCombinePassShader.safeGetUniform("BloomIntensive").set(PhotonConfig.INSTANCE.bloomIntensity.get().floatValue());
-        blitShader(finalCombinePassShader, targets.output, false);
-
-        RenderSystem.depthMask(true);
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-
-
-        if (Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug) {
-            GL46.glPopDebugGroup();
+            RenderSystem.disableBlend();
+            RenderSystem.defaultBlendFunc();
+            finalCombinePassShader.setSampler("inputA", mips.get(0));
+            finalCombinePassShader.setSampler("inputB", srcTarget);
+            finalCombinePassShader.safeGetUniform("BloomIntensive").set(PhotonConfig.INSTANCE.bloomIntensity.get().floatValue());
+            blitShader(finalCombinePassShader, targets.output, false);
+        } finally {
+            RenderSystem.depthMask(true);
+            RenderSystem.enableDepthTest();
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            if (debugGroup) GL46.glPopDebugGroup();
         }
     }
 
@@ -153,8 +148,11 @@ public class PhotonPostProcessing {
             dist.bindWrite(true);
         }
         shaderInstance.apply();
-        SceneBlit.drawFullscreenQuad();
-        shaderInstance.clear();
+        try {
+            SceneBlit.drawFullscreenQuad();
+        } finally {
+            shaderInstance.clear();
+        }
     }
 
     private static void blitShaderAdditive(ShaderInstance shaderInstance, RenderTarget dist) {
@@ -162,10 +160,13 @@ public class PhotonPostProcessing {
         // ShaderInstance.apply() applies the JSON blend state, so additive composition must be
         // configured after it and immediately before the draw.
         shaderInstance.apply();
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
-        RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
-        SceneBlit.drawFullscreenQuad();
-        shaderInstance.clear();
+        try {
+            RenderSystem.enableBlend();
+            RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
+            RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
+            SceneBlit.drawFullscreenQuad();
+        } finally {
+            shaderInstance.clear();
+        }
     }
 }
