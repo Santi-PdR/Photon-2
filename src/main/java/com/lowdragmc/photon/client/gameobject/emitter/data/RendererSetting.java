@@ -20,6 +20,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,12 @@ public class RendererSetting {
 
         public VertexSorting getVertexSorting() {
             return vertexSorting.get();
+        }
+
+        /** Viewer-space origin used by the 26.2 distance-sorting API; {@code null} when sorting is off. */
+        @Nullable
+        public Vector3fc sortOrigin(Vector3fc eye) {
+            return this == DISTANCE ? eye : null;
         }
 
     }
