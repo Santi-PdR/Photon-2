@@ -92,7 +92,7 @@ public class TrailParticleRenderer {
         var t = 0f;
         if (rawTails.size() > 1) {
             lerpDur = rawTails.getLifeTime(1) - rawTails.getLifeTime(0);
-            t = 1 - (rawTails.getLifeTime(0) + 1 - partialTicks) / lerpDur;
+            t = TrailInterpolation.partialTime(rawTails.getLifeTime(0), lerpDur, partialTicks);
         }
         int size = tails.size();
         for (int i = 0; i < size - 1; i++) {
@@ -100,18 +100,16 @@ public class TrailParticleRenderer {
             if ((tails.getLifeTime(i) - partialTicks < 0f && tails.getLifeTime(i + 1) - partialTicks < 0)) {
                 continue;
             }
-            var currT = tails.getLifeTime(i) / lerpDur;
-            var nextT = tails.getLifeTime(i + 1) / lerpDur;
-            if (nextT < t) continue;
+            var currLife = tails.getLifeTime(i);
+            var nextLife = tails.getLifeTime(i + 1);
+            if (TrailInterpolation.hasPassed(nextLife, lerpDur, t)) continue;
 
             // basic
             Vector3f tailPos = tails.getPosition(i);
             Vector3f next = tails.getPosition(i + 1);
             // apply interpolation for tail
-            if (lerpDur > 0) {
-                if (currT <= t && t <= nextT) {
-                    tailPos = tailPos.lerp(next, (t - currT) / (nextT - currT));
-                }
+            if (TrailInterpolation.shouldInterpolate(currLife, nextLife, lerpDur, t)) {
+                tailPos = tailPos.lerp(next, TrailInterpolation.factor(currLife, nextLife, lerpDur, t));
             }
 
             Vector3f curr = new Vector3f(tailPos);
@@ -320,7 +318,7 @@ public class TrailParticleRenderer {
         var t = 0f;
         if (rawTails.size() > 1) {
             lerpDur = rawTails.getLifeTime(1) - rawTails.getLifeTime(0);
-            t = 1 - (rawTails.getLifeTime(0) + 1 - partialTicks) / lerpDur;
+            t = TrailInterpolation.partialTime(rawTails.getLifeTime(0), lerpDur, partialTicks);
         }
 
         // first rendered segment k — the skipped segments form a prefix (lifetimes grow with index)
@@ -331,13 +329,11 @@ public class TrailParticleRenderer {
             float lifeI = (pushHead && i == n - 1) ? 100 : tails.getLifeTime(i);
             float lifeI1 = (pushHead && i + 1 == n - 1) ? 100 : tails.getLifeTime(i + 1);
             if (lifeI - partialTicks < 0f && lifeI1 - partialTicks < 0) continue;
-            var currT = lifeI / lerpDur;
-            var nextT = lifeI1 / lerpDur;
-            if (nextT < t) continue;
+            if (TrailInterpolation.hasPassed(lifeI1, lerpDur, t)) continue;
             k = i;
-            if (lerpDur > 0 && currT <= t && t <= nextT) {
+            if (TrailInterpolation.shouldInterpolate(lifeI, lifeI1, lerpDur, t)) {
                 lerpFirst = true;
-                lerpFactor = (t - currT) / (nextT - currT);
+                lerpFactor = TrailInterpolation.factor(lifeI, lifeI1, lerpDur, t);
             }
             break;
         }

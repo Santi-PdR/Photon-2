@@ -140,4 +140,7 @@ The local Forge baseline is a community Photon 2.2.6.a port, not an official 26.
 - Beam geometry now skips zero-length beams in CPU and instanced paths and uses a deterministic perpendicular when the view ray is collinear with the beam. Four pure tests verify finite geometry, width, rejection and the matching packed GLSL fallback.
 - Java 17 `./gradlew test --offline --no-daemon --console=plain`: **88 tests, 0 failures/errors/skips across 30 suites**. `./gradlew build --offline --no-daemon --console=plain`: **BUILD SUCCESSFUL**, including `reobfJar`.
 - Artifact: `build/libs/photon-forge-1.20.1-26.2.2.3.jar`, 3,000,454 bytes; SHA-256 `201bc01331ba23c4886d0fbdf9d76774e40d20c9d875c244f7991e9b2790e713`.
+- Trail lifetime interpolation now validates its duration and segment span before division in both CPU and instanced render paths, avoiding NaN interpolation for equal or invalid point lifetimes. Two focused tests cover degenerate and valid interpolation.
+- Java 17 `./gradlew test build --offline --no-daemon --console=plain`: **90 tests, 0 failures/errors/skips across 31 suites; BUILD SUCCESSFUL**, including `reobfJar`.
+- Artifact: `build/libs/photon-forge-1.20.1-26.2.2.3.jar`, 3,001,428 bytes; SHA-256 `f239ec769f322d8325dcdf302c0f586df19346f9889407f807e0357a5795590c`.
 - Minecraft was not launched. Shader export and resource-pack mounting still need runtime verification.
