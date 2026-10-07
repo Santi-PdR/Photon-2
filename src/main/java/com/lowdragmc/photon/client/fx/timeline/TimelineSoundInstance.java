@@ -21,8 +21,7 @@ import java.util.function.Supplier;
  */
 @OnlyIn(Dist.CLIENT)
 public class TimelineSoundInstance extends AbstractTickableSoundInstance {
-    @Nullable
-    private Supplier<Vector3f> positionSupplier;
+    private final TimelineSoundPosition position;
     private boolean stopRequested = false;
 
     public TimelineSoundInstance(SoundEvent soundEvent, SoundSource source, float volume, float pitch,
@@ -32,13 +31,12 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
         this.delay = 0;
         this.volume = volume;
         this.pitch = pitch;
-        if (attenuated && positionSupplier != null) {
-            this.positionSupplier = positionSupplier;
+        this.position = new TimelineSoundPosition(attenuated, positionSupplier);
+        if (this.position.isPositional()) {
             this.attenuation = SoundInstance.Attenuation.LINEAR;
             this.relative = false;
-            applyPosition(positionSupplier.get());
+            applyPosition(this.position.getPosition());
         } else {
-            this.positionSupplier = null;
             this.attenuation = SoundInstance.Attenuation.NONE;
             this.relative = true; // non-positional: play at the listener
         }
@@ -48,8 +46,14 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
     public void update(float volume, float pitch, @Nullable Supplier<Vector3f> positionSupplier) {
         this.volume = volume;
         this.pitch = pitch;
-        if (this.positionSupplier != null && positionSupplier != null) {
-            this.positionSupplier = positionSupplier;
+        this.position.update(positionSupplier);
+        if (this.position.isPositional()) {
+            this.attenuation = SoundInstance.Attenuation.LINEAR;
+            this.relative = false;
+            applyPosition(this.position.getPosition());
+        } else {
+            this.attenuation = SoundInstance.Attenuation.NONE;
+            this.relative = true;
         }
     }
 
@@ -76,9 +80,7 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
             stop();
             return;
         }
-        if (positionSupplier != null) {
-            applyPosition(positionSupplier.get());
-        }
+        applyPosition(position.getPosition());
     }
 
     private void applyPosition(@Nullable Vector3f pos) {
