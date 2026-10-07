@@ -10,11 +10,17 @@ uniform vec2 Center;
 uniform float FocusRange;
 uniform float Near;
 uniform float Far;
+uniform mat4 ProjMat;
 
 in vec2 texCoord;
 out vec4 fragColor;
 
 float linearize(float depth) {
+    // Forge 1.20.1 uses forward-Z: perspective depth is nonlinear, while orthographic
+    // depth is linear. ProjMat[2][3] is -1 for perspective and 0 for orthographic.
+    if (abs(ProjMat[2][3]) < 0.5) {
+        return mix(Near, Far, depth);
+    }
     return (Near * Far) / (Far - depth * (Far - Near));
 }
 
