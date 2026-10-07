@@ -57,6 +57,11 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public final static int MAX_SAMPLER = 128;
     public final static int MAX_SAMPLING = 128;
 
+    /** Shader JSON key used by Photon 26.2 to identify shaders authored for reverse-Z depth. */
+    public static final String DEPTH_CONVENTION_KEY = "depthConvention";
+    /** Value used by Photon 26.2 for its native reverse-Z depth convention. */
+    public static final String DEPTH_CONVENTION_NATIVE = "reverse_z";
+
     @Getter
     @Persisted
     private ResourceLocation shaderLocation = Photon.id("circle");
