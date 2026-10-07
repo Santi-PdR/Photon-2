@@ -1,11 +1,53 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.photon.client.gameobject.particle.IParticle;
 import org.junit.jupiter.api.Test;
+
+import java.nio.FloatBuffer;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AdditionalGPUAttribLayoutTest {
+    @Test
+    void exposesTheLiveAttributePlanInFloatOffsets() throws NoSuchMethodException {
+        assertEquals(java.util.List.class,
+                AdditionalGPUDataSetting.class.getMethod("planAttribs", int.class).getReturnType());
+        assertEquals(int.class, AdditionalGPUDataSetting.TailAttrib.class.getMethod("location").getReturnType());
+        assertEquals(int.class, AdditionalGPUDataSetting.TailAttrib.class.getMethod("floats").getReturnType());
+        assertEquals(int.class, AdditionalGPUDataSetting.TailAttrib.class.getMethod("offsetFloats").getReturnType());
+        assertEquals(16, AdditionalGPUDataSetting.MAX_VERTEX_ATTRIBUTES);
+    }
+
+    @Test
+    void livePlannerReturnsFloatOffsetsAndRefreshesTheUploadPlan() {
+        var setting = new AdditionalGPUDataSetting() {
+            @Override
+            public PhotonGpuChannels.Kind kind() {
+                return PhotonGpuChannels.Kind.TILE;
+            }
+
+            @Override
+            protected Set<String> enabledChannelIds() {
+                return Set.of("addition_gpu_data.random", "addition_gpu_data.position");
+            }
+
+            @Override
+            protected void uploadChannel(PhotonGpuChannels.Channel channel, IParticle particle,
+                                         FloatBuffer target, float partialTicks) {
+            }
+        };
+        setting.setEnable(true);
+
+        var attributes = setting.planAttribs(5);
+
+        assertEquals(2, attributes.size());
+        assertEquals(new AdditionalGPUDataSetting.TailAttrib(8, 1, 5), attributes.get(0));
+        assertEquals(new AdditionalGPUDataSetting.TailAttrib(9, 3, 6), attributes.get(1));
+        assertEquals(4, setting.attribFloats());
+    }
+
     @Test
     void capsTileCustomShaderAttributesAtSixteenAndKeepsRecordOffsetsAligned() {
         var kind = PhotonGpuChannels.Kind.TILE;
