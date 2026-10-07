@@ -59,8 +59,10 @@ public class PhotonPostProcessing {
         }
 
         void destroy() {
-            if (output != null) output.destroyBuffers();
-            for (var mip : mips) mip.destroyBuffers();
+            var targets = new ArrayList<HDRTarget>(mips.size() + 1);
+            if (output != null) targets.add(output);
+            targets.addAll(mips);
+            ResourceDisposal.disposeAll(targets, HDRTarget::destroyBuffers);
         }
     }
 
@@ -105,9 +107,13 @@ public class PhotonPostProcessing {
     public static void onFrameEnd() {
         frame++;
         FAILED_TARGET_RETRY.advanceTo(frame);
-        for (var targets : TARGETS.endFrame()) {
-            targets.destroy();
-            if (current == targets) current = null;
+        var expired = TARGETS.endFrame();
+        if (current != null && expired.contains(current)) current = null;
+        try {
+            ResourceDisposal.disposeAll(expired, TargetSet::destroy);
+        } catch (RuntimeException | Error failure) {
+            com.lowdragmc.photon.Photon.LOGGER.error(
+                    "Could not dispose one or more expired bloom target sets", failure);
         }
     }
 
