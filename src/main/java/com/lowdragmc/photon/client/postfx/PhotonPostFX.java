@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
+import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
@@ -182,6 +183,7 @@ public final class PhotonPostFX {
         PostEffectStack.GLOBAL.onFrameEnd();
         PostEffectStack.EDITOR_SCENE.onFrameEnd();
         PostFXTargetPool.endFrame();
+        PhotonPostProcessing.onFrameEnd();
         // mask textures are per-frame — a no-particle frame must not reuse last frame's mask
         RenderPassPipeline.clearFrameMask();
         if (testEffect != null) {

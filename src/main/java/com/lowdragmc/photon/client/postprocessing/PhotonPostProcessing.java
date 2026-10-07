@@ -10,7 +10,6 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
-import lombok.Getter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.client.Minecraft;
@@ -21,64 +20,88 @@ import org.lwjgl.opengl.GL46;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 @OnlyIn(Dist.CLIENT)
 public class PhotonPostProcessing {
-    public static class Mip {
-        @Getter
-        private HDRTarget swapA;
-//        @Getter
-//        private HDRTarget swapB;
+    private record TargetKey(int width, int height, int requestedLevels) {}
 
-        public void updateScreenSize(int width, int height) {
-            swapA = resize(swapA, width, height);
-//            swapB = resize(swapB, width, height);
+    private static final class TargetSet {
+        final int width;
+        final int height;
+        final int requestedLevels;
+        @Nullable final HDRTarget output;
+        final ArrayList<HDRTarget> mips;
+        long lastUsedFrame;
+
+        TargetSet(int width, int height, int requestedLevels) {
+            this.width = width;
+            this.height = height;
+            this.requestedLevels = requestedLevels;
+            var sizes = BloomMipLayout.compute(width, height, requestedLevels);
+            if (sizes.isEmpty()) {
+                output = null;
+                mips = new ArrayList<>();
+                return;
+            }
+            output = resize(null, width, height);
+            mips = new ArrayList<>(sizes.size());
+            for (var size : sizes) {
+                mips.add(resize(null, size.width(), size.height()));
+            }
         }
 
-        public void clear() {
-            if (swapA != null) {
-                swapA.destroyBuffers();
-            }
-//            if (swapB != null) {
-//                swapB.destroyBuffers();
-//            }
+        void destroy() {
+            if (output != null) output.destroyBuffers();
+            for (var mip : mips) mip.destroyBuffers();
         }
     }
-    private static int LAST_WIDTH, LAST_HEIGHT;
-    private static HDRTarget OUTPUT;
-    private static final List<Mip> MIPS = new ArrayList<>();
+
+    private static final Map<TargetKey, TargetSet> TARGETS = new HashMap<>();
+    private static long frame;
+    @Nullable private static TargetSet current;
 
     public static void prepareTarget(int width, int height) {
-        int mipLevel = PhotonConfig.INSTANCE.bloomMipLevel.get();
-        var mipSizes = BloomMipLayout.compute(width, height, mipLevel);
-        if (LAST_WIDTH == width && LAST_HEIGHT == height && MIPS.size() == mipSizes.size()) return;
-
-        OUTPUT = resize(OUTPUT, width, height);
-
-        MIPS.forEach(Mip::clear);
-        MIPS.clear();
-        for (var size : mipSizes) {
-            var mip = new Mip();
-            mip.updateScreenSize(size.width(), size.height());
-            MIPS.add(mip);
-        }
-
-        LAST_WIDTH = width;
-        LAST_HEIGHT = height;
+        int levels = PhotonConfig.INSTANCE.bloomMipLevel.get();
+        var key = new TargetKey(width, height, levels);
+        current = TARGETS.computeIfAbsent(key, ignored -> new TargetSet(width, height, levels));
+        current.lastUsedFrame = frame;
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
-        if (MIPS.isEmpty()) return srcTarget;
-        renderBloom(srcTarget);
-        return OUTPUT;
+        int levels = PhotonConfig.INSTANCE.bloomMipLevel.get();
+        if (current == null || current.width != srcTarget.width || current.height != srcTarget.height
+                || current.requestedLevels != levels) {
+            prepareTarget(srcTarget.width, srcTarget.height);
+        }
+        var targets = current;
+        if (targets == null || targets.mips.isEmpty() || targets.output == null) return srcTarget;
+        targets.lastUsedFrame = frame;
+        renderBloom(srcTarget, targets);
+        return targets.output;
+    }
+
+    /** Frame boundary: release cached target sets that have not served a view for 120 frames. */
+    public static void onFrameEnd() {
+        frame++;
+        Iterator<Map.Entry<TargetKey, TargetSet>> entries = TARGETS.entrySet().iterator();
+        while (entries.hasNext()) {
+            var targets = entries.next().getValue();
+            if (frame - targets.lastUsedFrame <= 120) continue;
+            targets.destroy();
+            if (current == targets) current = null;
+            entries.remove();
+        }
     }
 
     private static HDRTarget resize(@Nullable HDRTarget target, int width, int height) {
         return RenderPassPipeline.resize(target, width, height, false);
     }
 
-    private static void renderBloom(RenderTarget srcTarget) {
+    private static void renderBloom(RenderTarget srcTarget, TargetSet targets) {
+        var mips = targets.mips;
         if (Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug) {
             GL46.glPushDebugGroup(GL46.GL_DEBUG_SOURCE_APPLICATION, 0, "photon_bloom");
         }
@@ -97,32 +120,32 @@ public class PhotonPostProcessing {
 
         brightPassShader.setSampler("inputSampler", srcTarget);
         brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
-        blitShader(brightPassShader, MIPS.get(0).swapA, false);
+        blitShader(brightPassShader, mips.get(0), false);
 
         // down-sampling
         var downSampling = PhotonShaders.getDownSamplingShader();
-        for (int i = 1; i < MIPS.size(); i++) {
-            var input = MIPS.get(i - 1).swapA;
+        for (int i = 1; i < mips.size(); i++) {
+            var input = mips.get(i - 1);
             downSampling.setSampler("inputSampler", input);
             downSampling.safeGetUniform("inputResolution").set((float) input.width, (float) input.height);
-            blitShader(downSampling, MIPS.get(i).swapA, false);
+            blitShader(downSampling, mips.get(i), false);
         }
 
 
         // up-sampling: add each lower-resolution contribution into the existing higher-resolution mip.
         var upSampling = PhotonShaders.getUpSamplingShader();
         upSampling.safeGetUniform("filterRadius").set(0.005f);
-        for (int i = MIPS.size() - 2; i >= 0; i--) {
-            upSampling.setSampler("inputSampler", MIPS.get(i + 1).swapA);
-            blitShaderAdditive(upSampling, MIPS.get(i).swapA);
+        for (int i = mips.size() - 2; i >= 0; i--) {
+            upSampling.setSampler("inputSampler", mips.get(i + 1));
+            blitShaderAdditive(upSampling, mips.get(i));
         }
 
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
-        finalCombinePassShader.setSampler("inputA", MIPS.get(0).swapA);
+        finalCombinePassShader.setSampler("inputA", mips.get(0));
         finalCombinePassShader.setSampler("inputB", srcTarget);
         finalCombinePassShader.safeGetUniform("BloomIntensive").set(PhotonConfig.INSTANCE.bloomIntensity.get().floatValue());
-        blitShader(finalCombinePassShader, OUTPUT, false);
+        blitShader(finalCombinePassShader, targets.output, false);
 
         RenderSystem.depthMask(true);
         RenderSystem.enableDepthTest();
