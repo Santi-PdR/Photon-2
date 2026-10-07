@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -32,6 +33,7 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public abstract class PhotonFXRenderPass {
+    private static final AtomicLong NEXT_COMPARATOR_ID = new AtomicLong();
     public final static CustomShaderMaterial INVERSE = new CustomShaderMaterial(Photon.id("inverse"));
     protected static final MaterialSetting WIREFRAME_MATERIAL = new MaterialSetting();
     /** The mask value (0..1) of the pass currently drawing in the mask sub-pass — staged into the
@@ -78,6 +80,8 @@ public abstract class PhotonFXRenderPass {
     public final RendererSetting.Runtime renderer;
     public final VertexFormat.Mode mode;
     public final VertexFormat format;
+    /** Stable final tie-breaker so unequal passes with colliding hash codes remain distinct in TreeMaps. */
+    final long comparatorId = NEXT_COMPARATOR_ID.getAndIncrement();
 
     public PhotonFXRenderPass(RendererSetting.Runtime renderer, VertexFormat.Mode mode, VertexFormat format) {
         this.renderer = renderer;
