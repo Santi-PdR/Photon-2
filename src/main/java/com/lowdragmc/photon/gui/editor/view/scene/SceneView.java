@@ -178,10 +178,12 @@ public class SceneView extends View implements FXSceneOptions {
             return;
         }
         pendingSimulateTarget = -1; // a direct seek supersedes any pending coalesced request
-        // a scrub/seek/edit-preview replay (never live play): silence timeline audio so a replayed clip
-        // doesn't start (or leave) a long sound playing. syncSignalDispatch re-enables it next UI tick if
-        // playback is actually live.
-        if (fxEditor.runtime != null) fxEditor.runtime.timelinePlayer.setAudioDispatch(false);
+        // A scrub/seek/edit-preview replay (never live play) must not produce external timeline
+        // events. syncSignalDispatch re-enables dispatch on the next UI tick if playback is live.
+        if (fxEditor.runtime != null) {
+            fxEditor.runtime.timelinePlayer.setSignalDispatch(false);
+            fxEditor.runtime.timelinePlayer.setAudioDispatch(false);
+        }
         var curTime = particleManager.getTime();
         if (time > curTime) {
             runSimulationTicks(time - curTime);
