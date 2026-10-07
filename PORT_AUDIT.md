@@ -9,7 +9,7 @@ Audit date: 2026-10-07
 - Starting commit: `6956f47` (`Initial commit`)
 - Starting tracked source tree: only `README.md` (`# Photon-2`)
 - Current tree includes a community Photon 2.2.6.a Forge 1.20.1 source baseline (380 Java files), ForgeGradle dependencies on LDLib2 2.2.39.a and KilaGraph 20.1.0.14, and bundled library artifacts under `libs/`.
-- Current port status: **approximately 87%; TARGET 26.2 FEATURE PORT IN PROGRESS**. A Java 17 Forge 47.4.26 artifact builds and passes unit tests; client/server runtime behavior remains incompletely verified. Do not launch Minecraft for this task; verify with source comparison, builds, tests, artifact inspection and GitHub Actions.
+- Current port status: **approximately 88%; TARGET 26.2 FEATURE PORT IN PROGRESS**. A Java 17 Forge 47.4.26 artifact builds and passes unit tests; client/server runtime behavior remains incompletely verified. Do not launch Minecraft for this task; verify with source comparison, builds, tests, artifact inspection and GitHub Actions.
 
 ## Original project and supplied artifact
 
