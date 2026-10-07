@@ -255,7 +255,7 @@ public final class FXPacks {
      * CONTRACT with {@link FXPackExporter}: gc runs right after every export, so every file the
      * exporter packs MUST be reachable through {@link #mark}'s reference patterns —
      * {@code file(assets/...)} strings, {@code .png}/{@code .obj}/{@code .glb}/{@code .gltf} location strings, and the
-     * {@code custom_shader} json→vsh/fsh chain. A new packed kind needs a matching mark pattern
+     * {@code custom_shader} json→vsh/fsh→recursive {@code #moj_import} chain. A new packed kind needs a matching mark pattern
      * here, or its files are swept immediately after being written.
      */
     static void gc(FileSystem zip) throws IOException {
@@ -292,12 +292,13 @@ public final class FXPacks {
     }
 
     /** Collect every in-pack location a packed NBT references (recursing into packed library files). */
-    private static void mark(CompoundTag tag, FileSystem zip, Set<String> referenced, Set<String> visited) {
+    private static void mark(CompoundTag tag, FileSystem zip, Set<String> referenced, Set<String> visited)
+            throws IOException {
         // custom shaders: the json names the vsh/fsh program files
         if ("custom_shader".equals(tag.getString("type")) && tag.contains("data", Tag.TAG_COMPOUND)) {
             var shaderId = ResourceLocation.tryParse(tag.getCompound("data").getString("shaderLocation"));
             if (shaderId != null) {
-                markCoreShader(shaderId, zip, referenced);
+                markCoreShader(shaderId, zip, referenced, visited);
             }
         }
         // render-graph pass sources carrying a hand-written shader (PassSource.CODEC shape) —
@@ -305,7 +306,7 @@ public final class FXPacks {
         if ("CUSTOM_SHADER".equals(tag.getString("type")) && tag.contains("shader", Tag.TAG_STRING)) {
             var shaderId = ResourceLocation.tryParse(tag.getString("shader"));
             if (shaderId != null) {
-                markCoreShader(shaderId, zip, referenced);
+                markCoreShader(shaderId, zip, referenced, visited);
             }
         }
         for (var key : tag.getAllKeys()) {
@@ -314,11 +315,13 @@ public final class FXPacks {
     }
 
     private static void markChild(@Nullable Tag child, FileSystem zip,
-                                  Set<String> referenced, Set<String> visited) {
+                                  Set<String> referenced, Set<String> visited) throws IOException {
         if (child instanceof CompoundTag compound) {
             mark(compound, zip, referenced, visited);
         } else if (child instanceof ListTag list) {
-            list.forEach(tag -> markChild(tag, zip, referenced, visited));
+            for (var tag : list) {
+                markChild(tag, zip, referenced, visited);
+            }
         } else if (child instanceof StringTag string) {
             markString(string.getAsString(), zip, referenced, visited);
         }
@@ -336,7 +339,8 @@ public final class FXPacks {
                 || value.endsWith(".glb") || value.endsWith(".gltf");
     }
 
-    private static void markString(String value, FileSystem zip, Set<String> referenced, Set<String> visited) {
+    private static void markString(String value, FileSystem zip, Set<String> referenced, Set<String> visited)
+            throws IOException {
         if (isPackableAsset(value)) {
             var location = ResourceLocation.tryParse(value);
             if (location != null) {
@@ -357,12 +361,13 @@ public final class FXPacks {
                     mark(nested, zip, referenced, visited);
                 }
             } catch (IOException e) {
-                Photon.LOGGER.warn("fxpack gc: failed to read library file {}", key, e);
+                throw new IOException("fxpack gc: failed to read library file " + key, e);
             }
         }
     }
 
-    private static void markCoreShader(ResourceLocation shaderId, FileSystem zip, Set<String> referenced) {
+    private static void markCoreShader(ResourceLocation shaderId, FileSystem zip, Set<String> referenced,
+                                       Set<String> visited) throws IOException {
         var jsonKey = entryKey(shaderId.getNamespace(), "shaders/core/" + shaderId.getPath() + ".json");
         referenced.add(jsonKey);
         var jsonPath = zip.getPath(jsonKey);
@@ -373,11 +378,29 @@ public final class FXPacks {
                 if (!json.has(stage[0])) continue;
                 var programId = ResourceLocation.tryParse(json.get(stage[0]).getAsString());
                 if (programId != null) {
-                    referenced.add(entryKey(programId.getNamespace(), "shaders/core/" + programId.getPath() + stage[1]));
+                    var stageLocation = ResourceLocation.fromNamespaceAndPath(programId.getNamespace(),
+                            "shaders/core/" + programId.getPath() + stage[1]);
+                    markShaderSource(stageLocation, zip, referenced, visited);
                 }
             }
+        } catch (IOException e) {
+            throw e;
         } catch (Exception e) {
-            Photon.LOGGER.warn("fxpack gc: failed to parse shader json {}", jsonKey, e);
+            throw new IOException("fxpack gc: failed to mark shader " + jsonKey, e);
+        }
+    }
+
+    /** Keep the shader's transitive imports, matching the exporter, and stop recursive cycles. */
+    private static void markShaderSource(ResourceLocation location, FileSystem zip, Set<String> referenced,
+                                         Set<String> visited) throws IOException {
+        var key = entryKey(location);
+        referenced.add(key);
+        if (!visited.add(key)) return;
+        var path = zip.getPath(key);
+        if (!Files.isRegularFile(path)) return;
+        var source = Files.readString(path, StandardCharsets.UTF_8);
+        for (var include : ShaderIncludeResolver.imports(source)) {
+            markShaderSource(include, zip, referenced, visited);
         }
     }
 }

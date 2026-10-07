@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +53,63 @@ class FXPacksTest {
             assertFalse(Files.exists(zip.getPath("assets/demo/textures/fx/orphan.png")));
             assertTrue(Files.exists(zip.getPath("pack.mcmeta")));
         }
+    }
+
+    @Test
+    void removingEffectKeepsShaderIncludesStillUsedByAnotherEffect() throws Exception {
+        var pack = tempDir.resolve("shader-effects.fxpack");
+        var removedId = ResourceLocation.fromNamespaceAndPath("demo", "remove_shader");
+        var keptId = ResourceLocation.fromNamespaceAndPath("demo", "keep_shader");
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of("create", "true"))) {
+            var fxDir = zip.getPath("assets/demo/fx");
+            Files.createDirectories(fxDir);
+            writeShaderFx(fxDir.resolve("remove_shader.fx"), "demo:removed");
+            writeShaderFx(fxDir.resolve("keep_shader.fx"), "demo:kept");
+
+            writeShader(zip, "demo:removed", "removed", "#moj_import <photon:shared.glsl>\n#moj_import <photon:removed.glsl>\n");
+            writeShader(zip, "demo:kept", "kept", "#moj_import <photon:shared.glsl>\n");
+            Files.createDirectories(zip.getPath("assets/photon/shaders/include"));
+            Files.writeString(zip.getPath("assets/photon/shaders/include/shared.glsl"),
+                    "#moj_import \"photon:shaders/include/nested.glsl\"\n", StandardCharsets.UTF_8);
+            Files.writeString(zip.getPath("assets/photon/shaders/include/nested.glsl"),
+                    "#moj_import <photon:shared.glsl>\n// still in use\n", StandardCharsets.UTF_8);
+            Files.writeString(zip.getPath("assets/photon/shaders/include/removed.glsl"), "// only removed shader\n");
+        }
+
+        FXPacks.removeFx(pack.toFile(), removedId);
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of())) {
+            assertFalse(Files.exists(zip.getPath("assets/demo/shaders/core/removed.json")));
+            assertTrue(Files.exists(zip.getPath("assets/demo/shaders/core/kept.json")));
+            assertTrue(Files.exists(zip.getPath("assets/demo/shaders/core/kept.vsh")));
+            assertTrue(Files.exists(zip.getPath("assets/photon/shaders/include/shared.glsl")));
+            assertTrue(Files.exists(zip.getPath("assets/photon/shaders/include/nested.glsl")));
+            assertFalse(Files.exists(zip.getPath("assets/photon/shaders/include/removed.glsl")));
+        }
+    }
+
+    private static void writeShader(FileSystem zip, String shaderId, String programId, String vertexSource) throws Exception {
+        var shader = ResourceLocation.tryParse(shaderId);
+        var shaderPath = zip.getPath("assets", shader.getNamespace(), "shaders/core", shader.getPath() + ".json");
+        Files.createDirectories(shaderPath.getParent());
+        Files.writeString(shaderPath, "{\"vertex\":\"demo:" + programId + "\",\"fragment\":\"demo:" + programId + "\"}");
+        var vertexPath = zip.getPath("assets/demo/shaders/core", programId + ".vsh");
+        var fragmentPath = zip.getPath("assets/demo/shaders/core", programId + ".fsh");
+        Files.createDirectories(vertexPath.getParent());
+        Files.writeString(vertexPath, vertexSource);
+        Files.writeString(fragmentPath, "// fragment shader\n");
+    }
+
+    private static void writeShaderFx(Path path, String shaderId) throws Exception {
+        var data = new CompoundTag();
+        data.putString("shaderLocation", shaderId);
+        var fx = new CompoundTag();
+        fx.putString("type", "custom_shader");
+        fx.put("data", data);
+        var bytes = new ByteArrayOutputStream();
+        NbtIo.writeCompressed(fx, bytes);
+        Files.write(path, bytes.toByteArray());
     }
 
     private static void writeFx(Path path, String assetLocation) throws Exception {
