@@ -174,6 +174,11 @@ public class FXRuntime implements IScene {
             fxObject.setDelay(delay);
         }
         timelinePlayer.begin(effect);
+        // begin() evaluates t=0 and a control clip can reset its target/subtree, clearing the delay.
+        // Restore it after that initial evaluation; keep the seeded reset state from the clip.
+        for (var fxObject : objects.values()) {
+            fxObject.setDelay(delay);
+        }
     }
 
     /** @deprecated typo; use {@link #emit(IEffectExecutor)}. */
