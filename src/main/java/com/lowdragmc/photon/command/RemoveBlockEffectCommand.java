@@ -1,10 +1,7 @@
 package com.lowdragmc.photon.command;
 
-import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import com.lowdragmc.photon.client.fx.BlockEffectExecutor;
-import com.lowdragmc.photon.client.fx.EntityEffectExecutor;
-import com.lowdragmc.photon.client.fx.FXHelper;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -25,6 +22,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 import javax.annotation.Nullable;
+import java.util.List;
 import java.util.function.Supplier;
 
 public class RemoveBlockEffectCommand {
@@ -91,19 +89,12 @@ public class RemoveBlockEffectCommand {
     @OnlyIn(Dist.CLIENT)
     private static class Client {
         public static void execute(RemoveBlockEffectCommand packet) {
-            var effects = BlockEffectExecutor.CACHE.get(packet.pos);
-            if (effects == null) return;
-            var iter = effects.iterator();
-            while (iter.hasNext()) {
-                var effect = iter.next();
-                if (packet.location == null || packet.location.equals(effect.getFx().getFxLocation())) {
-                    iter.remove();
-                    var runtime = effect.getRuntime();
-                    if (runtime != null && runtime.isAlive()) {
-                        runtime.destroy(packet.force);
-                    }
-                }
-            }
+            EffectRemoval.removeMatching(List.of(packet.pos), BlockEffectExecutor.CACHE,
+                    effect -> packet.location == null || packet.location.equals(effect.getFx().getFxLocation()),
+                    effect -> {
+                        var runtime = effect.getRuntime();
+                        if (runtime != null && runtime.isAlive()) runtime.destroy(packet.force);
+                    });
         }
     }
 
