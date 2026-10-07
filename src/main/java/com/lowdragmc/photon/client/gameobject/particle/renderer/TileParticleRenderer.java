@@ -8,6 +8,8 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.model.AnimatedGltfMod
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.VertexAnimationBake;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.FacingOrientationHelper;
 import com.lowdragmc.photon.client.fx.IWholeEffectTransformer;
 import com.lowdragmc.photon.client.fx.WholeEffectRenderSpace;
 import com.lowdragmc.photon.client.gameobject.particle.IParticle;
@@ -130,7 +132,7 @@ public class TileParticleRenderer {
         if (model != null) {
             // mesh positions are already in centered model space (PhotonMesh convention)
             var transform = new Matrix4f().translate(x, y, z)
-                    .rotate(computeModelQuaternion(particle, rotation))
+                    .rotate(computeModelQuaternion(particle, rotation, camera, partialTicks))
                     .scale(size.mul(particle.getSpaceScale()));
             // draw 3d model
             var mesh = model.mesh();
@@ -338,7 +340,7 @@ public class TileParticleRenderer {
             }
 
             if (renderMode == ParticleRendererSetting.Mode.Model) {
-                var quaternion = computeModelQuaternion(particle, rotation);
+                var quaternion = computeModelQuaternion(particle, rotation, camera, partialTicks);
                 // pos vec3
                 buffer.put(x).put(y).put(z);
                 // scale vec3
@@ -465,20 +467,28 @@ public class TileParticleRenderer {
             return whole.applyAnimatedBillboardRotation(quaternion, rotation, keepCameraFacing);
         }
         if (!Vector3fHelper.isZero(rotation)) {
-            quaternion = new Quaternionf(quaternion).rotateXYZ(rotation.x, rotation.y, rotation.z);
+            quaternion = ParticleRotationMath.withParticleRotation(quaternion, rotation);
         }
         return quaternion;
     }
 
-    private static Quaternionf computeModelQuaternion(TileParticle particle, Vector3f rotation) {
+    private static Quaternionf computeModelQuaternion(TileParticle particle, Vector3f rotation,
+                                                       Camera camera, float partialTicks) {
+        var renderer = particle.getRuntime().renderer;
+        var facing = renderer.getFacingMode();
+        var orientation = facing == FacingMode.DEFAULT
+                ? particle.getSpaceRotation()
+                : new Quaternionf(FacingOrientationHelper.compute(
+                        facing, renderer.getFacingDirection(), particle, camera, partialTicks));
         var effect = particle.getEmitter().getEffectExecutor();
         if (effect instanceof IWholeEffectTransformer whole) {
-            // Local space carries Qwhole already, but A(t) * (Qwhole * S) rotates the
-            // animation around the old world axes. Factor it out before composing Qwhole * A(t) * S.
-            return whole.applyAnimatedModelRotation(particle.getSpaceRotation(), rotation,
-                    particle.getConfig().getSimulationSpace() != ParticleConfig.Space.World);
+            // Only the default orientation comes from the simulation space and can already include
+            // the whole-effect rotation for local-space particles. Explicit facing is world-oriented.
+            boolean spaceContainsWholeRotation = facing == FacingMode.DEFAULT
+                    && particle.getConfig().getSimulationSpace() != ParticleConfig.Space.World;
+            return whole.applyAnimatedModelRotation(orientation, rotation, spaceContainsWholeRotation);
         }
-        return new Quaternionf().rotateXYZ(rotation.x, rotation.y, rotation.z).mul(particle.getSpaceRotation());
+        return ParticleRotationMath.withParticleRotation(orientation, rotation);
     }
 
     private static Vector3f applyWholeEffectPosition(TileParticle particle, Vector3f worldPosition) {
