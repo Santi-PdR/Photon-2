@@ -126,7 +126,7 @@ public final class GltfMeshParser {
         return new Reader(root, glbBin, flipV, readSkin, externalBuffers);
     }
 
-    private static byte[] openRelativeBuffer(ResourceLocation model, String value) throws IOException {
+    static ResourceLocation resolveRelativeBufferLocation(ResourceLocation model, String value) throws IOException {
         final URI uri;
         try {
             uri = new URI(value);
@@ -165,6 +165,11 @@ public final class GltfMeshParser {
         } catch (IllegalArgumentException e) {
             throw new IOException("invalid external buffer resource path '" + path + "'", e);
         }
+        return buffer;
+    }
+
+    private static byte[] openRelativeBuffer(ResourceLocation model, String value) throws IOException {
+        var buffer = resolveRelativeBufferLocation(model, value);
         try (var input = Minecraft.getInstance().getResourceManager().open(buffer)) {
             return input.readAllBytes();
         } catch (IOException e) {

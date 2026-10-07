@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.Skeleton;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.VertexAnimationBake;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -12,6 +13,7 @@ import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GltfMeshParserTest {
@@ -26,6 +28,34 @@ class GltfMeshParserTest {
         assertEquals(2f, mesh.vertices()[PhotonMesh.vertexOffset(0, 0)], 1e-6f);
         assertEquals(0f, mesh.vertices()[PhotonMesh.vertexOffset(0, 0) + 1], 1e-6f);
         assertEquals(1f, mesh.vertices()[PhotonMesh.vertexOffset(0, 1) + 3], 1e-6f);
+    }
+
+    @Test
+    void resolvesRelativeBuffersBesideTheModelAndWithinItsNamespace() throws Exception {
+        var model = ResourceLocation.fromNamespaceAndPath("example", "models/creature/body.gltf");
+
+        assertEquals(ResourceLocation.fromNamespaceAndPath("example", "models/creature/body.bin"),
+                GltfMeshParser.resolveRelativeBufferLocation(model, "body.bin"));
+        assertEquals(ResourceLocation.fromNamespaceAndPath("example", "models/shared/weights.bin"),
+                GltfMeshParser.resolveRelativeBufferLocation(model, "../shared/weights.bin"));
+        assertEquals(ResourceLocation.fromNamespaceAndPath("example", "models/shared/weights.bin"),
+                GltfMeshParser.resolveRelativeBufferLocation(model, "%2e%2e/shared/weights.bin"));
+    }
+
+    @Test
+    void rejectsExternalBufferUrisThatEscapeOrLeaveTheResourceNamespace() {
+        var model = ResourceLocation.fromNamespaceAndPath("example", "models/creature/body.gltf");
+
+        assertThrows(java.io.IOException.class,
+                () -> GltfMeshParser.resolveRelativeBufferLocation(model, "../../../outside.bin"));
+        assertThrows(java.io.IOException.class,
+                () -> GltfMeshParser.resolveRelativeBufferLocation(model, "%2e%2e/%2e%2e/%2e%2e/outside.bin"));
+        assertThrows(java.io.IOException.class,
+                () -> GltfMeshParser.resolveRelativeBufferLocation(model, "..%2f..%2f..%2foutside.bin"));
+        assertThrows(java.io.IOException.class,
+                () -> GltfMeshParser.resolveRelativeBufferLocation(model, "https://example.invalid/body.bin"));
+        assertThrows(java.io.IOException.class,
+                () -> GltfMeshParser.resolveRelativeBufferLocation(model, "body.bin?revision=2"));
     }
 
     @Test
