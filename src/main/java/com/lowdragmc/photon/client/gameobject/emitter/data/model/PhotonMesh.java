@@ -587,6 +587,8 @@ public final class PhotonMesh {
         }
 
         public Builder triangle(float[] a, float[] b, float[] c, int ia, int ib, int ic) {
+            lastFaceStart = vertices.size() / FLOATS_PER_VERTEX;
+            lastFaceCount = 3;
             return quad(a, b, c, c, 0f, 0f, 1f, 1f, 1f, ia, ib, ic, ic);
         }
 
@@ -609,6 +611,8 @@ public final class PhotonMesh {
 
         public Builder triangle(float[] a, float[] b, float[] c, float[] ta, float[] tb, float[] tc,
                                 int ia, int ib, int ic) {
+            lastFaceStart = vertices.size() / FLOATS_PER_VERTEX;
+            lastFaceCount = 3;
             quad(a, b, c, c, 0f, 0f, 1f, 1f, 1f, ia, ib, ic, ic);
             tangents.addElements(tangents.size(), ta, 0, FLOATS_PER_TANGENT);
             tangents.addElements(tangents.size(), tb, 0, FLOATS_PER_TANGENT);
