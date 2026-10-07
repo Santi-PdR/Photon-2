@@ -10,10 +10,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nullable;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Best-effort cache of a {@code SoundEvent}'s length in ticks, decoded off-thread from its OGG so an
@@ -23,26 +20,26 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @OnlyIn(Dist.CLIENT)
 public class SoundLengthCache {
-    private static final Map<ResourceLocation, Double> LENGTHS = new ConcurrentHashMap<>();
-    private static final Set<ResourceLocation> PENDING = ConcurrentHashMap.newKeySet();
+    private static final ReloadableCache<ResourceLocation, Double> LENGTHS = new ReloadableCache<>();
 
     /** Length of {@code soundId} in ticks, or 0 when unknown / not yet decoded (triggers a load). */
     public static double getTicks(@Nullable ResourceLocation soundId) {
         if (soundId == null) return 0;
         var cached = LENGTHS.get(soundId);
         if (cached != null) return cached;
-        requestLoad(soundId);
+        var generation = LENGTHS.beginLoad(soundId);
+        if (generation != ReloadableCache.NO_LOAD) {
+            CompletableFuture
+                    .supplyAsync(() -> computeTicks(soundId), Util.ioPool())
+                    .whenComplete((ticks, error) -> LENGTHS.complete(
+                            soundId, generation, error != null || ticks == null ? 0.0 : ticks));
+        }
         return 0;
     }
 
-    private static void requestLoad(ResourceLocation soundId) {
-        if (!PENDING.add(soundId)) return; // already loading
-        CompletableFuture
-                .supplyAsync(() -> computeTicks(soundId), Util.ioPool())
-                .whenComplete((ticks, error) -> {
-                    LENGTHS.put(soundId, error != null || ticks == null ? 0.0 : ticks);
-                    PENDING.remove(soundId);
-                });
+    /** Drop cached lengths after a sound/resource pack reload. */
+    public static void invalidate() {
+        LENGTHS.invalidate();
     }
 
     private static double computeTicks(ResourceLocation soundId) {
