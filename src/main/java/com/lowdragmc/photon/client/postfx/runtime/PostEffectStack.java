@@ -136,6 +136,12 @@ public final class PostEffectStack {
         return !requests.isEmpty();
     }
 
+    /** Whether pending requests can run for this stack; callers use this before copying the scene target. */
+    public boolean wantsExecution() {
+        return !requests.isEmpty() && effectsEnabled
+                && com.lowdragmc.photon.PhotonConfig.INSTANCE.enableCustomEffects.get();
+    }
+
     /** Whether any pending request would consume the CustomMask this frame (a MaskFilter request,
      *  or an effect whose graph reads the Custom Mask/Depth inputs) — the pipeline skips the whole
      *  mask sub-pass otherwise, so flagged emitters cost nothing while no effect looks at them. */

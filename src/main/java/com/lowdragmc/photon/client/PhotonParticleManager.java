@@ -190,7 +190,7 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         // particle build passed through and silently dropped BLOOM and all effects.
         if (!renderTypeFilter.test(ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT)) return;
         var stack = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink();
-        if (!stack.hasPending() || stack.isConsumedThisFrame()) return;
+        if (!stack.wantsExecution() || stack.isConsumedThisFrame()) return;
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();

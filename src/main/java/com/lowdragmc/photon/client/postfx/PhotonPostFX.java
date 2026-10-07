@@ -142,7 +142,7 @@ public final class PhotonPostFX {
             // no effects ran yet this frame — the main target IS the clean scene
             com.lowdragmc.photon.client.postfx.runtime.PostFXPreview.captureIfRequested(previewTarget);
         }
-        if (!stack.hasPending() || stack.isConsumedThisFrame()) return;
+        if (!stack.wantsExecution() || stack.isConsumedThisFrame()) return;
         var mainTarget = UISurface.currentTarget();
         var framebufferState = FramebufferState.capture();
         int viewportX = GlStateManager.Viewport.x();
