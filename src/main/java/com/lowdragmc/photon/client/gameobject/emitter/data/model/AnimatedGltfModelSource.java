@@ -412,11 +412,11 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
 
     private float clipTime(@Nullable AnimationClip clip) {
         float seconds;
-        PhotonParticleManager editor = PhotonParticleManager.getRenderingManager();
+        float editorSeconds = PhotonParticleManager.editorAnimationSeconds();
         if (pinnedClock != null) {
             seconds = pinnedClock;
-        } else if (editor != null) {
-            seconds = editor.getTime(Minecraft.getInstance().getFrameTime()) / 20f;
+        } else if (editorSeconds >= 0) {
+            seconds = editorSeconds;
         } else {
             var level = Minecraft.getInstance().level;
             seconds = level == null ? 0f : (level.getGameTime() + Minecraft.getInstance().getFrameTime()) / 20f;

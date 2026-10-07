@@ -60,6 +60,8 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
     @Nullable
     @Getter
     private static PhotonParticleManager renderingManager = null;
+    /** Partial tick supplied by the active scene render; world/global frame time may differ in previews. */
+    private float lastPartialTick;
 
     /** The scene's particles by render type (LDLib2 keeps the map protected). */
     public Map<ParticleRenderType, Queue<Particle>> particlesByRenderType() {
@@ -119,6 +121,16 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         return time + (isPlaying ? pPartialTicks : 0);
     }
 
+    /**
+     * Timeline time in seconds for the editor scene currently being rendered, or a negative value
+     * outside an editor-scene render. Model sources use this instead of the world's frame partial so
+     * embedded previews and paused playback stay pinned to the owning view's clock.
+     */
+    public static float editorAnimationSeconds() {
+        var manager = renderingManager;
+        return manager == null ? -1f : manager.getTime(manager.lastPartialTick) / 20f;
+    }
+
     @Override
     public void render(PoseStack pMatrixStack, Camera pActiveRenderInfo, float pPartialTicks, Predicate<ParticleRenderType> renderTypeFilter) {
         com.lowdragmc.photon.client.fx.FXPostProcessPreparation.prepare(particlesByRenderType(),
@@ -126,6 +138,7 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         drawMode = options.getDrawMode();
         sceneBloomEnabled = options.isBloomEnabled();
         renderingManager = this;
+        lastPartialTick = pPartialTicks;
         // route post-effect submission/consumption to the isolated editor-scene stack
         com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(true);
         com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink()
