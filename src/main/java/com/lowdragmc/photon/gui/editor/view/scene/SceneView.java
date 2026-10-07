@@ -295,6 +295,10 @@ public class SceneView extends View implements FXSceneOptions {
 
     public class ParticleSceneEditor extends SceneEditor {
 
+        /** Whether the fly camera is currently consuming movement keys. */
+        public boolean isCameraMoving() {
+            return isCameraMoving;
+        }
 
         public SceneView sceneView() {
             return SceneView.this;

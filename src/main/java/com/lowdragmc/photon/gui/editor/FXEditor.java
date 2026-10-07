@@ -15,7 +15,6 @@ import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
-import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
@@ -54,9 +53,6 @@ public class FXEditor extends Editor {
 
         var scene = sceneView;
         var gizmo = scene.sceneEditor.getTransformGizmo();
-        boolean cameraMoving = GLFW.glfwGetMouseButton(
-                net.minecraft.client.Minecraft.getInstance().getWindow().getWindow(),
-                GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
 
         if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.PLAY_PAUSE, event.keyCode, event.scanCode)
                 || PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.STOP, event.keyCode, event.scanCode)) {
@@ -78,7 +74,7 @@ public class FXEditor extends Editor {
             if (runtime == null) return;
             reloadEffect();
             event.stopPropagation();
-        } else if (cameraMoving) {
+        } else if (scene.sceneEditor.isCameraMoving()) {
             return;
         } else if (PhotonEditorKeyMappings.matches(
                 PhotonEditorKeyMappings.GIZMO_NONE, event.keyCode, event.scanCode)) {
