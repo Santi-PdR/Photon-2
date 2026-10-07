@@ -187,27 +187,28 @@ public class RenderPassPipeline {
             return;
         }
         current = this;
-        var mode = PhotonParticleManager.getDrawMode();
-        drawMode = mode == null ? SceneView.DrawMode.DRAW : mode;
-
-        var inlineGroup = routePasses();
-        // Capture the caller's target and viewport for every path.  Binding DRAW_TARGET below
-        // resets the viewport to the target's full size; an editor Scene is commonly rendered in
-        // a sub-viewport of the UI framebuffer, so losing this rectangle makes particles render at
-        // the window centre and makes the subsequent write-back overwrite unrelated UI pixels.
-        entryFramebufferState = FramebufferState.capture();
-        entryViewport = PositionedRect.of(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(),
-                GlStateManager.Viewport.width(), GlStateManager.Viewport.height());
-        entryScissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
-        GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, entryScissorBox);
         // A throwing pass must not latch the pipeline into a half-built state: `lateLayer` stuck true
         // would send the NEXT build down the layer path with a stale depth attachment, a stuck
         // `current` would keep every material reading a dead pipeline, and — worst of the three — our
         // own framebuffer would still be bound, so the whole rest of the level render would land in
-        // it. (That is exactly what the missing-water bug looked like.) The frame is lost either way;
-        // the point is that the frame after it is not.
+        // it. Wireframe polygon state and the mask sub-pass flag must be reset too. The frame is lost
+        // either way; the point is that the frame after it is not.
         boolean completed = false;
+        boolean entryStateCaptured = false;
+        entryFramebufferState = null;
         try {
+            var mode = PhotonParticleManager.getDrawMode();
+            drawMode = mode == null ? SceneView.DrawMode.DRAW : mode;
+            // Capture the caller's target and viewport for every path. Binding DRAW_TARGET below
+            // resets the viewport to the target's full size; an editor Scene is commonly rendered
+            // in a sub-viewport of the UI framebuffer.
+            entryFramebufferState = FramebufferState.capture();
+            entryViewport = PositionedRect.of(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(),
+                    GlStateManager.Viewport.width(), GlStateManager.Viewport.height());
+            entryScissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+            GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, entryScissorBox);
+            entryStateCaptured = true;
+            var inlineGroup = routePasses();
             if (!inlineGroup.isEmpty()) {
                 renderGroup(inlineGroup, false, lateGroup == null);
             }
@@ -216,7 +217,7 @@ public class RenderPassPipeline {
             }
             completed = true;
         } finally {
-            if (!completed) {
+            if (!completed && entryStateCaptured) {
                 // A material or post-effect may throw after binding one of our accumulators.  The
                 // old fallback rebound the logical UI target, but that is not necessarily the
                 // framebuffer handed to this particle pass (Fabulous and embedded editor views
@@ -228,7 +229,6 @@ public class RenderPassPipeline {
                     com.lowdragmc.photon.Photon.LOGGER.error("Failed to restore particle render target after pipeline failure", restoreFailure);
                     UISurface.currentTarget().bindWrite(true);
                 }
-                irisTarget = null;
             }
             clearRenderingState();
             current = null;
@@ -343,20 +343,26 @@ public class RenderPassPipeline {
         // material draws each mesh as inverted-color lines over the (optional) shaded pass.
         if (drawMode != SceneView.DrawMode.DRAW) {
             wireframeSubPass = true;
-            GL30.glPolygonMode(GL30.GL_FRONT_AND_BACK, GL30.GL_LINE);
-            GL30.glEnable(GL30.GL_POLYGON_OFFSET_LINE);
-            GL30.glPolygonOffset(-1.0f, -1.0f);
-            renderQueuedPasses();
-            GL30.glPolygonOffset(0f, 0f);
-            GL30.glDisable(GL30.GL_POLYGON_OFFSET_LINE);
-            GL30.glPolygonMode(GL30.GL_FRONT_AND_BACK, GL30.GL_FILL);
-            wireframeSubPass = false;
+            try {
+                GL30.glPolygonMode(GL30.GL_FRONT_AND_BACK, GL30.GL_LINE);
+                GL30.glEnable(GL30.GL_POLYGON_OFFSET_LINE);
+                GL30.glPolygonOffset(-1.0f, -1.0f);
+                renderQueuedPasses();
+            } finally {
+                GL30.glPolygonOffset(0f, 0f);
+                GL30.glDisable(GL30.GL_POLYGON_OFFSET_LINE);
+                GL30.glPolygonMode(GL30.GL_FRONT_AND_BACK, GL30.GL_FILL);
+                wireframeSubPass = false;
+            }
         }
 
         if (lastGroup) {
             activeGroup = particles;
-            renderMaskSubPass();
-            activeGroup = group;
+            try {
+                renderMaskSubPass();
+            } finally {
+                activeGroup = group;
+            }
         }
 
         afterRendering();
@@ -419,8 +425,11 @@ public class RenderPassPipeline {
         loggedMaskAllocationFailure = Long.MIN_VALUE;
         RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
         maskSubPass = true;
-        renderQueuedPasses();
-        maskSubPass = false;
+        try {
+            renderQueuedPasses();
+        } finally {
+            maskSubPass = false;
+        }
         maskColorTexture = MASK_TARGET.getColorTextureId();
         maskDepthTexture = MASK_TARGET.getDepthTextureId();
         DRAW_TARGET.bindWrite(false);
@@ -921,6 +930,9 @@ public class RenderPassPipeline {
         activeGroup = particles;
         lateGroup = null;
         lateLayer = false;
+        wireframeSubPass = false;
+        maskSubPass = false;
+        irisTarget = null;
         camera = null;
     }
 
