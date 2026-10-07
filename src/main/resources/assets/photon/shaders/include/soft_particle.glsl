@@ -3,7 +3,11 @@ uniform mat4 ProjMat;
 
 float photon_eye_depth(float depth) {
     float clipDepth = depth * 2.0 - 1.0;
-    return abs(ProjMat[3][2] / (clipDepth + ProjMat[2][2]));
+    // Solve the projection's clip-Z / clip-W relation for view-space Z. The shorter
+    // perspective-only formula fails for orthographic cameras because clip-W is constant.
+    float viewZ = (ProjMat[3][2] - clipDepth * ProjMat[3][3])
+            / (clipDepth * ProjMat[2][3] - ProjMat[2][2]);
+    return abs(viewZ);
 }
 
 vec4 photon_soft_particle(vec4 color, vec4 params) {
