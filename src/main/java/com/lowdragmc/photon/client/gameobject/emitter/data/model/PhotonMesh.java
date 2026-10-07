@@ -299,6 +299,8 @@ public final class PhotonMesh {
 
     public static int geometryOffset(int vertex) { return vertex * FLOATS_PER_GEOMETRY; }
     public static int attributeOffset(int vertex) { return vertex * FLOATS_PER_ATTRIBUTE; }
+    /** Offset of {@code vertex} into {@link #tangents()}, matching the 26.2 mesh API. */
+    public static int tangentOffset(int vertex) { return vertex * FLOATS_PER_TANGENT; }
     public static int spriteOffset(int vertex) { return vertex * FLOATS_PER_SPRITE; }
 
     /**
