@@ -134,7 +134,7 @@ The local Forge baseline is a community Photon 2.2.6.a port, not an official 26.
 
 ## Current port checkpoint
 
-- The FX Pack exporter now walks recursive GLSL `#moj_import` chains, resolves angle imports under the namespaced `shaders/include` path and quoted imports from the namespace asset root, skips traversal paths, and deduplicates/cuts cycles. Four focused parser tests cover these path and safety rules.
+- The FX Pack exporter now walks recursive GLSL `#moj_import` chains, resolves angle imports under the namespaced `shaders/include` path and quoted imports from the namespace asset root, skips traversal paths, and deduplicates/cuts cycles. Three focused parser tests cover these path and safety rules.
 - Java 17 `./gradlew test --offline --no-daemon --console=plain`: **80 tests, 0 failures/errors/skips across 29 suites**. `./gradlew build --offline --no-daemon --console=plain`: **BUILD SUCCESSFUL**, including `reobfJar`.
 - Artifact: `build/libs/photon-forge-1.20.1-26.2.2.3.jar`, 2,998,919 bytes; SHA-256 `68f4aed3c69c681723a7e902e8222845b496870d488502dc3a9ccc53c675e1ea`.
 - Minecraft was not launched. Shader export and resource-pack mounting still need runtime verification.
