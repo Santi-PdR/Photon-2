@@ -16,6 +16,7 @@ import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -46,6 +47,7 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     @Configurable(name = "TextureMaterial.hdrMode")
     protected TextureMaterial.HDRMode hdrMode = TextureMaterial.HDRMode.ADDITIVE;
     @Configurable(name = "TextureMaterial.softParticles", subConfigurable = true)
+    @Getter
     protected final SoftParticles softParticles = new SoftParticles();
     private static final Map<String, ShaderInstance> spriteHDRParticleShaders = new HashMap<>();
 
