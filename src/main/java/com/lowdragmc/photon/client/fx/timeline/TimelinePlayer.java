@@ -308,14 +308,15 @@ public class TimelinePlayer {
                 instance.update(clip.volumeAt(local), clip.pitchAt(local), attenuatedSupplier(audioTrack, clip));
             }
         }
-        // stop instances whose track was removed / muted since last evaluation
-        if (audioInstances.size() > seen.size()) {
-            for (var track : new ArrayList<>(audioInstances.keySet())) {
-                if (!seen.contains(track)) {
-                    var instance = audioInstances.remove(track);
-                    if (instance != null) instance.requestStop();
-                    audioClips.remove(track);
-                }
+        // Stop and forget tracks removed / muted since last evaluation. Comparing map sizes to
+        // the visible track count misses stale sounds whenever another visible track has no clip.
+        var tracked = new HashSet<AudioTrack>(audioClips.keySet());
+        tracked.addAll(audioInstances.keySet());
+        for (var track : tracked) {
+            if (!seen.contains(track)) {
+                var instance = audioInstances.remove(track);
+                if (instance != null) instance.requestStop();
+                audioClips.remove(track);
             }
         }
     }
