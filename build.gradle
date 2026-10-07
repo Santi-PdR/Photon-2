@@ -218,7 +218,7 @@ tasks.named('jar', Jar).configure {
 
 def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     group = 'verification'
-    description = 'Rejects direct client-only Minecraft/Blaze3D links from common classes in the reobfuscated mod JAR.'
+    description = 'Checks target metadata, Java 17 bytecode, and client links in the reobfuscated Photon JAR.'
     dependsOn tasks.named('reobfJar')
     doLast {
         def artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
@@ -227,15 +227,48 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
         }
 
         def scanned = 0
+        def photonClasses = 0
+        def incompatibleBytecode = []
         def violations = []
         def zip = new java.util.zip.ZipFile(artifact)
         try {
+            def requiredEntries = [
+                    'META-INF/mods.toml',
+                    'META-INF/accesstransformer.cfg',
+                    'photon.mixins.json',
+                    'assets/photon/textures/icon.png'
+            ]
+            def missingEntries = requiredEntries.findAll { zip.getEntry(it) == null }
+            if (!missingEntries.isEmpty()) {
+                throw new GradleException("Photon artifact is missing required entries: ${missingEntries.join(', ')}")
+            }
+            def metadata = new String(zip.getInputStream(zip.getEntry('META-INF/mods.toml')).withCloseable {
+                it.readAllBytes()
+            }, java.nio.charset.StandardCharsets.UTF_8)
+            def requiredMetadata = [
+                    'modId = "photon"',
+                    "version = \"${project.version}\"",
+                    'versionRange = "[1.20.1]"',
+                    "versionRange = \"${project.forge_version_range}\""
+            ]
+            def missingMetadata = requiredMetadata.findAll { !metadata.contains(it) }
+            if (!missingMetadata.isEmpty()) {
+                throw new GradleException("Photon artifact metadata does not match the 1.20.1 Forge target: ${missingMetadata.join(', ')}")
+            }
+
             def entries = zip.entries()
             while (entries.hasMoreElements()) {
                 def entry = entries.nextElement()
                 if (entry.directory || !entry.name.startsWith('com/lowdragmc/photon/') || !entry.name.endsWith('.class')) {
                     continue
                 }
+                photonClasses++
+                def bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
+                def majorVersion = ((bytes[6] & 0xff) << 8) | (bytes[7] & 0xff)
+                if (majorVersion != 61) {
+                    incompatibleBytecode << "${entry.name} uses classfile major version ${majorVersion}"
+                }
+
                 def relative = entry.name.substring('com/lowdragmc/photon/'.length())
                 def path = relative.toLowerCase(java.util.Locale.ROOT)
                 if (path.startsWith('client/') || path.startsWith('gui/') || path.startsWith('uitest/')
@@ -245,7 +278,6 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                 }
 
                 scanned++
-                def bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
                 def constantPool = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
                 if (constantPool.contains('net/minecraft/client/')) {
                     violations << "${entry.name} references net/minecraft/client"
@@ -261,10 +293,16 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
         if (scanned == 0) {
             throw new GradleException("No common Photon classfiles were found in ${artifact}")
         }
+        if (photonClasses == 0) {
+            throw new GradleException("No Photon classfiles were found in ${artifact}")
+        }
+        if (!incompatibleBytecode.isEmpty()) {
+            throw new GradleException("Photon classes must use Java 17 bytecode (major 61):\n - ${incompatibleBytecode.join('\n - ')}")
+        }
         if (!violations.isEmpty()) {
             throw new GradleException("Common-side client API links in ${artifact}:\n - ${violations.join('\n - ')}")
         }
-        logger.lifecycle("Verified ${scanned} common Photon classfiles in ${artifact.name}; no direct client-only Minecraft or Blaze3D links.")
+        logger.lifecycle("Verified ${artifact.name}: Photon 26.2.2.3 targets Minecraft 1.20.1/Forge ${project.forge_version}, all ${photonClasses} Photon classes use Java 17 bytecode, and ${scanned} common classes have no direct client-only Minecraft or Blaze3D links.")
     }
 }
 
