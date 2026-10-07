@@ -96,9 +96,10 @@ public class BeamParticleRenderer {
         var a = frame.a();
 
         var direction = new Vector3f(end).sub(from);
+        if (!BeamGeometry.hasLength(from, end)) return;
 
         var toO = new Vector3f(from).sub(cameraPos);
-        Vector3f n = new Vector3f(toO).cross(direction).normalize().mul(frame.width());
+        Vector3f n = BeamGeometry.side(toO, direction, frame.width());
         Vector3f normal = new Vector3f(direction).cross(n).normalize();
 
         var p0 = new Vector3f(from).add(n).sub(cameraPos);
@@ -136,8 +137,9 @@ public class BeamParticleRenderer {
         var cameraPos = camera.getPosition().toVector3f();
         for (var p : particles) {
             if (!(p instanceof BeamParticle particle) || particle.getDelay() > 0) continue;
-            instanceCount++;
             var frame = sampleBeam(particle, camera, partialTicks);
+            if (!BeamGeometry.hasLength(frame.from(), frame.end())) continue;
+            instanceCount++;
 
             // iStart vec4 (camera-relative xyz + width)
             buffer.put(frame.from().x - cameraPos.x).put(frame.from().y - cameraPos.y).put(frame.from().z - cameraPos.z);

@@ -367,7 +367,13 @@ ParticleData getParticleData() {
 
     vec3 beamDir = iEnd - iStart.xyz;
     // toO = start - cameraPos = start (camera at origin)
-    vec3 beamN = normalize(cross(iStart.xyz, beamDir)) * iStart.w;
+    vec3 beamSide = cross(iStart.xyz, beamDir);
+    if (dot(beamSide, beamSide) <= 1e-12) {
+        vec3 fallbackAxis = abs(beamDir.z) < 0.9 * length(beamDir)
+            ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+        beamSide = cross(fallbackAxis, beamDir);
+    }
+    vec3 beamN = normalize(beamSide) * iStart.w;
     data.Position = mix(iStart.xyz, iEnd, aPos.x) + beamN * aPos.y;
     data.Color = iColor;
     // -n side (-1) uses v0 (iUV.y), +n side (+1) uses v1 (iUV.w)
