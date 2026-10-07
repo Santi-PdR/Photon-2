@@ -13,6 +13,7 @@ class CommonSideIsolationTest {
     private static final List<String> COMMON_CLASSFILES = List.of(
             "com/lowdragmc/photon/Photon.class",
             "com/lowdragmc/photon/PhotonCommonProxy.class",
+            "com/lowdragmc/photon/integration/PhotonLDLibPlugin.class",
             "com/lowdragmc/photon/PhotonNetworking.class",
             "com/lowdragmc/photon/PhotonRegistries.class",
             "com/lowdragmc/photon/ServerCommands.class",
@@ -26,7 +27,7 @@ class CommonSideIsolationTest {
     );
 
     @Test
-    void commonEntrypointAndPacketClassfilesDoNotLinkClientOnlyMinecraftApis() throws IOException {
+    void commonEntrypointPacketAndPluginClassfilesDoNotLinkClientOnlyApis() throws IOException {
         var classLoader = getClass().getClassLoader();
         for (var classfile : COMMON_CLASSFILES) {
             byte[] bytes;
@@ -39,6 +40,10 @@ class CommonSideIsolationTest {
                     classfile + " directly references a client-only Minecraft class");
             assertFalse(constantPool.contains("com/mojang/blaze3d/"),
                     classfile + " directly references client-only Blaze3D classes");
+            if (classfile.equals("com/lowdragmc/photon/integration/PhotonLDLibPlugin.class")) {
+                assertFalse(constantPool.contains("com/lowdragmc/photon/client/"),
+                        "common LDLib2 plugin directly references Photon client classes");
+            }
         }
     }
 }
