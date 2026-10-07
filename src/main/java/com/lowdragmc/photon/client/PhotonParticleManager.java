@@ -63,6 +63,11 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
     /** Partial tick supplied by the active scene render; world/global frame time may differ in previews. */
     private float lastPartialTick;
 
+    /** True while a Photon scene manager, rather than the world particle manager, is rendering. */
+    public static boolean isEditorSceneRendering() {
+        return renderingManager != null;
+    }
+
     /** The scene's particles by render type (LDLib2 keeps the map protected). */
     public Map<ParticleRenderType, Queue<Particle>> particlesByRenderType() {
         return particles;

@@ -289,7 +289,7 @@ public class RenderPassPipeline {
         // The editor scene draws into a sub-viewport of a screen: it has no clouds and no water to
         // be wrecked by, and no after-renderLevel seam to composite from, so the layer would simply
         // never land. Keep it on the path it has always used.
-        if (PhotonParticleManager.getRenderingManager() != null) return false;
+        if (PhotonParticleManager.isEditorSceneRendering()) return false;
         // Opaque-layer FX render in Forge's "solid particles" slot, before the translucent chunk
         // layer, so their ordering against water is already right and they write depth like
         // vanilla's opaque particle sheets do.
