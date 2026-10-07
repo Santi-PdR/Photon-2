@@ -71,6 +71,11 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
 
     IGuiTexture preview();
 
+    /** Inspector preview rendered at its current size; materials may provide a dedicated live view. */
+    default IGuiTexture previewLive() {
+        return preview();
+    }
+
     default void end(MaterialContext context) {
 
     }
@@ -93,7 +98,7 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
                         .addChild(new UIElement().layout(layout -> {
                             layout.widthPercent(100);
                             layout.heightPercent(100);
-                        }).style(style -> style.backgroundTexture(DynamicTexture.of(this::preview))))));
+                        }).style(style -> style.backgroundTexture(DynamicTexture.of(this::previewLive))))));
     }
 
     @Override
