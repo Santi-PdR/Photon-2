@@ -271,11 +271,8 @@ public abstract class FXObject extends Particle implements IFXObject {
 
     @Override
     public void render(@Nonnull VertexConsumer buffer, Camera pRenderInfo, float pPartialTicks) {
-        var tickTime = lastTick + pPartialTicks;
-        deltaTime = tickTime - lastTickTime;
-        lastTickTime = tickTime;
+        extractFrame(pPartialTicks);
         if (delay > 0) return;
-        updateFrame(pPartialTicks);
         var passBuffer = RenderPassPipeline.getCollecting();
         if (passBuffer != null) {
             passBuffer.setupRenderingState(pRenderInfo, pPartialTicks);
@@ -288,6 +285,18 @@ public abstract class FXObject extends Particle implements IFXObject {
 
     public void prepareRenderPass(RenderPassPipeline buffer) {
 
+    }
+
+    /**
+     * Per-frame drive and delta-time bookkeeping. Kept as a public hook for integrations and called
+     * by the 1.20.1 particle render path before collecting this object's render passes.
+     */
+    public void extractFrame(float partialTicks) {
+        var tickTime = lastTick + partialTicks;
+        deltaTime = tickTime - lastTickTime;
+        lastTickTime = tickTime;
+        if (delay > 0) return;
+        updateFrame(partialTicks);
     }
 
     @Override
