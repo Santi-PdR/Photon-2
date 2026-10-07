@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.Skeleton;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.MeshSkin;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.VertexAnimationBake;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
@@ -135,6 +136,8 @@ class GltfMeshParserTest {
 
         assertNotNull(model.skeleton());
         assertNotNull(model.skin());
+        assertEquals(MeshSkin.MAX_INFLUENCES, model.skin().influences());
+        assertEquals(1f, model.skin().weights()[MeshSkin.INFLUENCES], 1e-6f);
         assertTrue(model.isAnimated());
         var clip = model.clip("move_joint");
         assertNotNull(clip);
@@ -243,14 +246,14 @@ class GltfMeshParserTest {
     }
 
     private static byte[] skinnedAnimatedTriangle() {
-        ByteBuffer binary = ByteBuffer.allocate(252).order(ByteOrder.LITTLE_ENDIAN);
+        ByteBuffer binary = ByteBuffer.allocate(312).order(ByteOrder.LITTLE_ENDIAN);
         for (float value : new float[]{0,0,0, 1,0,0, 0,1,0}) binary.putFloat(value);
         for (float value : new float[]{0,0,1, 0,0,1, 0,0,1}) binary.putFloat(value);
         for (float value : new float[]{0,0, 1,0, 0,1}) binary.putFloat(value);
-        binary.put(new byte[12]); // JOINTS_0: joint zero for each of the three vertices
-        for (int vertex = 0; vertex < 3; vertex++) {
-            binary.putFloat(1).putFloat(0).putFloat(0).putFloat(0);
-        }
+        binary.put(new byte[12]); // JOINTS_0
+        for (int vertex = 0; vertex < 3; vertex++) binary.putFloat(0).putFloat(0).putFloat(0).putFloat(0); // WEIGHTS_0
+        binary.put(new byte[12]); // JOINTS_1: the animation is weighted only by this second set
+        for (int vertex = 0; vertex < 3; vertex++) binary.putFloat(1).putFloat(0).putFloat(0).putFloat(0); // WEIGHTS_1
         for (float value : new float[]{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}) binary.putFloat(value);
         binary.putFloat(0).putFloat(1);
         for (float value : new float[]{0,0,0, 1,0,0}) binary.putFloat(value);
@@ -259,27 +262,31 @@ class GltfMeshParserTest {
                 {"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0,1]}],
                  "nodes":[{"mesh":0,"skin":0},{"translation":[0,0,0]}],
                  "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2,
-                   "JOINTS_0":3,"WEIGHTS_0":4}}]}],
-                 "skins":[{"skeleton":1,"joints":[1],"inverseBindMatrices":5}],
-                 "animations":[{"name":"move_joint","samplers":[{"input":6,"output":7}],
+                   "JOINTS_0":3,"WEIGHTS_0":4,"JOINTS_1":5,"WEIGHTS_1":6}}]}],
+                 "skins":[{"skeleton":1,"joints":[1],"inverseBindMatrices":7}],
+                 "animations":[{"name":"move_joint","samplers":[{"input":8,"output":9}],
                    "channels":[{"sampler":0,"target":{"node":1,"path":"translation"}}]}],
                  "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},
                    {"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},
                    {"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"},
                    {"bufferView":3,"componentType":5121,"count":3,"type":"VEC4"},
                    {"bufferView":4,"componentType":5126,"count":3,"type":"VEC4"},
-                   {"bufferView":5,"componentType":5126,"count":1,"type":"MAT4"},
-                   {"bufferView":6,"componentType":5126,"count":2,"type":"SCALAR"},
-                   {"bufferView":7,"componentType":5126,"count":2,"type":"VEC3"}],
+                   {"bufferView":5,"componentType":5121,"count":3,"type":"VEC4"},
+                   {"bufferView":6,"componentType":5126,"count":3,"type":"VEC4"},
+                   {"bufferView":7,"componentType":5126,"count":1,"type":"MAT4"},
+                   {"bufferView":8,"componentType":5126,"count":2,"type":"SCALAR"},
+                   {"bufferView":9,"componentType":5126,"count":2,"type":"VEC3"}],
                  "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},
                    {"buffer":0,"byteOffset":36,"byteLength":36},
                    {"buffer":0,"byteOffset":72,"byteLength":24},
                    {"buffer":0,"byteOffset":96,"byteLength":12},
                    {"buffer":0,"byteOffset":108,"byteLength":48},
-                   {"buffer":0,"byteOffset":156,"byteLength":64},
-                   {"buffer":0,"byteOffset":220,"byteLength":8},
-                   {"buffer":0,"byteOffset":228,"byteLength":24}],
-                 "buffers":[{"byteLength":252,"uri":"data:application/octet-stream;base64,%s"}]}
+                   {"buffer":0,"byteOffset":156,"byteLength":12},
+                   {"buffer":0,"byteOffset":168,"byteLength":48},
+                   {"buffer":0,"byteOffset":216,"byteLength":64},
+                   {"buffer":0,"byteOffset":280,"byteLength":8},
+                   {"buffer":0,"byteOffset":288,"byteLength":24}],
+                 "buffers":[{"byteLength":312,"uri":"data:application/octet-stream;base64,%s"}]}
                 """.formatted(Base64.getEncoder().encodeToString(binary.array()));
         return gltf.getBytes(StandardCharsets.UTF_8);
     }

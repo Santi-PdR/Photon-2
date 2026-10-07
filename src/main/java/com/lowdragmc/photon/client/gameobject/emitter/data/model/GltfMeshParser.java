@@ -47,8 +47,9 @@ import java.util.List;
  * hierarchy into the vertices. {@link #parseModel(InputStream, boolean)} additionally reads glTF
  * skins, inverse-bind matrices and translation/rotation/scale animation clips. Both read every
  * {@code TRIANGLES} primitive and the {@code POSITION} / {@code NORMAL} / {@code TEXCOORD_0} /
- * {@code TANGENT} attributes. Materials and textures remain Photon's own; morph targets are not
- * supported yet.</p>
+ * {@code TANGENT} attributes, including up to eight skin influences through {@code JOINTS_0/1} and
+ * {@code WEIGHTS_0/1}. Materials and textures remain Photon's own; morph targets are not supported
+ * yet.</p>
  *
  * <p><b>Tangents.</b> glTF is the first format Photon reads that can carry them, and its convention is
  * already ours: {@code TANGENT} is a {@code vec4}, {@code xyz} the unit tangent and {@code w} the
@@ -68,7 +69,7 @@ public final class GltfMeshParser {
     private static final int GLB_MAGIC = 0x46546C67;      // "glTF", little-endian
     private static final int CHUNK_JSON = 0x4E4F534A;     // "JSON"
     private static final int CHUNK_BIN = 0x004E4942;      // "BIN\0"
-    private static final float[] RIGID_WEIGHTS = {1f, 0f, 0f, 0f};
+    private static final float[] RIGID_WEIGHTS = {1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f};
     /** Malformed files can describe a node cycle; glTF forbids it, so bail rather than recurse forever. */
     private static final int MAX_NODE_DEPTH = 64;
 
@@ -279,12 +280,12 @@ public final class GltfMeshParser {
             PhotonMesh mesh = builder.build();
             if (skeleton == null) return SkinnedModel.staticModel(mesh);
             int vertexCount = mesh.quadCount() * 4;
-            while (skinJoints.size() < vertexCount * MeshSkin.INFLUENCES) {
+            while (skinJoints.size() < vertexCount * MeshSkin.MAX_INFLUENCES) {
                 skinJoints.add(0);
                 skinWeights.add(0f);
             }
             MeshSkin skin = mesh.isEmpty() || skinJoints.isEmpty()
-                    ? null : new MeshSkin(skinJoints.toIntArray(), skinWeights.toFloatArray());
+                    ? null : new MeshSkin(skinJoints.toIntArray(), skinWeights.toFloatArray(), MeshSkin.MAX_INFLUENCES);
             return new SkinnedModel(mesh, skin, skeleton, readAnimations());
         }
 
@@ -566,6 +567,14 @@ public final class GltfMeshParser {
             float[] jointIndices = jointSlots == null ? null : attributeOf(attributes, "JOINTS_0", 4, vertexCount);
             float[] jointWeights = jointIndices == null ? null : attributeOf(attributes, "WEIGHTS_0", 4, vertexCount);
             if (jointWeights == null) jointIndices = null;
+            float[] extraJointIndices = jointSlots == null || !attributes.has("JOINTS_1")
+                    ? null : attributeOf(attributes, "JOINTS_1", 4, vertexCount);
+            float[] extraJointWeights = jointSlots == null || !attributes.has("WEIGHTS_1")
+                    ? null : attributeOf(attributes, "WEIGHTS_1", 4, vertexCount);
+            if (extraJointIndices == null || extraJointWeights == null) {
+                extraJointIndices = null;
+                extraJointWeights = null;
+            }
 
             int[] indices = primitive.has("indices")
                     ? readIndices(primitive.get("indices").getAsInt())
@@ -600,38 +609,41 @@ public final class GltfMeshParser {
                             cornerTangent[0], cornerTangent[1], cornerTangent[2], sampleA, sampleB, sampleC);
                 }
                 if (jointIndices != null) {
-                    addSkin(sourceVertices[0], jointIndices, jointWeights, jointSlots);
-                    addSkin(sourceVertices[1], jointIndices, jointWeights, jointSlots);
-                    addSkin(sourceVertices[2], jointIndices, jointWeights, jointSlots);
-                    addSkin(sourceVertices[2], jointIndices, jointWeights, jointSlots); // Photon stores triangles as degenerate quads
+                    addSkin(sourceVertices[0], jointIndices, jointWeights, extraJointIndices, extraJointWeights, jointSlots);
+                    addSkin(sourceVertices[1], jointIndices, jointWeights, extraJointIndices, extraJointWeights, jointSlots);
+                    addSkin(sourceVertices[2], jointIndices, jointWeights, extraJointIndices, extraJointWeights, jointSlots);
+                    addSkin(sourceVertices[2], jointIndices, jointWeights, extraJointIndices, extraJointWeights, jointSlots); // Photon stores triangles as degenerate quads
                 } else if (rigidSlot >= 0) {
                     addRigidSkin(rigidSlot);
                     addRigidSkin(rigidSlot);
                     addRigidSkin(rigidSlot);
                     addRigidSkin(rigidSlot);
                 } else if (skeleton != null) {
-                    padSkinTo(skinJoints.size() / MeshSkin.INFLUENCES + 4);
+                    padSkinTo(skinJoints.size() / MeshSkin.MAX_INFLUENCES + 4);
                 }
             }
         }
 
         private void addRigidSkin(int joint) {
             skinJoints.add(joint);
-            skinJoints.add(0);
-            skinJoints.add(0);
-            skinJoints.add(0);
+            for (int i = 1; i < MeshSkin.MAX_INFLUENCES; i++) skinJoints.add(0);
             skinWeights.addElements(skinWeights.size(), RIGID_WEIGHTS);
         }
 
-        private void addSkin(int vertex, float[] jointIndices, float[] weights, int[] jointSlots) {
-            int source = vertex * MeshSkin.INFLUENCES;
-            int[] mapped = new int[MeshSkin.INFLUENCES];
-            float[] normalized = new float[MeshSkin.INFLUENCES];
+        private void addSkin(int vertex, float[] jointIndices, float[] weights,
+                             @org.jetbrains.annotations.Nullable float[] extraJointIndices,
+                             @org.jetbrains.annotations.Nullable float[] extraWeights, int[] jointSlots) {
+            int[] mapped = new int[MeshSkin.MAX_INFLUENCES];
+            float[] normalized = new float[MeshSkin.MAX_INFLUENCES];
             float total = 0f;
-            for (int i = 0; i < MeshSkin.INFLUENCES; i++) {
-                int local = (int) jointIndices[source + i];
+            for (int i = 0; i < MeshSkin.MAX_INFLUENCES; i++) {
+                float[] sourceJoints = i < MeshSkin.INFLUENCES ? jointIndices : extraJointIndices;
+                float[] sourceWeights = i < MeshSkin.INFLUENCES ? weights : extraWeights;
+                if (sourceJoints == null || sourceWeights == null) continue;
+                int source = vertex * MeshSkin.INFLUENCES + i % MeshSkin.INFLUENCES;
+                int local = (int) sourceJoints[source];
                 int joint = local >= 0 && local < jointSlots.length ? jointSlots[local] : -1;
-                float weight = weights[source + i];
+                float weight = sourceWeights[source];
                 if (joint < 0 || !(weight > 0f) || !Float.isFinite(weight)) continue;
                 mapped[i] = joint;
                 normalized[i] = weight;
@@ -645,7 +657,7 @@ public final class GltfMeshParser {
         }
 
         private void padSkinTo(int vertexCount) {
-            while (skinJoints.size() < vertexCount * MeshSkin.INFLUENCES) {
+            while (skinJoints.size() < vertexCount * MeshSkin.MAX_INFLUENCES) {
                 skinJoints.add(0);
                 skinWeights.add(0f);
             }

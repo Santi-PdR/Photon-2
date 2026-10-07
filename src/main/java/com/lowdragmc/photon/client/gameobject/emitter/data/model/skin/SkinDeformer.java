@@ -51,19 +51,20 @@ public final class SkinDeformer {
     public void deform(PhotonMesh mesh, MeshSkin skin, float[] out, float[] restTangents, float[] outTangents) {
         float[] vertices = mesh.vertices();
         int vertexCount = mesh.quadCount() * 4;
+        int influences = skin.influences();
         int[] joints = skin.joints();
         float[] weights = skin.weights();
         for (int vertex = 0; vertex < vertexCount; vertex++) {
             int src = vertex * PhotonMesh.FLOATS_PER_VERTEX;
             int dst = vertex * 6;
-            int influence = vertex * MeshSkin.INFLUENCES;
+            int influence = vertex * influences;
             float px = vertices[src], py = vertices[src + 1], pz = vertices[src + 2];
             float nx = vertices[src + 5], ny = vertices[src + 6], nz = vertices[src + 7];
             float ox = 0, oy = 0, oz = 0, onx = 0, ony = 0, onz = 0;
             float tx = 0, ty = 0, tz = 0, sum = 0;
             int tangentAt = vertex * PhotonMesh.FLOATS_PER_TANGENT;
             boolean hasInfluence = false;
-            for (int i = 0; i < MeshSkin.INFLUENCES && influence + i < joints.length; i++) {
+            for (int i = 0; i < influences && influence + i < joints.length; i++) {
                 float weight = weights[influence + i];
                 int joint = joints[influence + i];
                 if (!(weight > 0) || joint < 0 || joint >= skeleton.jointCount()) continue;
