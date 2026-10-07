@@ -414,6 +414,7 @@ public abstract class PhotonFXRenderPass {
      * restore opengl environment.
      */
     public void releaseStatus(@Nonnull RenderPassPipeline pipeline) {
+        Minecraft.getInstance().gameRenderer.lightTexture().turnOffLightLayer();
     }
 
     /**

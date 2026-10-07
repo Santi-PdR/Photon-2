@@ -448,8 +448,12 @@ public class RenderPassPipeline {
             var particleQueue = entry.getValue();
             if (!particleQueue.isEmpty()) {
                 renderPass.prepareStatus(this);
-                var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
-                renderPass.releaseStatus(this);
+                boolean drewSomething;
+                try {
+                    drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                } finally {
+                    renderPass.releaseStatus(this);
+                }
                 if (drewSomething) {
                     // only a pass that wrote pixels can change what a later scene-sampling
                     // material sees; skipping the mark avoids a redundant scene re-copy
