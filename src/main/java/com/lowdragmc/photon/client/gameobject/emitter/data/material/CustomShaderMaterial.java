@@ -70,16 +70,32 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Nullable
     private LDShaderHolder shaderHolder;
     private Cleaner.Cleanable shaderCleanable;
+    private final Cleaner.Cleanable samplerTexturesCleanable;
     @Getter
     private String compiledErrorMessage = "";
     /** Per-material API overrides. Kept separate from LDShaderHolder's UI values for NBT stability. */
     private final Map<String, float[]> uniformOverrides = new HashMap<>();
 
     public CustomShaderMaterial() {
+        samplerTexturesCleanable = AutoCloseCleaner.registerRenderThread(this,
+                new SamplerTextures(curveTexture, gradientTexture));
     }
 
     public CustomShaderMaterial(ResourceLocation shaderLocation) {
+        this();
         this.shaderLocation = shaderLocation;
+    }
+
+    /** Holds no reference to the material, so the cleaner can release both owned dynamic textures. */
+    private record SamplerTextures(CurveTexture curve, GradientTexture gradient) implements AutoCloseable {
+        @Override
+        public void close() {
+            try {
+                curve.close();
+            } finally {
+                gradient.close();
+            }
+        }
     }
 
     public void setShader(ResourceLocation shaderLocation) {
