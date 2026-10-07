@@ -209,6 +209,8 @@ public final class PostEffectStack {
         boolean bloomDone = !doBuiltinBloom;
         int effectSceneDepthTexture = sceneDepthTexture;
         boolean resolvedSampleableDepth = false;
+        boolean completed = false;
+        var leases = new TargetLease<HDRTarget>(PostFXTargetPool::release);
         setPostRenderState();
         try {
             for (var invocation : invocations) {
@@ -216,7 +218,7 @@ public final class PostEffectStack {
                 if (!bloomDone && invocation.effect().priority() >= 0) {
                     chain = PhotonPostProcessing.postTarget(chain);
                     if (pooledChain != null) {
-                        PostFXTargetPool.release(pooledChain);
+                        leases.release(pooledChain);
                         pooledChain = null;
                     }
                     bloomDone = true;
@@ -262,6 +264,7 @@ public final class PostEffectStack {
                         params, chain, effectSceneDepthTexture, maskTexture,
                         com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.getMaskDepthTexture());
                 if (output == null) continue; // broken effect: chain passes through
+                leases.acquire(output);
 
                 boolean mixCulling = masked && !effectOwnsMask;
                 var result = output;
@@ -279,21 +282,25 @@ public final class PostEffectStack {
                         // several groups: bake their EXACT union as a binary mask (R=1 where any
                         // of them wrote), then match "any" against it — no over-coverage
                         unionMask = buildUnionMask(maskGroups, chain.width, chain.height, maskTexture);
-                        if (unionMask != null) mixMaskTexture = unionMask.getColorTextureId();
+                        if (unionMask != null) {
+                            leases.acquire(unionMask);
+                            mixMaskTexture = unionMask.getColorTextureId();
+                        }
                     } // empty (any group) / >MAX groups / no union shader: filter 0 on the raw mask
                     var mixShader = mixCulling ? PhotonShaders.getWeightMaskMixShader()
                             : PhotonShaders.getWeightMixShader();
                     if (mixShader == null) { // partial shader registration: degrade to the raw output
-                        if (unionMask != null) PostFXTargetPool.release(unionMask);
-                        if (pooledChain != null) PostFXTargetPool.release(pooledChain);
+                        leases.release(unionMask);
+                        leases.release(pooledChain);
                         pooledChain = result;
                         chain = result;
                         continue;
                     }
                     var mixed = PostFXTargetPool.acquire(chain.width, chain.height);
+                    leases.acquire(mixed);
                     if (mixed == null) {
-                        if (unionMask != null) PostFXTargetPool.release(unionMask);
-                        if (pooledChain != null) PostFXTargetPool.release(pooledChain);
+                        leases.release(unionMask);
+                        leases.release(pooledChain);
                         pooledChain = result;
                         chain = result;
                         continue;
@@ -307,24 +314,32 @@ public final class PostEffectStack {
                         mixShader.safeGetUniform("MaskFilter").set(mixFilter);
                     }
                     PhotonPostProcessing.blitShader(mixShader, mixed, false);
-                    if (unionMask != null) PostFXTargetPool.release(unionMask);
-                    PostFXTargetPool.release(output);
+                    leases.release(unionMask);
+                    leases.release(output);
                     result = mixed;
                 }
 
-                if (pooledChain != null) PostFXTargetPool.release(pooledChain);
+                leases.release(pooledChain);
                 pooledChain = result;
                 chain = result;
             }
             if (!bloomDone) {
                 chain = PhotonPostProcessing.postTarget(chain);
                 if (pooledChain != null) {
-                    PostFXTargetPool.release(pooledChain);
+                    leases.release(pooledChain);
                     pooledChain = null;
                 }
             }
+            completed = true;
         } finally {
-            restorePostRenderState();
+            boolean restored = false;
+            try {
+                restorePostRenderState();
+                restored = true;
+            } finally {
+                if (completed && restored) leases.transfer(pooledChain);
+                leases.close();
+            }
         }
         // the caller blits this target to the main/Iris framebuffer right after we return, so a pooled
         // final target stays out of the pool until the frame boundary
@@ -352,18 +367,27 @@ public final class PostEffectStack {
                 com.lowdragmc.photon.client.postfx.graph.TargetFormat.R8);
         if (target == null) return null;
         var shader = PhotonShaders.getMaskUnionShader();
+        if (shader == null) {
+            PostFXTargetPool.release(target);
+            return null;
+        }
         var ids = new float[MAX_UNION_GROUPS];
         int count = 0;
         for (var groupName : groups) {
             if (count >= MAX_UNION_GROUPS) break;
             ids[count++] = MaskGroups.idOf(groupName);
         }
-        shader.setSampler("MaskSampler", maskTexture);
-        shader.safeGetUniform("IdsA").set(ids[0], ids[1], ids[2], ids[3]);
-        shader.safeGetUniform("IdsB").set(ids[4], ids[5], ids[6], ids[7]);
-        shader.safeGetUniform("IdCount").set((float) count);
-        PhotonPostProcessing.blitShader(shader, target, false);
-        return target;
+        try {
+            shader.setSampler("MaskSampler", maskTexture);
+            shader.safeGetUniform("IdsA").set(ids[0], ids[1], ids[2], ids[3]);
+            shader.safeGetUniform("IdsB").set(ids[4], ids[5], ids[6], ids[7]);
+            shader.safeGetUniform("IdCount").set((float) count);
+            PhotonPostProcessing.blitShader(shader, target, false);
+            return target;
+        } catch (RuntimeException | Error failure) {
+            PostFXTargetPool.release(target);
+            throw failure;
+        }
     }
 
     // ---- blending --------------------------------------------------------------------------------
