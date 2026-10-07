@@ -67,7 +67,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapRotationBySpeedTag(CompoundTag rotationTag){
         CompoundTag newRotationTag = new CompoundTag();
         newRotationTag.putByte("_enable", rotationTag.getByte("enable"));
-        if(newRotationTag.getByte("enable") == 1){
+        if(newRotationTag.getByte("_enable") == 1){
             newRotationTag.put("speedRange",  rotationTag.getCompound("speedRange"));
             newRotationTag.put("roll", MapperUtils.mapTypedValue(rotationTag.getCompound("roll"), false));
             newRotationTag.put("pitch", MapperUtils.mapTypedValue(rotationTag.getCompound("pitch"), false));
@@ -98,7 +98,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapForceOTTag(CompoundTag forceOTTag){
         CompoundTag newForceOTTag = new CompoundTag();
         newForceOTTag.putByte("_enable", forceOTTag.getByte("enable"));
-        if(newForceOTTag.getByte("enable") == 1){
+        if(newForceOTTag.getByte("_enable") == 1){
             newForceOTTag.putString("simulationSpace", forceOTTag.getString("simulationSpace"));
             newForceOTTag.put("force", MapperUtils.mapTyped3Vec(forceOTTag.getCompound("force"), null, false));
         }
@@ -109,13 +109,13 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapNoiseTag(CompoundTag noiseTag){
         CompoundTag newNoiseTag = new CompoundTag();
         newNoiseTag.putByte("_enable", noiseTag.getByte("enable"));
-        if(newNoiseTag.getByte("enable") == 1){
+        if(newNoiseTag.getByte("_enable") == 1){
             newNoiseTag.put("size", MapperUtils.mapTypedValue(noiseTag.getCompound("size"), false));
             newNoiseTag.put("rotation", MapperUtils.mapTypedValue(noiseTag.getCompound("rotation"), false));
             newNoiseTag.put("position", MapperUtils.mapTyped3Vec(noiseTag.getCompound("position"), null, true));
             CompoundTag remap = new CompoundTag();
             remap.putByte("_enable",  noiseTag.getCompound("remap").getByte("enable"));
-            if(remap.getByte("enable") == 1){
+            if(remap.getByte("_enable") == 1){
                 remap.put("remapCurve", MapperUtils.mapTypedValue(noiseTag.getCompound("remap").getCompound("remapCurve"), false));
             }
             newNoiseTag.put("remap", remap);
@@ -129,7 +129,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapPhysicsTag(CompoundTag physicsTag){
         CompoundTag newPhysicsTag = new CompoundTag();
         newPhysicsTag.putByte("_enable", physicsTag.getByte("enable"));
-        if(newPhysicsTag.getByte("enable") == 1){
+        if(newPhysicsTag.getByte("_enable") == 1){
             newPhysicsTag.putByte("hasCollision",  physicsTag.getByte("hasCollision"));
             newPhysicsTag.putByte("removeWhenCollided",  physicsTag.getByte("removeWhenCollided"));
             newPhysicsTag.put("friction", MapperUtils.mapTypedValue(physicsTag.getCompound("friction"), false));
@@ -163,7 +163,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapSizeBySpeedTag(CompoundTag sizeBySpeedTag){
         CompoundTag newSizeBySpeedTag = new CompoundTag();
         newSizeBySpeedTag.putByte("_enable", sizeBySpeedTag.getByte("enable"));
-        if(newSizeBySpeedTag.getByte("enable") == 1){
+        if(newSizeBySpeedTag.getByte("_enable") == 1){
             newSizeBySpeedTag.put("speedRange", sizeBySpeedTag.getCompound("speedRange"));
             newSizeBySpeedTag.put("size", MapperUtils.mapTyped3Vec(sizeBySpeedTag.getCompound("size"), null, false));
         }
@@ -174,7 +174,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapVelocityOLTag(CompoundTag velocityOTTag){
         CompoundTag newVelocityOTTag = new CompoundTag();
         newVelocityOTTag.putByte("_enable", velocityOTTag.getByte("enable"));
-        if(newVelocityOTTag.getByte("enable") == 1){
+        if(newVelocityOTTag.getByte("_enable") == 1){
             newVelocityOTTag.put("speedModifier",  MapperUtils.mapTypedValue(velocityOTTag.getCompound("speedModifier"), false));
             newVelocityOTTag.putString("orbitalMode",   velocityOTTag.getString("orbitalMode"));
             newVelocityOTTag.put("offset",  MapperUtils.mapTyped3Vec(velocityOTTag.getCompound("offset"), null, false));
@@ -189,7 +189,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapRotationOLTTag(CompoundTag rotationOLTTag){
         CompoundTag newRotationOLTTag = new CompoundTag();
         newRotationOLTTag.putByte("_enable", rotationOLTTag.getByte("enable"));
-        if(newRotationOLTTag.getByte("enable") == 1){
+        if(newRotationOLTTag.getByte("_enable") == 1){
             newRotationOLTTag.put("roll", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("roll"), false));
             newRotationOLTTag.put("pitch", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("pitch"), false));
             newRotationOLTTag.put("yaw", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("yaw"), false));
@@ -214,7 +214,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapTrailsTag(CompoundTag trailsTag){
         CompoundTag newTrailsTag = new CompoundTag();
         newTrailsTag.putByte("_enable", trailsTag.getByte("enable"));
-        if(newTrailsTag.getByte("enable") == 1){
+        if(newTrailsTag.getByte("_enable") == 1){
             newTrailsTag.putByte("dieWithParticles", trailsTag.getByte("dieWithParticles"));
             newTrailsTag.putByte("sizeAffectsWidth", trailsTag.getByte("sizeAffectsWidth"));
             newTrailsTag.putByte("inheritParticleColor", trailsTag.getByte("inheritParticleColor"));
