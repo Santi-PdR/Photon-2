@@ -36,6 +36,12 @@ issueTrackerURL = "https://github.com/Low-Drag-MC/Photon/issues"
     versionRange = "${kilagraph_version_range}"
     ordering = "AFTER"
     side = "BOTH"
+[[dependencies.${mod_id}]]
+    modId = "kotlinforforge"
+    mandatory = true
+    versionRange = "${kotlinforforge_version_range}"
+    ordering = "AFTER"
+    side = "BOTH"
 
 [features.${mod_id}]
 openGLVersion = "[3.2,)"

@@ -10,7 +10,7 @@ With Java 17 installed, run:
 ./gradlew build
 ```
 
-The build output is written to `build/libs/`. Unit tests run as part of `build`; `./gradlew test` runs only the tests. The project requires the bundled LDLib2 and KilaGraph Forge libraries in `libs/`.
+The build output is written to `build/libs/`. Unit tests run as part of `build`; `./gradlew test` runs only the tests. The project requires the bundled LDLib2 and KilaGraph Forge libraries in `libs/`. Install Kotlin for Forge 4.10.0 or newer in the Forge 1.20.1 profile; LDLib2 uses its Kotlin runtime libraries.
 
 GitHub Actions builds this branch with Java 17 and publishes the JAR as a downloadable workflow artifact after a successful build. The workflow artifact is a test build, not a final release.
 
