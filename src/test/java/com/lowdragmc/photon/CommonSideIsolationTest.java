@@ -4,7 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -76,5 +80,35 @@ class CommonSideIsolationTest {
                         "the guarded client suggestion path must remain present");
             }
         }
+    }
+
+    @Test
+    void allCommonProductionClassfilesAvoidDirectClientRenderingLinks() throws Exception {
+        var classesRoot = Path.of(Photon.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                .resolve("com/lowdragmc/photon");
+        assertTrue(Files.isDirectory(classesRoot), "Missing compiled Photon classes at " + classesRoot);
+
+        try (Stream<Path> classfiles = Files.walk(classesRoot)) {
+            for (var path : classfiles.filter(p -> p.toString().endsWith(".class")).toList()) {
+                var relative = classesRoot.relativize(path).toString().replace(path.getFileSystem().getSeparator(), "/");
+                if (isClientOnlyClassfile(relative)) continue;
+
+                var constantPool = new String(Files.readAllBytes(path), StandardCharsets.ISO_8859_1);
+                assertFalse(constantPool.contains("net/minecraft/client/"),
+                        relative + " directly references a client-only Minecraft class");
+                assertFalse(constantPool.contains("com/mojang/blaze3d/"),
+                        relative + " directly references client-only Blaze3D classes");
+            }
+        }
+    }
+
+    private static boolean isClientOnlyClassfile(String relative) {
+        var path = relative.toLowerCase(Locale.ROOT);
+        return path.startsWith("client/")
+                || path.startsWith("gui/")
+                || path.startsWith("uitest/")
+                || path.startsWith("core/mixins/")
+                || path.endsWith("$client.class")
+                || path.equals("integration/photonldlibclientplugin.class");
     }
 }
