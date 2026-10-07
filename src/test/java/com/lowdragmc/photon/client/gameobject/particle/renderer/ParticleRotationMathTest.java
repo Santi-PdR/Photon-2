@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.particle.renderer;
 
+import com.lowdragmc.photon.client.fx.IWholeEffectTransformer;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.Test;
@@ -35,5 +36,52 @@ class ParticleRotationMathTest {
 
         assertTrue(actualVector.distance(expected.transform(new Vector3f(input))) < 1e-6f);
         assertTrue(actualVector.distance(reversed.transform(new Vector3f(input))) > 0.1f);
+    }
+
+    @Test
+    void preservesParentOrientationInsideWholeEffectTransform() {
+        var wholeRotation = new Quaternionf().rotateY(-0.55f).rotateX(0.2f);
+        var parentRotation = new Quaternionf().rotateZ(0.7f).rotateY(0.3f);
+        var particleRotation = new Vector3f(0.6f, -0.25f, 0.4f);
+        var transform = wholeTransformer(wholeRotation);
+        var storedSpace = new Quaternionf(wholeRotation).mul(parentRotation);
+        var expected = new Quaternionf(wholeRotation).mul(parentRotation)
+                .mul(ParticleRotationMath.eulerRotation(particleRotation));
+        var input = new Vector3f(0.8f, -0.2f, 0.5f);
+
+        var actual = transform.applyAnimatedModelRotation(storedSpace, particleRotation, true)
+                .transform(new Vector3f(input));
+
+        assertTrue(actual.distance(expected.transform(new Vector3f(input))) < 1e-6f);
+    }
+
+    @Test
+    void appliesWholeEffectOutsideAnExplicitWorldFacingOrientation() {
+        var wholeRotation = new Quaternionf().rotateX(-0.45f).rotateY(0.6f);
+        var facing = new Quaternionf().rotateZ(0.3f).rotateX(0.8f);
+        var particleRotation = new Vector3f(-0.2f, 0.5f, 0.75f);
+        var transform = wholeTransformer(wholeRotation);
+        var expected = new Quaternionf(wholeRotation).mul(facing)
+                .mul(ParticleRotationMath.eulerRotation(particleRotation));
+        var input = new Vector3f(-0.4f, 0.9f, 0.15f);
+
+        var actual = transform.applyAnimatedModelRotation(facing, particleRotation, false)
+                .transform(new Vector3f(input));
+
+        assertTrue(actual.distance(expected.transform(new Vector3f(input))) < 1e-6f);
+    }
+
+    private static IWholeEffectTransformer wholeTransformer(Quaternionf rotation) {
+        return new IWholeEffectTransformer() {
+            @Override
+            public Quaternionf applyWholeEffectRotation(Quaternionf particleRotation) {
+                return new Quaternionf(rotation).mul(particleRotation);
+            }
+
+            @Override
+            public Vector3f applyWholeEffectPosition(Vector3f worldPosition) {
+                return new Vector3f(worldPosition);
+            }
+        };
     }
 }
