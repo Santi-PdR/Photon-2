@@ -319,6 +319,12 @@ public abstract class FXObject extends Particle implements IFXObject {
         return NO_RENDER_RENDER_TYPE;
     }
 
+    /** 26.2 compatibility name for the render group; Forge 1.20.1 calls this render type. */
+    @Nonnull
+    public ParticleRenderType getGroup() {
+        return getRenderType();
+    }
+
     @Nonnull
     public AABB getRenderBoundingBox(float partialTicks) {
         return INFINITE_BOUNDS;
