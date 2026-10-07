@@ -46,28 +46,22 @@ public class PhotonPostProcessing {
         }
     }
     private static int LAST_WIDTH, LAST_HEIGHT;
-    private static HDRTarget HIGH_LIGHT, OUTPUT;
+    private static HDRTarget OUTPUT;
     private static final List<Mip> MIPS = new ArrayList<>();
 
     public static void prepareTarget(int width, int height) {
         int mipLevel = PhotonConfig.INSTANCE.bloomMipLevel.get();
-        if (LAST_WIDTH == width && LAST_HEIGHT == height && MIPS.size() == mipLevel) return;
+        var mipSizes = BloomMipLayout.compute(width, height, mipLevel);
+        if (LAST_WIDTH == width && LAST_HEIGHT == height && MIPS.size() == mipSizes.size()) return;
 
-        HIGH_LIGHT = resize(HIGH_LIGHT, width / 2, height / 2);
         OUTPUT = resize(OUTPUT, width, height);
 
         MIPS.forEach(Mip::clear);
         MIPS.clear();
-        for (int i = 0; i < mipLevel; i++) {
-            MIPS.add(new Mip());
-        }
-
-        var w = width / 2;
-        var h = height / 2;
-        for (Mip mip : MIPS) {
-            w = w / 2;
-            h = h / 2;
-            mip.updateScreenSize(w, h);
+        for (var size : mipSizes) {
+            var mip = new Mip();
+            mip.updateScreenSize(size.width(), size.height());
+            MIPS.add(mip);
         }
 
         LAST_WIDTH = width;
@@ -75,6 +69,7 @@ public class PhotonPostProcessing {
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
+        if (MIPS.isEmpty()) return srcTarget;
         renderBloom(srcTarget);
         return OUTPUT;
     }
@@ -102,76 +97,25 @@ public class PhotonPostProcessing {
 
         brightPassShader.setSampler("inputSampler", srcTarget);
         brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
-        blitShader(brightPassShader, HIGH_LIGHT, false);
+        blitShader(brightPassShader, MIPS.get(0).swapA, false);
 
         // down-sampling
         var downSampling = PhotonShaders.getDownSamplingShader();
-        RenderTarget input = HIGH_LIGHT;
-        for (Mip mip : MIPS) {
-            var swapA = mip.swapA;
-//            var swapB = mip.swapB;
+        for (int i = 1; i < MIPS.size(); i++) {
+            var input = MIPS.get(i - 1).swapA;
             downSampling.setSampler("inputSampler", input);
             downSampling.safeGetUniform("inputResolution").set((float) input.width, (float) input.height);
-            blitShader(downSampling, swapA, false);
-//
-//            separableBlur.setSampler("inputSampler", swapA);
-//            separableBlur.safeGetUniform("BlurDir").set(1f, 0f);
-//            separableBlur.safeGetUniform("OutSize").set((float) swapA.width, (float) swapA.height);
-//            blitShader(separableBlur, swapB);
-//
-//            separableBlur.setSampler("inputSampler", swapB);
-//            separableBlur.safeGetUniform("BlurDir").set(0f, 1f);
-//            separableBlur.safeGetUniform("OutSize").set((float) swapB.width, (float) swapB.height);
-//            blitShader(separableBlur, swapA);
-
-            input = swapA;
+            blitShader(downSampling, MIPS.get(i).swapA, false);
         }
 
 
-        // up-sampling
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
-        RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
-
+        // up-sampling: add each lower-resolution contribution into the existing higher-resolution mip.
         var upSampling = PhotonShaders.getUpSamplingShader();
-        var lowRes = MIPS.get(MIPS.size() - 1).swapA;
         upSampling.safeGetUniform("filterRadius").set(0.005f);
         for (int i = MIPS.size() - 2; i >= 0; i--) {
-            var mip = MIPS.get(i).swapA;
-            upSampling.setSampler("inputSampler", lowRes);
-            blitShader(upSampling, mip, false);
-            lowRes = mip;
+            upSampling.setSampler("inputSampler", MIPS.get(i + 1).swapA);
+            blitShaderAdditive(upSampling, MIPS.get(i).swapA);
         }
-
-//        // down-sampling
-//        RenderTarget input = HIGH_LIGHT;
-//        for (Mip mip : MIPS) {
-//            var swapA = mip.swapA;
-//            var swapB = mip.swapB;
-//            separableBlur.setSampler("inputSampler", input);
-//            separableBlur.safeGetUniform("BlurDir").set(1f, 0f);
-//            separableBlur.safeGetUniform("OutSize").set((float) swapA.width, (float) swapA.height);
-//            blitShader(separableBlur, swapA);
-//
-//            separableBlur.setSampler("inputSampler", swapA);
-//            separableBlur.safeGetUniform("BlurDir").set(0f, 1f);
-//            separableBlur.safeGetUniform("OutSize").set((float) swapB.width, (float) swapB.height);
-//            blitShader(separableBlur, swapB);
-//            input = swapB;
-//        }
-//
-//        // up-sampling
-//        RenderTarget lowRes = MIPS.getLast().swapB;
-//        var bloomIntensity = PhotonConfig.INSTANCE.bloomIntensity.get().floatValue();
-//        combinePassShader.safeGetUniform("BloomIntensive").set(1f);
-//        combinePassShader.safeGetUniform("BloomScatter").set(0.7f);
-//        for (int i = MIPS.size() - 2; i >= 0; i--) {
-//            var highRes = MIPS.get(i);
-//            combinePassShader.setSampler("inputA", lowRes);
-//            combinePassShader.setSampler("inputB", highRes.getSwapB());
-//            blitShader(combinePassShader, highRes.getSwapA());
-//            lowRes = highRes.getSwapA();
-//        }
 
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
@@ -198,6 +142,18 @@ public class PhotonPostProcessing {
             dist.bindWrite(true);
         }
         shaderInstance.apply();
+        SceneBlit.drawFullscreenQuad();
+        shaderInstance.clear();
+    }
+
+    private static void blitShaderAdditive(ShaderInstance shaderInstance, RenderTarget dist) {
+        dist.bindWrite(true);
+        // ShaderInstance.apply() applies the JSON blend state, so additive composition must be
+        // configured after it and immediately before the draw.
+        shaderInstance.apply();
+        RenderSystem.enableBlend();
+        RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
+        RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
         SceneBlit.drawFullscreenQuad();
         shaderInstance.clear();
     }
