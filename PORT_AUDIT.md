@@ -9,7 +9,7 @@ Audit date: 2026-10-07
 - Starting commit: `6956f47` (`Initial commit`)
 - Starting tracked source tree: only `README.md` (`# Photon-2`)
 - Current tree includes a community Photon 2.2.6.a Forge 1.20.1 source baseline (380 Java files), ForgeGradle dependencies on LDLib2 2.2.39.a and KilaGraph 20.1.0.14, and bundled library artifacts under `libs/`.
-- Current port status: **approximately 89%; TARGET 26.2 FEATURE PORT IN PROGRESS**. A Java 17 Forge 47.4.26 artifact builds and passes unit tests; client/server runtime behavior remains incompletely verified. Do not launch Minecraft for this task; verify with source comparison, builds, tests, artifact inspection and GitHub Actions.
+- Current port status: **approximately 90%; TARGET 26.2 FEATURE PORT IN PROGRESS**. A Java 17 Forge 47.4.26 artifact builds and passes unit tests; client/server runtime behavior remains incompletely verified. Do not launch Minecraft for this task; verify with source comparison, builds, tests, artifact inspection and GitHub Actions.
 
 ## Original project and supplied artifact
 
@@ -211,3 +211,4 @@ The local Forge baseline is a community Photon 2.2.6.a port, not an official 26.
 - `PostEffectStack.wantsExecution()` now matches the 26.2 execution gate (pending requests plus global and per-view enable switches), and both standalone world/editor paths consult it before copying the scene framebuffer. Disabled post-FX no longer incurs that offscreen copy.
 - Bloom's final combine now preserves the input target's alpha while applying the 26.2 equivalent RGB formula; subsequent post-FX can safely read scene/layer coverage after bloom. Iris compositing still sources coverage from the original layer so color effects cannot alter pack blending.
 - Current Java 17 `compileJava`, `reobfJar`, and `verifyCommonSideArtifact` pass after the API and post-FX changes. The reobfuscated JAR contains 676 Photon classes at bytecode major 61, validates Minecraft 1.20.1 / Forge 47.4.26 metadata, and has no direct client-only Minecraft/Blaze3D links in 20 common classfiles. JAR: 3,017,151 bytes; SHA-256 `3cd5a44a6bc72f673b032b51a3a8c7186c9b89d95698c0ee6aa07347b4dad644`. No tests or Minecraft process were run in this verification.
+- Bloom now preserves the source alpha through its final combine, matching the 26.2 RGB-only accumulation and preventing later post-FX from receiving synthetic opaque coverage. Java 17 `reobfJar verifyCommonSideArtifact` passes, and the packaged shader hash matches its source. JAR: 3,017,129 bytes; SHA-256 `f775c47a6bf8244d4fb796cafe0f304943b81e10771c68f527cb7abdb3ede213`. No tests or Minecraft process were run.
