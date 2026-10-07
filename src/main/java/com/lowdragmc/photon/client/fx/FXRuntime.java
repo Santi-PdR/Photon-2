@@ -88,8 +88,8 @@ public class FXRuntime implements IScene {
     /**
      * Set the playback rate for the entire effect. A rate of 1 is normal speed, 0.5 is half speed,
      * and 0 pauses both simulation and timeline progression. Rates above 1 use bounded simulation
-     * sub-stepping; the global rate is capped at {@link FXObject#MAX_SUBSTEPS} so the timeline clock
-     * cannot outrun the simulation.
+     * sub-stepping. The object's simulation is bounded by {@link FXObject#MAX_SUBSTEPS}; the master
+     * timeline still advances by the requested rate, matching Photon 26.2 at extreme rates.
      *
      * <p>This value is transient and is not written into the effect data. A timeline speed track
      * targeting the root remains authoritative for simulation while that track is active.</p>
@@ -102,7 +102,7 @@ public class FXRuntime implements IScene {
 
     static float normalizeRate(float rate) {
         if (!Float.isFinite(rate)) return 1f;
-        return Math.max(0f, Math.min(rate, FXObject.MAX_SUBSTEPS));
+        return Math.max(0f, rate);
     }
 
     @Nullable
