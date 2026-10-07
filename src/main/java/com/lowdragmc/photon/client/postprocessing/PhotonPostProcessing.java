@@ -42,11 +42,20 @@ public class PhotonPostProcessing {
                 mips = new ArrayList<>();
                 return;
             }
-            output = resize(null, width, height);
-            mips = new ArrayList<>(sizes.size());
-            for (var size : sizes) {
-                mips.add(resize(null, size.width(), size.height()));
+            HDRTarget allocatedOutput = null;
+            var allocatedMips = new ArrayList<HDRTarget>(sizes.size());
+            try {
+                allocatedOutput = resize(null, width, height);
+                for (var size : sizes) {
+                    allocatedMips.add(resize(null, size.width(), size.height()));
+                }
+            } catch (RuntimeException | Error failure) {
+                destroyAfterFailedBuild(allocatedOutput, failure);
+                for (var mip : allocatedMips) destroyAfterFailedBuild(mip, failure);
+                throw failure;
             }
+            output = allocatedOutput;
+            mips = allocatedMips;
         }
 
         void destroy() {
@@ -56,12 +65,28 @@ public class PhotonPostProcessing {
     }
 
     private static final IdleFrameCache<TargetKey, TargetSet> TARGETS = new IdleFrameCache<>(120);
+    private static final FrameRetryPolicy<TargetKey> FAILED_TARGET_RETRY = new FrameRetryPolicy<>();
+    private static final int ALLOCATION_RETRY_FRAMES = 120;
+    private static long frame;
     @Nullable private static TargetSet current;
 
     public static void prepareTarget(int width, int height) {
         int levels = PhotonConfig.INSTANCE.bloomMipLevel.get();
         var key = new TargetKey(width, height, levels);
-        current = TARGETS.getOrCreate(key, () -> new TargetSet(width, height, levels));
+        if (FAILED_TARGET_RETRY.shouldDefer(key, frame)) {
+            current = null;
+            return;
+        }
+        try {
+            current = TARGETS.getOrCreate(key, () -> new TargetSet(width, height, levels));
+            FAILED_TARGET_RETRY.succeeded(key);
+        } catch (RuntimeException failure) {
+            current = null;
+            FAILED_TARGET_RETRY.failed(key, frame, ALLOCATION_RETRY_FRAMES);
+            com.lowdragmc.photon.Photon.LOGGER.warn(
+                    "Could not allocate {}x{} bloom targets; skipping builtin bloom for {} frames",
+                    width, height, ALLOCATION_RETRY_FRAMES, failure);
+        }
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
@@ -78,6 +103,8 @@ public class PhotonPostProcessing {
 
     /** Frame boundary: release cached target sets that have not served a view for 120 frames. */
     public static void onFrameEnd() {
+        frame++;
+        FAILED_TARGET_RETRY.advanceTo(frame);
         for (var targets : TARGETS.endFrame()) {
             targets.destroy();
             if (current == targets) current = null;
@@ -86,6 +113,15 @@ public class PhotonPostProcessing {
 
     private static HDRTarget resize(@Nullable HDRTarget target, int width, int height) {
         return RenderPassPipeline.resize(target, width, height, false);
+    }
+
+    private static void destroyAfterFailedBuild(@Nullable HDRTarget target, Throwable failure) {
+        if (target == null) return;
+        try {
+            target.destroyBuffers();
+        } catch (RuntimeException | Error cleanupFailure) {
+            if (cleanupFailure != failure) failure.addSuppressed(cleanupFailure);
+        }
     }
 
     private static void renderBloom(RenderTarget srcTarget, TargetSet targets) {
