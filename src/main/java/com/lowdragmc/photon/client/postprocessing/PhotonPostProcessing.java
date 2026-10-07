@@ -20,9 +20,6 @@ import org.lwjgl.opengl.GL46;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 @OnlyIn(Dist.CLIENT)
 public class PhotonPostProcessing {
@@ -34,7 +31,6 @@ public class PhotonPostProcessing {
         final int requestedLevels;
         @Nullable final HDRTarget output;
         final ArrayList<HDRTarget> mips;
-        long lastUsedFrame;
 
         TargetSet(int width, int height, int requestedLevels) {
             this.width = width;
@@ -59,15 +55,13 @@ public class PhotonPostProcessing {
         }
     }
 
-    private static final Map<TargetKey, TargetSet> TARGETS = new HashMap<>();
-    private static long frame;
+    private static final IdleFrameCache<TargetKey, TargetSet> TARGETS = new IdleFrameCache<>(120);
     @Nullable private static TargetSet current;
 
     public static void prepareTarget(int width, int height) {
         int levels = PhotonConfig.INSTANCE.bloomMipLevel.get();
         var key = new TargetKey(width, height, levels);
-        current = TARGETS.computeIfAbsent(key, ignored -> new TargetSet(width, height, levels));
-        current.lastUsedFrame = frame;
+        current = TARGETS.getOrCreate(key, () -> new TargetSet(width, height, levels));
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
@@ -78,21 +72,15 @@ public class PhotonPostProcessing {
         }
         var targets = current;
         if (targets == null || targets.mips.isEmpty() || targets.output == null) return srcTarget;
-        targets.lastUsedFrame = frame;
         renderBloom(srcTarget, targets);
         return targets.output;
     }
 
     /** Frame boundary: release cached target sets that have not served a view for 120 frames. */
     public static void onFrameEnd() {
-        frame++;
-        Iterator<Map.Entry<TargetKey, TargetSet>> entries = TARGETS.entrySet().iterator();
-        while (entries.hasNext()) {
-            var targets = entries.next().getValue();
-            if (frame - targets.lastUsedFrame <= 120) continue;
+        for (var targets : TARGETS.endFrame()) {
             targets.destroy();
             if (current == targets) current = null;
-            entries.remove();
         }
     }
 
