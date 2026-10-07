@@ -180,7 +180,11 @@ public final class PostEffectStack {
     private RenderTarget consumeAndExecute(HDRTarget chainInput, boolean doBuiltinBloom, int sceneDepthTexture,
                                            @Nullable RenderTarget sceneDepthSource) {
         long frame = PostFXTargetPool.currentFrame();
-        if (consumedFrame == frame) return chainInput;
+        if (consumedFrame == frame) {
+            // Effects are consumed once per frame, but a second view sharing this stack still needs
+            // its own bloom pass over that view's HDR target.
+            return doBuiltinBloom ? PhotonPostProcessing.postTarget(chainInput) : chainInput;
+        }
         consumedFrame = frame;
         PostFXPreview.captureIfRequested(chainInput); // editors preview against the clean scene
 
