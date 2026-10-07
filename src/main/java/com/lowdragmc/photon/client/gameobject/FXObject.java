@@ -315,6 +315,31 @@ public abstract class FXObject extends Particle implements IFXObject {
         return INFINITE_BOUNDS;
     }
 
+    /** Color and rotation values exposed on FXObject by Photon 26.2; stored on Particle in 1.20.1. */
+    public float getRCol() {
+        return rCol;
+    }
+
+    public float getGCol() {
+        return gCol;
+    }
+
+    public float getBCol() {
+        return bCol;
+    }
+
+    public float getAlpha() {
+        return alpha;
+    }
+
+    public float getRoll() {
+        return roll;
+    }
+
+    public float getORoll() {
+        return oRoll;
+    }
+
     public static ParticleRenderType NO_RENDER_RENDER_TYPE = new ParticleRenderType() {
         public final RenderPassPipeline pipeline = new RenderPassPipeline();
 
