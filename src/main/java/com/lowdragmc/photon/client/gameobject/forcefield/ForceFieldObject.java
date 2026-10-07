@@ -40,9 +40,6 @@ import java.util.List;
 @ParametersAreNonnullByDefault
 public class ForceFieldObject extends FXObject {
     public static final IGuiTexture ICON = Icons.icon(Photon.MOD_ID, "force_field");
-    /** Matches the 0.05f authored-force scale of {@code ForceOverLifetimeSetting.Runtime#getForce}. */
-    private static final float FORCE_SCALE = 0.05f;
-
     @LDLRegisterClient(name = "force_field", registry = "photon:fx_object")
     public static final FXObjectType TYPE = new FXObjectType() {
         @Override
@@ -156,83 +153,32 @@ public class ForceFieldObject extends FXObject {
         // (including scale) shapes the influence volume
         var local = new Vector3f(worldPos).mulPosition(transform().worldToLocalMatrix());
         var endRange = rt.getEndRange();
-        var startRange = Math.min(rt.getStartRange(), endRange);
-        if (endRange <= 0) {
-            return;
-        }
-        float r = switch (rt.getShape()) {
-            case Sphere -> local.length();
-            case Hemisphere -> local.y < 0 ? Float.MAX_VALUE : local.length();
-            case Cylinder -> Math.max((float) Math.sqrt(local.x * local.x + local.z * local.z), Math.abs(local.y));
-            case Box -> Math.max(Math.abs(local.x), Math.max(Math.abs(local.y), Math.abs(local.z)));
-        };
-        if (r > endRange) {
-            return;
-        }
-        // influence contract: 1 inside startRange, linear falloff to 0 at endRange
-        float influence = r <= startRange ? 1f : 1f - (r - startRange) / (endRange - startRange);
-        float strength = influence * multiplier;
+        float strength = ForceFieldPhysics.influence(rt.getShape(), local, rt.getStartRange(), endRange) * multiplier;
         if (strength == 0) {
             return;
         }
 
         var t = particle.getT();
         var localToWorld = transform().localToWorldMatrix();
-
-        // directional force, authored along the field's local axes
-        var direction = new Vector3f(
-                rt.getDirectionX(particle, t),
-                rt.getDirectionY(particle, t),
-                rt.getDirectionZ(particle, t));
-        if (direction.lengthSquared() > 0) {
-            var magnitude = direction.length();
-            localToWorld.transformDirection(direction).normalize(magnitude);
-            worldVelocity.add(direction.mul(FORCE_SCALE * strength * dt));
-        }
-
-        // gravity: pull toward the focus point (0 = field center, 1 = a point at endRange toward the particle)
-        var gravity = rt.getGravity(particle, t);
-        if (gravity != 0 && local.lengthSquared() > 1e-8f) {
-            var pull = new Vector3f(local).normalize(rt.getGravityFocus() * endRange).sub(local);
-            if (pull.lengthSquared() > 1e-8f) {
-                localToWorld.transformDirection(pull).normalize();
-                worldVelocity.add(pull.mul(gravity * FORCE_SCALE * strength * dt));
-            }
-        }
-
-        // vortex rotation around the field's local Y axis; randomness offsets the axis anchor per particle
+        float directionX = rt.getDirectionX(particle, t);
+        float directionY = rt.getDirectionY(particle, t);
+        float directionZ = rt.getDirectionZ(particle, t);
+        float gravity = rt.getGravity(particle, t);
+        float gravityFocus = rt.getGravityFocus();
         var rotationSpeed = rt.getRotationSpeed(particle, t);
+        float rotationAnchorX = 0;
+        float rotationAnchorZ = 0;
         if (rotationSpeed != 0) {
-            var anchorX = config.getRotationRandomnessX() * (particle.getMemRandom(rotationRandomKeyX, rand -> rand.nextFloat() * 2 - 1));
-            var anchorZ = config.getRotationRandomnessZ() * (particle.getMemRandom(rotationRandomKeyZ, rand -> rand.nextFloat() * 2 - 1));
-            var radialX = local.x - anchorX;
-            var radialZ = local.z - anchorZ;
-            if (radialX * radialX + radialZ * radialZ > 1e-8f) {
-                // tangential direction = cross(localY, radial)
-                var tangential = new Vector3f(-radialZ, 0, radialX);
-                localToWorld.transformDirection(tangential).normalize(rotationSpeed * FORCE_SCALE);
-                worldVelocity.add(new Vector3f(tangential).mul(strength * dt));
-                // attraction drags the current velocity toward the pure vortex motion
-                var attraction = com.lowdragmc.photon.util.MathCompat.clamp(
-                        rt.getRotationAttraction() * strength * dt, 0f, 1f);
-                if (attraction > 0) {
-                    worldVelocity.lerp(tangential, attraction);
-                }
-            }
+            rotationAnchorX = config.getRotationRandomnessX()
+                    * particle.getMemRandom(rotationRandomKeyX, rand -> rand.nextFloat() * 2 - 1);
+            rotationAnchorZ = config.getRotationRandomnessZ()
+                    * particle.getMemRandom(rotationRandomKeyZ, rand -> rand.nextFloat() * 2 - 1);
         }
-
-        // drag: velocity damping, optionally scaled by particle size and speed
         var drag = rt.getDrag(particle, t);
-        if (drag > 0) {
-            float k = drag * strength;
-            if (config.isMultiplyDragByParticleSize()) {
-                k *= particleSize;
-            }
-            if (config.isMultiplyDragByParticleVelocity()) {
-                k *= worldVelocity.length();
-            }
-            worldVelocity.mul(Math.max(0f, 1f - k * FORCE_SCALE * dt));
-        }
+        ForceFieldPhysics.apply(local, localToWorld, worldVelocity, particleSize, dt, strength,
+                directionX, directionY, directionZ, gravity, gravityFocus,
+                rotationSpeed, rt.getRotationAttraction(), rotationAnchorX, rotationAnchorZ,
+                drag, config.isMultiplyDragByParticleSize(), config.isMultiplyDragByParticleVelocity(), endRange);
     }
 
     @Override
