@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.shadergraph;
 
 import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
 import com.lowdragmc.kilagraph.rendertype.compiler.GlslType;
+import com.lowdragmc.kilagraph.rendertype.compiler.ShaderCompileContext;
 import com.lowdragmc.kilagraph.rendertype.compiler.ShaderExpr;
 import com.lowdragmc.kilagraph.rendertype.compiler.ShaderGraphCompiler;
 import com.lowdragmc.kilagraph.rendertype.compiler.TangentBasis;
@@ -42,6 +43,17 @@ public class PhotonShaderCompiler extends ShaderGraphCompiler {
     public static final String SCENE_DEPTH = "SamplerSceneDepth";
     /** Engine-driven viewport uniform (x, y, width, height), bound by ShaderGraphMaterial. */
     public static final String VIEWPORT = "U_ViewPort";
+
+    /**
+     * Returns Photon's viewport rectangle as a graph expression and registers its engine binding.
+     *
+     * <p>This restores the public 26.2 compiler helper while using the 1.20.1 compiler contract:
+     * {@code U_ViewPort} is a builtin shader uniform supplied by the Forge render pipeline rather
+     * than a field in the newer {@code PhotonEngine} uniform block.</p>
+     */
+    public static ShaderExpr viewport(ShaderCompileContext ctx) {
+        return new ShaderExpr(ctx.useBuiltinUniform(VIEWPORT, GlslType.VEC4), GlslType.VEC4);
+    }
 
     /** The compiler currently running {@link #compile()} (render thread only) — lets nodes without
      *  compiler access (e.g. AdditionalDataNode) report metadata like used data channels. */
