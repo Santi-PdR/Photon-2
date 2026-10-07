@@ -459,7 +459,7 @@ public final class PostEffectStack {
         return target;
     }
 
-    private static int lerpArgb(int from, int to, float t) {
+    static int lerpArgb(int from, int to, float t) {
         int a = lerpChannel(from >>> 24, to >>> 24, t);
         int r = lerpChannel((from >> 16) & 0xFF, (to >> 16) & 0xFF, t);
         int g = lerpChannel((from >> 8) & 0xFF, (to >> 8) & 0xFF, t);
