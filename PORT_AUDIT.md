@@ -143,4 +143,7 @@ The local Forge baseline is a community Photon 2.2.6.a port, not an official 26.
 - Trail lifetime interpolation now validates its duration and segment span before division in both CPU and instanced render paths, avoiding NaN interpolation for equal or invalid point lifetimes. Two focused tests cover degenerate and valid interpolation.
 - Java 17 `./gradlew test build --offline --no-daemon --console=plain`: **90 tests, 0 failures/errors/skips across 31 suites; BUILD SUCCESSFUL**, including `reobfJar`.
 - Artifact: `build/libs/photon-forge-1.20.1-26.2.2.3.jar`, 3,001,428 bytes; SHA-256 `f239ec769f322d8325dcdf302c0f586df19346f9889407f807e0357a5795590c`.
+- CPU and instanced trail renderers now skip trails that have fewer than two points before attempting mesh construction; this prevents a fresh empty trail from reading the nonexistent first tail color. A focused point-count test covers empty, singleton, and drawable trails.
+- Java 17 `./gradlew test build --offline --no-daemon --console=plain`: **91 tests, 0 failures/errors/skips across 32 suites; BUILD SUCCESSFUL**, including `reobfJar`.
+- Artifact: `build/libs/photon-forge-1.20.1-26.2.2.3.jar`, 3,002,076 bytes; SHA-256 `03b1480d30bb0c21b94697bab0c1254dcfe983f85f9e379d32168d982fe2c852`.
 - Minecraft was not launched. Shader export and resource-pack mounting still need runtime verification.

@@ -82,6 +82,7 @@ public class TrailParticleRenderer {
                 pushHead = false;
             }
         }
+        if (!TrailGeometry.hasSegments(tailSize, pushHead)) return;
 
         if (pushHead) {
             var headTail = new TrailParticle.Tail(headPos, 100, tails.getColor(0), tails.getWidth(0));
@@ -312,7 +313,7 @@ public class TrailParticleRenderer {
         }
         // logical point list = tails plus (optionally) the head; n mirrors the CPU strip's size
         int n = tailSize + (pushHead ? 1 : 0);
-        if (n < 2) return 0;
+        if (!TrailGeometry.hasSegments(tailSize, pushHead)) return 0;
 
         var lerpDur = 0f;
         var t = 0f;
