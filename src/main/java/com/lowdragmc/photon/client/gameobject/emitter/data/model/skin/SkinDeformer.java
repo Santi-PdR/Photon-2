@@ -37,6 +37,11 @@ public final class SkinDeformer {
         }
     }
 
+    /** Deform geometry alone, leaving any tangent stream untouched. */
+    public void deform(PhotonMesh mesh, MeshSkin skin, float[] out) {
+        deform(mesh, skin, out, null, null);
+    }
+
     /** Writes position xyz and normal xyz for each topology corner. */
     public void deform(PhotonMesh mesh, MeshSkin skin, float[] out, float[] outTangents) {
         deform(mesh, skin, out, outTangents == null ? null : mesh.tangents(), outTangents);
