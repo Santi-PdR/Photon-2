@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommonSideIsolationTest {
     private static final List<String> COMMON_CLASSFILES = List.of(
@@ -43,6 +44,12 @@ class CommonSideIsolationTest {
             if (classfile.equals("com/lowdragmc/photon/integration/PhotonLDLibPlugin.class")) {
                 assertFalse(constantPool.contains("com/lowdragmc/photon/client/"),
                         "common LDLib2 plugin directly references Photon client classes");
+                assertTrue(constantPool.contains("net/minecraftforge/fml/DistExecutor"),
+                        "common LDLib2 plugin must use Forge's distribution gate");
+                assertTrue(constantPool.contains("safeRunWhenOn"),
+                        "common LDLib2 plugin must guard client accessor registration");
+                assertTrue(constantPool.contains("com/lowdragmc/photon/integration/PhotonLDLibClientPlugin"),
+                        "common LDLib2 plugin must retain client accessor registration");
             }
         }
     }
