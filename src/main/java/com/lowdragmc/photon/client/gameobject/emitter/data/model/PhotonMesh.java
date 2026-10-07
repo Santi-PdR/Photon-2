@@ -28,8 +28,12 @@ import java.util.function.Supplier;
 public final class PhotonMesh {
     public static final int FLOATS_PER_VERTEX = 8; // pos3 + uv2 + normal3
     public static final int FLOATS_PER_GEOMETRY = 6; // deformed pos3 + normal3 per mesh vertex
+    /** Compatibility stream: u, v and face brightness for each corner. */
+    public static final int FLOATS_PER_ATTRIBUTE = 3;
     /** Floats per corner in {@link #tangents()}: tangent xyz + handedness. */
     public static final int FLOATS_PER_TANGENT = MeshTangents.FLOATS_PER_TANGENT;
+    /** Floats per corner in {@link #spriteBounds()}: u0, v0, u1, v1. */
+    public static final int FLOATS_PER_SPRITE = 4;
     public static final PhotonMesh EMPTY = new PhotonMesh(new float[0], new float[0], new float[0], new float[0]);
 
     /** quadCount * 4 * {@link #FLOATS_PER_VERTEX}: x,y,z,u,v,nx,ny,nz per corner. */
@@ -55,6 +59,10 @@ public final class PhotonMesh {
     /** Stable base identity and source topology, retained across animated geometry snapshots. */
     private final PhotonMesh topology;
     private final SamplingTopology samplingTopology;
+    @Nullable private volatile float[] geometryView;
+    @Nullable private volatile float[] attributeView;
+    @Nullable private volatile float[] spriteBoundsView;
+    @Nullable private volatile int[] indexView;
 
     private PhotonMesh(float[] vertices, float[] spriteBounds, float[] shadeBrightness,
                        @Nullable float[] suppliedTangents) {
@@ -101,6 +109,13 @@ public final class PhotonMesh {
 
     public int vertexCount() {
         return quadCount() * 4;
+    }
+
+    /** Number of triangles represented by this mesh's quad stream. Degenerate quads count once. */
+    public int triangleCount() {
+        int count = 0;
+        for (int quad = 0; quad < quadCount(); quad++) count += isTriangle(quad) ? 1 : 2;
+        return count;
     }
 
     public boolean isEmpty() {
@@ -181,9 +196,99 @@ public final class PhotonMesh {
         return vertices;
     }
 
+    /**
+     * Position and normal stream (xyz + normal xyz) in the corner order used by this Forge port.
+     * Unlike the 26.2 indexed mesh representation, this stream contains four entries per face.
+     */
+    public float[] geometry() {
+        var result = geometryView;
+        if (result == null) {
+            result = new float[vertexCount() * FLOATS_PER_GEOMETRY];
+            for (int vertex = 0; vertex < vertexCount(); vertex++) {
+                int source = vertex * FLOATS_PER_VERTEX;
+                int target = vertex * FLOATS_PER_GEOMETRY;
+                System.arraycopy(vertices, source, result, target, 3);
+                System.arraycopy(vertices, source + 5, result, target + 3, 3);
+            }
+            geometryView = result;
+        }
+        return result;
+    }
+
+    /** UV and per-face brightness stream, expanded to one entry per face corner. */
+    public float[] attributes() {
+        var result = attributeView;
+        if (result == null) {
+            result = new float[vertexCount() * FLOATS_PER_ATTRIBUTE];
+            for (int vertex = 0; vertex < vertexCount(); vertex++) {
+                int source = vertex * FLOATS_PER_VERTEX;
+                int target = vertex * FLOATS_PER_ATTRIBUTE;
+                result[target] = vertices[source + 3];
+                result[target + 1] = vertices[source + 4];
+                result[target + 2] = shadeBrightness[vertex / 4];
+            }
+            attributeView = result;
+        }
+        return result;
+    }
+
+    /** Sprite UV bounds expanded from the Forge per-face representation to one tuple per corner. */
     public float[] spriteBounds() {
+        var result = spriteBoundsView;
+        if (result == null) {
+            result = new float[vertexCount() * FLOATS_PER_SPRITE];
+            for (int quad = 0; quad < quadCount(); quad++) {
+                for (int corner = 0; corner < 4; corner++) {
+                    System.arraycopy(spriteBounds, quad * FLOATS_PER_SPRITE, result,
+                            (quad * 4 + corner) * FLOATS_PER_SPRITE, FLOATS_PER_SPRITE);
+                }
+            }
+            spriteBoundsView = result;
+        }
+        return result;
+    }
+
+    /** Per-face bounds used by the Forge quad renderer. */
+    public float[] quadSpriteBounds() {
         return spriteBounds;
     }
+
+    /** Triangle indices over the four unshared corner vertices of each face. */
+    public int[] indices() {
+        var result = indexView;
+        if (result == null) {
+            var indices = new IntArrayList(triangleCount() * 3);
+            for (int quad = 0; quad < quadCount(); quad++) {
+                int base = quad * 4;
+                indices.add(base); indices.add(base + 1); indices.add(base + 2);
+                if (!isTriangle(quad)) {
+                    indices.add(base + 2); indices.add(base + 3); indices.add(base);
+                }
+            }
+            result = indices.toIntArray();
+            indexView = result;
+        }
+        return result;
+    }
+
+    /** True for the two triangles produced from one quad; a degenerate triangle returns false. */
+    public boolean quadPaired(int triangle) {
+        if (triangle < 0 || triangle >= triangleCount()) throw new IndexOutOfBoundsException(triangle);
+        int current = 0;
+        for (int quad = 0; quad < quadCount(); quad++) {
+            if (isTriangle(quad)) {
+                if (current++ == triangle) return false;
+            } else {
+                if (current == triangle || current + 1 == triangle) return true;
+                current += 2;
+            }
+        }
+        throw new IndexOutOfBoundsException(triangle);
+    }
+
+    public static int geometryOffset(int vertex) { return vertex * FLOATS_PER_GEOMETRY; }
+    public static int attributeOffset(int vertex) { return vertex * FLOATS_PER_ATTRIBUTE; }
+    public static int spriteOffset(int vertex) { return vertex * FLOATS_PER_SPRITE; }
 
     /**
      * Per-corner {@code tx,ty,tz,w}; the shader rebuilds the bitangent as {@code cross(N, T) * w}.

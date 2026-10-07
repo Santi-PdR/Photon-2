@@ -116,7 +116,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
             }
             // only touched when the emitter asked for tangents — the mesh generates them on first access
             var tangents = wantsTangent ? mesh.tangents() : null;
-            var bounds = mesh.spriteBounds();
+            var bounds = mesh.quadSpriteBounds();
             var centers = new ArrayList<Float>();
             var triangles = new ArrayList<Integer>();
 

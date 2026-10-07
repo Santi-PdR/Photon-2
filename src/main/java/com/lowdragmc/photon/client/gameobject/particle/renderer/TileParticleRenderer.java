@@ -216,7 +216,7 @@ public class TileParticleRenderer {
 
         float u0 = 0, v0 = 0, uw = 1, vh = 1;
         if (remapUV) {
-            var bounds = mesh.spriteBounds();
+            var bounds = mesh.quadSpriteBounds();
             u0 = bounds[quad * 4];
             v0 = bounds[quad * 4 + 1];
             uw = bounds[quad * 4 + 2] - u0;
