@@ -261,8 +261,18 @@ public class TimelinePlayer {
 
         applyAnimations(time);
         applySpeed(leaves, time);
-        dispatchSignals(leaves, time);
-        applyAudio(leaves, time);
+        if (isStartDelayed()) {
+            // begin() evaluates t=0 immediately, but emit(delay) must not expose timeline events
+            // before the root starts ticking. Keep signal time untouched so t=0 fires on start.
+            stopAllAudio();
+        } else {
+            dispatchSignals(leaves, time);
+            applyAudio(leaves, time);
+        }
+    }
+
+    private boolean isStartDelayed() {
+        return runtime.root instanceof FXObject root && root.getDelay() > 0;
     }
 
     /**
