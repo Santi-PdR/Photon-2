@@ -8,6 +8,7 @@
     "GameRendererMixin",
     "MinecraftMixin",
     "ParticleEngineMixin",
+    "UIVisualLayerMixin",
     "accessor.BlendModeAccessor",
     "accessor.ParticleEngineAccessor",
     "accessor.ShaderInstanceAccessor",
