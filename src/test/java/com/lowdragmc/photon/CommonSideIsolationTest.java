@@ -61,6 +61,20 @@ class CommonSideIsolationTest {
                 assertTrue(constantPool.contains("com/lowdragmc/photon/integration/PhotonLDLibClientPlugin"),
                         "common LDLib2 plugin must retain client accessor registration");
             }
+            if (classfile.equals("com/lowdragmc/photon/PhotonRegistries.class")) {
+                assertTrue(constantPool.contains("net/minecraftforge/fml/DistExecutor"),
+                        "client-only registries must initialize behind Forge's distribution gate");
+                assertTrue(constantPool.contains("safeRunWhenOn"),
+                        "client-only registry scanning must not run on a dedicated server");
+            }
+            if (classfile.equals("com/lowdragmc/photon/command/FxLocationArgument.class")) {
+                assertTrue(constantPool.contains("net/minecraftforge/fml/DistExecutor"),
+                        "client resource suggestions must be side-gated");
+                assertTrue(constantPool.contains("unsafeCallWhenOn"),
+                        "client FX classes must only be resolved for client-side suggestions");
+                assertTrue(constantPool.contains("com/lowdragmc/photon/client/fx/FXHelper"),
+                        "the guarded client suggestion path must remain present");
+            }
         }
     }
 }
