@@ -60,7 +60,7 @@ public class TimelinePlayer {
     private boolean recording = false;
     /** Executor permission is refreshed per playback; editor controls remain independent. */
     private final TimelineEventDispatch eventDispatch = new TimelineEventDispatch();
-    /** Highest tick already dispatched signals for, so a forward window never re-fires (reset on begin). */
+    /** Highest tick evaluated for signals, including muted preview windows (reset on begin). */
     private double lastSignalTick = -1;
     /** Per-audio-track currently-playing sound instance and the clip that spawned it. */
     private final Map<AudioTrack, TimelineSoundInstance> audioInstances = new HashMap<>();
@@ -372,12 +372,16 @@ public class TimelinePlayer {
     }
 
     /**
-     * Fire every signal whose tick falls in the forward window {@code (lastSignalTick, time]}. Gated to
-     * live playback by {@link #setSignalDispatch}; the monotonic window + {@link #begin} reset prevent
-     * any double-fire (the {@code evaluate(0)} repeat, or a replay seek).
+     * Fire every signal whose tick falls in the forward window {@code (lastSignalTick, time]}. The
+     * cursor advances even while dispatch is gated, so resuming after a preview/seek never catches up
+     * and emits events from the silent replay window.
      */
     private void dispatchSignals(java.util.List<Track> leaves, double time) {
-        if (!eventDispatch.canDispatchSignals() || time <= lastSignalTick) return;
+        if (time <= lastSignalTick) return;
+        if (!eventDispatch.canDispatchSignals()) {
+            lastSignalTick = time;
+            return;
+        }
         for (var track : leaves) {
             if (track.mute() || !(track instanceof SignalTrack signalTrack)) continue;
             var channel = signalTrack.displayName();
