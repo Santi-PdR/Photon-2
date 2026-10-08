@@ -7,6 +7,7 @@ import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraftforge.api.distmarker.Dist;
@@ -395,7 +396,7 @@ public final class PostEffectStack {
             PhotonPostProcessing.blitShader(shader, target, false);
             return target;
         } catch (RuntimeException | Error failure) {
-            PostFXTargetPool.release(target);
+            ResourceDisposal.cleanupAfterFailure(failure, () -> PostFXTargetPool.release(target));
             throw failure;
         }
     }

@@ -18,6 +18,22 @@ public final class ResourceDisposal {
         }
     }
 
+    /** Run every cleanup action, preserving the operation failure or reporting the first cleanup error. */
+    public static void runAllPreservingFailure(@Nullable Throwable operationFailure, Runnable... cleanups) {
+        Throwable failure = operationFailure;
+        for (var cleanup : cleanups) {
+            try {
+                cleanup.run();
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (failure == null) failure = cleanupFailure;
+                else if (failure != cleanupFailure) failure.addSuppressed(cleanupFailure);
+            }
+        }
+        if (operationFailure != null) return;
+        if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+        if (failure instanceof Error errorFailure) throw errorFailure;
+    }
+
     static <T> void disposeAll(Iterable<T> resources, Consumer<? super T> disposer) {
         disposeAllPreservingFailure(resources, disposer, null);
     }

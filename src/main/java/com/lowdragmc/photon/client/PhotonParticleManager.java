@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client;
 import com.lowdragmc.lowdraglib2.client.scene.ParticleManager;
 import com.lowdragmc.photon.client.fx.ParticleTickHost;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXCamera;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -216,6 +217,7 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         var mainTarget = UISurface.currentTarget();
         var chain = com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool
                 .acquire(mainTarget.width, mainTarget.height);
+        Throwable operationFailure = null;
         try {
             // Pool exhaustion or an unsupported framebuffer size skips this editor-only chain for
             // the frame; never dereference a failed nullable allocation or disturb the scene target.
@@ -242,11 +244,14 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
                     }
                 }
             }
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool.release(chain);
-            // The copy/chain/write-back may leave a pool target bound or reset the viewport.
-            mainTarget.bindWrite(false);
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    () -> com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool.release(chain),
+                    () -> mainTarget.bindWrite(false),
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
         }
     }
 

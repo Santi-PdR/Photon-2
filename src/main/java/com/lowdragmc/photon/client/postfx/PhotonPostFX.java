@@ -6,6 +6,7 @@ import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
@@ -153,6 +154,7 @@ public final class PhotonPostFX {
         int[] scissorBox = new int[4];
         GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
         com.lowdragmc.lowdraglib2.client.shader.HDRTarget chain = null;
+        Throwable operationFailure = null;
         try {
             chain = PostFXTargetPool.acquire(mainTarget.width, mainTarget.height);
             if (chain == null) return; // keep the clean scene intact; this frame's post effects are skipped
@@ -161,16 +163,20 @@ public final class PhotonPostFX {
             if (output != chain) {
                 SceneBlit.writeBack(output, mainTarget);
             }
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            PostFXTargetPool.release(chain);
-            framebufferState.restore();
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
-            GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
-            if (scissorEnabled) {
-                GlStateManager._enableScissorTest();
-            } else {
-                GlStateManager._disableScissorTest();
-            }
+            var targetToRelease = chain;
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    () -> PostFXTargetPool.release(targetToRelease),
+                    framebufferState::restore,
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight),
+                    () -> GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]),
+                    () -> {
+                        if (scissorEnabled) GlStateManager._enableScissorTest();
+                        else GlStateManager._disableScissorTest();
+                    });
         }
     }
 

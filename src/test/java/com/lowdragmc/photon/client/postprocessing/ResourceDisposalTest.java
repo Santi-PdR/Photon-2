@@ -23,6 +23,38 @@ class ResourceDisposalTest {
     }
 
     @Test
+    void runsEveryCleanupActionAndKeepsTheOperationFailurePrimary() {
+        var attempted = new ArrayList<String>();
+        var operationFailure = new IllegalStateException("render operation failed");
+        var cleanupFailure = new IllegalArgumentException("framebuffer restore failed");
+
+        ResourceDisposal.runAllPreservingFailure(operationFailure,
+                () -> attempted.add("release"),
+                () -> { attempted.add("framebuffer"); throw cleanupFailure; },
+                () -> attempted.add("viewport"));
+
+        assertEquals(List.of(cleanupFailure), List.of(operationFailure.getSuppressed()));
+        assertEquals(List.of("release", "framebuffer", "viewport"), attempted);
+    }
+
+    @Test
+    void runsEveryCleanupActionAndReportsTheFirstCleanupFailureWhenNoOperationFailed() {
+        var attempted = new ArrayList<String>();
+        var firstFailure = new IllegalStateException("first cleanup failed");
+        var secondFailure = new IllegalArgumentException("second cleanup failed");
+
+        var thrown = assertThrows(IllegalStateException.class, () ->
+                ResourceDisposal.runAllPreservingFailure(null,
+                        () -> { attempted.add("first"); throw firstFailure; },
+                        () -> { attempted.add("second"); throw secondFailure; },
+                        () -> attempted.add("third")));
+
+        assertSame(firstFailure, thrown);
+        assertEquals(List.of(secondFailure), List.of(thrown.getSuppressed()));
+        assertEquals(List.of("first", "second", "third"), attempted);
+    }
+
+    @Test
     void attemptsEveryReleaseAndPreservesLaterFailuresAsSuppressed() {
         var attempted = new ArrayList<String>();
         var firstFailure = new IllegalStateException("first release failed");
