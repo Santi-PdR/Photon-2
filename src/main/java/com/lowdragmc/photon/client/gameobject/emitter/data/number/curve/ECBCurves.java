@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.number.curve;
 
 import com.lowdragmc.lowdraglib2.math.curve.ExplicitCubicBezierCurve2;
+import com.mojang.serialization.Codec;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import net.minecraft.core.HolderLookup;
@@ -20,6 +21,10 @@ import java.util.List;
  */
 @EqualsAndHashCode
 public class ECBCurves implements RegistryAwareNBTSerializable<ListTag> {
+    /** JSON codec retained from Photon 26.2 for integrations that exchange curve presets. */
+    public static final Codec<ECBCurves> CODEC = Codec.FLOAT.listOf().listOf()
+            .xmap(ECBCurves::fromCodec, ECBCurves::toCodec);
+
     @Getter
     private final List<ExplicitCubicBezierCurve2> segments = new ArrayList<>();
 
@@ -79,5 +84,31 @@ public class ECBCurves implements RegistryAwareNBTSerializable<ListTag> {
             curves.segments.add(segment.copy());
         }
         return curves;
+    }
+
+    private static ECBCurves fromCodec(List<List<Float>> encoded) {
+        var curves = new ECBCurves();
+        curves.segments.clear();
+        for (var segment : encoded) {
+            if (segment.size() < 8) continue;
+            curves.segments.add(new ExplicitCubicBezierCurve2(
+                    new Vector2f(segment.get(0), segment.get(1)),
+                    new Vector2f(segment.get(2), segment.get(3)),
+                    new Vector2f(segment.get(4), segment.get(5)),
+                    new Vector2f(segment.get(6), segment.get(7))));
+        }
+        return curves;
+    }
+
+    private List<List<Float>> toCodec() {
+        var encoded = new ArrayList<List<Float>>(segments.size());
+        for (var segment : segments) {
+            encoded.add(List.of(
+                    segment.p0.x(), segment.p0.y(),
+                    segment.c0.x(), segment.c0.y(),
+                    segment.c1.x(), segment.c1.y(),
+                    segment.p1.x(), segment.p1.y()));
+        }
+        return encoded;
     }
 }
