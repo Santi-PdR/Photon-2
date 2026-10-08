@@ -80,6 +80,17 @@ repositories {
     }
 }
 
+def prepareKotlinRuntime = tasks.register('prepareKotlinRuntime', Exec) {
+    group = 'build setup'
+    description = 'Repackages the local KotlinForForge runtime under the kotlin.stdlib JPMS module name.'
+    def sourceArchive = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
+    def outputArchive = rootProject.file("libs/kotlinruntime-${project.kotlinforforge_version}.jar")
+    inputs.file(sourceArchive)
+    inputs.file(rootProject.file('gradle/prepare-kotlin-runtime.py'))
+    outputs.file(outputArchive)
+    commandLine 'python3', rootProject.file('gradle/prepare-kotlin-runtime.py'), sourceArchive, outputArchive
+}
+
 base {
     archivesName = "${project.name}-${minecraft_version}"
 }
@@ -174,12 +185,12 @@ dependencies {
     implementation fg.deobf("local:ldlib-forge-1.20.1:${ldlib_version}")
     implementation fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all")
     implementation fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15")
-    implementation "local:kotlinforforge:${kotlinforforge_version}"
+    implementation "local:kotlinruntime:${kotlinforforge_version}"
     def ldlib2Runtime = jarJar(fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all"))
     jarJar.ranged(ldlib2Runtime, "[2.2.39.a,)")
     def kilaGraphRuntime = jarJar(fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15"))
     jarJar.ranged(kilaGraphRuntime, "[20.1.0.15,)")
-    def kotlinRuntime = jarJar("local:kotlinforforge:${kotlinforforge_version}")
+    def kotlinRuntime = jarJar("local:kotlinruntime:${kotlinforforge_version}")
     jarJar.ranged(kotlinRuntime, "[${kotlinforforge_version},)")
 
     // Optional shader-pack integration for Forge 1.20.1 (Oculus is the Iris port).
@@ -196,6 +207,13 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.named('compileJava').configure {
+    dependsOn prepareKotlinRuntime
+}
+tasks.named('jarJar').configure {
+    dependsOn prepareKotlinRuntime
 }
 
 mixin {
@@ -286,7 +304,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'META-INF/jarjar/metadata.json',
                     'META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar',
                     'META-INF/jarjar/kilagraph-forge-1.20.1-forge4710-20.1.0.15.jar',
-                    "META-INF/jarjar/kotlinforforge-${project.kotlinforforge_version}.jar",
+                    "META-INF/jarjar/kotlinruntime-${project.kotlinforforge_version}.jar",
                     'photon.mixins.json',
                     'photon.refmap.json',
                     'assets/photon/textures/icon.png'
@@ -394,11 +412,48 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             }
 
             def kotlinDependency = jarJarMetadata.jars.find { dependency ->
-                dependency.identifier?.artifact == 'kotlinforforge'
+                dependency.identifier?.artifact == 'kotlinruntime'
             }
             if (kotlinDependency?.version?.artifactVersion != project.kotlinforforge_version
                     || kotlinDependency?.version?.range != "[${project.kotlinforforge_version},)") {
                 throw new GradleException("Photon must package the local Kotlin runtime ${project.kotlinforforge_version}")
+            }
+            def kotlinRuntimePath = kotlinDependency.path
+            def nestedKotlinRuntime = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
+                    zip.getInputStream(zip.getEntry(kotlinRuntimePath)).withCloseable { it.readAllBytes() }))
+            def kotlinRuntimeManifest = null
+            def kotlinRuntimeHasUnit = false
+            def kotlinRuntimeHasModuleDescriptor = false
+            def nestedKffModules = null
+            try {
+                def nestedEntry
+                while ((nestedEntry = nestedKotlinRuntime.nextEntry) != null) {
+                    if (nestedEntry.name == 'META-INF/MANIFEST.MF') {
+                        kotlinRuntimeManifest = new String(nestedKotlinRuntime.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    } else if (nestedEntry.name == 'kotlin/Unit.class') {
+                        kotlinRuntimeHasUnit = true
+                    } else if (nestedEntry.name.endsWith('module-info.class')) {
+                        kotlinRuntimeHasModuleDescriptor = true
+                    } else if (nestedEntry.name == 'META-INF/jarjar/metadata.json') {
+                        nestedKffModules = new groovy.json.JsonSlurper().parseText(
+                                new String(nestedKotlinRuntime.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+                    }
+                }
+            } finally {
+                nestedKotlinRuntime.close()
+            }
+            if (kotlinRuntimeManifest == null
+                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: kotlin.stdlib')
+                    || kotlinRuntimeHasModuleDescriptor
+                    || !kotlinRuntimeHasUnit) {
+                throw new GradleException('Photon Kotlin runtime must expose kotlin.stdlib without a conflicting module descriptor')
+            }
+            def requiredKffArtifacts = ['kfflang', 'kfflib', 'kffmod']
+            if (nestedKffModules == null || requiredKffArtifacts.any { required ->
+                !nestedKffModules.jars.any { it.identifier?.artifact == required
+                        && it.version?.artifactVersion == project.kotlinforforge_version }
+            }) {
+                throw new GradleException('Photon Kotlin runtime is missing the nested KFF language, library, or mod modules')
             }
 
             def entries = zip.entries()
