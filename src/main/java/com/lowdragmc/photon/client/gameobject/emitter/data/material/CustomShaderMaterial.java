@@ -342,9 +342,11 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         var uniforms = shader.getShaderInstanceAccessor().getUniformMap();
         uniformOverrides.forEach((name, components) -> {
             var uniform = uniforms.get(name);
-            if (uniform == null || components.length != uniform.getCount()) return;
+            if (uniform == null) return;
+            float[] fittedComponents = CustomShaderUniformValues.fitComponents(components, uniform.getCount());
+            if (fittedComponents.length == 0) return;
             if (isIntegerUniform(uniform.getType())) {
-                int[] integerComponents = CustomShaderUniformValues.toIntegerComponents(components);
+                int[] integerComponents = CustomShaderUniformValues.toIntegerComponents(fittedComponents);
                 switch (integerComponents.length) {
                     case 1 -> uniform.set(integerComponents[0]);
                     case 2 -> uniform.set(integerComponents[0], integerComponents[1]);
@@ -355,7 +357,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                             name, integerComponents.length);
                 }
             } else {
-                uniform.set(components);
+                uniform.set(fittedComponents);
             }
         });
     }
