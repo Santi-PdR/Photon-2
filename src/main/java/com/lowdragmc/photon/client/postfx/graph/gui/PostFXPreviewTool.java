@@ -107,9 +107,12 @@ public class PostFXPreviewTool extends UIElement implements IGraphTool {
         }
 
         var shown = result != null ? result : source; // broken/no-op effect previews the clean scene
-        drawTarget(guiContext, shown, x, y, width, height);
-        if (result != null) {
-            PostFXTargetPool.release(result);
+        try {
+            drawTarget(guiContext, shown, x, y, width, height);
+        } finally {
+            if (result != null) {
+                PostFXTargetPool.release(result);
+            }
         }
     }
 
