@@ -6,6 +6,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
+import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -15,9 +16,16 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Locks the public runtime API names and overloads shared with Photon 26.2. */
 class PublicApiParityTest {
+    @Test
+    void tileParticleRendererPreservesReferenceInstanceStrides() {
+        assertEquals(21, TileParticleRenderer.INSTANCE_FLOATS);
+        assertEquals(15, TileParticleRenderer.MODEL_INSTANCE_FLOATS);
+    }
+
     @Test
     void materialPreservesTheReferenceInspectorApi() {
         assertApi(IMaterial.class, Set.of(

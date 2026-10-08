@@ -42,6 +42,11 @@ import java.util.Collection;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public class TileParticleRenderer {
+    /** Float stride of the particle/sprite instance payload, including packed light. */
+    public static final int INSTANCE_FLOATS = 21;
+    /** Float stride of the model instance payload, including packed light. */
+    public static final int MODEL_INSTANCE_FLOATS = 15;
+
     private static final int GL_MAX_TEXTURE_BUFFER_SIZE = 0x8C2B;
     private final ParticleConfig config;
     /** The renderer runtime this pass draws with (slot-or-config per field): the config's default runtime

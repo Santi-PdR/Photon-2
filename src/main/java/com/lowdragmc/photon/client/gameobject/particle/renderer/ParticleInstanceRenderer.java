@@ -237,8 +237,8 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
     protected int instanceFloats() {
         var custom = config.additionalGPUDataSetting.attribFloats();
         return custom + (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model
-                ? 3 + 3 + 4 + 4 + 1        // pos scale rotation color light
-                : 3 + 2 + 3 + 4 + 4 + 4 + 1); // pos size scale rotation color uv light
+                ? TileParticleRenderer.MODEL_INSTANCE_FLOATS
+                : TileParticleRenderer.INSTANCE_FLOATS);
     }
 
     @Override
