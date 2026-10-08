@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Repackage the local KFF 4.11 runtime under Kotlin's module name.
+"""Build a KFF runtime carrier that uses LDLib2's Kotlin standard library.
 
-KFF's local 4.11 artifact contains Kotlin standard-library packages but names the
-automatic Java module ``thedarkcolour.kotlinforforge``. A profile can already
-provide a ``kotlin.stdlib`` module (for example, through another mod), causing a
-split-package module-layer failure. Keep the exact local runtime classes and KFF's
-nested kfflang/kfflib/kffmod dependencies, but expose those packages as
-``kotlin.stdlib`` so module resolution selects one provider by module name.
+The local KFF 4.11 archive duplicates Kotlin stdlib classes also supplied by
+LDLib2. Keeping both providers made Forge select the newer stdlib while KFF's
+language-provider scanner could not load ``kotlin.jvm.internal.Intrinsics``.
+Retain KFF's kotlinx runtime and nested kfflang/kfflib/kffmod modules, remove the
+duplicate Kotlin stdlib packages, and give the carrier a unique module name.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ def main() -> None:
         names = set(source.namelist())
         manifest_name = "META-INF/MANIFEST.MF"
         module_info = "META-INF/versions/9/module-info.class"
-        if manifest_name not in names or "kotlin/Unit.class" not in names:
+        if manifest_name not in names or "kotlinx/coroutines/CoroutineScope.class" not in names:
             raise SystemExit("Input is not the expected KotlinForForge runtime archive")
         if module_info not in names:
             raise SystemExit("Input has no Kotlin reflect module descriptor to remove")
@@ -46,17 +45,23 @@ def main() -> None:
             raise SystemExit("Input has an unexpected KFF automatic module name")
         manifest = manifest.replace(
             "Automatic-Module-Name: thedarkcolour.kotlinforforge",
-            "Automatic-Module-Name: kotlin.stdlib",
+            "Automatic-Module-Name: com.lowdragmc.photon.kotlinruntime",
             1,
         )
 
         args.destination.parent.mkdir(parents=True, exist_ok=True)
         with ZipFile(args.destination, "w", ZIP_DEFLATED) as output:
             for entry in source.infolist():
-                if entry.filename == module_info:
+                name = entry.filename
+                if (name == module_info
+                        or name.startswith("kotlin/")
+                        or name.startswith("_COROUTINE/")
+                        or name.startswith("META-INF/versions/9/kotlin/")
+                        or name.startswith("META-INF/services/kotlin.")
+                        or name.rsplit("/", 1)[-1].startswith("kotlin-stdlib")):
                     continue
-                data = manifest.encode("utf-8") if entry.filename == manifest_name else source.read(entry)
-                output.writestr(entry.filename, data)
+                data = manifest.encode("utf-8") if name == manifest_name else source.read(entry)
+                output.writestr(name, data)
 
 
 if __name__ == "__main__":

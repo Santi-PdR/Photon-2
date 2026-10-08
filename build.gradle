@@ -82,7 +82,7 @@ repositories {
 
 def prepareKotlinRuntime = tasks.register('prepareKotlinRuntime', Exec) {
     group = 'build setup'
-    description = 'Repackages the local KotlinForForge runtime under the kotlin.stdlib JPMS module name.'
+    description = 'Packages KFF runtime modules without duplicating LDLib2 Kotlin stdlib classes.'
     def sourceArchive = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
     def outputArchive = rootProject.file("libs/kotlinruntime-${project.kotlinforforge_version}.jar")
     inputs.file(sourceArchive)
@@ -422,16 +422,24 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             def nestedKotlinRuntime = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
                     zip.getInputStream(zip.getEntry(kotlinRuntimePath)).withCloseable { it.readAllBytes() }))
             def kotlinRuntimeManifest = null
-            def kotlinRuntimeHasUnit = false
+            def kotlinRuntimeHasStdlibClass = false
+            def kotlinRuntimeHasCoroutines = false
             def kotlinRuntimeHasModuleDescriptor = false
+            def kotlinRuntimeHasStdlibService = false
             def nestedKffModules = null
             try {
                 def nestedEntry
                 while ((nestedEntry = nestedKotlinRuntime.nextEntry) != null) {
                     if (nestedEntry.name == 'META-INF/MANIFEST.MF') {
                         kotlinRuntimeManifest = new String(nestedKotlinRuntime.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-                    } else if (nestedEntry.name == 'kotlin/Unit.class') {
-                        kotlinRuntimeHasUnit = true
+                    } else if (nestedEntry.name.startsWith('kotlin/')
+                            || nestedEntry.name.startsWith('META-INF/versions/9/kotlin/')
+                            || nestedEntry.name.startsWith('_COROUTINE/')) {
+                        kotlinRuntimeHasStdlibClass = true
+                    } else if (nestedEntry.name == 'kotlinx/coroutines/CoroutineScope.class') {
+                        kotlinRuntimeHasCoroutines = true
+                    } else if (nestedEntry.name.startsWith('META-INF/services/kotlin.')) {
+                        kotlinRuntimeHasStdlibService = true
                     } else if (nestedEntry.name.endsWith('module-info.class')) {
                         kotlinRuntimeHasModuleDescriptor = true
                     } else if (nestedEntry.name == 'META-INF/jarjar/metadata.json') {
@@ -443,10 +451,12 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                 nestedKotlinRuntime.close()
             }
             if (kotlinRuntimeManifest == null
-                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: kotlin.stdlib')
+                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: com.lowdragmc.photon.kotlinruntime')
                     || kotlinRuntimeHasModuleDescriptor
-                    || !kotlinRuntimeHasUnit) {
-                throw new GradleException('Photon Kotlin runtime must expose kotlin.stdlib without a conflicting module descriptor')
+                    || kotlinRuntimeHasStdlibClass
+                    || kotlinRuntimeHasStdlibService
+                    || !kotlinRuntimeHasCoroutines) {
+                throw new GradleException('Photon KFF runtime must omit duplicate Kotlin stdlib classes while retaining Kotlin coroutines')
             }
             def requiredKffArtifacts = ['kfflang', 'kfflib', 'kffmod']
             if (nestedKffModules == null || requiredKffArtifacts.any { required ->
@@ -454,6 +464,37 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                         && it.version?.artifactVersion == project.kotlinforforge_version }
             }) {
                 throw new GradleException('Photon Kotlin runtime is missing the nested KFF language, library, or mod modules')
+            }
+
+            def nestedLdlib2 = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
+                    zip.getInputStream(zip.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar'))
+                            .withCloseable { it.readAllBytes() }))
+            def ldlib2HasKotlinIntrinsics = false
+            try {
+                def nestedEntry
+                while ((nestedEntry = nestedLdlib2.nextEntry) != null) {
+                    if (nestedEntry.name.startsWith('META-INF/jarjar/kotlin-stdlib-')
+                            && nestedEntry.name.endsWith('.jar')) {
+                        def nestedStdlib = new java.util.zip.ZipInputStream(
+                                new java.io.ByteArrayInputStream(nestedLdlib2.readAllBytes()))
+                        try {
+                            def stdlibEntry
+                            while ((stdlibEntry = nestedStdlib.nextEntry) != null) {
+                                if (stdlibEntry.name == 'kotlin/jvm/internal/Intrinsics.class') {
+                                    ldlib2HasKotlinIntrinsics = true
+                                    break
+                                }
+                            }
+                        } finally {
+                            nestedStdlib.close()
+                        }
+                    }
+                }
+            } finally {
+                nestedLdlib2.close()
+            }
+            if (!ldlib2HasKotlinIntrinsics) {
+                throw new GradleException('The bundled LDLib2 runtime must provide Kotlin stdlib Intrinsics for KFF')
             }
 
             def entries = zip.entries()
