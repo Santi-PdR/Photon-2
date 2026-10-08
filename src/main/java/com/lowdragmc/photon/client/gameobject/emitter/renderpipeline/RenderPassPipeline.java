@@ -11,6 +11,7 @@ import com.lowdragmc.photon.client.compat.iris.IrisFrameTarget;
 import com.lowdragmc.photon.client.gameobject.particle.IParticle;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
+import com.lowdragmc.photon.client.render.PreviewSceneCapturePolicy;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
@@ -125,6 +126,7 @@ public class RenderPassPipeline {
     @Nullable
     private static HDRTarget SCENE_SAMPLER;
     private static boolean IS_SCENE_SAMPLER_DIRTY = true;
+    private static long lastSceneSamplerCopyNanos = Long.MIN_VALUE;
 
     public static Comparator<PhotonFXRenderPass> makeRenderPassComparator() {
         return (passOne, passTwo) -> {
@@ -991,6 +993,8 @@ public class RenderPassPipeline {
      */
     public @Nonnull SceneSamplers getSceneSamplers() {
         if (irisTarget != null) {
+            // Iris textures are owned by the current render pass and cannot be retained for a GUI preview.
+            lastSceneSamplerCopyNanos = Long.MIN_VALUE;
             IrisCompat.degrade("SCENE_SAMPLER", "materials sampling scene colour read the pack's "
                     + "colortex0 (lit, pre-tonemap, pack colour space) instead of the finished frame");
             return new SceneSamplers(irisTarget.sceneColorTexture(), irisTarget.sceneDepthTexture());
@@ -1011,6 +1015,18 @@ public class RenderPassPipeline {
         return new SceneSamplers(sampler.getColorTextureId(), sampler.getDepthTextureId());
     }
 
+    /** Last plain-pipeline capture for the GUI preview pass; null when stale or still in a build. */
+    @Nullable
+    public static SceneSamplers lastCapturedSceneSamplersForPreview() {
+        if (current != null || SCENE_SAMPLER == null || IS_SCENE_SAMPLER_DIRTY
+                || !PreviewSceneCapturePolicy.isFresh(lastSceneSamplerCopyNanos, System.nanoTime())) {
+            return null;
+        }
+        int color = SCENE_SAMPLER.getColorTextureId();
+        int depth = SCENE_SAMPLER.getDepthTextureId();
+        return color > 0 && depth > 0 ? new SceneSamplers(color, depth) : null;
+    }
+
     /** The frame as it stands at the particle pass — colour and live depth straight off MC's main
      *  target, since the late layer itself holds neither. */
     private HDRTarget getLateSceneSampler() {
@@ -1019,6 +1035,7 @@ public class RenderPassPipeline {
         SCENE_SAMPLER = resize(SCENE_SAMPLER, DRAW_TARGET.width, DRAW_TARGET.height, true);
         SCENE_SAMPLER.copyDepthAndColorFrom(mainTarget);
         IS_SCENE_SAMPLER_DIRTY = false;
+        lastSceneSamplerCopyNanos = System.nanoTime();
         DRAW_TARGET.bindWrite(false);
         return SCENE_SAMPLER;
     }
@@ -1045,5 +1062,6 @@ public class RenderPassPipeline {
         SCENE_SAMPLER = resize(SCENE_SAMPLER, DRAW_TARGET.width, DRAW_TARGET.height, true);
         SCENE_SAMPLER.copyDepthAndColorFrom(DRAW_TARGET);
         IS_SCENE_SAMPLER_DIRTY = false;
+        lastSceneSamplerCopyNanos = System.nanoTime();
     }
 }

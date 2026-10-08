@@ -7,6 +7,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.render.PhotonShaderDefaults;
 import com.lowdragmc.photon.client.util.FramebufferState;
@@ -137,14 +138,18 @@ public final class MaterialPreviewRenderer {
 
     /** Scene-sampler stand-ins for preview shaders; the preview has no particle render pipeline. */
     public static int previewSceneColorTexture() {
-        return PREVIEW_RENDER_ACTIVE.get() && PREVIEW_SCENE_TARGET != null
-                ? PREVIEW_SCENE_TARGET.getColorTextureId() : -1;
+        if (!PREVIEW_RENDER_ACTIVE.get()) return -1;
+        var captured = RenderPassPipeline.lastCapturedSceneSamplersForPreview();
+        if (captured != null) return captured.colorTexture();
+        return PREVIEW_SCENE_TARGET != null ? PREVIEW_SCENE_TARGET.getColorTextureId() : -1;
     }
 
     /** Scene-sampler stand-ins for preview shaders; depth is cleared to the far plane. */
     public static int previewSceneDepthTexture() {
-        return PREVIEW_RENDER_ACTIVE.get() && PREVIEW_SCENE_TARGET != null
-                ? PREVIEW_SCENE_TARGET.getDepthTextureId() : -1;
+        if (!PREVIEW_RENDER_ACTIVE.get()) return -1;
+        var captured = RenderPassPipeline.lastCapturedSceneSamplersForPreview();
+        if (captured != null) return captured.depthTexture();
+        return PREVIEW_SCENE_TARGET != null ? PREVIEW_SCENE_TARGET.getDepthTextureId() : -1;
     }
 
     private static void ensurePreviewSceneTarget() {
