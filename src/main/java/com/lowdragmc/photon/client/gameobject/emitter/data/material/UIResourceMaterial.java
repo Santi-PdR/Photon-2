@@ -67,6 +67,11 @@ public final class UIResourceMaterial implements IMaterial {
     }
 
     @Override
+    public IGuiTexture previewLive() {
+        return getInternalMaterial().previewLive();
+    }
+
+    @Override
     public UIResourceMaterial copy() {
         return new UIResourceMaterial(getResourcePath());
     }
