@@ -100,15 +100,7 @@ public final class RenderGraphCompiler {
 
         // resource lifetimes: written at its own pass, alive until its last consumer
         int passCount = state.passes.size();
-        int[] lastUse = new int[passCount];
-        for (int i = 0; i < passCount; i++) lastUse[i] = i;
-        for (int i = 0; i < passCount; i++) {
-            for (var ref : state.passes.get(i).textures.values()) {
-                if (ref.source() == ResourceRef.Source.RESOURCE) {
-                    lastUse[ref.resource()] = Math.max(lastUse[ref.resource()], i);
-                }
-            }
-        }
+        int[] lastUse = calculateLastUses(state.passes.stream().map(build -> build.textures).toList());
 
         var resources = new ArrayList<CompiledEffect.ResourceDesc>(passCount);
         var passes = new ArrayList<CompiledEffect.CompiledPass>(passCount);
@@ -129,6 +121,21 @@ public final class RenderGraphCompiler {
                 List.copyOf(passes),
                 outputRef.resource());
         return new Result(effect, state.passEntries);
+    }
+
+    /** Calculate each transient target's last consuming pass, independent of graph/Forge startup. */
+    static int[] calculateLastUses(List<? extends Map<String, ResourceRef>> texturesByPass) {
+        int passCount = texturesByPass.size();
+        int[] lastUse = new int[passCount];
+        for (int i = 0; i < passCount; i++) lastUse[i] = i;
+        for (int i = 0; i < passCount; i++) {
+            for (var ref : texturesByPass.get(i).values()) {
+                if (ref.source() == ResourceRef.Source.RESOURCE) {
+                    lastUse[ref.resource()] = Math.max(lastUse[ref.resource()], i);
+                }
+            }
+        }
+        return lastUse;
     }
 
     /** The blendable parameter schema: every INPUT blackboard variable, plus every PARAMETER-mode
