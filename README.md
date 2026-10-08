@@ -10,7 +10,7 @@ With Java 17 installed, run:
 ./gradlew build
 ```
 
-The build output is written to `build/libs/`. Unit tests run as part of `build`; `./gradlew test` runs only the tests. The project requires the bundled LDLib2 and KilaGraph Forge libraries in `libs/`. Install Kotlin for Forge 4.10.0 or newer in the Forge 1.20.1 profile; LDLib2 uses its Kotlin runtime libraries.
+The distributable all-in-one JAR is `build/libs/photon-forge-1.20.1-26.2.2.3-all.jar`. Unit tests run as part of `build`; `./gradlew test` runs only the tests. The project compiles against LDLib 1.0.52.a from the target profile, matching the version used by `ghouls`. Photon embeds LDLib2, the Forge 47.4.10-compatible KilaGraph build, and KotlinForForge with its runtime, so those do not need separate JARs in the profile.
 
 GitHub Actions builds this branch with Java 17 and publishes the JAR as a downloadable workflow artifact after a successful build. The workflow artifact is a test build, not a final release.
 

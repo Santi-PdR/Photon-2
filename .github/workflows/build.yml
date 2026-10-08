@@ -37,6 +37,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: photon-forge-1.20.1-${{ github.sha }}
-          path: build/libs/photon-forge-1.20.1-26.2.2.3.jar
+          path: build/libs/photon-forge-1.20.1-26.2.2.3-all.jar
           if-no-files-found: error
           retention-days: 30
