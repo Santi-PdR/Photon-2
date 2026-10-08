@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Prepare Photon-private Kotlin runtimes without split packages.
+"""Prepare Photon-private Kotlin runtimes without split packages or ABI drift.
 
-KFF 4.11 supplies the Kotlin classes needed while Forge scans language
-providers. LDLib2 embeds another Kotlin stdlib; remove that nested copy from
-Photon's private LDLib2 archive so KFF remains the sole provider.
+KFF 4.11 supplies Forge's language provider and Kotlin reflection/coroutines.
+LDLib2 embeds a newer Kotlin stdlib. Put those newer stdlib classes in KFF's
+early-visible kotlin.stdlib module, then remove LDLib2's nested duplicate.
 """
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import json
+from io import BytesIO
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 
@@ -21,6 +22,33 @@ def main() -> None:
     parser.add_argument("ldlib2_source", type=Path)
     parser.add_argument("ldlib2_destination", type=Path)
     args = parser.parse_args()
+
+    with ZipFile(args.ldlib2_source) as ldlib2:
+        ldlib2_metadata_name = "META-INF/jarjar/metadata.json"
+        if ldlib2_metadata_name not in ldlib2.namelist():
+            raise SystemExit("LDLib2 archive is missing JarJar metadata")
+        ldlib2_metadata = json.loads(ldlib2.read(ldlib2_metadata_name))
+        stdlib_dependencies = [item for item in ldlib2_metadata.get("jars", [])
+                               if item.get("identifier", {}).get("artifact") == "kotlin-stdlib"]
+        if len(stdlib_dependencies) != 1:
+            raise SystemExit("Expected exactly one nested LDLib2 Kotlin stdlib")
+        stdlib_dependency = stdlib_dependencies[0]
+        stdlib_path = stdlib_dependency["path"]
+        stdlib_version = stdlib_dependency.get("version", {}).get("artifactVersion")
+        with ZipFile(BytesIO(ldlib2.read(stdlib_path))) as kotlin_stdlib:
+            stdlib_manifest_name = "META-INF/MANIFEST.MF"
+            if stdlib_manifest_name not in kotlin_stdlib.namelist():
+                raise SystemExit("LDLib2 Kotlin stdlib is missing its manifest")
+            stdlib_manifest = kotlin_stdlib.read(stdlib_manifest_name).decode("utf-8")
+            if f"Implementation-Version: {stdlib_version}-" not in stdlib_manifest:
+                raise SystemExit("LDLib2 Kotlin stdlib version does not match its JarJar metadata")
+            stdlib_entries = {
+                name: kotlin_stdlib.read(name)
+                for name in kotlin_stdlib.namelist()
+                if (name.startswith(("kotlin/", "_COROUTINE/", "META-INF/versions/9/kotlin/"))
+                    or name.startswith("META-INF/services/kotlin.")
+                    or (name.startswith("META-INF/") and name.endswith(".kotlin_module")))
+            }
 
     with ZipFile(args.source) as source:
         names = set(source.namelist())
@@ -46,26 +74,26 @@ def main() -> None:
             raise SystemExit("Input has an unexpected KFF automatic module name")
         manifest = manifest.replace("Automatic-Module-Name: thedarkcolour.kotlinforforge",
                                     "Automatic-Module-Name: kotlin.stdlib", 1)
+        manifest = manifest.replace(
+            "Automatic-Module-Name: kotlin.stdlib",
+            f"Automatic-Module-Name: kotlin.stdlib\nPhoton-Kotlin-Stdlib-Version: {stdlib_version}",
+            1,
+        )
+        stdlib_names = set(stdlib_entries)
 
         args.destination.parent.mkdir(parents=True, exist_ok=True)
         with ZipFile(args.destination, "w", ZIP_DEFLATED) as output:
             for entry in source.infolist():
                 name = entry.filename
-                if name == module_info:
+                if name == module_info or name in stdlib_names:
                     continue
                 data = manifest.encode("utf-8") if name == manifest_name else source.read(entry)
                 output.writestr(name, data)
+            for name, data in stdlib_entries.items():
+                output.writestr(name, data)
 
     with ZipFile(args.ldlib2_source) as source:
-        metadata_name = "META-INF/jarjar/metadata.json"
-        if metadata_name not in source.namelist():
-            raise SystemExit("LDLib2 archive is missing JarJar metadata")
-        metadata = json.loads(source.read(metadata_name))
-        removed = [item for item in metadata.get("jars", [])
-                   if item.get("identifier", {}).get("artifact") == "kotlin-stdlib"]
-        if len(removed) != 1:
-            raise SystemExit("Expected exactly one nested LDLib2 Kotlin stdlib")
-        removed_paths = {item["path"] for item in removed}
+        removed_paths = {stdlib_path}
 
         args.ldlib2_destination.parent.mkdir(parents=True, exist_ok=True)
         with ZipFile(args.ldlib2_destination, "w", ZIP_DEFLATED) as output:
@@ -73,10 +101,10 @@ def main() -> None:
                 if entry.filename in removed_paths:
                     continue
                 data = source.read(entry)
-                if entry.filename == metadata_name:
-                    metadata["jars"] = [item for item in metadata["jars"]
-                                        if item["identifier"]["artifact"] != "kotlin-stdlib"]
-                    data = (json.dumps(metadata, indent=2) + "\n").encode("utf-8")
+                if entry.filename == ldlib2_metadata_name:
+                    ldlib2_metadata["jars"] = [item for item in ldlib2_metadata["jars"]
+                                                if item["identifier"]["artifact"] != "kotlin-stdlib"]
+                    data = (json.dumps(ldlib2_metadata, indent=2) + "\n").encode("utf-8")
                 output.writestr(entry.filename, data)
 
 

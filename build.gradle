@@ -453,6 +453,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             }
             if (kotlinRuntimeManifest == null
                     || !kotlinRuntimeManifest.contains('Automatic-Module-Name: kotlin.stdlib')
+                    || !kotlinRuntimeManifest.contains('Photon-Kotlin-Stdlib-Version: 2.1.20')
                     || kotlinRuntimeHasModuleDescriptor
                     || !kotlinRuntimeHasStdlibClass
                     || !kotlinRuntimeHasCoroutines) {
@@ -469,31 +470,20 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             def nestedLdlib2 = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
                     zip.getInputStream(zip.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar'))
                             .withCloseable { it.readAllBytes() }))
-            def ldlib2HasKotlinIntrinsics = false
+            def ldlib2HasKotlinStdlib = false
             try {
                 def nestedEntry
                 while ((nestedEntry = nestedLdlib2.nextEntry) != null) {
                     if (nestedEntry.name.startsWith('META-INF/jarjar/kotlin-stdlib-')
                             && nestedEntry.name.endsWith('.jar')) {
-                        def nestedStdlib = new java.util.zip.ZipInputStream(
-                                new java.io.ByteArrayInputStream(nestedLdlib2.readAllBytes()))
-                        try {
-                            def stdlibEntry
-                            while ((stdlibEntry = nestedStdlib.nextEntry) != null) {
-                                if (stdlibEntry.name == 'kotlin/jvm/internal/Intrinsics.class') {
-                                    ldlib2HasKotlinIntrinsics = true
-                                    break
-                                }
-                            }
-                        } finally {
-                            nestedStdlib.close()
-                        }
+                        ldlib2HasKotlinStdlib = true
+                        break
                     }
                 }
             } finally {
                 nestedLdlib2.close()
             }
-            if (ldlib2HasKotlinIntrinsics) {
+            if (ldlib2HasKotlinStdlib) {
                 throw new GradleException('Photon LDLib2 copy must not bundle a second Kotlin stdlib provider')
             }
 
