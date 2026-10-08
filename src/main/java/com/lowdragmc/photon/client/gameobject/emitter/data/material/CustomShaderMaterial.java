@@ -32,6 +32,7 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -43,6 +44,8 @@ import org.joml.Vector4f;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.lang.ref.Cleaner;
 import java.util.HashMap;
 import java.util.Map;
@@ -316,26 +319,39 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (shaderHolder != null) applyUniformOverrides(shaderHolder.baseInstance);
     }
 
-    /** Read the current value, returning zero components for a missing or not-yet-compiled uniform. */
+    /** Read the current value, including the shader JSON defaults when the program is not compiled yet. */
     public float[] getUniformValue(String name, int count) {
         if (count <= 0) return new float[0];
-        var result = new float[count];
         var override = uniformOverrides.get(name);
-        if (override != null) {
-            System.arraycopy(override, 0, result, 0, Math.min(count, override.length));
-            return result;
-        }
-        if (shaderHolder == null) return result;
-        var uniform = shaderHolder.baseInstance.getShaderInstanceAccessor().getUniformMap().get(name);
-        if (uniform == null) return result;
-        if (isIntegerUniform(uniform.getType())) {
-            var values = uniform.getIntBuffer();
-            for (int i = 0; i < Math.min(count, values.capacity()); i++) result[i] = values.get(i);
+        float[] result;
+        var uniform = shaderHolder == null ? null
+                : shaderHolder.baseInstance.getShaderInstanceAccessor().getUniformMap().get(name);
+        if (uniform == null) {
+            result = readShaderUniformDefaults(name, count);
         } else {
-            var values = uniform.getFloatBuffer();
-            for (int i = 0; i < Math.min(count, values.capacity()); i++) result[i] = values.get(i);
+            result = new float[count];
+            if (isIntegerUniform(uniform.getType())) {
+                var values = uniform.getIntBuffer();
+                for (int i = 0; i < Math.min(count, values.capacity()); i++) result[i] = values.get(i);
+            } else {
+                var values = uniform.getFloatBuffer();
+                for (int i = 0; i < Math.min(count, values.capacity()); i++) result[i] = values.get(i);
+            }
         }
+        if (override != null) System.arraycopy(override, 0, result, 0, Math.min(count, override.length));
         return result;
+    }
+
+    private float[] readShaderUniformDefaults(String name, int count) {
+        var shaderJson = ResourceLocation.fromNamespaceAndPath(shaderLocation.getNamespace(),
+                "shaders/core/" + shaderLocation.getPath() + ".json");
+        var resource = Minecraft.getInstance().getResourceManager().getResource(shaderJson).orElse(null);
+        if (resource == null) return new float[count];
+        try (var reader = new InputStreamReader(resource.open(), StandardCharsets.UTF_8)) {
+            return CustomShaderUniformDefaults.read(GsonHelper.parse(reader), name, count);
+        } catch (Exception ignored) {
+            return new float[count];
+        }
     }
 
     private void applyUniformOverrides(LDShaderInstance shader) {
