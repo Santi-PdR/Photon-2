@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.client.UIRenderStateScope;
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
@@ -85,7 +86,7 @@ public final class MaterialPreviewRenderer {
         Entry(int size) {
             this.size = size;
             this.id = Photon.id("material_preview/" + NEXT_ID.getAndIncrement());
-            this.target = new HDRTarget(size, size, GL11.GL_LINEAR, false);
+            this.target = new HDRTarget(size, size, GL11.GL_LINEAR, true);
             this.target.setClearColor(0, 0, 0, 0);
         }
 
@@ -261,6 +262,7 @@ public final class MaterialPreviewRenderer {
         var mc = Minecraft.getInstance();
         ensurePreviewSceneTarget();
         var target = entry.target;
+        var previewSetting = new MaterialSetting(material);
         var framebuffers = FramebufferState.capture();
         int viewportX = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
         int viewportY = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
@@ -270,6 +272,7 @@ public final class MaterialPreviewRenderer {
         boolean began = false;
         boolean projectionBackedUp = false;
         boolean modelViewPushed = false;
+        boolean materialSettingApplied = false;
         boolean previousPreviewRenderActive = PREVIEW_RENDER_ACTIVE.get();
             var lightTexture = mc.gameRenderer.lightTexture();
         BlendMode materialBlend = null;
@@ -299,20 +302,18 @@ public final class MaterialPreviewRenderer {
             PhotonShaderDefaults.setup(shader);
             var previewShader = shader;
             RenderSystem.setShader(() -> previewShader);
-            // GUI state may have inherited a mask pass or world culling. A full-screen preview quad
-            // must write every color channel and remain visible regardless of the previous pass.
-            RenderSystem.colorMask(true, true, true, true);
-            RenderSystem.disableCull();
-            RenderSystem.disableDepthTest();
-            RenderSystem.depthMask(false);
+            previewSetting.pre();
+            materialSettingApplied = true;
             BlendModeAccessor.photon$setLastApplied(null);
             var buffer = Tesselator.getInstance().getBuilder();
             buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
             var pose = new Matrix4f();
+            // Counter-clockwise in projected coordinates, so MaterialSetting's default back-face
+            // culling retains the quad while matching the real particle draw state.
             buffer.vertex(pose, 0, 0, 0).color(-1).uv(0, 0).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(pose, entry.size, 0, 0).color(-1).uv(1, 0).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(pose, entry.size, entry.size, 0).color(-1).uv(1, 1).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
             buffer.vertex(pose, 0, entry.size, 0).color(-1).uv(0, 1).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(pose, entry.size, entry.size, 0).color(-1).uv(1, 1).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(pose, entry.size, 0, 0).color(-1).uv(1, 0).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
             BufferUploader.drawWithShader(buffer.end());
         } catch (Throwable error) {
             operationFailure = error;
@@ -322,6 +323,7 @@ public final class MaterialPreviewRenderer {
             var finalBlend = materialBlend;
             boolean finalBegan = began;
             boolean finalModelViewPushed = modelViewPushed;
+            boolean finalMaterialSettingApplied = materialSettingApplied;
             boolean finalPreviewRenderActive = previousPreviewRenderActive;
             boolean finalProjectionBackedUp = projectionBackedUp;
             Runnable restoreBlend = finalShader != null && finalBlend != null
@@ -330,6 +332,7 @@ public final class MaterialPreviewRenderer {
             ResourceDisposal.runAllPreservingFailure(operationFailure,
                     restoreBlend,
                     () -> { if (finalBegan) material.end(MaterialContext.PREVIEW); },
+                    () -> { if (finalMaterialSettingApplied) previewSetting.post(); },
                     lightTexture::turnOffLightLayer,
                     () -> {
                         var modelView = RenderSystem.getModelViewStack();
