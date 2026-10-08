@@ -18,10 +18,24 @@ final class DynamicMeshCache {
         float[] geometry = dynamic.geometry();
         PhotonMesh resolved = geometry == null || revision == 0
                 ? topology
-                : topology.withGeometry(geometry, dynamic::tangents, revision);
+                : topology.withGeometry(geometry, () -> tangentsForRevision(dynamic, revision), revision);
         current = resolved;
         cachedTopology = topology;
         return resolved;
+    }
+
+    /**
+     * Tangent generation is lazy, but the provider may reuse its backing array on the next pose.
+     * Keep a later animation revision from supplying tangents for this cached geometry snapshot.
+     */
+    @Nullable
+    private static float[] tangentsForRevision(IDynamicMesh dynamic, long expectedRevision) {
+        synchronized (dynamic) {
+            if (dynamic.revision() != expectedRevision) return null;
+            float[] tangents = dynamic.tangents();
+            if (dynamic.revision() != expectedRevision || tangents == null) return null;
+            return tangents.clone();
+        }
     }
 
     @Nullable
