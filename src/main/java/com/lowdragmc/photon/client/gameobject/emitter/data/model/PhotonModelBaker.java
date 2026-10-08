@@ -27,8 +27,8 @@ import java.util.function.Function;
 @OnlyIn(Dist.CLIENT)
 final class PhotonModelBaker implements ModelBaker {
     private static final int MAX_PARENT_DEPTH = 64;
-    private static final ResourceLocation GENERATED_MODEL = new ResourceLocation("minecraft", "builtin/generated");
-    private static final ResourceLocation ENTITY_MODEL = new ResourceLocation("minecraft", "builtin/entity");
+    private static final ResourceLocation GENERATED_MODEL = ResourceLocation.fromNamespaceAndPath("minecraft", "builtin/generated");
+    private static final ResourceLocation ENTITY_MODEL = ResourceLocation.fromNamespaceAndPath("minecraft", "builtin/entity");
 
     private final Map<ResourceLocation, UnbakedModel> models = new HashMap<>();
     private final Set<ResourceLocation> resolving = new HashSet<>();
