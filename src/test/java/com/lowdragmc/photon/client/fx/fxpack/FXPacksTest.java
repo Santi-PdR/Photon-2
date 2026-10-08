@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -116,6 +117,45 @@ class FXPacksTest {
         }
     }
 
+    @Test
+    void gcKeepsNestedPackedLibraryResourcesAndTheirAssets() throws Exception {
+        var pack = tempDir.resolve("nested-library.fxpack");
+        var outerPath = "file(assets/photon_fx/render_graph/outer.nbt)";
+        var innerPath = "file(assets/photon_fx/fullscreen_graph/inner.nbt)";
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of("create", "true"))) {
+            var fx = new CompoundTag();
+            fx.putString("effect", outerPath);
+            fx.putString("invalidTraversal", "file(assets/demo/../../photon_fx/orphan/unused.nbt)");
+            fx.putString("invalidNamespace", "file(assets/../photon_fx/orphan/unused.nbt)");
+            writeCompressedFx(zip.getPath("assets/demo/fx/nested/library.fx"), fx);
+
+            var outer = new CompoundTag();
+            outer.putString("nestedEffect", innerPath);
+            writeLibraryTag(zip.getPath("assets/photon_fx/render_graph/outer.nbt"), outer);
+
+            var inner = new CompoundTag();
+            inner.putString("texture", "demo:textures/fx/reachable.png");
+            writeLibraryTag(zip.getPath("assets/photon_fx/fullscreen_graph/inner.nbt"), inner);
+
+            Files.createDirectories(zip.getPath("assets/demo/textures/fx"));
+            Files.write(zip.getPath("assets/demo/textures/fx/reachable.png"), new byte[]{1});
+            Files.createDirectories(zip.getPath("assets/photon_fx/orphan"));
+            Files.write(zip.getPath("assets/photon_fx/orphan/unused.nbt"), new byte[]{2});
+            Files.write(zip.getPath("assets/demo/textures/fx/orphan.png"), new byte[]{3});
+        }
+
+        try (var zip = FileSystems.newFileSystem(pack, Map.of())) {
+            FXPacks.gc(zip);
+            assertTrue(Files.exists(zip.getPath("assets/demo/fx/nested/library.fx")));
+            assertTrue(Files.exists(zip.getPath("assets/photon_fx/render_graph/outer.nbt")));
+            assertTrue(Files.exists(zip.getPath("assets/photon_fx/fullscreen_graph/inner.nbt")));
+            assertTrue(Files.exists(zip.getPath("assets/demo/textures/fx/reachable.png")));
+            assertFalse(Files.exists(zip.getPath("assets/photon_fx/orphan/unused.nbt")));
+            assertFalse(Files.exists(zip.getPath("assets/demo/textures/fx/orphan.png")));
+        }
+    }
+
     private static void writeShader(FileSystem zip, String shaderId, String programId, String vertexSource) throws Exception {
         var shader = ResourceLocation.tryParse(shaderId);
         var shaderPath = zip.getPath("assets", shader.getNamespace(), "shaders/core", shader.getPath() + ".json");
@@ -142,8 +182,20 @@ class FXPacksTest {
     private static void writeFx(Path path, String assetLocation) throws Exception {
         var fx = new CompoundTag();
         fx.putString("texture", assetLocation);
+        writeCompressedFx(path, fx);
+    }
+
+    private static void writeCompressedFx(Path path, CompoundTag fx) throws Exception {
+        Files.createDirectories(path.getParent());
         var bytes = new ByteArrayOutputStream();
         NbtIo.writeCompressed(fx, bytes);
         Files.write(path, bytes.toByteArray());
+    }
+
+    private static void writeLibraryTag(Path path, CompoundTag tag) throws Exception {
+        Files.createDirectories(path.getParent());
+        try (var output = new DataOutputStream(Files.newOutputStream(path))) {
+            NbtIo.write(tag, output);
+        }
     }
 }

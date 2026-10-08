@@ -15,8 +15,6 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import com.google.gson.JsonParser;
-import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
-import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.photon.client.fx.FX;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -349,8 +347,9 @@ public final class FXPacks {
         } else if (value.startsWith("file(assets/") && value.endsWith(")")) {
             // a rewritten library reference — mark the file and recurse into it (graphs reference
             // subgraphs and textures of their own)
-            if (!(IResourcePath.parse(value) instanceof FilePath filePath) || filePath.location == null) return;
-            var key = entryKey(filePath.location);
+            var location = packedFileLocation(value);
+            if (location == null) return;
+            var key = entryKey(location);
             referenced.add(key);
             if (!visited.add(key)) return;
             var path = zip.getPath(key);
@@ -363,6 +362,28 @@ public final class FXPacks {
             } catch (IOException e) {
                 throw new IOException("fxpack gc: failed to read library file " + key, e);
             }
+        }
+    }
+
+    /** Decode LDLib2's {@code file(assets/<namespace>/<path>)} form without bootstrapping its registry. */
+    @Nullable
+    private static ResourceLocation packedFileLocation(String value) {
+        if (!value.startsWith("file(assets/") || !value.endsWith(")")) return null;
+        var assetPath = value.substring("file(assets/".length(), value.length() - 1);
+        int separator = assetPath.indexOf('/');
+        if (separator <= 0 || separator == assetPath.length() - 1) return null;
+        var namespace = assetPath.substring(0, separator);
+        var path = assetPath.substring(separator + 1);
+        if (namespace.equals(".") || namespace.equals("..") || path.startsWith("/") || path.contains("\\")) {
+            return null;
+        }
+        for (var segment : path.split("/", -1)) {
+            if (segment.equals(".") || segment.equals("..")) return null;
+        }
+        try {
+            return ResourceLocation.fromNamespaceAndPath(namespace, path);
+        } catch (IllegalArgumentException ignored) {
+            return null;
         }
     }
 
