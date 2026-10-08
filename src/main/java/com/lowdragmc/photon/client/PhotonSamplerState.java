@@ -34,6 +34,16 @@ public final class PhotonSamplerState {
         return new KGSamplerGl.GlSampler(minFilter, filter, address, address);
     }
 
+    /** Sampler used for quantity textures and color targets when the graph has no sampler override. */
+    public static KGSamplerGl.GlSampler linearClamp() {
+        return new KGSamplerGl.GlSampler(GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    }
+
+    /** Custom-mask pixels encode categorical object IDs and must never be interpolated. */
+    public static KGSamplerGl.GlSampler nearestClamp() {
+        return new KGSamplerGl.GlSampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    }
+
     /** Replace graph defaults only for exposed sampler values explicitly overridden by a material. */
     public static List<KGSamplerGl.Binding> overrides(List<String> samplerNames,
                                                        Map<String, String> variableSamplers,

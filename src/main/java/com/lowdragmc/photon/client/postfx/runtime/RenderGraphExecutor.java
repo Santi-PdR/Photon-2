@@ -215,7 +215,7 @@ public final class RenderGraphExecutor {
                     }
                 }
 
-                stageExternalSamplers(shader, pass, params);
+                stageSamplerStates(shader, pass, params);
                 PhotonPostProcessing.blitShader(shader, targets[out], false);
 
                 // aliasing: anything last consumed by this pass goes straight back to the pool
@@ -327,15 +327,15 @@ public final class RenderGraphExecutor {
         return Minecraft.getInstance().getTextureManager().getTexture(ResourceLocation.parse(location)).getId();
     }
 
-    /** Apply each external texture's sampler state for this draw. KilaGraph's ShaderInstance mixin
-     *  binds staged OpenGL sampler objects after ShaderInstance.apply() and clears them afterward. */
-    private static void stageExternalSamplers(ShaderInstance shader, CompiledEffect.CompiledPass pass,
-                                              Map<String, Object> params) {
+    /** Apply explicit sampler objects for this draw after ShaderInstance.apply(). */
+    private static void stageSamplerStates(ShaderInstance shader, CompiledEffect.CompiledPass pass,
+                                           Map<String, Object> params) {
         var names = ((ShaderInstanceAccessor) shader).photon$getSamplerNames();
         var bindings = new ArrayList<KGSamplerGl.Binding>();
         for (var entry : pass.textures().entrySet()) {
             var ref = entry.getValue();
-            RenderTypeGraphTypes.Sampler2DValue sampler = switch (ref.source()) {
+            if (!names.contains(entry.getKey())) continue;
+            var sampler = switch (ref.source()) {
                 case ASSET -> ref.asset();
                 case PARAM -> {
                     var value = params.get(ref.param());
@@ -343,11 +343,17 @@ public final class RenderGraphExecutor {
                 }
                 default -> null;
             };
-            if (!names.contains(entry.getKey())) continue;
-            if (sampler == null || !LDLib2.isValidResourceLocation(sampler.location())) {
-                sampler = RenderTypeGraphTypes.Sampler2DValue.defaultValue();
-            }
-            bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), PhotonSamplerState.from(sampler)));
+            var state = switch (ref.source()) {
+                case ASSET, PARAM -> {
+                    if (sampler == null || !LDLib2.isValidResourceLocation(sampler.location())) {
+                        sampler = RenderTypeGraphTypes.Sampler2DValue.defaultValue();
+                    }
+                    yield PhotonSamplerState.from(sampler);
+                }
+                case CUSTOM_MASK -> PhotonSamplerState.nearestClamp();
+                default -> PhotonSamplerState.linearClamp();
+            };
+            bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), state));
         }
         KGSamplerBinder.stage(shader, bindings);
     }
