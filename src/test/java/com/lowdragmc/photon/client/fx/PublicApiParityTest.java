@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.fx;
 import com.lowdragmc.photon.client.gameobject.IFXObject;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
@@ -12,6 +13,7 @@ import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRend
 import com.lowdragmc.photon.client.gameobject.particle.renderer.ParticleRotationMath;
 import org.junit.jupiter.api.Test;
 import org.joml.Vector2fc;
+import com.lowdragmc.photon.client.render.FXCompositeMode;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -28,6 +30,19 @@ class PublicApiParityTest {
     void curveGraphPointCoordinatesPreserveTheReferenceReadOnlyApi() throws NoSuchMethodException {
         var pointCoord = AbstractCurveGraph.class.getDeclaredMethod("pointCoord", ECBCurves.class, int.class);
         assertEquals(Vector2fc.class, pointCoord.getReturnType());
+    }
+
+    @Test
+    void rendererSettingPreservesTheReferenceCompositeModeApi() throws ReflectiveOperationException {
+        assertEquals(FXCompositeMode.class, RendererSetting.class.getDeclaredField("compositeMode").getType());
+        assertEquals(FXCompositeMode.class, RendererSetting.class.getDeclaredMethod("getCompositeMode").getReturnType());
+        assertEquals(FXCompositeMode.class,
+                RendererSetting.class.getDeclaredMethod("setCompositeMode", FXCompositeMode.class).getParameterTypes()[0]);
+
+        var runtime = RendererSetting.Runtime.class;
+        assertEquals(FXCompositeMode.class, runtime.getDeclaredMethod("getCompositeMode").getReturnType());
+        var runtimeValueType = (java.lang.reflect.ParameterizedType) runtime.getDeclaredField("compositeMode").getGenericType();
+        assertEquals(FXCompositeMode.class, runtimeValueType.getActualTypeArguments()[0]);
     }
 
     @Test

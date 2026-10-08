@@ -8,10 +8,10 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
-import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
 import com.lowdragmc.photon.client.PhotonParticleManager;
+import com.lowdragmc.photon.client.render.FXCompositeMode;
 import com.lowdragmc.photon.client.render.PhotonStage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
@@ -255,7 +255,7 @@ public class RendererSetting {
          * passes and editor scenes always stay in their ordinary layer stage.
          */
         public PhotonStage effectiveStage() {
-            return resolveEffectiveStage(getLayer(), getCompositeMode().resolve(),
+            return resolveEffectiveStage(getLayer(), getCompositeMode().resolve().toRenderPipeline(),
                     PremultipliedBlendPlan.areLayerSafe(getMaterials()),
                     PhotonParticleManager.isEditorSceneRendering());
         }
@@ -309,9 +309,12 @@ public class RendererSetting {
         }
     }
 
-    static PhotonStage resolveEffectiveStage(Layer layer, FXCompositeMode compositeMode,
+    static PhotonStage resolveEffectiveStage(Layer layer,
+                                             com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode compositeMode,
                                              boolean layerSafe, boolean editorScene) {
-        if (editorScene || layer != Layer.Translucent || compositeMode != FXCompositeMode.LATE || !layerSafe) {
+        if (editorScene || layer != Layer.Translucent
+                || compositeMode != com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode.LATE
+                || !layerSafe) {
             return layer.stage;
         }
         return PhotonStage.DEFERRED;
