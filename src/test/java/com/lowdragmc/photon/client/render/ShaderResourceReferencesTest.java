@@ -5,11 +5,15 @@ import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -27,6 +31,7 @@ class ShaderResourceReferencesTest {
         Path root = Path.of(rootUrl.toURI());
         var failures = new ArrayList<String>();
         var checked = new int[2];
+        var visitedImports = new HashSet<String>();
 
         try (Stream<Path> paths = Files.walk(root)) {
             for (Path path : paths.filter(Files::isRegularFile).toList()) {
@@ -34,7 +39,8 @@ class ShaderResourceReferencesTest {
                 if (name.endsWith(".json")) {
                     checkProgram(path, loader, failures, checked);
                 } else if (name.endsWith(".vsh") || name.endsWith(".fsh")) {
-                    checkImports(path, loader, failures, checked);
+                    String relative = root.relativize(path).toString().replace('\\', '/');
+                    checkImports(SHADER_ROOT + "/" + relative, loader, failures, checked, visitedImports);
                 }
             }
         }
@@ -62,18 +68,31 @@ class ShaderResourceReferencesTest {
         }
     }
 
-    private static void checkImports(Path shader, ClassLoader loader, List<String> failures, int[] checked)
+    private static void checkImports(String firstResource, ClassLoader loader, List<String> failures, int[] checked,
+                                     Set<String> visited)
             throws Exception {
-        Matcher matcher = IMPORT.matcher(Files.readString(shader));
-        while (matcher.find()) {
-            checked[1]++;
-            String identifier = matcher.group(1);
-            String[] parts = identifier.split(":", 2);
-            String namespace = parts.length == 2 ? parts[0] : "minecraft";
-            String path = parts.length == 2 ? parts[1] : parts[0];
-            String resource = "assets/" + namespace + "/shaders/include/" + path;
-            if (loader.getResource(resource) == null) {
-                failures.add(shader + " imports missing source " + resource);
+        var pending = new ArrayDeque<String>();
+        pending.add(firstResource);
+        while (!pending.isEmpty()) {
+            String shader = pending.removeFirst();
+            if (!visited.add(shader)) continue;
+            URL url = loader.getResource(shader);
+            if (url == null) {
+                failures.add("missing shader source " + shader);
+                continue;
+            }
+            String source;
+            try (var input = url.openStream()) {
+                source = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            Matcher matcher = IMPORT.matcher(source);
+            while (matcher.find()) {
+                checked[1]++;
+                String identifier = matcher.group(1);
+                String[] parts = identifier.split(":", 2);
+                String namespace = parts.length == 2 ? parts[0] : "minecraft";
+                String path = parts.length == 2 ? parts[1] : parts[0];
+                pending.addLast("assets/" + namespace + "/shaders/include/" + path);
             }
         }
     }
