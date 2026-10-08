@@ -146,6 +146,7 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         var previousRenderingManager = renderingManager;
         boolean previousEditorSceneRendering = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack
                 .isEditorSceneRendering();
+        float previousShaderGameTime = RenderSystem.getShaderGameTime() * 24000f;
         var startTime = System.nanoTime();
         try {
             drawMode = options.getDrawMode();
@@ -191,11 +192,11 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
                 frameIndex = (frameIndex + 1) % lastFrameTimes.length;
             }
         } finally {
-            // roll back to previous game time
+            // Restore the exact prior shader clock. This also matters in menus (no level) and if a scene
+            // render is nested inside another render context with its own timeline clock.
             try {
-                if (Minecraft.getInstance().level != null) {
-                    RenderSystem.setShaderGameTime(Minecraft.getInstance().level.getGameTime(), pPartialTicks);
-                }
+                long wholeTicks = (long) previousShaderGameTime;
+                RenderSystem.setShaderGameTime(wholeTicks, previousShaderGameTime - wholeTicks);
             } finally {
                 drawMode = previousDrawMode;
                 sceneBloomEnabled = previousBloomEnabled;
