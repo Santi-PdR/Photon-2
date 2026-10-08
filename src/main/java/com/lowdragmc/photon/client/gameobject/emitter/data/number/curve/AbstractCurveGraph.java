@@ -19,6 +19,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector2f;
+import org.joml.Vector2fc;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -180,8 +181,8 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
             for (int i = 0; i < els.size(); i++) {
                 var p = pointCoord(curves, i);
                 els.get(i).layout(layout -> {
-                    layout.leftPercent(p.x * 100);
-                    layout.topPercent((1 - p.y) * 100);
+                    layout.leftPercent(p.x() * 100);
+                    layout.topPercent((1 - p.y()) * 100);
                 });
             }
         }
@@ -189,7 +190,7 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
     }
 
     /** The point at {@code index} of a series: point 0 is the first segment's p0, point i is segment i-1's p1. */
-    protected Vector2f pointCoord(ECBCurves curves, int index) {
+    protected Vector2fc pointCoord(ECBCurves curves, int index) {
         var segments = curves.getSegments();
         return index == 0 ? segments.get(0).p0 : segments.get(index - 1).p1;
     }
@@ -611,8 +612,8 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
             if (segments.isEmpty()) continue;
             for (int i = 0; i <= segments.size(); i++) {
                 var p = pointCoord(curvesList.get(s), i);
-                var sx = gx + gw * p.x;
-                var sy = gy + gh * (1 - p.y);
+                var sx = gx + gw * p.x();
+                var sy = gy + gh * (1 - p.y());
                 if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) selectedPoints.add(encodePoint(s, i));
             }
         }
@@ -782,7 +783,7 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
             var curves = curvesList.get(dragSeries);
             var segments = curves.getSegments();
             if (dragKind == 0 && dragPoint >= 0 && dragPoint <= segments.size() && !segments.isEmpty()) {
-                return pointCoord(curves, dragPoint);
+                return new Vector2f(pointCoord(curves, dragPoint));
             }
             if (dragKind == 1 && dragPoint > 0 && dragPoint - 1 < segments.size()) {
                 return segments.get(dragPoint - 1).c1;
@@ -798,7 +799,7 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
         for (int s = 0; s < pointElements.size() && s < curvesList.size(); s++) {
             var els = pointElements.get(s);
             for (int i = 0; i < els.size(); i++) {
-                if (els.get(i).isHover()) return pointCoord(curvesList.get(s), i);
+                if (els.get(i).isHover()) return new Vector2f(pointCoord(curvesList.get(s), i));
             }
         }
         return null;

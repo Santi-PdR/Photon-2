@@ -6,9 +6,12 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.AbstractCurveGraph;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.ParticleRotationMath;
 import org.junit.jupiter.api.Test;
+import org.joml.Vector2fc;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -21,6 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Locks the public runtime API names and overloads shared with Photon 26.2. */
 class PublicApiParityTest {
+    @Test
+    void curveGraphPointCoordinatesPreserveTheReferenceReadOnlyApi() throws NoSuchMethodException {
+        var pointCoord = AbstractCurveGraph.class.getDeclaredMethod("pointCoord", ECBCurves.class, int.class);
+        assertEquals(Vector2fc.class, pointCoord.getReturnType());
+    }
+
     @Test
     void tileParticleRendererPreservesReferenceInstanceStrides() {
         assertEquals(21, TileParticleRenderer.INSTANCE_FLOATS);
