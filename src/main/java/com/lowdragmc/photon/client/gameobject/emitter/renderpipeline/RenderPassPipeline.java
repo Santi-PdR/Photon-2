@@ -418,19 +418,20 @@ public class RenderPassPipeline {
                 MASK_TARGET = null;
                 ResourceDisposal.cleanupAfterFailure(failure, failedTarget::destroyBuffers);
             }
-            if (failure instanceof Error error) throw error;
-            var runtimeFailure = (RuntimeException) failure;
             maskColorTexture = -1;
             maskDepthTexture = -1;
-            if (loggedMaskAllocationFailure != sizeKey) {
+            var runtimeFailure = failure instanceof RuntimeException runtime ? runtime : null;
+            if (runtimeFailure != null && loggedMaskAllocationFailure != sizeKey) {
                 com.lowdragmc.photon.Photon.LOGGER.error(
                         "Could not prepare {}x{} custom mask target; skipping mask effects for this frame",
                         DRAW_TARGET.width, DRAW_TARGET.height, runtimeFailure);
                 loggedMaskAllocationFailure = sizeKey;
             }
-            DRAW_TARGET.bindWrite(false);
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
-            return;
+            ResourceDisposal.runAllPreservingFailure(failure,
+                    () -> DRAW_TARGET.bindWrite(false),
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
+            if (runtimeFailure != null) return;
+            throw (Error) failure;
         }
         loggedMaskAllocationFailure = Long.MIN_VALUE;
         RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);

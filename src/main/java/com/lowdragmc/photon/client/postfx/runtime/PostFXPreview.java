@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraftforge.api.distmarker.Dist;
@@ -50,10 +51,14 @@ public final class PostFXPreview {
         // resize() hands the binding and viewport back untouched, so this snapshot is the caller's
         SOURCE = RenderPassPipeline.resize(SOURCE, cleanScene.width, cleanScene.height, true);
         var framebufferState = FramebufferState.capture();
+        Throwable operationFailure = null;
         try {
             SOURCE.copyDepthAndColorFrom(cleanScene);
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            framebufferState.restore();
+            ResourceDisposal.runAllPreservingFailure(operationFailure, framebufferState::restore);
         }
         capturedFrame = frame;
         hasCapture = true;

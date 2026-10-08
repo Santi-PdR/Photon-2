@@ -77,16 +77,21 @@ public final class OpaqueDepthCapture {
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
+        Throwable operationFailure = null;
         try {
             allocate(mainTarget.width, mainTarget.height);
             assert target != null;
             target.copyDepthFrom(mainTarget);
             capturedFrame = frame;
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
             // Iris can keep independent read and draw framebuffers bound. Preserve both even when
             // allocation or the depth blit fails, and leave the caller's viewport untouched.
-            framebufferState.restore();
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    framebufferState::restore,
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
         }
     }
 
