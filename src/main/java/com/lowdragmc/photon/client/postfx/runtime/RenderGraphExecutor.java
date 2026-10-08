@@ -272,9 +272,9 @@ public final class RenderGraphExecutor {
     static boolean requiredTextureAvailable(CompiledEffect.ResourceRef.Source source,
                                             int sceneDepth, int mask, int customDepth) {
         return switch (source) {
-            case SCENE_DEPTH -> sceneDepth != -1;
-            case CUSTOM_MASK -> mask != -1;
-            case CUSTOM_DEPTH -> customDepth != -1;
+            case SCENE_DEPTH -> sceneDepth > 0;
+            case CUSTOM_MASK -> mask > 0;
+            case CUSTOM_DEPTH -> customDepth > 0;
             default -> true;
         };
     }

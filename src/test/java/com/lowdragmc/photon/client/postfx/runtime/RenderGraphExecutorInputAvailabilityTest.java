@@ -10,8 +10,11 @@ class RenderGraphExecutorInputAvailabilityTest {
     @Test
     void missingDepthOrMaskInputsSkipTheEffectInsteadOfBindingStaleTextures() {
         assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.SCENE_DEPTH, -1, 4, 5));
+        assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.SCENE_DEPTH, 0, 4, 5));
         assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.CUSTOM_MASK, 3, -1, 5));
+        assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.CUSTOM_MASK, 3, 0, 5));
         assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.CUSTOM_DEPTH, 3, 4, -1));
+        assertFalse(RenderGraphExecutor.requiredTextureAvailable(Source.CUSTOM_DEPTH, 3, 4, 0));
     }
 
     @Test
