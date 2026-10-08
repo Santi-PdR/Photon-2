@@ -88,7 +88,7 @@ class PublicApiParityTest {
     }
 
     @Test
-    void effectExecutorInterfacePreservesTheReferenceApi() {
+    void configurableEffectExecutorInterfacePreservesTheReferenceApi() {
         assertApi(IEffectExecutor.class, Set.of("getLevel/0", "getRandomSource/0", "onTimelineSignal/4",
                 "postEffectSink/0", "updateFXObjectFrame/2", "updateFXObjectTick/1"));
     }
@@ -96,6 +96,38 @@ class PublicApiParityTest {
     @Test
     void particleTickHostPreservesTheReferenceApi() {
         assertApi(ParticleTickHost.class, Set.of("generation/0", "tickCount/0"));
+    }
+
+    @Test
+    void runtimePreservesTheReferenceApi() {
+        assertApi(FXRuntime.class, Set.of(
+                "addSceneObjectInternal/1", "destroy/1", "emit/1", "emit/2", "emmit/1", "emmit/2",
+                "findObject/1", "findObjects/1", "getAllSceneObjects/0", "getFxData/0", "getGenerationAtEmit/0",
+                "getHost/0", "getObjects/0", "getRate/0", "getRoot/0", "getSceneObject/1",
+                "getTimelinePlayer/0", "isAlive/0", "isDestroyed/0", "isEmitted/0", "isFinished/0",
+                "isValid/0", "removeSceneObjectInternal/1", "setRate/1"));
+    }
+
+    @Test
+    void fxDataPreservesTheReferenceApi() {
+        assertApi(FXData.class, Set.of("copy/1", "deserializeNBT/2", "objects/0", "serializeNBT/1", "timeline/0"));
+    }
+
+    @Test
+    void effectExecutorInterfacePreservesTheReferenceApi() {
+        assertApi(IFXEffectExecutor.class, Set.of("getFx/0", "setAllowMulti/1", "setDelay/1", "setForcedDeath/1",
+                "setOffset/1", "setOffset/3", "setRotation/1", "setRotation/3", "setScale/1", "setScale/3",
+                "start/0"));
+    }
+
+    @Test
+    void blockEffectExecutorPreservesTheReferenceApi() {
+        assertApi(BlockEffectExecutor.class, Set.of("setCheckState/1", "start/0", "updateFXObjectTick/1"));
+    }
+
+    @Test
+    void entityEffectExecutorPreservesTheReferenceApi() {
+        assertApi(EntityEffectExecutor.class, Set.of("start/0", "updateFXObjectFrame/2", "updateFXObjectTick/1"));
     }
 
     private static void assertApi(Class<?> type, Set<String> expected) {
