@@ -8,8 +8,8 @@ Audit date: 2026-10-08
 - Delivery branch: `test-1`, published from `codex/photon-forge-1.20.1`
 - Starting commit: `6956f47` (`Initial commit`)
 - Starting tracked source tree: only `README.md` (`# Photon-2`)
-- Current tree includes a community Photon 2.2.6.a Forge 1.20.1 source baseline (380 Java files), ForgeGradle dependencies on LDLib2 2.2.39.a and KilaGraph 20.1.0.14, and bundled library artifacts under `libs/`.
-- Current port status: **approximately 99%; TARGET 26.2 FEATURE PORT IN PROGRESS**. A Java 17 Forge 47.4.10 artifact builds and passes unit tests; metadata accepts Forge `[47.4.10,48)` for Minecraft 1.20.1. Client/server runtime behavior remains incompletely verified. Do not launch Minecraft for this task; verify with source comparison, builds, tests, artifact inspection and GitHub Actions.
+- Current tree is based on the community Photon 2.2.6.a Forge 1.20.1 source. Runtime dependencies are LDLib 1.0.52.a from the profile plus bundled LDLib2 2.2.39.a, KilaGraph 20.1.0.15 adapted to Forge 47.4.10, and KotlinForForge 4.11.0.
+- Current port status: **approximately 99%; TARGET 26.2 FEATURE PORT IN PROGRESS**. At commit `3e5e9ef`, Java 17 `compileJava --offline` and `verifyCommonSideArtifact --offline` pass; the latter confirms Minecraft 1.20.1 / Forge 47.4.10 metadata, 704 Java 17 Photon classes, and 23 common classes without direct client-only links. The 18,383,693-byte artifact has SHA-256 `a82929a2429d008f371f20893c657cb13e460c3b3f332de22dbcde31c733cadc`. Photon now recognizes Forge 1.20.1's Oculus mod ID when enabling its Iris bridge/mixins. This commit is pushed to GitHub `test-1`. Runtime behavior remains incompletely verified; do not open Minecraft for this task. Continue with source comparison, builds, static artifact inspection, and non-game tests.
 
 ## Original project and supplied artifact
 
