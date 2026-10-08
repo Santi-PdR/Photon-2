@@ -226,9 +226,10 @@ public final class RenderGraphExecutor {
                     }
                     shader.setSampler(binding.getKey(), textureId);
                     var texelSize = shader.getUniform(binding.getKey() + PhotonFullscreenCompiler.TEXEL_SIZE_SUFFIX);
-                    if (texelSize != null && textureWidth > 0 && textureHeight > 0) {
-                        texelSize.set((float) textureWidth, (float) textureHeight,
-                                1f / textureWidth, 1f / textureHeight);
+                    if (texelSize != null) {
+                        var values = texelSizeValues(textureWidth, textureHeight);
+                        texelSize.set(values.width(), values.height(),
+                                values.inverseWidth(), values.inverseHeight());
                     }
                 }
 
@@ -262,6 +263,14 @@ public final class RenderGraphExecutor {
             }
         }
     }
+
+    /** Unknown-sized asset samplers must clear this shared shader uniform instead of keeping a prior pass's size. */
+    static TexelSizeValues texelSizeValues(int width, int height) {
+        if (width <= 0 || height <= 0) return new TexelSizeValues(0, 0, 0, 0);
+        return new TexelSizeValues(width, height, 1f / width, 1f / height);
+    }
+
+    record TexelSizeValues(float width, float height, float inverseWidth, float inverseHeight) {}
 
     /** Null-safe effect identity — editor-preview effects compile without a source path. */
     private static String sourceName(CompiledEffect effect) {
