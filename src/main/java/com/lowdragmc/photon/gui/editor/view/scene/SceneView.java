@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.core.mixins.PhotonSceneTickContext;
 import com.lowdragmc.photon.client.FXSceneOptions;
 import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.PhotonParticleManager;
@@ -168,8 +169,10 @@ public class SceneView extends View implements FXSceneOptions {
 
     @Override
     public void screenTick() {
-        flushPendingSimulate(); // fallback for frames where the view isn't drawn
-        super.screenTick();
+        try (var ignored = PhotonSceneTickContext.suppressVirtualLevelEvents()) {
+            flushPendingSimulate(); // fallback for frames where the view isn't drawn
+            super.screenTick();
+        }
     }
 
     public void simulateTo(long time) {

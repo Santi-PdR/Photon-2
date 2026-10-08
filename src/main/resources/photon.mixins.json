@@ -9,6 +9,7 @@
     "GameRendererMixin",
     "MinecraftMixin",
     "ParticleEngineMixin",
+    "DummyWorldMixin",
     "UIVisualLayerMixin",
     "accessor.BlendModeAccessor",
     "accessor.ParticleEngineAccessor",
