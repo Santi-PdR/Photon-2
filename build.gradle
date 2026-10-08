@@ -38,7 +38,7 @@ repositories {
     mavenCentral()
     mavenLocal()
     flatDir {
-        dirs 'libs'
+        dirs "$buildDir/prepared-runtime", 'libs'
     }
     maven {
         name = "Modrinth"
@@ -82,13 +82,17 @@ repositories {
 
 def prepareKotlinRuntime = tasks.register('prepareKotlinRuntime', Exec) {
     group = 'build setup'
-    description = 'Packages KFF runtime modules without duplicating LDLib2 Kotlin stdlib classes.'
+    description = 'Packages KFF as kotlin.stdlib and removes LDLib2’s duplicate from Photon’s private copy.'
     def sourceArchive = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
     def outputArchive = rootProject.file("libs/kotlinruntime-${project.kotlinforforge_version}.jar")
+    def ldlib2Source = rootProject.file('libs/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
+    def ldlib2Output = rootProject.file('build/prepared-runtime/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
     inputs.file(sourceArchive)
+    inputs.file(ldlib2Source)
     inputs.file(rootProject.file('gradle/prepare-kotlin-runtime.py'))
     outputs.file(outputArchive)
-    commandLine 'python3', rootProject.file('gradle/prepare-kotlin-runtime.py'), sourceArchive, outputArchive
+    outputs.file(ldlib2Output)
+    commandLine 'python3', rootProject.file('gradle/prepare-kotlin-runtime.py'), sourceArchive, outputArchive, ldlib2Source, ldlib2Output
 }
 
 base {
@@ -425,7 +429,6 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             def kotlinRuntimeHasStdlibClass = false
             def kotlinRuntimeHasCoroutines = false
             def kotlinRuntimeHasModuleDescriptor = false
-            def kotlinRuntimeHasStdlibService = false
             def nestedKffModules = null
             try {
                 def nestedEntry
@@ -438,8 +441,6 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                         kotlinRuntimeHasStdlibClass = true
                     } else if (nestedEntry.name == 'kotlinx/coroutines/CoroutineScope.class') {
                         kotlinRuntimeHasCoroutines = true
-                    } else if (nestedEntry.name.startsWith('META-INF/services/kotlin.')) {
-                        kotlinRuntimeHasStdlibService = true
                     } else if (nestedEntry.name.endsWith('module-info.class')) {
                         kotlinRuntimeHasModuleDescriptor = true
                     } else if (nestedEntry.name == 'META-INF/jarjar/metadata.json') {
@@ -451,12 +452,11 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                 nestedKotlinRuntime.close()
             }
             if (kotlinRuntimeManifest == null
-                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: com.lowdragmc.photon.kotlinruntime')
+                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: kotlin.stdlib')
                     || kotlinRuntimeHasModuleDescriptor
-                    || kotlinRuntimeHasStdlibClass
-                    || kotlinRuntimeHasStdlibService
+                    || !kotlinRuntimeHasStdlibClass
                     || !kotlinRuntimeHasCoroutines) {
-                throw new GradleException('Photon KFF runtime must omit duplicate Kotlin stdlib classes while retaining Kotlin coroutines')
+                throw new GradleException('Photon must package KFF as the sole kotlin.stdlib provider')
             }
             def requiredKffArtifacts = ['kfflang', 'kfflib', 'kffmod']
             if (nestedKffModules == null || requiredKffArtifacts.any { required ->
@@ -493,8 +493,8 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             } finally {
                 nestedLdlib2.close()
             }
-            if (!ldlib2HasKotlinIntrinsics) {
-                throw new GradleException('The bundled LDLib2 runtime must provide Kotlin stdlib Intrinsics for KFF')
+            if (ldlib2HasKotlinIntrinsics) {
+                throw new GradleException('Photon LDLib2 copy must not bundle a second Kotlin stdlib provider')
             }
 
             def entries = zip.entries()
