@@ -6,7 +6,9 @@ import com.lowdragmc.photon.client.fx.FXHelper;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
+import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.item.Item;
@@ -67,6 +69,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
             FXHelper.clearCache();
             SoundLengthCache.invalidate();
+            RenderSystem.recordRenderCall(MaterialPreviewRenderer::releaseAll);
         });
     }
 

@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.compat.iris.IrisOverlay;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.OpaqueDepthCapture;
+import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.lowdragmc.photon.client.postfx.PhotonPostFX;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXCamera;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -52,6 +53,13 @@ public class PhotonClientListeners {
     private static void capturePostFXCamera(RenderLevelStageEvent event) {
         PostFXCamera.capture(event.getPoseStack().last().pose(), event.getProjectionMatrix(),
                 event.getCamera().getPosition());
+    }
+
+    /** Execute queued material previews before the GUI begins drawing. */
+    @SubscribeEvent
+    public static void onRenderGuiPre(RenderGuiEvent.Pre event) {
+        event.getGuiGraphics().flush();
+        MaterialPreviewRenderer.processPending();
     }
 
     /** Opt-in shader-pack layout readout (/photon_iris overlay). */

@@ -23,6 +23,7 @@ import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.render.PhotonDepthParams;
 import com.lowdragmc.photon.client.render.PhotonCustomUniforms;
+import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -416,7 +417,14 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public IGuiTexture preview() {
         return DynamicTexture.of(() -> isCompiledError() ?
                 new TextTexture(compiledErrorMessage.isEmpty() ? "error" : compiledErrorMessage, 0xffff0000) :
-                preview);
+                MaterialPreviewRenderer.previewOf(this));
+    }
+
+    @Override
+    public IGuiTexture previewLive() {
+        return DynamicTexture.of(() -> isCompiledError() ?
+                new TextTexture(compiledErrorMessage.isEmpty() ? "error" : compiledErrorMessage, 0xffff0000) :
+                MaterialPreviewRenderer.livePreviewOf(this));
     }
 
     @Override
