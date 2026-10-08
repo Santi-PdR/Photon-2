@@ -2,6 +2,9 @@ package com.lowdragmc.photon.client.fx;
 
 import com.lowdragmc.photon.client.gameobject.IFXObject;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -36,6 +39,38 @@ class PublicApiParityTest {
                 "getSimSpaceRotation/0", "getSimSpaceScale/0", "getSimToWorld/0", "getT/0", "getT/1",
                 "getVelocity/0", "getWorldToSim/0", "inspectSceneInformation/2", "isLooping/0", "self/0",
                 "setAge/1", "setRGBAColor/1"));
+    }
+
+    @Test
+    void particleEmitterPreservesItsReferenceApiOutsideRenderPipelineHooks() {
+        assertApi(ParticleEmitter.class, Set.of(
+                "buildConfigurator/1", "clearsLightCacheOnTickBegin/0", "createNewParticle/0",
+                "currentSpawnFrame/0", "drawEditorAfterWorld/3", "effectiveRenderPass/0", "emitParticle/1",
+                "getAccumulatedDistance/0", "getActiveForceFields/0", "getCullBox/1", "getEmissionRateAccum/0",
+                "getFXObjectType/0", "getIcon/0", "getLifetime/0", "getParticleAmount/0", "getParticleBatchCount/0",
+                "getParticles/0", "getSimSpaceRotation/0", "getSimSpaceScale/0", "getSimToWorld/0",
+                "getWorldToSim/0", "isLooping/0", "nextParticleBatchIndex/0", "onTickBegin/0", "remove/1",
+                "rendererRuntime/0", "reset/0", "resolveSimSpaceTransform/0", "runtime/0",
+                "scheduleSubEmitterSpawn/1", "setAccumulatedDistance/1", "setEmissionRateAccum/1",
+                "shallowCopy/0", "update/1", "updateOrigin/0"));
+    }
+
+    @Test
+    void beamEmitterPreservesItsReferenceApiOutsideRenderPipelineHooks() {
+        assertApi(BeamEmitter.class, Set.of(
+                "buildConfigurator/1", "effectiveRenderPass/0", "getConfig/0", "getCullBox/1",
+                "getFXObjectType/0", "getIcon/0", "getLifetime/0", "getParticleAmount/0", "getStartDelay/0",
+                "getT/0", "getT/1", "isLooping/0", "onTickBegin/0", "remove/1", "rendererRuntime/0",
+                "reset/0", "runtime/0", "shallowCopy/0", "update/1", "updateOrigin/0"));
+    }
+
+    @Test
+    void trailEmitterPreservesItsReferenceApiOutsideRenderPipelineHooks() {
+        assertApi(TrailEmitter.class, Set.of(
+                "buildConfigurator/1", "effectiveRenderPass/0", "getCullBox/1", "getFXObjectType/0",
+                "getIcon/0", "getLifetime/0", "getParticleAmount/0", "getStartDelay/0", "isLooping/0",
+                "onTickBegin/0", "remove/1", "rendererRuntime/0", "reset/0", "runtime/0", "shallowCopy/0",
+                "update/1", "updateOrigin/0"));
     }
 
     @Test
