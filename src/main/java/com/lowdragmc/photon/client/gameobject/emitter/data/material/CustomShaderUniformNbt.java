@@ -2,14 +2,20 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.FloatTag;
+import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.Map;
+import java.util.Set;
 
 /** Pure NBT adapter for per-material custom shader uniform overrides. */
 final class CustomShaderUniformNbt {
     private static final int MAX_COMPONENTS = 16;
+    private static final Set<String> BUILTIN_UNIFORMS = Set.of(
+            "ModelViewMat", "ProjMat", "IViewRotMat", "ColorModulator", "FogStart",
+            "FogEnd", "FogColor", "FogShape", "GameTime", "ScreenSize", "LineWidth");
 
     private CustomShaderUniformNbt() {}
 
@@ -41,6 +47,42 @@ final class CustomShaderUniformNbt {
             }
             if (valid) destination.put(name, values);
         }
+    }
+
+    /** Reads Photon 26.2's {@code shaderData.uniforms} map into the Forge override representation. */
+    static void readLegacyUniformsInto(Map<String, float[]> destination, Tag tag) {
+        if (!(tag instanceof CompoundTag compound)) return;
+        for (String name : compound.getAllKeys()) {
+            if (!validName(name) || BUILTIN_UNIFORMS.contains(name)) continue;
+            Tag value = compound.get(name);
+            if (value instanceof IntArrayTag ints) {
+                int[] components = ints.getAsIntArray();
+                if (components.length == 0 || components.length > MAX_COMPONENTS) continue;
+                var converted = new float[components.length];
+                for (int i = 0; i < components.length; i++) converted[i] = components[i];
+                destination.put(name, converted);
+            } else if (value instanceof ListTag list && !list.isEmpty()
+                    && list.size() <= MAX_COMPONENTS) {
+                var components = new float[list.size()];
+                boolean valid = true;
+                for (int i = 0; i < components.length; i++) {
+                    if (!(list.get(i) instanceof NumericTag number)
+                            || !Float.isFinite(number.getAsFloat())) {
+                        valid = false;
+                        break;
+                    }
+                    components[i] = number.getAsFloat();
+                }
+                if (valid) destination.put(name, components);
+            }
+        }
+    }
+
+    static boolean isPhoton262LegacyShaderData(CompoundTag shaderData) {
+        // LDLib2 2.2 writes these fields even when their maps are empty. Photon 26.2's
+        // pendingShaderData only contains its editable "uniforms" map.
+        return !shaderData.contains("hdrVersion") && !shaderData.contains("hdrUniforms")
+                && !shaderData.contains("samplers");
     }
 
     private static boolean validName(String name) {

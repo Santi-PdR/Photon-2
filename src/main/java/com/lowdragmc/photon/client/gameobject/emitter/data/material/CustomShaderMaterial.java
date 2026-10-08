@@ -145,8 +145,22 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     @Override
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
-        CustomShaderUniformNbt.readInto(uniformOverrides,
-                tag instanceof CompoundTag shaderData ? shaderData.get("uniformOverrides") : tag);
+        uniformOverrides.clear();
+        if (tag instanceof CompoundTag materialData) {
+            if (materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
+                var legacyShaderData = materialData.getCompound("shaderData");
+                if (CustomShaderUniformNbt.isPhoton262LegacyShaderData(legacyShaderData)) {
+                    CustomShaderUniformNbt.readLegacyUniformsInto(uniformOverrides,
+                            legacyShaderData.get("uniforms"));
+                }
+            }
+            var savedOverrides = new HashMap<String, float[]>();
+            CustomShaderUniformNbt.readInto(savedOverrides, materialData.get("uniformOverrides"));
+            // The explicit Forge field wins if a save contains both formats.
+            uniformOverrides.putAll(savedOverrides);
+        } else {
+            CustomShaderUniformNbt.readInto(uniformOverrides, tag);
+        }
         if (tag instanceof CompoundTag || shaderHolder != null) recompile();
         if (shaderHolder != null && tag instanceof CompoundTag shaderData
                 && shaderData.contains("shaderData", Tag.TAG_COMPOUND)) {
