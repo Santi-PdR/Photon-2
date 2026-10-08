@@ -65,17 +65,19 @@ The Forge networking direction is based on the [Forge 1.20.x networking guide](h
 
 ## Dependencies
 
-The reference metadata requires NeoForge 26.2+, Minecraft 26.2, LDLib2 `[26.2.2.41.a,)`, and KilaGraph `[26.2.0.15,)`; KilaGraph 26.2.0.15 is jar-in-jar. These exact dependency lines cannot satisfy the Forge 47 / Java 17 target. A community LDLib2 Forge 1.20.1 candidate builds and has had a limited client startup smoke test, but it is not yet integrated, its client run did not reach a confirmed main-menu checkpoint, and no Photon API compatibility test exists.
+The reference metadata requires NeoForge 26.2+, Minecraft 26.2, LDLib2 `[26.2.2.41.a,)`, and KilaGraph `[26.2.0.15,)`; KilaGraph 26.2.0.15 is jar-in-jar. These exact dependency lines cannot satisfy the Forge 47 / Java 17 target. The Forge branch uses LDLib2 2.2.39.a and KilaGraph 20.1.0.14 from `libs/`, declares Embeddium/Oculus as optional client-render APIs, and now declares KotlinForForge 4.10.0 because LDLib2 contains Kotlin-compiled classes without the Kotlin runtime. Gradle resolves KFF from its official Maven repository, and `mods.toml` requires mod ID `kotlinforforge` version `[4.10,)` on both sides. The final JAR has passed local Java 17 build/test, metadata inspection, and the GitHub Actions artifact check. Library behavior in a live client/server remains unverified; see `PORT_AUDIT.md` for the current evidence.
 
 ## Port coverage from this reference
 
 | Area | Evidence from reference | Port state |
 |---|---|---|
-| Bootstrap/config/registries | Entrypoint, proxy, config, annotation-driven registries inspected | Forge 2.2.6.a baseline present; 26.2 changes unreconciled |
+| Bootstrap/config/registries | Entrypoint, proxy, config, annotation-driven registries inspected | Forge 1.20.1 entrypoint, side selection, common/client registry split, mod-list config screen, and required dependencies are implemented; startup/config UI behavior remains runtime-unverified |
 | Commands/packets | Command trees and all four S2C payload encoders/decoders compared, including inherited transform fields and optional effect filters | Argument behavior and wire field order match 26.2; Forge `SimpleChannel` dispatch replaces NeoForge payload registration; multiplayer delivery remains runtime-unverified |
-| FX runtime/object graph | `FXObject`, `Emitter`, `ParticleEmitter`, `BeamEmitter`, and `TrailEmitter` tick/emission sections compared against 26.2 | Shared simulation sections are present; newer render extraction was mapped onto the 1.20.1 particle/render-pass hooks; other object/timeline behavior and runtime equivalence remain incomplete |
-| GPU render/post-FX/shader graph | Classes, resources, events, and mixins inventoried; major API redesign required | Older Forge pipeline present; 26.2 pipeline/post-FX not reconciled |
-| Editor/timeline/FX Packs | Package/resource inventory; transport control behavior mapped | Forge timeline controls partially reconciled; remaining 26.2 editor actions and FX Pack changes incomplete |
-| Dedicated-server/client compatibility | Common/client initialization split inspected; not tested in target | Forge baseline present; dedicated-server behavior not verified |
+| FX runtime/object graph | `FXObject`, `Emitter`, `ParticleEmitter`, `BeamEmitter`, and `TrailEmitter` tick/emission sections compared against 26.2 | Core objects, emitters, simulation timing, playback rate, timeline boundary evaluation, audio/signal policy, and animation clocks are implemented/adapted; runtime behavior and data-format edge cases remain only partially verified |
+| GPU render/post-FX/shader graph | Classes, resources, events, and mixins inventoried; major API redesign required | The Forge 1.20.1 render-pass pipeline, post-FX graph, scene/depth capture, Iris bridge, material/shader graphs, bloom, and sampler mapping are implemented as target-API adapters; source/build/fixture checks pass, while visual rendering and shader-pack integration remain runtime-unverified |
+| Editor/timeline/FX Packs | Package/resource inventory; transport control behavior mapped | Editor source paths, public action IDs/default keymaps, timeline transport, input guards, FX Pack import/export, path handling and archive garbage collection have been reconciled; interactive GUI, resource mounting, and visual output remain runtime-unverified |
+| Dedicated-server/client compatibility | Common/client initialization split inspected | Common/client separation, packet and command gating, and classfile linkage checks are implemented; dedicated-server classloading and multiplayer delivery remain runtime-unverified |
+
+The matrix is an implementation snapshot, not a completion claim. See [`PORT_AUDIT.md`](PORT_AUDIT.md) for the detailed feature matrix, current Java 17 test/build counts, artifact hashes, CI evidence, and remaining runtime checks. The current port status is approximately 98%.
 
 The user confirmed that prior written consent for public distribution has been obtained from the upstream author. Any distributed port must retain CC BY-NC-SA 4.0, attribution, and non-commercial use.
