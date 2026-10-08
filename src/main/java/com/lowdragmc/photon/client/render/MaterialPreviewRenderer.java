@@ -7,6 +7,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
+import com.lowdragmc.photon.client.render.PhotonShaderDefaults;
 import com.lowdragmc.photon.client.util.FramebufferState;
 import com.lowdragmc.photon.core.mixins.accessor.BlendModeAccessor;
 import com.lowdragmc.photon.core.mixins.accessor.ShaderInstanceAccessor;
@@ -270,7 +271,7 @@ public final class MaterialPreviewRenderer {
         boolean projectionBackedUp = false;
         boolean modelViewPushed = false;
         boolean previousPreviewRenderActive = PREVIEW_RENDER_ACTIVE.get();
-        var lightTexture = mc.gameRenderer.lightTexture();
+            var lightTexture = mc.gameRenderer.lightTexture();
         BlendMode materialBlend = null;
         Throwable operationFailure = null;
         try (var state = UIRenderStateScope.capture()) {
@@ -295,6 +296,7 @@ public final class MaterialPreviewRenderer {
             shaderAccessor.photon$setBlend(PREVIEW_BLEND);
             lightTexture.turnOnLightLayer();
             RenderSystem.setShaderColor(1, 1, 1, 1);
+            PhotonShaderDefaults.setup(shader);
             var previewShader = shader;
             RenderSystem.setShader(() -> previewShader);
             // GUI state may have inherited a mask pass or world culling. A full-screen preview quad

@@ -5,6 +5,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.renderpipeline;
  import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
  import com.lowdragmc.photon.client.gameobject.emitter.data.material.*;
  import com.lowdragmc.photon.client.gameobject.particle.IParticle;
+import com.lowdragmc.photon.client.render.PhotonShaderDefaults;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.Camera;
@@ -347,7 +348,7 @@ public abstract class PhotonFXRenderPass {
             // vanilla draw path fills these values for the built-in particle shader, but custom
             // Photon materials use their own ShaderInstance and otherwise retain the JSON defaults
             // (notably Sampler2=0 and FogEnd=1), which makes the whole particle transparent.
-            setupDefaultUniforms(shader);
+            PhotonShaderDefaults.setup(shader);
             shader.apply();
             applied = true;
             materialSetting.pre();
@@ -363,51 +364,6 @@ public abstract class PhotonFXRenderPass {
                 materialSetting.post();
             }
         }
-    }
-
-    /** Mirror the default uniform setup performed by vanilla's particle draw path. */
-    private static void setupDefaultUniforms(ShaderInstance shader) {
-        for (int i = 0; i < 12; i++) {
-            shader.setSampler("Sampler" + i, RenderSystem.getShaderTexture(i));
-        }
-        if (shader.MODEL_VIEW_MATRIX != null) {
-            shader.MODEL_VIEW_MATRIX.set(RenderSystem.getModelViewMatrix());
-        }
-        if (shader.PROJECTION_MATRIX != null) {
-            shader.PROJECTION_MATRIX.set(RenderSystem.getProjectionMatrix());
-        }
-        if (shader.INVERSE_VIEW_ROTATION_MATRIX != null) {
-            shader.INVERSE_VIEW_ROTATION_MATRIX.set(RenderSystem.getInverseViewRotationMatrix());
-        }
-        if (shader.COLOR_MODULATOR != null) {
-            shader.COLOR_MODULATOR.set(RenderSystem.getShaderColor());
-        }
-        if (shader.GLINT_ALPHA != null) {
-            shader.GLINT_ALPHA.set(RenderSystem.getShaderGlintAlpha());
-        }
-        if (shader.FOG_START != null) {
-            shader.FOG_START.set(RenderSystem.getShaderFogStart());
-        }
-        if (shader.FOG_END != null) {
-            shader.FOG_END.set(RenderSystem.getShaderFogEnd());
-        }
-        if (shader.FOG_COLOR != null) {
-            shader.FOG_COLOR.set(RenderSystem.getShaderFogColor());
-        }
-        if (shader.FOG_SHAPE != null) {
-            shader.FOG_SHAPE.set(RenderSystem.getShaderFogShape().getIndex());
-        }
-        if (shader.TEXTURE_MATRIX != null) {
-            shader.TEXTURE_MATRIX.set(RenderSystem.getTextureMatrix());
-        }
-        if (shader.GAME_TIME != null) {
-            shader.GAME_TIME.set(RenderSystem.getShaderGameTime());
-        }
-        if (shader.SCREEN_SIZE != null) {
-            var window = Minecraft.getInstance().getWindow();
-            shader.SCREEN_SIZE.set((float) window.getWidth(), (float) window.getHeight());
-        }
-        RenderSystem.setupShaderLights(shader);
     }
 
     /**
