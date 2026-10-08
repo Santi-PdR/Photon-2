@@ -297,6 +297,10 @@ public final class MaterialPreviewRenderer {
             RenderSystem.setShaderColor(1, 1, 1, 1);
             var previewShader = shader;
             RenderSystem.setShader(() -> previewShader);
+            // GUI state may have inherited a mask pass or world culling. A full-screen preview quad
+            // must write every color channel and remain visible regardless of the previous pass.
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.disableCull();
             RenderSystem.disableDepthTest();
             RenderSystem.depthMask(false);
             BlendModeAccessor.photon$setLastApplied(null);
