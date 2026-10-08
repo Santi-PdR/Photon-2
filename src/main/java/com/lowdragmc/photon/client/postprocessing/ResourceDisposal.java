@@ -4,8 +4,17 @@ import java.util.ArrayList;
 import java.util.function.Consumer;
 
 /** Attempts every release in a batch, then reports any cleanup failures together. */
-final class ResourceDisposal {
+public final class ResourceDisposal {
     private ResourceDisposal() {}
+
+    /** Run one cleanup while retaining an earlier operation failure as the primary exception. */
+    public static void cleanupAfterFailure(Throwable failure, Runnable cleanup) {
+        try {
+            cleanup.run();
+        } catch (RuntimeException | Error cleanupFailure) {
+            if (failure != cleanupFailure) failure.addSuppressed(cleanupFailure);
+        }
+    }
 
     static <T> void disposeAll(Iterable<T> resources, Consumer<? super T> disposer) {
         Throwable failure = null;

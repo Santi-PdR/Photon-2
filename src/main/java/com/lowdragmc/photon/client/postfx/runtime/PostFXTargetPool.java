@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -79,17 +80,22 @@ public final class PostFXTargetPool {
             }
         }
         if (FAILED.contains(targetKey)) return null;
+        HDRTarget target = null;
         try {
             if (width > RenderSystem.maxSupportedTextureSize() || height > RenderSystem.maxSupportedTextureSize()) {
                 throw new IllegalArgumentException("target exceeds the maximum supported texture size");
             }
-            var target = format == TargetFormat.RGBA16F
+            target = format == TargetFormat.RGBA16F
                     ? new HDRTarget(width, height, GL11.GL_LINEAR, false)
                     : new FormatTarget(width, height, GL11.GL_LINEAR, format);
             target.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             labelTarget(target, width, height, format);
             return target;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
+            if (target != null) {
+                ResourceDisposal.cleanupAfterFailure(e, target::destroyBuffers);
+            }
+            if (e instanceof Error error) throw error;
             FAILED.add(targetKey);
             Photon.LOGGER.error("Could not allocate {}x{} {} post-effect target; skipping the effect chain for this frame",
                     width, height, format, e);

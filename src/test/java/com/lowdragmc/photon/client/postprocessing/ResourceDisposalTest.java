@@ -11,6 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ResourceDisposalTest {
     @Test
+    void cleanupAfterFailureKeepsTheOperationFailurePrimary() {
+        var operationFailure = new IllegalStateException("target setup failed");
+        var cleanupFailure = new IllegalArgumentException("target cleanup failed");
+
+        ResourceDisposal.cleanupAfterFailure(operationFailure, () -> {
+            throw cleanupFailure;
+        });
+
+        assertEquals(List.of(cleanupFailure), List.of(operationFailure.getSuppressed()));
+    }
+
+    @Test
     void attemptsEveryReleaseAndPreservesLaterFailuresAsSuppressed() {
         var attempted = new ArrayList<String>();
         var firstFailure = new IllegalStateException("first release failed");
