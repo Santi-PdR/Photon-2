@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
  * Photon would treat such a pack as "no shader pack" and draw into MC's main render target in the
  * middle of the world render — i.e. the FX simply never appear.
  */
-@Mixin(FallbackShader.class)
+@Mixin(value = FallbackShader.class, remap = false)
 public interface FallbackShaderAccessor {
     @Accessor
     GlFramebuffer getWritingToBeforeTranslucent();

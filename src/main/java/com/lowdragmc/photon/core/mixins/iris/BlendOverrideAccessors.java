@@ -18,14 +18,14 @@ public final class BlendOverrideAccessors {
     private BlendOverrideAccessors() {
     }
 
-    @Mixin(BlendModeOverride.class)
+    @Mixin(value = BlendModeOverride.class, remap = false)
     public interface BlendModeOverrideAccessor {
         /** Null exactly for {@link BlendModeOverride#OFF}, i.e. "blending disabled for this program". */
         @Accessor("blendMode")
         BlendMode photon$blendMode();
     }
 
-    @Mixin(BufferBlendOverride.class)
+    @Mixin(value = BufferBlendOverride.class, remap = false)
     public interface BufferBlendOverrideAccessor {
         /** The draw-buffer slot this override applies to (not the colortex number). */
         @Accessor("drawBuffer")

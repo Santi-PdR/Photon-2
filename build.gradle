@@ -4,6 +4,7 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.38'
 }
 
 version = mod_version
@@ -176,6 +177,7 @@ dependencies {
 
     compileOnly "org.projectlombok:lombok:${lombok_version}"
     annotationProcessor "org.projectlombok:lombok:${lombok_version}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     testCompileOnly "org.projectlombok:lombok:${lombok_version}"
     testAnnotationProcessor "org.projectlombok:lombok:${lombok_version}"
 
@@ -183,6 +185,11 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+mixin {
+    add sourceSets.main, 'photon.refmap.json'
+    config 'photon.mixins.json'
 }
 
 test {
@@ -243,11 +250,34 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'META-INF/mods.toml',
                     'META-INF/accesstransformer.cfg',
                     'photon.mixins.json',
+                    'photon.refmap.json',
                     'assets/photon/textures/icon.png'
             ]
             def missingEntries = requiredEntries.findAll { zip.getEntry(it) == null }
             if (!missingEntries.isEmpty()) {
                 throw new GradleException("Photon artifact is missing required entries: ${missingEntries.join(', ')}")
+            }
+            def mixinConfig = new groovy.json.JsonSlurper().parseText(
+                    new String(zip.getInputStream(zip.getEntry('photon.mixins.json')).withCloseable {
+                        it.readAllBytes()
+                    }, java.nio.charset.StandardCharsets.UTF_8))
+            if (mixinConfig.refmap != 'photon.refmap.json') {
+                throw new GradleException("Photon mixin config does not reference photon.refmap.json")
+            }
+            def refmap = new groovy.json.JsonSlurper().parseText(
+                    new String(zip.getInputStream(zip.getEntry('photon.refmap.json')).withCloseable {
+                        it.readAllBytes()
+                    }, java.nio.charset.StandardCharsets.UTF_8))
+            def gameRendererMappings = refmap.mappings?.get('com/lowdragmc/photon/core/mixins/GameRendererMixin')
+            def requiredGameRendererMappings = [
+                    'renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V': 'm_109089_',
+                    'render(FJZ)V': 'm_109093_'
+            ]
+            def missingGameRendererMappings = requiredGameRendererMappings.findAll { source, target ->
+                !(gameRendererMappings?.get(source)?.contains(target))
+            }
+            if (!missingGameRendererMappings.isEmpty()) {
+                throw new GradleException("Photon production refmap is missing GameRenderer mappings: ${missingGameRendererMappings}")
             }
             def metadata = new String(zip.getInputStream(zip.getEntry('META-INF/mods.toml')).withCloseable {
                 it.readAllBytes()

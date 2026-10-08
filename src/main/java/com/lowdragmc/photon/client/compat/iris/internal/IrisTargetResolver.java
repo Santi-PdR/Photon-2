@@ -115,7 +115,7 @@ final class IrisTargetResolver {
             }
         }
 
-        var fbo = framebufferOf(shader, pipeline, accessor);
+        var fbo = framebufferOf(shader, pipeline);
         if (fbo == null) return fail("Iris has no framebuffer for " + key);
         lastFailure = null;
 
@@ -149,8 +149,7 @@ final class IrisTargetResolver {
     }
 
     private static @Nullable GlFramebuffer framebufferOf(@Nullable ShaderInstance shader,
-                                                         IrisRenderingPipeline pipeline,
-                                                         IrisRenderingPipelineAccessor accessor) {
+                                                         IrisRenderingPipeline pipeline) {
         boolean before = pipeline.isBeforeTranslucent;
         if (shader instanceof ExtendedShaderAccessor extended) {
             return before ? extended.getWritingToBeforeTranslucent() : extended.getWritingToAfterTranslucent();
@@ -158,9 +157,16 @@ final class IrisTargetResolver {
         if (shader instanceof FallbackShaderAccessor fallback) {
             return before ? fallback.getWritingToBeforeTranslucent() : fallback.getWritingToAfterTranslucent();
         }
-        // Whatever Iris would bind for an unmanaged shader: a single-attachment framebuffer on the
-        // pack's fallback (scene colour) target.
-        return before ? accessor.photon$defaultFB() : accessor.photon$defaultFBAlt();
+        // Do not guess an output target when Oculus supplied no managed or fallback shader.
+        return null;
+    }
+
+    /** Oculus 1.20.1 keeps the default scene-colour ping-pong in colortex0. */
+    private static int sceneColorTexture(@Nullable RenderTargets renderTargets, boolean beforeTranslucent) {
+        if (renderTargets == null || renderTargets.getRenderTargetCount() == 0) return 0;
+        var sceneColor = renderTargets.get(0);
+        if (sceneColor == null) return 0;
+        return beforeTranslucent ? sceneColor.getMainTexture() : sceneColor.getAltTexture();
     }
 
     private IrisFrameTarget probe(IrisRenderingPipeline pipeline,
@@ -237,8 +243,7 @@ final class IrisTargetResolver {
             int primaryTexture = attachmentTextures[primaryAttachment];
             int primaryColortex = colortexIndices[primaryAttachment];
 
-            var sceneFbo = pipeline.isBeforeTranslucent ? accessor.photon$defaultFB() : accessor.photon$defaultFBAlt();
-            int sceneColorTexture = sceneFbo == null ? 0 : sceneFbo.getColorAttachment(0);
+            int sceneColorTexture = sceneColorTexture(renderTargets, pipeline.isBeforeTranslucent);
             boolean primaryIsSceneColor = primaryTexture != 0 && primaryTexture == sceneColorTexture;
 
             int width = bufferWidth;

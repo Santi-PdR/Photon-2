@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.List;
 
-@Mixin(ExtendedShader.class)
+@Mixin(value = ExtendedShader.class, remap = false)
 public interface ExtendedShaderAccessor {
     @Accessor
     GlFramebuffer getWritingToBeforeTranslucent();
