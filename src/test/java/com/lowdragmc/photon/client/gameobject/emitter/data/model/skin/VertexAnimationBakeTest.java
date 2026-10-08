@@ -11,6 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 class VertexAnimationBakeTest {
     @Test
+    void retainsTheReferenceTexelStrideApi() {
+        assertEquals(4, VertexAnimationBake.FLOATS_PER_TEXEL);
+        assertEquals(VertexAnimationBake.FLOATS_PER_VERTEX, VertexAnimationBake.FLOATS_PER_TEXEL);
+    }
+
+    @Test
     void bakesFrameMajorPositionsAndPackedNormals() {
         var meshBuilder = new PhotonMesh.Builder();
         float[] a = vertex(0, 0), b = vertex(1, 0), c = vertex(1, 1), d = vertex(0, 1);

@@ -6,6 +6,8 @@ import org.jetbrains.annotations.Nullable;
 /** Bakes skinned poses into a frame-major xyz + packed-octahedral-normal table. */
 public final class VertexAnimationBake {
     public static final int FLOATS_PER_VERTEX = 4;
+    /** Photon 26.2 API name for the same four-float VAT texel layout. */
+    public static final int FLOATS_PER_TEXEL = FLOATS_PER_VERTEX;
     public static final int MAX_TEXELS = 2_000_000;
     private static final float OCT_SCALE = 4095f;
     private static final float OCT_STRIDE = 4096f;
