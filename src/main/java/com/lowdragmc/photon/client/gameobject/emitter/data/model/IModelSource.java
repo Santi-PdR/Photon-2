@@ -44,7 +44,13 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable, ILD
                 && compound.contains("modelLocation", Tag.TAG_STRING)) {
             return new JsonModelSource(ResourceLocation.parse(compound.getString("modelLocation")));
         }
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(JsonModelSource::new);
+        Tag normalized = tag;
+        if (tag instanceof CompoundTag compound) {
+            CompoundTag copy = compound.copy();
+            AnimationFileListNbt.migrateLegacyConfig(copy);
+            normalized = copy;
+        }
+        return CODEC.parse(NbtOps.INSTANCE, normalized).result().orElseGet(JsonModelSource::new);
     }
 
     /**

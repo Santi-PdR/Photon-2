@@ -24,11 +24,41 @@ final class AnimationFileListNbt {
 
     /** A missing or malformed list is empty, matching the source's clear-before-load behavior. */
     static List<ResourceLocation> read(Tag tag) {
-        if (!(tag instanceof CompoundTag compound) || !compound.contains(KEY, Tag.TAG_LIST)) return List.of();
-        var serialized = compound.getList(KEY, Tag.TAG_STRING);
+        if (!(tag instanceof CompoundTag compound)) return List.of();
+        Tag value = compound.get(KEY);
+        if (value instanceof StringTag legacy) return parseLegacyLocations(legacy.getAsString());
+        if (!(value instanceof ListTag serialized) || serialized.getElementType() != Tag.TAG_STRING) return List.of();
         var locations = new ArrayList<ResourceLocation>(serialized.size());
         for (int i = 0; i < serialized.size(); i++) {
             var location = ResourceLocation.tryParse(serialized.getString(i));
+            if (location != null) locations.add(location);
+        }
+        return List.copyOf(locations);
+    }
+
+    /** Upgrade the old Forge string-backed configurable field before PersistedParser reads a list. */
+    static void migrateLegacyConfig(CompoundTag serialized) {
+        for (String key : List.copyOf(serialized.getAllKeys())) {
+            Tag value = serialized.get(key);
+            if (KEY.equals(key) && value instanceof StringTag legacy) {
+                serialized.put(KEY, parseLegacy(legacy.getAsString()));
+            } else if (value instanceof CompoundTag nested) {
+                migrateLegacyConfig(nested);
+            }
+        }
+    }
+
+    private static ListTag parseLegacy(String encoded) {
+        var locations = new ListTag();
+        for (var location : parseLegacyLocations(encoded)) locations.add(StringTag.valueOf(location.toString()));
+        return locations;
+    }
+
+    private static List<ResourceLocation> parseLegacyLocations(String encoded) {
+        if (encoded == null || encoded.isBlank()) return List.of();
+        var locations = new ArrayList<ResourceLocation>();
+        for (String entry : encoded.split("[,;\\s]+")) {
+            var location = ResourceLocation.tryParse(entry.trim());
             if (location != null) locations.add(location);
         }
         return List.copyOf(locations);

@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
@@ -47,9 +48,11 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     private boolean flipV;
     @Getter
     private String animation = "";
+    @ConfigList(configuratorMethod = "createAnimationFileConfigurator",
+            addDefaultMethod = "addDefaultAnimationFile")
     @Configurable(name = "AnimatedGltfModelSource.animationFiles",
             tips = "photon.model_source.animated_gltf_model.animationFiles.tips")
-    private String animationFiles = "";
+    private List<ResourceLocation> animationFiles = new ArrayList<>();
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.speed")
     private float speed = 1f;
@@ -90,7 +93,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @Nullable private AnimatedPose posed;
     @Nullable private SkinnedModel combinedModel;
     @Nullable private SkinnedModel combinedFrom;
-    private String combinedFiles = "";
+    private List<ResourceLocation> combinedFiles = List.of();
     private long combinedGeneration = -1;
     @Nullable private SkinnedModel bakedFrom;
     @Nullable private String bakedAnimation;
@@ -125,8 +128,8 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     }
 
     @ConfigSetter(field = "animationFiles")
-    public synchronized void setAnimationFiles(String value) {
-        animationFiles = value == null ? "" : value;
+    public synchronized void setAnimationFiles(List<ResourceLocation> value) {
+        animationFiles = value == null ? new ArrayList<>() : new ArrayList<>(value);
         posed = null;
         dropBake();
         combinedModel = null;
@@ -135,20 +138,9 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         dynamicCache.invalidate();
     }
 
-    /** External clip resources, in insertion order. The string-backed config field remains readable
-     * for saves produced by earlier Forge port builds; additional NBT uses the 26.2 list format. */
+    /** External clip resources in insertion order; callers cannot mutate the cache key in place. */
     public List<ResourceLocation> getAnimationFiles() {
-        return parseAnimationFiles(animationFiles);
-    }
-
-    private static List<ResourceLocation> parseAnimationFiles(String encoded) {
-        if (encoded == null || encoded.isBlank()) return List.of();
-        var locations = new ArrayList<ResourceLocation>();
-        for (String entry : encoded.split("[,;\\s]+")) {
-            var location = ResourceLocation.tryParse(entry.trim());
-            if (location != null) locations.add(location);
-        }
-        return List.copyOf(locations);
+        return List.copyOf(animationFiles);
     }
 
     @Override
@@ -163,8 +155,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         var locations = AnimationFileListNbt.read(tag);
         // The upstream clears this list before decoding. An omitted field means an empty list,
         // which matters when a source instance is reused while loading older/default NBT.
-        setAnimationFiles(locations.stream().map(ResourceLocation::toString)
-                .collect(java.util.stream.Collectors.joining(",")));
+        setAnimationFiles(locations);
     }
 
     @ConfigSetter(field = "speed")
@@ -293,7 +284,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         AnimatedGltfModelSource copy = new AnimatedGltfModelSource(modelLocation);
         copy.flipV = flipV;
         copy.animation = animation;
-        copy.animationFiles = animationFiles;
+        copy.animationFiles = new ArrayList<>(animationFiles);
         copy.speed = speed;
         copy.loop = loop;
         copy.perParticlePhase = perParticlePhase;
@@ -305,7 +296,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
 
     private SkinnedModel model() {
         SkinnedModel base = baseModel();
-        if (animationFiles.isBlank()) return base;
+        if (animationFiles.isEmpty()) return base;
         long generation = PhotonMeshCache.INSTANCE.generation();
         if (combinedModel != null && combinedFrom == base && combinedFiles.equals(animationFiles)
                 && combinedGeneration == generation) return combinedModel;
@@ -313,7 +304,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
             Photon.LOGGER.warn("Animated glTF {} has no skeleton; animation files cannot be retargeted", modelLocation);
             combinedModel = base;
             combinedFrom = base;
-            combinedFiles = animationFiles;
+            combinedFiles = List.copyOf(animationFiles);
             combinedGeneration = generation;
             return base;
         }
@@ -336,7 +327,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         }
         combinedModel = new SkinnedModel(base.mesh(), base.skin(), base.skeleton(), List.copyOf(clips));
         combinedFrom = base;
-        combinedFiles = animationFiles;
+        combinedFiles = List.copyOf(animationFiles);
         combinedGeneration = generation;
         return combinedModel;
     }
@@ -389,12 +380,24 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         }).show(root);
     }
 
-    private void appendAnimationFile(ResourceLocation location) {
-        if (location.equals(modelLocation)) return; // the base file's clips are already included
-        var files = new ArrayList<>(getAnimationFiles());
-        if (files.contains(location)) return;
-        files.add(location);
-        setAnimationFiles(files.stream().map(ResourceLocation::toString).collect(java.util.stream.Collectors.joining(",")));
+    private ResourceLocation addDefaultAnimationFile() {
+        return modelLocation;
+    }
+
+    private Configurator createAnimationFileConfigurator(java.util.function.Supplier<ResourceLocation> getter,
+                                                         Consumer<ResourceLocation> setter) {
+        var configurator = new Configurator();
+        configurator.addInlineChild(new Button().setText(getter.get().toString()).setOnClick(event -> {
+            var mui = event.currentElement.getModularUI();
+            if (mui == null) return;
+            showGltfDialog(mui.ui.rootElement, location -> {
+                if (location.equals(modelLocation) || getAnimationFiles().contains(location)) return;
+                setter.accept(location);
+                invalidate();
+                configurator.notifyChanges();
+            });
+        }).layout(layout -> layout.alignSelf(AlignItems.CENTER)));
+        return configurator;
     }
 
     private void refreshClipChoices(List<String> clips, SelectorConfigurator<String> selector) {
@@ -452,24 +455,10 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
                 }
             });
         }).layout(layout -> layout.alignSelf(AlignItems.CENTER)));
-        Configurator animationPicker = new Configurator();
-        animationPicker.addInlineChild(new Button().setText("photon.gui.editor.tips.add_animation_gltf").setOnClick(event -> {
-            var mui = event.currentElement.getModularUI();
-            if (mui == null) return;
-            showGltfDialog(mui.ui.rootElement, location -> {
-                int previousLength = animationFiles.length();
-                appendAnimationFile(location);
-                if (animationFiles.length() != previousLength) {
-                    refreshClipChoices(clips, clipSelector);
-                    animationPicker.notifyChanges();
-                    filePicker.notifyChanges();
-                }
-            });
-        }).layout(layout -> layout.alignSelf(AlignItems.CENTER)));
         Configurator reload = new Configurator().addInlineChild(new Button().setText("photon.reload_mesh")
                 .setOnClick(event -> { invalidate(); filePicker.notifyChanges(); })
                 .layout(layout -> layout.alignSelf(AlignItems.CENTER)));
-        father.addConfigurators(clipSelector, filePicker, animationPicker, reload);
+        father.addConfigurators(clipSelector, filePicker, reload);
     }
 
     @Override

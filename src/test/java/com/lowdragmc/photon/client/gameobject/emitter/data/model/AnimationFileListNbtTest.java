@@ -37,4 +37,28 @@ class AnimationFileListNbtTest {
         assertEquals(List.of(), AnimationFileListNbt.read(new CompoundTag()));
         assertEquals(List.of(), AnimationFileListNbt.read(StringTag.valueOf("not a compound")));
     }
+
+    @Test
+    void migratesLegacyStringFieldRecursivelyBeforeListDecoding() {
+        var root = new CompoundTag();
+        var sourceData = new CompoundTag();
+        sourceData.putString("animationFiles", "example:walk.glb; other:run.gltf Upper:bad");
+        root.put("data", sourceData);
+
+        AnimationFileListNbt.migrateLegacyConfig(root);
+
+        assertEquals(List.of(ResourceLocation.fromNamespaceAndPath("example", "walk.glb"),
+                        ResourceLocation.fromNamespaceAndPath("other", "run.gltf")),
+                AnimationFileListNbt.read(sourceData));
+    }
+
+    @Test
+    void readsLegacyStringAdditionalNbt() {
+        var serialized = new CompoundTag();
+        serialized.putString("animationFiles", "example:walk.glb other:run.gltf");
+
+        assertEquals(List.of(ResourceLocation.fromNamespaceAndPath("example", "walk.glb"),
+                        ResourceLocation.fromNamespaceAndPath("other", "run.gltf")),
+                AnimationFileListNbt.read(serialized));
+    }
 }
