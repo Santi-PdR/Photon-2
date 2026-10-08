@@ -247,12 +247,18 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             shaderHolder.addDynamicSampler("SamplerGradient", gradientTexture::getGradientTexture);
         }
         if (samplerNames.contains("SamplerSceneColor")) {
-            shaderHolder.addDynamicSampler("SamplerSceneColor", () -> Optional.ofNullable(RenderPassPipeline.getCurrent())
-                    .map(pipeline -> pipeline.getSceneSamplers().colorTexture()).orElse(-1));
+            shaderHolder.addDynamicSampler("SamplerSceneColor", () -> {
+                int previewTexture = MaterialPreviewRenderer.previewSceneColorTexture();
+                return previewTexture >= 0 ? previewTexture : Optional.ofNullable(RenderPassPipeline.getCurrent())
+                        .map(pipeline -> pipeline.getSceneSamplers().colorTexture()).orElse(-1);
+            });
         }
         if (samplerNames.contains("SamplerSceneDepth")) {
-            shaderHolder.addDynamicSampler("SamplerSceneDepth", () -> Optional.ofNullable(RenderPassPipeline.getCurrent())
-                    .map(pipeline -> pipeline.getSceneSamplers().depthTexture()).orElse(-1));
+            shaderHolder.addDynamicSampler("SamplerSceneDepth", () -> {
+                int previewTexture = MaterialPreviewRenderer.previewSceneDepthTexture();
+                return previewTexture >= 0 ? previewTexture : Optional.ofNullable(RenderPassPipeline.getCurrent())
+                        .map(pipeline -> pipeline.getSceneSamplers().depthTexture()).orElse(-1);
+            });
         }
     }
 

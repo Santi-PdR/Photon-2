@@ -67,6 +67,9 @@ public final class MaterialPreviewRenderer {
     private static final Map<IMaterial, Integer> LIVE_REQUESTS = new IdentityHashMap<>();
     private static final Map<IMaterial, Long> FAILED_UNTIL = new IdentityHashMap<>();
     private static final List<Entry> RELEASE_NEXT_FRAME = new ArrayList<>();
+    private static final ThreadLocal<Boolean> PREVIEW_RENDER_ACTIVE = ThreadLocal.withInitial(() -> false);
+    @Nullable
+    private static HDRTarget PREVIEW_SCENE_TARGET;
     private static long lastRequestMs;
 
     private MaterialPreviewRenderer() {}
@@ -124,6 +127,45 @@ public final class MaterialPreviewRenderer {
         TILE_REQUESTS.clear();
         LIVE_REQUESTS.clear();
         FAILED_UNTIL.clear();
+        if (PREVIEW_SCENE_TARGET != null) {
+            PREVIEW_SCENE_TARGET.destroyBuffers();
+            PREVIEW_SCENE_TARGET = null;
+        }
+    }
+
+    /** Scene-sampler stand-ins for preview shaders; the preview has no particle render pipeline. */
+    public static int previewSceneColorTexture() {
+        return PREVIEW_RENDER_ACTIVE.get() && PREVIEW_SCENE_TARGET != null
+                ? PREVIEW_SCENE_TARGET.getColorTextureId() : -1;
+    }
+
+    /** Scene-sampler stand-ins for preview shaders; depth is cleared to the far plane. */
+    public static int previewSceneDepthTexture() {
+        return PREVIEW_RENDER_ACTIVE.get() && PREVIEW_SCENE_TARGET != null
+                ? PREVIEW_SCENE_TARGET.getDepthTextureId() : -1;
+    }
+
+    private static void ensurePreviewSceneTarget() {
+        if (PREVIEW_SCENE_TARGET != null) return;
+        var framebuffers = FramebufferState.capture();
+        int viewportX = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int viewportY = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int viewportWidth = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int viewportHeight = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        HDRTarget target = null;
+        try (var state = UIRenderStateScope.capture()) {
+            target = new HDRTarget(1, 1, GL11.GL_NEAREST, true);
+            target.setClearColor(0, 0, 0, 0);
+            target.bindWrite(true);
+            target.clear(Minecraft.ON_OSX);
+            PREVIEW_SCENE_TARGET = target;
+        } catch (RuntimeException error) {
+            if (target != null) target.destroyBuffers();
+            throw error;
+        } finally {
+            framebuffers.restore();
+            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        }
     }
 
     private static void processLive(long now) {
@@ -216,6 +258,7 @@ public final class MaterialPreviewRenderer {
 
     private static void renderInto(IMaterial material, Entry entry) {
         var mc = Minecraft.getInstance();
+        ensurePreviewSceneTarget();
         var target = entry.target;
         var framebuffers = FramebufferState.capture();
         int viewportX = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
@@ -226,10 +269,12 @@ public final class MaterialPreviewRenderer {
         boolean began = false;
         boolean projectionBackedUp = false;
         boolean modelViewPushed = false;
+        boolean previousPreviewRenderActive = PREVIEW_RENDER_ACTIVE.get();
         var lightTexture = mc.gameRenderer.lightTexture();
         BlendMode materialBlend = null;
         Throwable operationFailure = null;
         try (var state = UIRenderStateScope.capture()) {
+            PREVIEW_RENDER_ACTIVE.set(true);
             target.bindWrite(true);
             target.clear(Minecraft.ON_OSX);
             RenderSystem.viewport(0, 0, entry.size, entry.size);
@@ -271,6 +316,7 @@ public final class MaterialPreviewRenderer {
             var finalBlend = materialBlend;
             boolean finalBegan = began;
             boolean finalModelViewPushed = modelViewPushed;
+            boolean finalPreviewRenderActive = previousPreviewRenderActive;
             boolean finalProjectionBackedUp = projectionBackedUp;
             Runnable restoreBlend = finalShader != null && finalBlend != null
                     ? () -> ((ShaderInstanceAccessor) finalShader).photon$setBlend(finalBlend)
@@ -288,7 +334,8 @@ public final class MaterialPreviewRenderer {
                     },
                     () -> { if (finalProjectionBackedUp) RenderSystem.restoreProjectionMatrix(); },
                     framebuffers::restore,
-                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight),
+                    () -> PREVIEW_RENDER_ACTIVE.set(finalPreviewRenderActive));
         }
     }
 
