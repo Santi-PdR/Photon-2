@@ -232,7 +232,7 @@ tasks.named('jar', Jar).configure {
 
 def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     group = 'verification'
-    description = 'Checks target metadata, Java 17 bytecode, and client links in the reobfuscated Photon JAR.'
+    description = 'Checks target metadata, Java 17 bytecode, mixin mappings, and dedicated-server class isolation in the reobfuscated Photon JAR.'
     dependsOn tasks.named('reobfJar')
     doLast {
         def artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
@@ -342,11 +342,16 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
 
                 scanned++
                 def constantPool = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1)
-                if (constantPool.contains('net/minecraft/client/')) {
-                    violations << "${entry.name} references net/minecraft/client"
-                }
-                if (constantPool.contains('com/mojang/blaze3d/')) {
-                    violations << "${entry.name} references com/mojang/blaze3d"
+                [
+                        'net/minecraft/client/': 'net/minecraft/client',
+                        'net/minecraftforge/client/': 'net/minecraftforge/client',
+                        'com/mojang/blaze3d/': 'com/mojang/blaze3d',
+                        'com/lowdragmc/lowdraglib2/client/': 'com/lowdragmc/lowdraglib2/client',
+                        'org/lwjgl/': 'org/lwjgl'
+                ].each { reference, label ->
+                    if (constantPool.contains(reference)) {
+                        violations << "${entry.name} references ${label}"
+                    }
                 }
             }
         } finally {
@@ -365,7 +370,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
         if (!violations.isEmpty()) {
             throw new GradleException("Common-side client API links in ${artifact}:\n - ${violations.join('\n - ')}")
         }
-        logger.lifecycle("Verified ${artifact.name}: Photon 26.2.2.3 targets Minecraft 1.20.1/Forge ${project.forge_version}, all ${photonClasses} Photon classes use Java 17 bytecode, and ${scanned} common classes have no direct client-only Minecraft or Blaze3D links.")
+        logger.lifecycle("Verified ${artifact.name}: Photon 26.2.2.3 targets Minecraft 1.20.1/Forge ${project.forge_version}, all ${photonClasses} Photon classes use Java 17 bytecode, and ${scanned} common classes have no direct client-only Minecraft, Forge, Blaze3D, LDLib2, or LWJGL links.")
     }
 }
 
