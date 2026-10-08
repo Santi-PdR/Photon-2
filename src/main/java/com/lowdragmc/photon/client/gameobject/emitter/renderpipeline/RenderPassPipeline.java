@@ -14,6 +14,7 @@ import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.util.FramebufferState;
 import com.lowdragmc.photon.client.render.PhotonStage;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
@@ -394,11 +395,13 @@ public class RenderPassPipeline {
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
         long sizeKey = ((long) DRAW_TARGET.width << 32) | (DRAW_TARGET.height & 0xffffffffL);
+        boolean allocatedMaskTarget = false;
         try {
             if (MASK_TARGET == null) {
                 MASK_TARGET = new FormatTarget(
                         DRAW_TARGET.width, DRAW_TARGET.height, GL11.GL_LINEAR,
                         TargetFormat.R8, true);
+                allocatedMaskTarget = true;
             } else if (MASK_TARGET.width != DRAW_TARGET.width || MASK_TARGET.height != DRAW_TARGET.height) {
                 MASK_TARGET.resize(DRAW_TARGET.width, DRAW_TARGET.height, Minecraft.ON_OSX);
             }
@@ -409,13 +412,20 @@ public class RenderPassPipeline {
             // of being cut by a water surface the effect is allowed to draw through.
             MASK_TARGET.copyDepthFrom(DRAW_TARGET);
             MASK_TARGET.bindWrite(false);
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException | Error failure) {
+            if (allocatedMaskTarget && MASK_TARGET != null) {
+                var failedTarget = MASK_TARGET;
+                MASK_TARGET = null;
+                ResourceDisposal.cleanupAfterFailure(failure, failedTarget::destroyBuffers);
+            }
+            if (failure instanceof Error error) throw error;
+            var runtimeFailure = (RuntimeException) failure;
             maskColorTexture = -1;
             maskDepthTexture = -1;
             if (loggedMaskAllocationFailure != sizeKey) {
                 com.lowdragmc.photon.Photon.LOGGER.error(
                         "Could not prepare {}x{} custom mask target; skipping mask effects for this frame",
-                        DRAW_TARGET.width, DRAW_TARGET.height, failure);
+                        DRAW_TARGET.width, DRAW_TARGET.height, runtimeFailure);
                 loggedMaskAllocationFailure = sizeKey;
             }
             DRAW_TARGET.bindWrite(false);
@@ -531,6 +541,7 @@ public class RenderPassPipeline {
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
+        boolean allocatedTarget = target == null;
         try {
             if (target == null) {
                 target = new HDRTarget(width, height, GL11.GL_LINEAR, useDepth);
@@ -538,6 +549,13 @@ public class RenderPassPipeline {
             } else {
                 target.resize(width, height, Minecraft.ON_OSX);
             }
+        } catch (RuntimeException | Error failure) {
+            if (allocatedTarget && target != null) {
+                var failedTarget = target;
+                target = null;
+                ResourceDisposal.cleanupAfterFailure(failure, failedTarget::destroyBuffers);
+            }
+            throw failure;
         } finally {
             framebufferState.restore();
             RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);

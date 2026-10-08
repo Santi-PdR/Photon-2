@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.renderpipeline;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -124,8 +125,15 @@ public final class OpaqueDepthCapture {
     private static void allocate(int width, int height) {
         if (target != null && target.width == width && target.height == height) return;
         if (target == null) {
-            target = new FormatTarget(width, height, GL11.GL_NEAREST, TargetFormat.R8, true);
-            target.setClearColor(0f, 0f, 0f, 0f);
+            var allocatedTarget = new FormatTarget(width, height, GL11.GL_NEAREST, TargetFormat.R8, true);
+            target = allocatedTarget;
+            try {
+                target.setClearColor(0f, 0f, 0f, 0f);
+            } catch (RuntimeException | Error failure) {
+                target = null;
+                ResourceDisposal.cleanupAfterFailure(failure, allocatedTarget::destroyBuffers);
+                throw failure;
+            }
         } else {
             target.resize(width, height, Minecraft.ON_OSX);
         }
