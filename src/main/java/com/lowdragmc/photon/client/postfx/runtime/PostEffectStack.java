@@ -206,6 +206,10 @@ public final class PostEffectStack {
         }
 
         RenderTarget chain = chainInput;
+        // Effect output resources can be smaller than the viewport. Keep the screen basis stable for
+        // every subsequent effect, as the 26.2 FrameInputs.withSceneColor contract does.
+        int frameWidth = chainInput.width;
+        int frameHeight = chainInput.height;
         HDRTarget pooledChain = null;
         boolean bloomDone = !doBuiltinBloom;
         int effectSceneDepthTexture = sceneDepthTexture;
@@ -264,7 +268,8 @@ public final class PostEffectStack {
 
                 var output = RenderGraphExecutor.execute(invocation.effect(), invocation.weight(),
                         params, chain, effectSceneDepthTexture, maskTexture,
-                        com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.getMaskDepthTexture());
+                        com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.getMaskDepthTexture(),
+                        frameWidth, frameHeight);
                 if (output == null) continue; // broken effect: chain passes through
                 leases.acquire(output);
 

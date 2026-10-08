@@ -67,29 +67,15 @@ public final class RenderGraphExecutor {
     @Nullable
     public static HDRTarget execute(CompiledEffect effect, float weight, Map<String, Object> params,
                                     RenderTarget chainInput, int sceneDepthTexture,
-                                    int maskTexture, int customDepthTexture) {
+                                    int maskTexture, int customDepthTexture,
+                                    int frameWidth, int frameHeight) {
         if (effect.passes().isEmpty()) return null; // no-op effect: chain passthrough
         int resourceCount = effect.resources().size();
-        int[] widths = new int[resourceCount];
-        int[] heights = new int[resourceCount];
-        for (int i = 0; i < resourceCount; i++) {
-            var size = effect.resources().get(i).size();
-            switch (size.mode()) {
-                case SCREEN_RELATIVE -> {
-                    widths[i] = Math.max(1, Math.round(chainInput.width * size.scale()));
-                    heights[i] = Math.max(1, Math.round(chainInput.height * size.scale()));
-                }
-                case INPUT_RELATIVE -> {
-                    // the graph compiler guarantees the referenced resource resolves earlier in the list
-                    widths[i] = Math.max(1, Math.round(widths[size.inputResource()] * size.scale()));
-                    heights[i] = Math.max(1, Math.round(heights[size.inputResource()] * size.scale()));
-                }
-                case ABSOLUTE -> {
-                    widths[i] = Math.max(1, size.width());
-                    heights[i] = Math.max(1, size.height());
-                }
-            }
-        }
+        // SCREEN_RELATIVE resources and scene-input TexelSize values stay based on the frame's original
+        // dimensions even when a previous effect left the chain at a reduced resolution.
+        var resolvedSizes = RenderGraphResourceSizing.resolve(effect.resources(), frameWidth, frameHeight);
+        int[] widths = resolvedSizes.widths();
+        int[] heights = resolvedSizes.heights();
 
         boolean debugGroup = Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug;
         if (debugGroup) {
@@ -180,23 +166,23 @@ public final class RenderGraphExecutor {
                     switch (binding.getValue().source()) {
                         case SCENE_COLOR -> {
                             textureId = chainInput.getColorTextureId();
-                            textureWidth = chainInput.width;
-                            textureHeight = chainInput.height;
+                            textureWidth = frameWidth;
+                            textureHeight = frameHeight;
                         }
                         case SCENE_DEPTH -> {
                             textureId = sceneDepthTexture;
-                            textureWidth = chainInput.width;
-                            textureHeight = chainInput.height;
+                            textureWidth = frameWidth;
+                            textureHeight = frameHeight;
                         }
                         case CUSTOM_MASK -> {
                             textureId = maskTexture;
-                            textureWidth = chainInput.width;
-                            textureHeight = chainInput.height;
+                            textureWidth = frameWidth;
+                            textureHeight = frameHeight;
                         }
                         case CUSTOM_DEPTH -> {
                             textureId = customDepthTexture;
-                            textureWidth = chainInput.width;
-                            textureHeight = chainInput.height;
+                            textureWidth = frameWidth;
+                            textureHeight = frameHeight;
                         }
                         case ASSET -> {
                             // a fixed image baked into the effect; dimensions are unknown here, so

@@ -100,7 +100,7 @@ public class PostFXPreviewTool extends UIElement implements IGraphTool {
                 // no mask source in the preview (it runs against a clean scene capture) — mask
                 // inputs degrade to an empty sampler
                 result = RenderGraphExecutor.execute(compiled, 1f, defaultParams, source,
-                        source.getDepthTextureId(), -1, -1);
+                        source.getDepthTextureId(), -1, -1, source.width, source.height);
             } finally {
                 PostEffectStack.restorePostRenderState();
             }
