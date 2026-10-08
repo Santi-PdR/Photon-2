@@ -4,6 +4,10 @@ import com.lowdragmc.kilagraph.rendertype.RenderTypeGraphTypes;
 import com.lowdragmc.kilagraph.rendertype.compiler.GlslType;
 import com.lowdragmc.kilagraph.rendertype.compiler.ShaderExpr;
 import com.lowdragmc.kilagraph.rendertype.compiler.ShaderGraphCompiler;
+import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.PortModel;
+
+import java.util.function.Supplier;
 
 /**
  * The fullscreen compile target: node semantics identical to KilaGraph's compiler, over a bare
@@ -14,6 +18,9 @@ import com.lowdragmc.kilagraph.rendertype.compiler.ShaderGraphCompiler;
  * would not.
  */
 public class PhotonFullscreenCompiler extends ShaderGraphCompiler {
+
+    /** Compiler currently producing a fullscreen graph or thumbnail; used by nodes shared with particle graphs. */
+    private static PhotonFullscreenCompiler current;
 
     /** The fullscreen 0..1 uv varying every uv/screen-uv read resolves through. */
     public static final String FS_UV = "photon_fs_uv";
@@ -28,6 +35,37 @@ public class PhotonFullscreenCompiler extends ShaderGraphCompiler {
 
     public PhotonFullscreenCompiler(FullscreenShaderGraph graph) {
         super(graph);
+    }
+
+    /** Whether the active compile target is a bare fullscreen pass rather than a particle material. */
+    public static boolean isCompiling() {
+        return current != null;
+    }
+
+    /** The inverse matrix that maps view coordinates into the node's expected world coordinate space. */
+    public static String inverseViewMatrixName(boolean fullscreen) {
+        return fullscreen ? "IViewMat" : "IModelViewMat";
+    }
+
+    @Override
+    public CompiledShaderGraph compile() {
+        return whileCurrent(super::compile);
+    }
+
+    /** Node thumbnails use a separate compiler entry point, so publish the target for those too. */
+    @Override
+    public CompiledShaderGraph compilePreview(PortModel outputPort) {
+        return whileCurrent(() -> super.compilePreview(outputPort));
+    }
+
+    private CompiledShaderGraph whileCurrent(Supplier<CompiledShaderGraph> compilation) {
+        var previous = current;
+        current = this;
+        try {
+            return compilation.get();
+        } finally {
+            current = previous;
+        }
     }
 
     /** The fullscreen uv: quad NDC mapped to 0..1 in the vertex stage, interpolated across the pass. */

@@ -13,6 +13,7 @@ import com.lowdragmc.lowdraglib2.nodegraphtookit.api.type.TypeHandles;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.definition.IOptionDefinitionContext;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.definition.IPortDefinitionContext;
 import com.lowdragmc.photon.client.postfx.shadergraph.FullscreenShaderGraph;
+import com.lowdragmc.photon.client.postfx.shadergraph.PhotonFullscreenCompiler;
 import com.lowdragmc.photon.client.shadergraph.PhotonScreenSpace;
 import com.lowdragmc.photon.client.shadergraph.PhotonShaderFunctionGraph;
 import com.lowdragmc.photon.client.shadergraph.ShaderGraph;
@@ -73,7 +74,9 @@ public class ScreenToWorldNode extends ShaderNode {
         ShaderExpr uv = ctx.isConnected("uv") ? ctx.input("uv") : ctx.screenUv();
         String rawDepth = ctx.input("rawDepth").code();
         String iProj = ctx.transformField("IProjMat", GlslType.MAT4).code();
-        String iView = ctx.transformField("IViewMat", GlslType.MAT4).code();
+        String iView = ctx.transformField(
+                PhotonFullscreenCompiler.inverseViewMatrixName(PhotonFullscreenCompiler.isCompiling()),
+                GlslType.MAT4).code();
 
         // screen uv -> viewport uv -> NDC. In-world (and in a fullscreen pass, where the executor binds the
         // pass target as the viewport) the remap is the identity; in the editor's sub-viewport scene it is not.
