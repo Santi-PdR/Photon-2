@@ -190,15 +190,9 @@ public final class MeshData implements RegistryAwareNBTSerializable<CompoundTag>
     public Triangle getRandomTriangle(float t) {
         ensureLoaded();
         if (triangles.isEmpty()) return null;
-        var a = t * triangleSumArea;
-        var ca = 0d;
-        for (var triangle : triangles) {
-            if (a <= triangle.area + ca) {
-                return triangle;
-            }
-            ca += triangle.area;
-        }
-        return triangles.get(triangles.size() - 1);
+        int index = AreaWeightedSelection.index(t, triangles.size(), triangleSumArea,
+                i -> triangles.get(i).area);
+        return index < 0 ? null : triangles.get(index);
     }
 
     private double addEdge(Vector3f a, Vector3f b) {
