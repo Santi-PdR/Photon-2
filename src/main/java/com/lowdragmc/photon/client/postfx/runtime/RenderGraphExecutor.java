@@ -15,6 +15,7 @@ import com.lowdragmc.photon.client.PhotonSamplerState;
 import com.lowdragmc.photon.client.postfx.shadergraph.PhotonFullscreenCompiler;
 import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.core.mixins.accessor.ShaderInstanceAccessor;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.shaders.Uniform;
@@ -32,8 +33,10 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL46;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -94,6 +97,7 @@ public final class RenderGraphExecutor {
         }
         var targets = new HDRTarget[resourceCount];
         boolean succeeded = false;
+        Throwable executionFailure = null;
         try {
             for (int passIndex = 0; passIndex < effect.passes().size(); passIndex++) {
                 var pass = effect.passes().get(passIndex);
@@ -244,12 +248,18 @@ public final class RenderGraphExecutor {
             targets[effect.outputResource()] = null;
             succeeded = true;
             return result;
+        } catch (RuntimeException | Error failure) {
+            executionFailure = failure;
+            throw failure;
         } finally {
-            for (var target : targets) {
-                if (target != null) PostFXTargetPool.release(target);
+            try {
+                ResourceDisposal.disposeAllPreservingFailure(
+                        Arrays.stream(targets).filter(Objects::nonNull).toList(),
+                        PostFXTargetPool::release, executionFailure);
+            } finally {
+                if (debugGroup) GL46.glPopDebugGroup();
+                if (succeeded) LOGGED_FAILURES.remove(sourceKey(effect));
             }
-            if (debugGroup) GL46.glPopDebugGroup();
-            if (succeeded) LOGGED_FAILURES.remove(sourceKey(effect));
         }
     }
 

@@ -39,4 +39,22 @@ class ResourceDisposalTest {
         assertEquals(List.of(secondFailure), List.of(thrown.getSuppressed()));
         assertEquals(List.of("first", "second", "third"), attempted);
     }
+
+    @Test
+    void attemptsEveryReleaseAndKeepsTheRenderFailurePrimary() {
+        var attempted = new ArrayList<String>();
+        var operationFailure = new IllegalStateException("render pass failed");
+        var firstCleanupFailure = new IllegalArgumentException("first target release failed");
+        var secondCleanupFailure = new IllegalStateException("second target release failed");
+
+        ResourceDisposal.disposeAllPreservingFailure(List.of("first", "second", "third"), resource -> {
+            attempted.add(resource);
+            if (resource.equals("first")) throw firstCleanupFailure;
+            if (resource.equals("second")) throw secondCleanupFailure;
+        }, operationFailure);
+
+        assertEquals(List.of(firstCleanupFailure, secondCleanupFailure),
+                List.of(operationFailure.getSuppressed()));
+        assertEquals(List.of("first", "second", "third"), attempted);
+    }
 }

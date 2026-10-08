@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.client.postprocessing;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
@@ -17,13 +19,25 @@ public final class ResourceDisposal {
     }
 
     static <T> void disposeAll(Iterable<T> resources, Consumer<? super T> disposer) {
+        disposeAllPreservingFailure(resources, disposer, null);
+    }
+
+    /** Attempt every release, attaching failures to an earlier operation failure when present. */
+    public static <T> void disposeAllPreservingFailure(Iterable<T> resources,
+                                                        Consumer<? super T> disposer,
+                                                        @Nullable Throwable operationFailure) {
         Throwable failure = null;
         for (T resource : resources) {
             try {
                 disposer.accept(resource);
             } catch (RuntimeException | Error cleanupFailure) {
-                if (failure == null) failure = cleanupFailure;
-                else if (failure != cleanupFailure) failure.addSuppressed(cleanupFailure);
+                if (operationFailure != null) {
+                    if (operationFailure != cleanupFailure) operationFailure.addSuppressed(cleanupFailure);
+                } else if (failure == null) {
+                    failure = cleanupFailure;
+                } else if (failure != cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
             }
         }
         if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
