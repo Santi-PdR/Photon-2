@@ -276,6 +276,68 @@ tasks.named('jarJar').configure {
     }
     finalizedBy 'reobfJarJar'
 }
+
+// ForgeGradle can resolve the flatDir LDLib2 module before prepareKotlinRuntime has generated
+// its replacement, especially on a clean CI checkout. Normalize the final JarJar artifact after
+// reobfuscation so its private LDLib2 copy always drops the duplicate Kotlin stdlib provider.
+def normalizeJarJarLdlib2 = tasks.register('normalizeJarJarLdlib2') {
+    group = 'build setup'
+    description = 'Replaces the nested LDLib2 archive with its prepared, single-Kotlin-runtime copy.'
+    dependsOn tasks.matching { it.name == 'reobfJarJar' }
+    dependsOn prepareKotlinRuntime
+    outputs.upToDateWhen { false }
+    doLast {
+        def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
+        def replacement = rootProject.file('build/prepared-runtime/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
+        def nestedPath = 'META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar'
+        if (!artifact.isFile() || !replacement.isFile()) {
+            throw new GradleException('The reobfuscated Photon or prepared LDLib2 archive is missing')
+        }
+
+        def temporary = new File(artifact.parentFile, artifact.name + '.normalized')
+        def foundNestedLdlib2 = false
+        def input = new java.util.zip.ZipFile(artifact)
+        try {
+            def output = new java.util.zip.ZipOutputStream(
+                    new java.io.BufferedOutputStream(new java.io.FileOutputStream(temporary)))
+            try {
+                def entries = input.entries()
+                while (entries.hasMoreElements()) {
+                    def sourceEntry = entries.nextElement()
+                    def outputEntry = new java.util.zip.ZipEntry(sourceEntry.name)
+                    if (sourceEntry.time >= 0) outputEntry.time = sourceEntry.time
+                    if (sourceEntry.comment != null) outputEntry.comment = sourceEntry.comment
+                    output.putNextEntry(outputEntry)
+                    if (!sourceEntry.directory) {
+                        def contents
+                        if (sourceEntry.name == nestedPath) {
+                            contents = replacement.bytes
+                            foundNestedLdlib2 = true
+                        } else {
+                            contents = input.getInputStream(sourceEntry).withCloseable { it.readAllBytes() }
+                        }
+                        output.write(contents)
+                    }
+                    output.closeEntry()
+                }
+            } finally {
+                output.close()
+            }
+        } finally {
+            input.close()
+        }
+        if (!foundNestedLdlib2) {
+            temporary.delete()
+            throw new GradleException("The JarJar artifact is missing nested LDLib2 at ${nestedPath}")
+        }
+        java.nio.file.Files.move(temporary.toPath(), artifact.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    }
+}
+tasks.matching { it.name == 'reobfJarJar' }.configureEach {
+    finalizedBy normalizeJarJarLdlib2
+}
 tasks.named('assemble').configure {
     dependsOn tasks.named('jarJar')
 }
@@ -283,7 +345,7 @@ tasks.named('assemble').configure {
 def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     group = 'verification'
     description = 'Checks target metadata, Java 17 bytecode, mixin mappings, and dedicated-server class isolation in the reobfuscated Photon JAR.'
-    dependsOn tasks.named('reobfJarJar')
+    dependsOn normalizeJarJarLdlib2
     doLast {
         def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
         if (!artifact.isFile()) {
@@ -545,7 +607,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
 def verifyKffLanguageProvider = tasks.register('verifyKffLanguageProvider') {
     group = 'verification'
     description = 'Executes KotlinForForge’s scan visitor in an isolated Forge JPMS layer.'
-    dependsOn tasks.named('reobfJarJar')
+    dependsOn normalizeJarJarLdlib2
     inputs.file(rootProject.file('gradle/KotlinLanguageProviderProbe.java'))
     doLast {
         def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
