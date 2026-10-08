@@ -5,7 +5,7 @@ Audit date: 2026-10-08
 ## Repository state
 
 - Remote: `https://github.com/Santi-PdR/Photon-2`
-- Branch: `codex/photon-forge-1.20.1`, tracking the public port branch
+- Delivery branch: `test-1`, published from `codex/photon-forge-1.20.1`
 - Starting commit: `6956f47` (`Initial commit`)
 - Starting tracked source tree: only `README.md` (`# Photon-2`)
 - Current tree includes a community Photon 2.2.6.a Forge 1.20.1 source baseline (380 Java files), ForgeGradle dependencies on LDLib2 2.2.39.a and KilaGraph 20.1.0.14, and bundled library artifacts under `libs/`.
