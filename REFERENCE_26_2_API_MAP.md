@@ -78,6 +78,8 @@ The reference metadata requires NeoForge 26.2+, Minecraft 26.2, LDLib2 `[26.2.2.
 | Editor/timeline/FX Packs | Package/resource inventory; transport control behavior mapped | Editor source paths, public action IDs/default keymaps, timeline transport, input guards, FX Pack import/export, path handling and archive garbage collection have been reconciled; interactive GUI, resource mounting, and visual output remain runtime-unverified |
 | Dedicated-server/client compatibility | Common/client initialization split inspected | Common/client separation, packet and command gating, and classfile linkage checks are implemented; dedicated-server classloading and multiplayer delivery remain runtime-unverified |
 
+- A JAR-to-class API comparison is now locked by `PublicApiParityTest`: the declared public/protected method names and overload arities of the core object/emitter interfaces and FX lifecycle classes remain present after the Forge adaptation. It allows additional Forge-side helpers.
+
 The matrix is an implementation snapshot, not a completion claim. See [`PORT_AUDIT.md`](PORT_AUDIT.md) for the detailed feature matrix, current Java 17 test/build counts, artifact hashes, CI evidence, and remaining runtime checks. The current port status is approximately 98%.
 
 The user confirmed that prior written consent for public distribution has been obtained from the upstream author. Any distributed port must retain CC BY-NC-SA 4.0, attribution, and non-commercial use.
