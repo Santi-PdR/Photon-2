@@ -22,7 +22,9 @@ public class PhotonMixinPlugin implements IMixinConfigPlugin, MixinPluginShared 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.contains("com.lowdragmc.photon.core.mixins.iris")) {
-            return IS_IRIS_LOAD;
+            // Forge 1.20.1 ships the Iris API through Oculus, whose mod id is `oculus`.
+            // Keep the Iris id for other loaders/builds that expose it directly.
+            return IS_IRIS_LOAD || IS_OCULUS_LOAD;
         }
         return true;
     }

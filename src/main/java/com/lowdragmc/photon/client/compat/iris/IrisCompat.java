@@ -15,7 +15,8 @@ import java.util.Map;
  * that no {@code net.irisshaders} class is ever referenced from a class that loads without Iris.
  */
 public final class IrisCompat {
-    public static final String MOD_ID = "iris";
+    private static final String IRIS_MOD_ID = "iris";
+    private static final String OCULUS_MOD_ID = "oculus";
 
     private static final IrisBridge BRIDGE = createBridge();
 
@@ -37,7 +38,8 @@ public final class IrisCompat {
     }
 
     private static IrisBridge createBridge() {
-        if (!LDLib2.isModLoaded(MOD_ID)) {
+        // Forge 1.20.1's Iris implementation is Oculus and registers as `oculus`.
+        if (!LDLib2.isModLoaded(OCULUS_MOD_ID) && !LDLib2.isModLoaded(IRIS_MOD_ID)) {
             return IrisBridge.NOOP;
         }
         try {
