@@ -268,16 +268,42 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     new String(zip.getInputStream(zip.getEntry('photon.refmap.json')).withCloseable {
                         it.readAllBytes()
                     }, java.nio.charset.StandardCharsets.UTF_8))
-            def gameRendererMappings = refmap.mappings?.get('com/lowdragmc/photon/core/mixins/GameRendererMixin')
-            def requiredGameRendererMappings = [
-                    'renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V': 'm_109089_',
-                    'render(FJZ)V': 'm_109093_'
+            def requiredMixinMappings = [
+                    'com/lowdragmc/photon/core/mixins/GameRendererMixin': [
+                            'renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V': 'Lnet/minecraft/client/renderer/GameRenderer;m_109089_(FJLcom/mojang/blaze3d/vertex/PoseStack;)V',
+                            'render(FJZ)V': 'Lnet/minecraft/client/renderer/GameRenderer;m_109093_(FJZ)V',
+                            'Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V': 'Lnet/minecraft/client/renderer/LevelRenderer;m_109599_(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V'
+                    ],
+                    'com/lowdragmc/photon/core/mixins/ParticleEngineMixin': [
+                            'tick': 'Lnet/minecraft/client/particle/ParticleEngine;m_107388_()V',
+                            'setLevel': 'Lnet/minecraft/client/particle/ParticleEngine;m_107342_(Lnet/minecraft/client/multiplayer/ClientLevel;)V'
+                    ],
+                    'com/lowdragmc/photon/core/mixins/MinecraftMixin': [
+                            'resizeDisplay': 'Lnet/minecraft/client/Minecraft;m_5741_()V'
+                    ],
+                    'com/lowdragmc/photon/core/mixins/accessor/BlendModeAccessor': [
+                            'lastApplied': 'f_85499_:Lcom/mojang/blaze3d/shaders/BlendMode;'
+                    ],
+                    'com/lowdragmc/photon/core/mixins/accessor/ShaderInstanceAccessor': [
+                            'samplerNames': 'f_173329_:Ljava/util/List;',
+                            'blend': 'f_173302_:Lcom/mojang/blaze3d/shaders/BlendMode;'
+                    ],
+                    'com/lowdragmc/photon/core/mixins/accessor/ParticleEngineAccessor': [
+                            'particles': 'f_107289_:Ljava/util/Map;',
+                            'spriteSets': 'f_107295_:Ljava/util/Map;'
+                    ]
             ]
-            def missingGameRendererMappings = requiredGameRendererMappings.findAll { source, target ->
-                !(gameRendererMappings?.get(source)?.contains(target))
+            def missingMixinMappings = []
+            requiredMixinMappings.each { mixinClass, mappings ->
+                def actual = refmap.mappings?.get(mixinClass)
+                mappings.each { source, target ->
+                    if (!(actual?.get(source)?.contains(target))) {
+                        missingMixinMappings << "${mixinClass}.${source} -> ${target}"
+                    }
+                }
             }
-            if (!missingGameRendererMappings.isEmpty()) {
-                throw new GradleException("Photon production refmap is missing GameRenderer mappings: ${missingGameRendererMappings}")
+            if (!missingMixinMappings.isEmpty()) {
+                throw new GradleException("Photon production refmap is missing required Minecraft mappings: ${missingMixinMappings}")
             }
             def metadata = new String(zip.getInputStream(zip.getEntry('META-INF/mods.toml')).withCloseable {
                 it.readAllBytes()
