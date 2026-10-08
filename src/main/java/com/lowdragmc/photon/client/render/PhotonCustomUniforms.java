@@ -61,11 +61,15 @@ public final class PhotonCustomUniforms implements AutoCloseable {
 
         public static Type parse(String type) {
             if (type == null) return null;
-            try {
-                return valueOf(type.toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ignored) {
-                return null;
-            }
+            return switch (type.toLowerCase(Locale.ROOT)) {
+                case "float" -> FLOAT;
+                case "int" -> INT;
+                case "vec2" -> VEC2;
+                case "vec3" -> VEC3;
+                case "vec4" -> VEC4;
+                case "mat4" -> MAT4;
+                default -> null;
+            };
         }
     }
 
