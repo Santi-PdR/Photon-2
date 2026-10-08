@@ -75,10 +75,7 @@ public class RemoveEntityEffectCommand {
     }
 
     public void decode(FriendlyByteBuf buf) {
-        ids = new int[buf.readVarInt()];
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = buf.readVarInt();
-        }
+        ids = EntityIdListCodec.read(buf, 2);
         force = buf.readBoolean();
         if (buf.readBoolean()) {
             location = buf.readResourceLocation();

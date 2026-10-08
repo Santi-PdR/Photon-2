@@ -166,10 +166,7 @@ public class EntityEffectCommand extends EffectCommand {
     public void decode(FriendlyByteBuf buf) {
         super.decode(buf);
         autoRotate = buf.readEnum(AutoRotateMode.class);
-        ids = new int[buf.readVarInt()];
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = buf.readVarInt();
-        }
+        ids = EntityIdListCodec.read(buf, 0);
     }
 
     public static EntityEffectCommand decodePacket(FriendlyByteBuf buf) {
