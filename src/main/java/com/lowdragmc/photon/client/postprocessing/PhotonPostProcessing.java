@@ -136,6 +136,7 @@ public class PhotonPostProcessing {
         if (debugGroup) {
             GL46.glPushDebugGroup(GL46.GL_DEBUG_SOURCE_APPLICATION, 0, "photon_bloom");
         }
+        Throwable operationFailure = null;
         try {
             var brightPassShader = PhotonShaders.getBrightPassShader();
             var finalCombinePassShader = PhotonShaders.getBloomFinalScatterPassShader();
@@ -173,12 +174,16 @@ public class PhotonPostProcessing {
             finalCombinePassShader.setSampler("inputB", srcTarget);
             finalCombinePassShader.safeGetUniform("BloomIntensive").set(PhotonConfig.INSTANCE.bloomIntensity.get().floatValue());
             blitShader(finalCombinePassShader, targets.output, false);
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            RenderSystem.depthMask(true);
-            RenderSystem.enableDepthTest();
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            if (debugGroup) GL46.glPopDebugGroup();
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    () -> RenderSystem.depthMask(true),
+                    RenderSystem::enableDepthTest,
+                    RenderSystem::enableBlend,
+                    RenderSystem::defaultBlendFunc,
+                    () -> { if (debugGroup) GL46.glPopDebugGroup(); });
         }
     }
 
@@ -189,11 +194,15 @@ public class PhotonPostProcessing {
         } else {
             dist.bindWrite(true);
         }
-        shaderInstance.apply();
+        Throwable operationFailure = null;
         try {
+            shaderInstance.apply();
             SceneBlit.drawFullscreenQuad();
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            shaderInstance.clear();
+            ResourceDisposal.runAllPreservingFailure(operationFailure, shaderInstance::clear);
         }
     }
 
@@ -201,14 +210,18 @@ public class PhotonPostProcessing {
         dist.bindWrite(true);
         // ShaderInstance.apply() applies the JSON blend state, so additive composition must be
         // configured after it and immediately before the draw.
-        shaderInstance.apply();
+        Throwable operationFailure = null;
         try {
+            shaderInstance.apply();
             RenderSystem.enableBlend();
             RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
             RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
             SceneBlit.drawFullscreenQuad();
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            shaderInstance.clear();
+            ResourceDisposal.runAllPreservingFailure(operationFailure, shaderInstance::clear);
         }
     }
 }
