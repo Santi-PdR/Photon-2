@@ -5,6 +5,7 @@ import com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyType;
 import com.lowdragmc.photon.client.gameobject.FXObject;
 import com.lowdragmc.photon.client.gameobject.FXObjectType;
 import com.lowdragmc.photon.client.gameobject.RuntimeBinding;
+import com.lowdragmc.photon.util.GradientNbtCompat;
 import com.lowdragmc.photon.client.util.HDRColorCompat;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.HDRColorFunction;
@@ -213,7 +214,7 @@ public class ColorPropertyType implements AnimatedPropertyType {
             var t = clips.getCompound(i);
             var gc = new com.lowdragmc.lowdraglib2.math.GradientColor();
             if (t.contains("gradient")) {
-                gc.deserializeNBT(provider, t.getCompound("gradient"));
+                gc.deserializeNBT(provider, GradientNbtCompat.toForgeGradient(t.getCompound("gradient")));
             }
             property.gradientClips().add(new com.lowdragmc.photon.client.fx.timeline.GradientClip(
                     t.getDouble("start"), t.getDouble("duration"), gc));

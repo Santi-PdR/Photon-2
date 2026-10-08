@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib2.math.GradientColor;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.GradientColorSelector;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.GradientColorTexture;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.RandomGradientColorTexture;
+import com.lowdragmc.photon.util.GradientNbtCompat;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -135,11 +136,11 @@ public class GradientResource extends Resource<GradientResource.Gradients> {
         @Override
         public void deserializeNBT(@Nonnull HolderLookup.Provider provider, CompoundTag nbt) {
             if (nbt.get("a") instanceof CompoundTag tag) {
-                gradient0.deserializeNBT(provider, tag);
+                gradient0.deserializeNBT(provider, GradientNbtCompat.toForgeGradient(tag));
             }
             if (gradient1 != null) {
                 if (nbt.get("b") instanceof CompoundTag tag) {
-                    gradient1.deserializeNBT(provider, tag);
+                    gradient1.deserializeNBT(provider, GradientNbtCompat.toForgeGradient(tag));
                 }
             }
             hdr = nbt.getBoolean("hdr");
