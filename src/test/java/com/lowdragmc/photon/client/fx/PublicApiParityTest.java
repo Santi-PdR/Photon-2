@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.fx;
 
 import com.lowdragmc.photon.client.gameobject.IFXObject;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
@@ -17,6 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Locks the public runtime API names and overloads shared with Photon 26.2. */
 class PublicApiParityTest {
+    @Test
+    void materialPreservesTheReferenceInspectorApi() {
+        assertApi(IMaterial.class, Set.of(
+                "buildConfigurator/1", "copy/0", "createPreview/1", "preview/0", "previewLive/0",
+                "serializeWrapper/0", "deserializeWrapper/1"));
+    }
+
     @Test
     void fxObjectInterfacePreservesTheReferenceApi() {
         assertApi(IFXObject.class, Set.of(
