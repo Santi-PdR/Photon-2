@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
 import com.lowdragmc.lowdraglib2.client.UIRenderStateScope;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
+import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.lowdragmc.photon.core.mixins.accessor.BlendModeAccessor;
 import com.lowdragmc.photon.core.mixins.accessor.ShaderInstanceAccessor;
 import com.mojang.blaze3d.shaders.BlendMode;
@@ -44,6 +45,11 @@ public abstract class ShaderInstanceMaterial implements IMaterial {
     }
 
     @Override
+    public IGuiTexture previewLive() {
+        return MaterialPreviewRenderer.livePreviewOf(this);
+    }
+
+    @Override
     public ShaderInstance begin(MaterialContext context) {
         setupUniform(context);
         return getShader(context);
@@ -56,7 +62,7 @@ public abstract class ShaderInstanceMaterial implements IMaterial {
 
     @Override
     public IGuiTexture preview() {
-        return preview;
+        return MaterialPreviewRenderer.previewOf(this);
     }
 
     public class ShaderTexture implements IGuiTexture {
