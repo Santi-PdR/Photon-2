@@ -34,27 +34,36 @@ public class FormatTarget extends HDRTarget {
 
     @Override
     public void resize(int width, int height, boolean clearError) {
-        super.resize(width, height, clearError);
-        if (format != null) { // null while the super constructor's initial resize runs
-            respecColor();
+        int previousTexture = GlStateManager._getInteger(GL30.GL_TEXTURE_BINDING_2D);
+        try {
+            super.resize(width, height, clearError);
+            if (format != null) { // null while the super constructor's initial resize runs
+                respecColor();
+            }
+        } finally {
+            GlStateManager._bindTexture(previousTexture);
         }
     }
 
     private void respecColor() {
         if (format == TargetFormat.RGBA16F) return; // already what HDRTarget allocated
-        GlStateManager._bindTexture(this.colorTextureId);
-        switch (format) {
-            case RGBA8 -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA8,
-                    this.width, this.height, 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, null);
-            case RG16F -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RG16F,
-                    this.width, this.height, 0, GL30.GL_RG, GL30.GL_FLOAT, null);
-            case R16F -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R16F,
-                    this.width, this.height, 0, GL30.GL_RED, GL30.GL_FLOAT, null);
-            case R8 -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8,
-                    this.width, this.height, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, null);
-            default -> { }
+        int previousTexture = GlStateManager._getInteger(GL30.GL_TEXTURE_BINDING_2D);
+        try {
+            GlStateManager._bindTexture(this.colorTextureId);
+            switch (format) {
+                case RGBA8 -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA8,
+                        this.width, this.height, 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, null);
+                case RG16F -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RG16F,
+                        this.width, this.height, 0, GL30.GL_RG, GL30.GL_FLOAT, null);
+                case R16F -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R16F,
+                        this.width, this.height, 0, GL30.GL_RED, GL30.GL_FLOAT, null);
+                case R8 -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_R8,
+                        this.width, this.height, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, null);
+                default -> { }
+            }
+            this.clear(Minecraft.ON_OSX);
+        } finally {
+            GlStateManager._bindTexture(previousTexture);
         }
-        GlStateManager._bindTexture(0);
-        this.clear(Minecraft.ON_OSX);
     }
 }
