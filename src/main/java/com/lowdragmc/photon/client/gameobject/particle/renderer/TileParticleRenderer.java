@@ -47,6 +47,14 @@ public class TileParticleRenderer {
     /** Float stride of the model instance payload, including packed light. */
     public static final int MODEL_INSTANCE_FLOATS = 15;
 
+    /**
+     * Converts Unity-style Euler angles using the same rotation order as the shared render paths.
+     * Kept here as a public compatibility entry point from Photon 26.2.
+     */
+    public static Quaternionf eulerRotation(Vector3f rotation) {
+        return ParticleRotationMath.eulerRotation(rotation);
+    }
+
     private static final int GL_MAX_TEXTURE_BUFFER_SIZE = 0x8C2B;
     private final ParticleConfig config;
     /** The renderer runtime this pass draws with (slot-or-config per field): the config's default runtime

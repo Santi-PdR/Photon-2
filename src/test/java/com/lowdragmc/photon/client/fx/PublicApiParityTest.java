@@ -7,6 +7,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
+import com.lowdragmc.photon.client.gameobject.particle.renderer.ParticleRotationMath;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -24,6 +25,12 @@ class PublicApiParityTest {
     void tileParticleRendererPreservesReferenceInstanceStrides() {
         assertEquals(21, TileParticleRenderer.INSTANCE_FLOATS);
         assertEquals(15, TileParticleRenderer.MODEL_INSTANCE_FLOATS);
+    }
+
+    @Test
+    void tileParticleRendererPreservesReferenceEulerRotationEntryPoint() {
+        var rotation = new org.joml.Vector3f(0.3f, -0.7f, 1.1f);
+        assertEquals(ParticleRotationMath.eulerRotation(rotation), TileParticleRenderer.eulerRotation(rotation));
     }
 
     @Test
