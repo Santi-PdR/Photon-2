@@ -1,7 +1,8 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
-import net.minecraft.nbt.EndTag;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.RegistryAccess;
 import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.Photon;
@@ -13,7 +14,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class AnimatedGltfAdditionalNbtTest {
     @BeforeAll
@@ -48,12 +49,13 @@ class AnimatedGltfAdditionalNbtTest {
 
     @Test
     void omitsEmptyAdditionalPayloadAndClearsReusedSourceWhenAbsent() {
+        var provider = RegistryAccess.EMPTY;
         var empty = new AnimatedGltfModelSource();
-        assertSame(EndTag.INSTANCE, empty.serializeAdditionalNBT(null));
+        assertFalse(empty.serializeNBT(provider).contains("_additional"));
 
         var reused = new AnimatedGltfModelSource();
         reused.setAnimationFiles(List.of(ResourceLocation.fromNamespaceAndPath("example", "old.glb")));
-        reused.deserializeAdditionalNBT(EndTag.INSTANCE, null);
+        reused.deserializeNBT(provider, new CompoundTag());
 
         assertEquals(List.of(), reused.getAnimationFiles());
     }

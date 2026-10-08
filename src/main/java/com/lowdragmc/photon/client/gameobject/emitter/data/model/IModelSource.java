@@ -9,6 +9,7 @@ import com.lowdragmc.photon.PhotonRegistries;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.EndTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.core.HolderLookup;
@@ -57,7 +58,8 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable,
     @Override
     default void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag) {
         IPersistedSerializable.super.deserializeNBT(tag);
-        if (tag.contains("_additional")) deserializeAdditionalNBT(tag.get("_additional"), provider);
+        var additional = tag.contains("_additional") ? tag.get("_additional") : EndTag.INSTANCE;
+        deserializeAdditionalNBT(additional, provider);
     }
 
     default CompoundTag serializeWrapper() {

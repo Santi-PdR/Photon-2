@@ -1,6 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
-import com.lowdragmc.lowdraglib2.syncdata.IProviderAwareNBTSerializable;
+import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.ListTag;
@@ -25,7 +25,7 @@ class CustomShaderMaterialCopyTest {
         assertEquals(sourceGradients.value, copiedGradients.value);
     }
 
-    private static final class ListState implements IProviderAwareNBTSerializable<ListTag> {
+    private static final class ListState implements RegistryAwareNBTSerializable<ListTag> {
         private ListTag value = new ListTag();
 
         private ListState(String... values) {
