@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - codex/photon-forge-1.20.1
+      - test-1
   pull_request:
     branches:
       - codex/photon-forge-1.20.1
+      - test-1
   workflow_dispatch:
 
 permissions:
