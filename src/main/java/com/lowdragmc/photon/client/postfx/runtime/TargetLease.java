@@ -1,5 +1,8 @@
 package com.lowdragmc.photon.client.postfx.runtime;
 
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -30,17 +33,15 @@ final class TargetLease<T> implements AutoCloseable {
 
     @Override
     public void close() {
-        Throwable failure = null;
-        for (T target : new ArrayList<>(owned)) {
-            try {
-                release.accept(target);
-            } catch (RuntimeException | Error e) {
-                if (failure == null) failure = e;
-                else failure.addSuppressed(e);
-            }
+        close(null);
+    }
+
+    void close(@Nullable Throwable operationFailure) {
+        try {
+            ResourceDisposal.disposeAllPreservingFailure(
+                    new ArrayList<>(owned), release, operationFailure);
+        } finally {
+            owned.clear();
         }
-        owned.clear();
-        if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
-        if (failure instanceof Error errorFailure) throw errorFailure;
     }
 }

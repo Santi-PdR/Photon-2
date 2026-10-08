@@ -212,6 +212,7 @@ public final class PostEffectStack {
         boolean completed = false;
         var leases = new TargetLease<HDRTarget>(PostFXTargetPool::release);
         setPostRenderState();
+        Throwable operationFailure = null;
         try {
             for (var invocation : invocations) {
                 if (invocation.effect().passes().isEmpty()) continue; // no-op (scene passthrough) effect
@@ -331,14 +332,23 @@ public final class PostEffectStack {
                 }
             }
             completed = true;
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
             boolean restored = false;
+            Throwable cleanupFailure = operationFailure;
             try {
                 restorePostRenderState();
                 restored = true;
+            } catch (RuntimeException | Error failure) {
+                if (cleanupFailure == null) cleanupFailure = failure;
+                else if (cleanupFailure != failure) cleanupFailure.addSuppressed(failure);
             } finally {
                 if (completed && restored) leases.transfer(pooledChain);
-                leases.close();
+                leases.close(cleanupFailure);
+                if (operationFailure == null && cleanupFailure instanceof RuntimeException failure) throw failure;
+                if (operationFailure == null && cleanupFailure instanceof Error failure) throw failure;
             }
         }
         // the caller blits this target to the main/Iris framebuffer right after we return, so a pooled

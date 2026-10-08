@@ -8,6 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TargetLeaseTest {
     @Test
@@ -63,6 +64,31 @@ class TargetLeaseTest {
         });
 
         assertEquals(2, released.size());
+    }
+
+    @Test
+    void preservesAnEarlierRenderFailureWhileReturningEveryLease() {
+        var attempted = new ArrayList<EqualTarget>();
+        var primaryFailure = new IllegalStateException("render-state restore failed");
+        var firstCleanupFailure = new IllegalArgumentException("first lease return failed");
+        var secondCleanupFailure = new IllegalStateException("second lease return failed");
+        var first = new EqualTarget("first");
+        var second = new EqualTarget("second");
+        var lease = new TargetLease<EqualTarget>(target -> {
+            attempted.add(target);
+            if (target == first) throw firstCleanupFailure;
+            if (target == second) throw secondCleanupFailure;
+        });
+        lease.acquire(first);
+        lease.acquire(second);
+
+        lease.close(primaryFailure);
+
+        var suppressed = List.of(primaryFailure.getSuppressed());
+        assertEquals(2, suppressed.size());
+        assertTrue(suppressed.contains(firstCleanupFailure));
+        assertTrue(suppressed.contains(secondCleanupFailure));
+        assertEquals(2, attempted.size());
     }
 
     private record EqualTarget(String key) {
