@@ -55,6 +55,11 @@ public class TileParticleRenderer {
         return ParticleRotationMath.eulerRotation(rotation);
     }
 
+    /** Returns whether this renderer's model source currently supplies baked vertex animation. */
+    public boolean usesVertexAnimation() {
+        return renderer.getModelSource().vertexAnimation() != null;
+    }
+
     private static final int GL_MAX_TEXTURE_BUFFER_SIZE = 0x8C2B;
     private final ParticleConfig config;
     /** The renderer runtime this pass draws with (slot-or-config per field): the config's default runtime

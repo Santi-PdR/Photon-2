@@ -31,6 +31,7 @@ class PublicApiParityTest {
     void tileParticleRendererPreservesReferenceEulerRotationEntryPoint() {
         var rotation = new org.joml.Vector3f(0.3f, -0.7f, 1.1f);
         assertEquals(ParticleRotationMath.eulerRotation(rotation), TileParticleRenderer.eulerRotation(rotation));
+        assertApi(TileParticleRenderer.class, Set.of("eulerRotation/1", "usesVertexAnimation/0"));
     }
 
     @Test
