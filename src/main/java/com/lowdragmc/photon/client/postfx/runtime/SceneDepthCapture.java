@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.util.FramebufferState;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -28,14 +29,19 @@ public final class SceneDepthCapture {
         int viewportY = GlStateManager.Viewport.y();
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
+        Throwable operationFailure = null;
         try {
             target = RenderPassPipeline.resize(target, source.width, source.height, true);
             target.copyDepthFrom(source);
             int depthTexture = target.getDepthTextureId();
             return depthTexture > 0 ? depthTexture : -1;
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            framebufferState.restore();
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    framebufferState::restore,
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
         }
     }
 }

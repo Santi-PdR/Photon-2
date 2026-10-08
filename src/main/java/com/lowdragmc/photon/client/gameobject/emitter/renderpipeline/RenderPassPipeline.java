@@ -542,6 +542,7 @@ public class RenderPassPipeline {
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
         boolean allocatedTarget = target == null;
+        Throwable operationFailure = null;
         try {
             if (target == null) {
                 target = new HDRTarget(width, height, GL11.GL_LINEAR, useDepth);
@@ -555,10 +556,12 @@ public class RenderPassPipeline {
                 target = null;
                 ResourceDisposal.cleanupAfterFailure(failure, failedTarget::destroyBuffers);
             }
+            operationFailure = failure;
             throw failure;
         } finally {
-            framebufferState.restore();
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    framebufferState::restore,
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight));
         }
         return target;
     }
@@ -914,21 +917,25 @@ public class RenderPassPipeline {
         boolean scissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
         int[] scissorBox = new int[4];
         GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
+        Throwable operationFailure = null;
         try {
             // Nothing else will ever see these pixels, so no other bloom can reach them — ours is
             // the only one they can get. Run it once on the layer both queues finished accumulating.
             int colorTexture = bloomedColorOf(layer, pendingLateBloom);
             entryTarget.bindWrite(true);
             SceneBlit.compositePremultipliedToBound(colorTexture, layer.getColorTextureId(), false);
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            framebufferState.restore();
-            RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
-            GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
-            if (scissorEnabled) {
-                GlStateManager._enableScissorTest();
-            } else {
-                GlStateManager._disableScissorTest();
-            }
+            ResourceDisposal.runAllPreservingFailure(operationFailure,
+                    framebufferState::restore,
+                    () -> RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight),
+                    () -> GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]),
+                    () -> {
+                        if (scissorEnabled) GlStateManager._enableScissorTest();
+                        else GlStateManager._disableScissorTest();
+                    });
         }
     }
 
