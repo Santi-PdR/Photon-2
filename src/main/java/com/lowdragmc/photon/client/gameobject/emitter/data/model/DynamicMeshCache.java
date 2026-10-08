@@ -30,12 +30,11 @@ final class DynamicMeshCache {
      */
     @Nullable
     private static float[] tangentsForRevision(IDynamicMesh dynamic, long expectedRevision) {
-        synchronized (dynamic) {
-            if (dynamic.revision() != expectedRevision) return null;
-            float[] tangents = dynamic.tangents();
-            if (dynamic.revision() != expectedRevision || tangents == null) return null;
-            return tangents.clone();
-        }
+        if (dynamic.revision() != expectedRevision) return null;
+        float[] tangents = dynamic.tangents();
+        if (tangents == null) return null;
+        float[] snapshot = tangents.clone();
+        return dynamic.revision() == expectedRevision ? snapshot : null;
     }
 
     @Nullable

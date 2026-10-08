@@ -17,7 +17,10 @@ public interface IDynamicMesh {
     /** Immutable mesh carrying the topology, UVs, sprite bounds, and shade values. */
     PhotonMesh topology();
 
-    /** Revision of the current deformation. Zero is reserved for the undeformed topology. */
+    /**
+     * Revision of the current deformation. Zero is reserved for the undeformed topology. Publish
+     * the new revision only after its geometry and tangents are fully written.
+     */
     long revision();
 
     /** Current positions and normals in topology vertex order, or null when unchanged/no CPU copy exists. */
