@@ -169,7 +169,7 @@ public class SceneView extends View implements FXSceneOptions {
 
     @Override
     public void screenTick() {
-        try (var ignored = PhotonSceneTickContext.suppressVirtualLevelEvents()) {
+        try (var ignored = PhotonSceneTickContext.suppressVirtualLevelEvents(level)) {
             flushPendingSimulate(); // fallback for frames where the view isn't drawn
             super.screenTick();
         }

@@ -8,35 +8,37 @@ import net.minecraft.world.level.Level;
  * unrelated Forge event subscribers.
  */
 public final class PhotonSceneTickContext {
-    private static final ThreadLocal<Integer> DEPTH = ThreadLocal.withInitial(() -> 0);
+    private static final ThreadLocal<DummyWorld> ACTIVE_LEVEL = new ThreadLocal<>();
 
     private PhotonSceneTickContext() {
     }
 
-    public static Scope suppressVirtualLevelEvents() {
-        DEPTH.set(DEPTH.get() + 1);
-        return new Scope();
+    public static Scope suppressVirtualLevelEvents(DummyWorld level) {
+        DummyWorld previous = ACTIVE_LEVEL.get();
+        ACTIVE_LEVEL.set(level);
+        return new Scope(previous);
     }
 
     public static boolean shouldSuppress(Level level) {
-        return DEPTH.get() > 0 && level instanceof DummyWorld;
+        return level == ACTIVE_LEVEL.get() && level instanceof DummyWorld;
     }
 
     public static final class Scope implements AutoCloseable {
+        private final DummyWorld previous;
         private boolean closed;
 
-        private Scope() {
+        private Scope(DummyWorld previous) {
+            this.previous = previous;
         }
 
         @Override
         public void close() {
             if (closed) return;
             closed = true;
-            int depth = DEPTH.get();
-            if (depth <= 1) {
-                DEPTH.remove();
+            if (previous == null) {
+                ACTIVE_LEVEL.remove();
             } else {
-                DEPTH.set(depth - 1);
+                ACTIVE_LEVEL.set(previous);
             }
         }
     }
