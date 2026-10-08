@@ -1,7 +1,7 @@
 package com.lowdragmc.photon.client.gameobject;
 
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
-import com.lowdragmc.lowdraglib2.utils.PersistedParser;
+import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyType;
 import com.lowdragmc.photon.client.fx.timeline.property.ColorPropertyType;
@@ -59,7 +59,7 @@ public abstract class FXObjectType {
      * polymorphic {@link IFXObject#CODEC} dispatches to this.
      */
     public Codec<IFXObject> codec() {
-        var base = PersistedParser.createCodec((Supplier<IFXObject>) this::create);
+        var base = PersistedCodec.createCodec((Supplier<IFXObject>) this::create);
         return new Codec<>() {
             @Override
             public <T> DataResult<Pair<IFXObject, T>> decode(DynamicOps<T> ops, T input) {

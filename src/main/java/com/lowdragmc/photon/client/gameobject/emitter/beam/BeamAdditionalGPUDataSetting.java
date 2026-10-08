@@ -1,6 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.beam;
 
-import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.AdditionalGPUDataSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.CustomData;
 import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;

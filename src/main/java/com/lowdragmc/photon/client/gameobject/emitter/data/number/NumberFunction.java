@@ -1,8 +1,8 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.number;
 
 import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.utils.PersistedParser;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Color;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.configurator.NumberFunctionConfigurator;
@@ -24,7 +24,7 @@ public interface NumberFunction extends IPersistedSerializable, ILDLRegisterClie
     NumberFunction ZERO = NumberFunction.constant(0);
     Codec<NumberFunction> CODEC = PhotonRegistries.NUMBER_FUNCTIONS.optionalCodec().dispatch(ILDLRegisterClient::getRegistryHolderOptional,
             optional -> optional.map(holder ->
-                            PersistedParser.createCodec(holder.value()).fieldOf("data").codec())
+                            PersistedCodec.createCodec(holder.value()).fieldOf("data").codec())
                     .orElseGet(() -> MapCodec.unit(ZERO).codec()));
 
     static NumberFunction constant(Number constant) {

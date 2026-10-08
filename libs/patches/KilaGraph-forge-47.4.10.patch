@@ -1,0 +1,60 @@
+diff --git a/build.gradle b/build.gradle
+index 0d6cb10..10a5dbd 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -4,7 +4,7 @@ plugins {
+     id 'idea'
+     id 'maven-publish'
+     id 'net.minecraftforge.gradle' version '6.0.54'
+-    id 'org.spongepowered.mixin' version '0.7.+'
++    id 'org.spongepowered.mixin' version '0.7.38'
+ }
+
+ version = mod_version
+@@ -88,8 +88,8 @@ repositories {
+ dependencies {
+     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+-    compileOnly 'org.projectlombok:lombok:1.18.30'
+-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
++    compileOnly 'org.projectlombok:lombok:1.18.34'
++    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+
+     // Keep LDLib2 external at distribution time, but deobfuscate the supplied Forge mod JAR for development.
+     implementation fg.deobf("local:ldlib2-forge-1.20.1:${ldlib2_version}:all")
+diff --git a/gradle.properties b/gradle.properties
+index 6dd4b80..b3ece1c 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -7,15 +7,15 @@ org.gradle.configuration-cache=false
+ ## Environment Properties
+ minecraft_version=1.20.1
+ minecraft_version_range=[1.20.1]
+-forge_version=47.4.23
+-forge_version_range=[47.4.23,48)
++forge_version=47.4.10
++forge_version_range=[47.4.10,48)
+ loader_version_range=[47,48)
+
+ ## Mod Properties
+ mod_id=kilagraph
+ mod_name=KilaGraph
+ mod_license=MIT-LICENSE
+-mod_version=20.1.0.14
++mod_version=20.1.0.15
+ mod_group_id=com.lowdragmc.kilagraph
+ mod_authors=KilaBash
+ mod_url=https://github.com/supermerlin204/kilagraph-1.20.1-forge
+diff --git a/settings.gradle b/settings.gradle
+index 057e9b2..6811e5a 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -7,8 +7,4 @@ pluginManagement {
+     }
+ }
+
+-plugins {
+-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+-}
+-
+ rootProject.name = "${mod_id}-forge"

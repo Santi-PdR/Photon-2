@@ -8,8 +8,8 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurato
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Scene;
 import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
 import com.lowdragmc.lowdraglib2.math.Size;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.utils.data.BlockInfo;
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld;
 import com.lowdragmc.photon.PhotonRegistries;
@@ -212,8 +212,13 @@ public final class MeshData implements RegistryAwareNBTSerializable<CompoundTag>
     }
 
     @Override
+    public CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
+        return IPersistedSerializable.super.serializeNBT();
+    }
+
+    @Override
     public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag nbt) {
-        IPersistedSerializable.super.deserializeNBT(provider, nbt);
+        IPersistedSerializable.super.deserializeNBT(nbt);
         if (!nbt.contains("source")) {
             // legacy (pre-v5) payloads store a bare json model id; editor resource files and pasted
             // NBT bypass the project datafixer, so keep these in-place fallbacks

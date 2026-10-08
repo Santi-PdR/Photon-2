@@ -14,6 +14,9 @@ configurations {
     libraries
     api.extendsFrom libraries
 
+    photonRuntime
+    jarJar
+
     localImplementation
     runtimeClasspath.extendsFrom localImplementation
     compileOnly.extendsFrom localImplementation
@@ -166,10 +169,18 @@ sourceSets.main.java { exclude 'com/lowdragmc/photon/uitest/**' }
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
+    // LDLib 1.0.52.a is the profile-facing API. Newer Photon editor systems use LDLib2 APIs,
+    // so keep those runtime modules private to this mod instead of requiring users to install them.
+    implementation fg.deobf("local:ldlib-forge-1.20.1:${ldlib_version}")
     implementation fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all")
-    implementation fg.deobf("local:kilagraph-forge-1.20.1:20.1.0.14")
-    // LDLib2 contains Kotlin-compiled classes and requires KFF's runtime libraries.
-    implementation "thedarkcolour:kotlinforforge:${kotlinforforge_version}"
+    implementation fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15")
+    implementation "local:kotlinforforge:${kotlinforforge_version}"
+    def ldlib2Runtime = jarJar(fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all"))
+    jarJar.ranged(ldlib2Runtime, "[2.2.39.a,)")
+    def kilaGraphRuntime = jarJar(fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15"))
+    jarJar.ranged(kilaGraphRuntime, "[20.1.0.15,)")
+    def kotlinRuntime = jarJar("local:kotlinforforge:${kotlinforforge_version}")
+    jarJar.ranged(kotlinRuntime, "[${kotlinforforge_version},)")
 
     // Optional shader-pack integration for Forge 1.20.1 (Oculus is the Iris port).
     localImplementation fg.deobf("maven.modrinth:embeddium:${embeddium_version}")
@@ -208,10 +219,10 @@ tasks.withType(ProcessResources).configureEach {
             "mod_name": mod_name,
             "mod_description": mod_description,
             "mod_url": mod_url,
+            "ldlib_version_range": ldlib_version_range,
             "ldlib2_version_range": ldlib2_version_range,
             "kilagraph_version_range": kilagraph_version_range,
-            "kotlinforforge_version_range": kotlinforforge_version_range
-    ]
+        ]
     inputs.properties replaceProperties
 
     filesMatching(['META-INF/mods.toml']) {
@@ -224,18 +235,35 @@ tasks.named('jar', Jar).configure {
         into 'META-INF'
         rename { 'LICENSE.txt' }
     }
+    from(rootProject.file('libs/licenses')) {
+        into 'META-INF/licenses'
+    }
     manifest {
         attributes 'MixinConfigs': 'photon.mixins.json'
     }
     finalizedBy 'reobfJar'
 }
 
+tasks.named('jarJar').configure {
+    from(rootProject.file('LICENSE')) {
+        into 'META-INF'
+        rename { 'LICENSE.txt' }
+    }
+    from(rootProject.file('libs/licenses')) {
+        into 'META-INF/licenses'
+    }
+    finalizedBy 'reobfJarJar'
+}
+tasks.named('assemble').configure {
+    dependsOn tasks.named('jarJar')
+}
+
 def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     group = 'verification'
     description = 'Checks target metadata, Java 17 bytecode, mixin mappings, and dedicated-server class isolation in the reobfuscated Photon JAR.'
-    dependsOn tasks.named('reobfJar')
+    dependsOn tasks.named('reobfJarJar')
     doLast {
-        def artifact = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
         if (!artifact.isFile()) {
             throw new GradleException("Reobfuscated Photon artifact is missing: ${artifact}")
         }
@@ -249,6 +277,16 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             def requiredEntries = [
                     'META-INF/mods.toml',
                     'META-INF/accesstransformer.cfg',
+                    'META-INF/LICENSE.txt',
+                    'META-INF/licenses/Apache-2.0.txt',
+                    'META-INF/licenses/GPL-3.0-only.txt',
+                    'META-INF/licenses/LGPL-2.1-only.txt',
+                    'META-INF/licenses/LGPL-3.0-only.txt',
+                    'META-INF/licenses/KilaGraph-MIT.txt',
+                    'META-INF/jarjar/metadata.json',
+                    'META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar',
+                    'META-INF/jarjar/kilagraph-forge-1.20.1-forge4710-20.1.0.15.jar',
+                    "META-INF/jarjar/kotlinforforge-${project.kotlinforforge_version}.jar",
                     'photon.mixins.json',
                     'photon.refmap.json',
                     'assets/photon/textures/icon.png'
@@ -312,11 +350,55 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'modId = "photon"',
                     "version = \"${project.version}\"",
                     'versionRange = "[1.20.1]"',
-                    "versionRange = \"${project.forge_version_range}\""
+                    "versionRange = \"${project.forge_version_range}\"",
+                    'modId = "ldlib"',
+                    "versionRange = \"${project.ldlib_version_range}\""
             ]
             def missingMetadata = requiredMetadata.findAll { !metadata.contains(it) }
             if (!missingMetadata.isEmpty()) {
                 throw new GradleException("Photon artifact metadata does not match the 1.20.1 Forge target: ${missingMetadata.join(', ')}")
+            }
+
+            def jarJarMetadata = new groovy.json.JsonSlurper().parseText(
+                    new String(zip.getInputStream(zip.getEntry('META-INF/jarjar/metadata.json')).withCloseable {
+                        it.readAllBytes()
+                    }, java.nio.charset.StandardCharsets.UTF_8))
+            def kilaGraphDependency = jarJarMetadata.jars.find { dependency ->
+                dependency.identifier?.artifact == 'kilagraph-forge-1.20.1-forge4710'
+            }
+            if (kilaGraphDependency?.version?.artifactVersion != '20.1.0.15'
+                    || kilaGraphDependency?.version?.range != '[20.1.0.15,)'
+                    || !metadata.contains('versionRange = "[20.1.0.15,)"')) {
+                throw new GradleException('Photon must select the KilaGraph 20.1.0.15 build adapted to Forge 47.4.10')
+            }
+
+            def kilaGraphPath = kilaGraphDependency.path
+            def nestedKilaGraph = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
+                    zip.getInputStream(zip.getEntry(kilaGraphPath)).withCloseable { it.readAllBytes() }))
+            def kilaGraphModsToml = null
+            try {
+                def nestedEntry
+                while ((nestedEntry = nestedKilaGraph.nextEntry) != null) {
+                    if (nestedEntry.name == 'META-INF/mods.toml') {
+                        kilaGraphModsToml = new String(nestedKilaGraph.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                        break
+                    }
+                }
+            } finally {
+                nestedKilaGraph.close()
+            }
+            if (kilaGraphModsToml == null
+                    || !kilaGraphModsToml.contains('version = "20.1.0.15"')
+                    || !kilaGraphModsToml.contains('versionRange = "[47.4.10,48)"')) {
+                throw new GradleException('The nested KilaGraph jar is not the Forge 47.4.10 build')
+            }
+
+            def kotlinDependency = jarJarMetadata.jars.find { dependency ->
+                dependency.identifier?.artifact == 'kotlinforforge'
+            }
+            if (kotlinDependency?.version?.artifactVersion != project.kotlinforforge_version
+                    || kotlinDependency?.version?.range != "[${project.kotlinforforge_version},)") {
+                throw new GradleException("Photon must package the local Kotlin runtime ${project.kotlinforforge_version}")
             }
 
             def entries = zip.entries()

@@ -1,6 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
-import com.lowdragmc.lowdraglib2.syncdata.IProviderAwareNBTSerializable;
+import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.Tag;
 import org.jetbrains.annotations.NotNull;
@@ -10,10 +10,10 @@ final class MaterialSamplerTextureCopy {
     private MaterialSamplerTextureCopy() {
     }
 
-    static <T extends Tag> void copy(IProviderAwareNBTSerializable<T> sourceCurve,
-                                     IProviderAwareNBTSerializable<T> sourceGradient,
-                                     IProviderAwareNBTSerializable<T> targetCurve,
-                                     IProviderAwareNBTSerializable<T> targetGradient,
+    static <T extends Tag> void copy(RegistryAwareNBTSerializable<T> sourceCurve,
+                                     RegistryAwareNBTSerializable<T> sourceGradient,
+                                     RegistryAwareNBTSerializable<T> targetCurve,
+                                     RegistryAwareNBTSerializable<T> targetGradient,
                                      HolderLookup.@NotNull Provider provider) {
         targetCurve.deserializeNBT(provider, sourceCurve.serializeNBT(provider));
         targetGradient.deserializeNBT(provider, sourceGradient.serializeNBT(provider));

@@ -153,7 +153,7 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
     public ListTag serializeNBT(@Nonnull HolderLookup.Provider provider) {
         var listTag = new ListTag();
         for (var curve : curves) {
-            listTag.add(curve.serializeNBT(provider));
+            listTag.add(curve.serializeNBT());
         }
         return listTag;
     }
@@ -163,7 +163,7 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
         curves.clear();
         for (Tag tag : listTag) {
             var curve = new Curve();
-            curve.deserializeNBT(provider, (CompoundTag) tag);
+            curve.deserializeNBT((CompoundTag) tag);
             curves.add(curve);
         }
         markAsDirty();

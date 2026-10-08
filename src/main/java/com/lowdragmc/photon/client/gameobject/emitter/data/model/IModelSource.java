@@ -3,14 +3,16 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.utils.PersistedParser;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.core.HolderLookup;
+import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 import net.minecraft.resources.ResourceLocation;
 
 import org.jetbrains.annotations.Nullable;
@@ -28,10 +30,35 @@ import java.util.function.Supplier;
  * Implementations must implement {@code equals}/{@code hashCode} over all mesh-affecting config
  * fields — render-pass batching and {@code MeshData} equality depend on it.
  */
-public interface IModelSource extends IConfigurable, IPersistedSerializable, ILDLRegisterClient<IModelSource, Supplier<IModelSource>> {
+public interface IModelSource extends IConfigurable, IPersistedSerializable,
+        RegistryAwareNBTSerializable<CompoundTag>, ILDLRegisterClient<IModelSource, Supplier<IModelSource>> {
     Codec<IModelSource> CODEC = PhotonRegistries.MODEL_SOURCES.optionalCodec().dispatch(ILDLRegisterClient::getRegistryHolderOptional,
-            optional -> optional.map(holder -> PersistedParser.createCodec(holder.value()).fieldOf("data").codec())
+            optional -> optional.map(holder -> PersistedCodec.createCodec(holder.value()).fieldOf("data").codec())
                     .orElseGet(() -> MapCodec.<IModelSource>unit(JsonModelSource::new).codec()));
+
+    default Tag serializeAdditionalNBT(HolderLookup.Provider provider) {
+        return new CompoundTag();
+    }
+
+    default void deserializeAdditionalNBT(Tag tag, HolderLookup.Provider provider) {
+    }
+
+    @Override
+    default CompoundTag serializeNBT(HolderLookup.Provider provider) {
+        var tag = IPersistedSerializable.super.serializeNBT();
+        var additional = serializeAdditionalNBT(provider);
+        if (additional != null && !(additional instanceof CompoundTag compound && compound.isEmpty())
+                && !(additional instanceof net.minecraft.nbt.ListTag list && list.isEmpty())) {
+            tag.put("_additional", additional);
+        }
+        return tag;
+    }
+
+    @Override
+    default void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag) {
+        IPersistedSerializable.super.deserializeNBT(tag);
+        if (tag.contains("_additional")) deserializeAdditionalNBT(tag.get("_additional"), provider);
+    }
 
     default CompoundTag serializeWrapper() {
         return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(new CompoundTag());

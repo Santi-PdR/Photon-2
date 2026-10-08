@@ -9,8 +9,9 @@ import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
 import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.utils.PersistedParser;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
+import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.serialization.Codec;
@@ -19,6 +20,7 @@ import dev.vfyjxf.taffy.style.AlignItems;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
@@ -36,7 +38,8 @@ import java.util.function.Supplier;
  */
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
-public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRegisterClient<IMaterial, Supplier<IMaterial>> {
+public interface IMaterial extends IConfigurable, IPersistedSerializable,
+        RegistryAwareNBTSerializable<CompoundTag>, ILDLRegisterClient<IMaterial, Supplier<IMaterial>> {
     // region builtin material
     @LDLRegisterClient(name = "missing", registry = "photon:material", manual = true)
     final class MissingMaterial implements IMaterial {
@@ -55,7 +58,7 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
     // endregion
 
     Codec<IMaterial> CODEC = PhotonRegistries.MATERIALS.optionalCodec().dispatch(ILDLRegisterClient::getRegistryHolderOptional,
-            optional -> optional.map(holder -> PersistedParser.createCodec(holder.value()).fieldOf("data").codec())
+            optional -> optional.map(holder -> PersistedCodec.createCodec(holder.value()).fieldOf("data").codec())
                     .orElseGet(() -> MapCodec.<IMaterial>unit(MISSING).codec()));
 
     @Nullable
@@ -68,6 +71,30 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
     }
 
     ShaderInstance begin(MaterialContext context);
+
+    default Tag serializeAdditionalNBT(HolderLookup.Provider provider) {
+        return new CompoundTag();
+    }
+
+    default void deserializeAdditionalNBT(Tag tag, HolderLookup.Provider provider) {
+    }
+
+    @Override
+    default CompoundTag serializeNBT(HolderLookup.Provider provider) {
+        var tag = IPersistedSerializable.super.serializeNBT();
+        var additional = serializeAdditionalNBT(provider);
+        if (additional != null && !(additional instanceof CompoundTag compound && compound.isEmpty())
+                && !(additional instanceof net.minecraft.nbt.ListTag list && list.isEmpty())) {
+            tag.put("_additional", additional);
+        }
+        return tag;
+    }
+
+    @Override
+    default void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag) {
+        IPersistedSerializable.super.deserializeNBT(tag);
+        deserializeAdditionalNBT(tag.get("_additional"), provider);
+    }
 
     IGuiTexture preview();
 

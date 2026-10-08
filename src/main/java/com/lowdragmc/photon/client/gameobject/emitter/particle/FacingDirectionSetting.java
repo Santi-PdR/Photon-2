@@ -6,8 +6,8 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSelector;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.NumberConfigurator;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import lombok.EqualsAndHashCode;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -72,9 +72,7 @@ public class FacingDirectionSetting implements IConfigurable, IPersistedSerializ
         particleRendererSetting.getConfig().particleRenderType.clearInstance();
     }
 
-    @Override
     public void afterDeserialize() {
-        IPersistedSerializable.super.afterDeserialize();
         particleRendererSetting.getConfig().particleRenderType.clearInstance();
     }
 

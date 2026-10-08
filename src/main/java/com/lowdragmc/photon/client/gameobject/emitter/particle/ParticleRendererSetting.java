@@ -10,8 +10,8 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.NumberConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurator;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
@@ -20,6 +20,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshDataConfigurator;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
+import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -39,7 +40,8 @@ import java.util.Objects;
 @Getter
 @Setter
 @EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
-public class ParticleRendererSetting extends RendererSetting implements IConfigurable, IPersistedSerializable {
+public class ParticleRendererSetting extends RendererSetting implements IConfigurable, IPersistedSerializable,
+        RegistryAwareNBTSerializable<CompoundTag> {
 
     public enum Mode {
         None((p, c, t) -> new Quaternionf()),
@@ -359,7 +361,7 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
 
     @Override
     public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
-        IPersistedSerializable.super.deserializeNBT(provider, tag);
+        IPersistedSerializable.super.deserializeNBT(tag);
         if (facingMode == null) {
             facingMode = FacingMode.DEFAULT;
         }
@@ -367,11 +369,12 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
             // MeshData's deserializer tolerates legacy payloads (bare modelLocation / source wrapper)
             model = new MeshData(tag.getCompound("model"));
         }
+        facingDirection.afterDeserialize();
     }
 
     @Override
     public CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
-        var tag = IPersistedSerializable.super.serializeNBT(provider);
+        var tag = IPersistedSerializable.super.serializeNBT();
         if (renderMode == Mode.Model && model != null) {
             tag.put("model", model.serializeNBT(provider));
         }

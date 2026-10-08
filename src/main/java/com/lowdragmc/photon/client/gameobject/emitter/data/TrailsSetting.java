@@ -232,16 +232,16 @@ public class TrailsSetting extends ToggleGroup {
     @Override
     public CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
         var data = super.serializeNBT(provider);
-        data.put("config", config.serializeNBT(provider));
-        data.put("araConfig", araConfig.serializeNBT(provider));
+        data.put("config", config.serializeNBT());
+        data.put("araConfig", araConfig.serializeNBT());
         return data;
     }
 
     @Override
     public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
         super.deserializeNBT(provider, tag);
-        config.deserializeNBT(provider, tag.getCompound("config"));
-        araConfig.deserializeNBT(provider, tag.getCompound("araConfig"));
+        config.deserializeNBT(tag.getCompound("config"));
+        araConfig.deserializeNBT(tag.getCompound("araConfig"));
     }
 
     private void createTrailTypeConfigurator(TrailType value, ConfiguratorGroup group) {
