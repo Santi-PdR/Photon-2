@@ -162,11 +162,14 @@ final class IrisTargetResolver {
     }
 
     /** Oculus 1.20.1 keeps the default scene-colour ping-pong in colortex0. */
-    private static int sceneColorTexture(@Nullable RenderTargets renderTargets, boolean beforeTranslucent) {
+    private static int sceneColorTexture(@Nullable RenderTargets renderTargets, IrisRenderingPipeline pipeline) {
         if (renderTargets == null || renderTargets.getRenderTargetCount() == 0) return 0;
         var sceneColor = renderTargets.get(0);
         if (sceneColor == null) return 0;
-        return beforeTranslucent ? sceneColor.getMainTexture() : sceneColor.getAltTexture();
+        var flippedBuffers = pipeline.isBeforeTranslucent
+                ? pipeline.getFlippedAfterPrepare()
+                : pipeline.getFlippedAfterTranslucent();
+        return IrisSceneColorSelection.activeTexture(sceneColor.getMainTexture(), sceneColor.getAltTexture(), flippedBuffers);
     }
 
     private IrisFrameTarget probe(IrisRenderingPipeline pipeline,
@@ -243,7 +246,7 @@ final class IrisTargetResolver {
             int primaryTexture = attachmentTextures[primaryAttachment];
             int primaryColortex = colortexIndices[primaryAttachment];
 
-            int sceneColorTexture = sceneColorTexture(renderTargets, pipeline.isBeforeTranslucent);
+            int sceneColorTexture = sceneColorTexture(renderTargets, pipeline);
             boolean primaryIsSceneColor = primaryTexture != 0 && primaryTexture == sceneColorTexture;
 
             int width = bufferWidth;
