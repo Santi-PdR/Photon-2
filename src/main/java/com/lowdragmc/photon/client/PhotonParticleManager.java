@@ -141,57 +141,68 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
     public void render(PoseStack pMatrixStack, Camera pActiveRenderInfo, float pPartialTicks, Predicate<ParticleRenderType> renderTypeFilter) {
         com.lowdragmc.photon.client.fx.FXPostProcessPreparation.prepare(particlesByRenderType(),
                 isPlaying ? pPartialTicks : 0);
-        drawMode = options.getDrawMode();
-        sceneBloomEnabled = options.isBloomEnabled();
-        renderingManager = this;
-        lastPartialTick = pPartialTicks;
-        // route post-effect submission/consumption to the isolated editor-scene stack
-        com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(true);
-        com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink()
-                .setEffectsEnabled(options.isEffectsEnabled());
-        if (options.isMaskViewEnabled()) {
-            // top-bar debug toggle: show the CustomMask contents instead of the scene this frame
-            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink().submit(
-                    com.lowdragmc.lowdraglib2.editor.resource.BuiltinResourceProvider.TYPE.createFullPath("show_mask"),
-                    java.util.Map.of(), 1f);
-        }
-        RenderSystem.setShaderGameTime(getRealTime(), isPlaying ? pPartialTicks : 0);
-        // The scene's own camera for post-effect world reconstruction (the game camera would be wrong here).
-        // LDLib2's ParticleManager multiplies pMatrixStack onto the model-view stack around the draws, so
-        // this is exactly the ModelViewMat the particles — and the scene's effect chain — are rendered with.
-        PostFXCamera.captureSubViewport(
-                new Matrix4f(RenderSystem.getModelViewMatrix()).mul(pMatrixStack.last().pose()),
-                RenderSystem.getProjectionMatrix(), pActiveRenderInfo.getPosition());
-
+        var previousDrawMode = drawMode;
+        var previousBloomEnabled = sceneBloomEnabled;
+        var previousRenderingManager = renderingManager;
+        boolean previousEditorSceneRendering = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack
+                .isEditorSceneRendering();
         var startTime = System.nanoTime();
-        // Particle rendering must not inherit the UI scissor, but restoring it by blindly
-        // enabling the test leaks a stale clip box into the rest of the frame when the caller had
-        // no scissor active. Capture both pieces of state and restore them on every exit path.
-        boolean scissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
-        int[] scissorBox = new int[4];
-        GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
-        GlStateManager._disableScissorTest();
         try {
-            super.render(pMatrixStack, pActiveRenderInfo, isPlaying ? pPartialTicks : 0, renderTypeFilter);
-            consumeEditorEffectsWithoutParticles(renderTypeFilter);
-        } finally {
-            if (scissorEnabled) {
-                GlStateManager._enableScissorTest();
-                GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
-            } else {
-                GlStateManager._disableScissorTest();
+            drawMode = options.getDrawMode();
+            sceneBloomEnabled = options.isBloomEnabled();
+            renderingManager = this;
+            lastPartialTick = pPartialTicks;
+            // Route post-effect submission/consumption to the isolated editor-scene stack.
+            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(true);
+            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink()
+                    .setEffectsEnabled(options.isEffectsEnabled());
+            if (options.isMaskViewEnabled()) {
+                // top-bar debug toggle: show the CustomMask contents instead of the scene this frame
+                com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.currentSink().submit(
+                        com.lowdragmc.lowdraglib2.editor.resource.BuiltinResourceProvider.TYPE.createFullPath("show_mask"),
+                        java.util.Map.of(), 1f);
             }
-            lastFrameTimes[frameIndex] = System.nanoTime() - startTime;
-            frameIndex = (frameIndex + 1) % lastFrameTimes.length;
+            RenderSystem.setShaderGameTime(getRealTime(), isPlaying ? pPartialTicks : 0);
+            // The scene's own camera for post-effect world reconstruction (the game camera would be wrong here).
+            // LDLib2's ParticleManager multiplies pMatrixStack onto the model-view stack around the draws, so
+            // this is exactly the ModelViewMat the particles — and the scene's effect chain — are rendered with.
+            PostFXCamera.captureSubViewport(
+                    new Matrix4f(RenderSystem.getModelViewMatrix()).mul(pMatrixStack.last().pose()),
+                    RenderSystem.getProjectionMatrix(), pActiveRenderInfo.getPosition());
 
-            // roll back to previous game time
-            if (Minecraft.getInstance().level != null) {
-                RenderSystem.setShaderGameTime(Minecraft.getInstance().level.getGameTime(), pPartialTicks);
+            // Particle rendering must not inherit the UI scissor, but restoring it by blindly
+            // enabling the test leaks a stale clip box into the rest of the frame when the caller had
+            // no scissor active. Capture both pieces of state and restore them on every exit path.
+            boolean scissorEnabled = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+            int[] scissorBox = new int[4];
+            GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
+            try {
+                GlStateManager._disableScissorTest();
+                super.render(pMatrixStack, pActiveRenderInfo, isPlaying ? pPartialTicks : 0, renderTypeFilter);
+                consumeEditorEffectsWithoutParticles(renderTypeFilter);
+            } finally {
+                if (scissorEnabled) {
+                    GlStateManager._enableScissorTest();
+                    GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+                } else {
+                    GlStateManager._disableScissorTest();
+                }
+                lastFrameTimes[frameIndex] = System.nanoTime() - startTime;
+                frameIndex = (frameIndex + 1) % lastFrameTimes.length;
             }
-            drawMode = null;
-            sceneBloomEnabled = true;
-            renderingManager = null;
-            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(false);
+        } finally {
+            // roll back to previous game time
+            try {
+                if (Minecraft.getInstance().level != null) {
+                    RenderSystem.setShaderGameTime(Minecraft.getInstance().level.getGameTime(), pPartialTicks);
+                }
+            } finally {
+                drawMode = previousDrawMode;
+                sceneBloomEnabled = previousBloomEnabled;
+                renderingManager = previousRenderingManager;
+                com.lowdragmc.photon.client.postfx.runtime.PostEffectStack
+                        .setEditorSceneRendering(previousEditorSceneRendering);
+            }
         }
     }
 
