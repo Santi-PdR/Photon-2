@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.google.gson.JsonObject;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
@@ -21,6 +22,7 @@ import com.lowdragmc.photon.client.AutoCloseCleaner;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.render.PhotonDepthParams;
+import com.lowdragmc.photon.client.render.PhotonCustomUniforms;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -78,6 +80,10 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     private String compiledErrorMessage = "";
     /** Per-material API overrides. Kept separate from LDShaderHolder's UI values for NBT stability. */
     private final Map<String, float[]> uniformOverrides = new HashMap<>();
+    @Nullable
+    private PhotonCustomUniforms customUniforms;
+    @Nullable
+    private JsonObject cachedShaderJson;
 
     public CustomShaderMaterial() {
         samplerTexturesCleanable = AutoCloseCleaner.registerRenderThread(this,
@@ -179,6 +185,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     public void recompile() {
         compiledErrorMessage = "";
+        customUniforms = null;
+        cachedShaderJson = null;
 
         if (shaderCleanable != null) {
             shaderCleanable.clean();
@@ -319,6 +327,22 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (shaderHolder != null) applyUniformOverrides(shaderHolder.baseInstance);
     }
 
+    /**
+     * Returns the JSON-declared custom uniforms. Forge 1.20.1 applies their values directly to the
+     * shader's ordinary uniforms instead of creating the 26.2-only GPU uniform buffer.
+     */
+    public PhotonCustomUniforms customUniforms() {
+        if (customUniforms == null) {
+            customUniforms = new PhotonCustomUniforms(CustomShaderUniformDefaults.fields(readShaderJson()),
+                    this::setUniformValue, this::applyUniformOverridesToBase);
+        }
+        return customUniforms;
+    }
+
+    private void applyUniformOverridesToBase() {
+        if (shaderHolder != null) applyUniformOverrides(shaderHolder.baseInstance);
+    }
+
     /** Read the current value, including the shader JSON defaults when the program is not compiled yet. */
     public float[] getUniformValue(String name, int count) {
         if (count <= 0) return new float[0];
@@ -343,14 +367,19 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     }
 
     private float[] readShaderUniformDefaults(String name, int count) {
+        return CustomShaderUniformDefaults.read(readShaderJson(), name, count);
+    }
+
+    private JsonObject readShaderJson() {
+        if (cachedShaderJson != null) return cachedShaderJson;
         var shaderJson = ResourceLocation.fromNamespaceAndPath(shaderLocation.getNamespace(),
                 "shaders/core/" + shaderLocation.getPath() + ".json");
         var resource = Minecraft.getInstance().getResourceManager().getResource(shaderJson).orElse(null);
-        if (resource == null) return new float[count];
+        if (resource == null) return cachedShaderJson = new JsonObject();
         try (var reader = new InputStreamReader(resource.open(), StandardCharsets.UTF_8)) {
-            return CustomShaderUniformDefaults.read(GsonHelper.parse(reader), name, count);
+            return cachedShaderJson = GsonHelper.parse(reader);
         } catch (Exception ignored) {
-            return new float[count];
+            return cachedShaderJson = new JsonObject();
         }
     }
 
