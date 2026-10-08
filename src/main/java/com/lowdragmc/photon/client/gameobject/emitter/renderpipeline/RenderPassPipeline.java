@@ -184,6 +184,11 @@ public class RenderPassPipeline {
         // it does not depend on MC's main target still being bound (which is what the shader-getter
         // override keys off).
         irisTarget = IrisCompat.resolveFrameTarget(this == ParticleQueueRenderType.TRANSLUCENT_QUEUE.pipeline);
+        if (irisTarget != null) {
+            // A prior plain-pipeline copy must not leak into a preview after the active target
+            // switches to Iris, even if this frame's materials never ask for scene samplers.
+            lastSceneSamplerCopyNanos = Long.MIN_VALUE;
+        }
         if (irisTarget != null && !irisTarget.canComposite()) {
             clearRenderingState();
             irisTarget = null;
