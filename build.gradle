@@ -542,8 +542,83 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     }
 }
 
+def verifyKffLanguageProvider = tasks.register('verifyKffLanguageProvider') {
+    group = 'verification'
+    description = 'Executes KotlinForForge’s scan visitor in an isolated Forge JPMS layer.'
+    dependsOn tasks.named('reobfJarJar')
+    inputs.file(rootProject.file('gradle/KotlinLanguageProviderProbe.java'))
+    doLast {
+        def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
+        def moduleDirectory = rootProject.file('build/kff-language-provider-probe')
+        delete(moduleDirectory)
+        moduleDirectory.mkdirs()
+
+        def modules = []
+        def outer = new java.util.zip.ZipFile(artifact)
+        try {
+            def runtimePath = "META-INF/jarjar/kotlinruntime-${project.kotlinforforge_version}.jar"
+            def runtimeBytes = outer.getInputStream(outer.getEntry(runtimePath)).withCloseable { it.readAllBytes() }
+            def runtimeCarrier = new File(moduleDirectory, "kotlinruntime-${project.kotlinforforge_version}.jar")
+            runtimeCarrier.bytes = runtimeBytes
+            modules << runtimeCarrier
+            def runtimeZip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(runtimeBytes))
+            try {
+                def runtimeEntry
+                while ((runtimeEntry = runtimeZip.nextEntry) != null) {
+                    if (runtimeEntry.name.startsWith('META-INF/jarjar/kff')
+                            && runtimeEntry.name.endsWith('.jar')) {
+                        def destination = new File(moduleDirectory, runtimeEntry.name.substring('META-INF/jarjar/'.length()))
+                        destination.bytes = runtimeZip.readAllBytes()
+                        modules << destination
+                    }
+                }
+            } finally {
+                runtimeZip.close()
+            }
+
+            def ldlib2Entry = outer.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
+            def ldlib2File = new File(moduleDirectory, 'ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
+            ldlib2File.bytes = outer.getInputStream(ldlib2Entry).withCloseable { it.readAllBytes() }
+            modules << ldlib2File
+        } finally {
+            outer.close()
+        }
+
+        def requiredClasses = [
+                'net/minecraftforge/forgespi/language/ModFileScanData.class',
+                'org/objectweb/asm/Type.class',
+                'net/minecraftforge/fml/Logging.class',
+                'org/apache/logging/log4j/Logger.class'
+        ]
+        def compileJars = configurations.compileClasspath.files.findAll { it.isFile() && it.name.endsWith('.jar') }
+        requiredClasses.each { classEntry ->
+            def owner = compileJars.find { candidate ->
+                def candidateZip = new java.util.zip.ZipFile(candidate)
+                try {
+                    candidateZip.getEntry(classEntry) != null
+                } finally {
+                    candidateZip.close()
+                }
+            }
+            if (owner == null) {
+                throw new GradleException("Cannot locate ${classEntry} for the KFF language-provider probe")
+            }
+            if (!modules.contains(owner)) modules << owner
+        }
+
+        def javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(17)
+        }.get()
+        exec {
+            executable javaLauncher.executablePath.asFile
+            args(([rootProject.file('gradle/KotlinLanguageProviderProbe.java')] + modules)
+                    .collect { it.absolutePath })
+        }
+    }
+}
+
 tasks.named('check') {
-    dependsOn verifyCommonSideArtifact
+    dependsOn verifyCommonSideArtifact, verifyKffLanguageProvider
 }
 
 tasks.withType(JavaCompile).configureEach {
