@@ -51,7 +51,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @ConfigList(configuratorMethod = "createAnimationFileConfigurator",
             addDefaultMethod = "addDefaultAnimationFile")
     @Configurable(name = "AnimatedGltfModelSource.animationFiles",
-            tips = "photon.model_source.animated_gltf_model.animationFiles.tips")
+            tips = "photon.model_source.animated_gltf_model.animationFiles.tips", persisted = false)
     private List<ResourceLocation> animationFiles = new ArrayList<>();
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.speed")

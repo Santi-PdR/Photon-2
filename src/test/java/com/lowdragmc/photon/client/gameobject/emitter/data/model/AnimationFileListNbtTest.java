@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class AnimationFileListNbtTest {
     @Test
@@ -39,7 +40,7 @@ class AnimationFileListNbtTest {
     }
 
     @Test
-    void migratesLegacyStringFieldRecursivelyBeforeListDecoding() {
+    void movesLegacyStringFieldRecursivelyIntoAdditionalNbt() {
         var root = new CompoundTag();
         var sourceData = new CompoundTag();
         sourceData.putString("animationFiles", "example:walk.glb; other:run.gltf Upper:bad");
@@ -49,7 +50,8 @@ class AnimationFileListNbtTest {
 
         assertEquals(List.of(ResourceLocation.fromNamespaceAndPath("example", "walk.glb"),
                         ResourceLocation.fromNamespaceAndPath("other", "run.gltf")),
-                AnimationFileListNbt.read(sourceData));
+                AnimationFileListNbt.read(sourceData.get("_additional")));
+        assertFalse(sourceData.contains("animationFiles"));
     }
 
     @Test

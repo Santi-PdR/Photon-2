@@ -11,6 +11,7 @@ import java.util.List;
 /** NBT codec for the external animation resource list persisted by animated glTF sources. */
 final class AnimationFileListNbt {
     private static final String KEY = "animationFiles";
+    private static final String ADDITIONAL_KEY = "_additional";
 
     private AnimationFileListNbt() {}
 
@@ -36,13 +37,25 @@ final class AnimationFileListNbt {
         return List.copyOf(locations);
     }
 
-    /** Upgrade the old Forge string-backed configurable field before PersistedParser reads a list. */
+    /**
+     * Move the old configurable field into PersistedParser's additional-NBT slot. ResourceLocation
+     * has no 1.20.1 LDLib2 value payload, so the editable list is persisted by serializeAdditionalNBT.
+     */
     static void migrateLegacyConfig(CompoundTag serialized) {
         for (String key : List.copyOf(serialized.getAllKeys())) {
             Tag value = serialized.get(key);
-            if (KEY.equals(key) && value instanceof StringTag legacy) {
-                serialized.put(KEY, parseLegacy(legacy.getAsString()));
-            } else if (value instanceof CompoundTag nested) {
+            if (KEY.equals(key)) {
+                var additional = serialized.getCompound(ADDITIONAL_KEY);
+                if (!additional.contains(KEY)) {
+                    Tag normalized = value instanceof StringTag legacy
+                            ? parseLegacy(legacy.getAsString()) : value;
+                    if (normalized instanceof ListTag list && list.getElementType() == Tag.TAG_STRING) {
+                        additional.put(KEY, list.copy());
+                        serialized.put(ADDITIONAL_KEY, additional);
+                    }
+                }
+                serialized.remove(KEY);
+            } else if (!ADDITIONAL_KEY.equals(key) && value instanceof CompoundTag nested) {
                 migrateLegacyConfig(nested);
             }
         }
