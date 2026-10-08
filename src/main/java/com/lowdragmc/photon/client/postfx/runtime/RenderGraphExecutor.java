@@ -172,6 +172,8 @@ public final class RenderGraphExecutor {
 
                 // texture inputs override the staged sampler defaults; TexelSize rides the same names
                 for (var binding : pass.textures().entrySet()) {
+                    if (!requiredTextureAvailable(binding.getValue().source(), sceneDepthTexture,
+                            maskTexture, customDepthTexture)) return null;
                     int textureId;
                     int textureWidth;
                     int textureHeight;
@@ -187,17 +189,11 @@ public final class RenderGraphExecutor {
                             textureHeight = chainInput.height;
                         }
                         case CUSTOM_MASK -> {
-                            // -1 must not reach setSampler: vanilla apply() skips binding at -1 and
-                            // the sampler reads whatever texture the unit last held (garbage). The
-                            // stack already skips mask-reading effects on maskless frames; this
-                            // guards the remaining callers (editor preview).
-                            if (maskTexture == -1) return null;
                             textureId = maskTexture;
                             textureWidth = chainInput.width;
                             textureHeight = chainInput.height;
                         }
                         case CUSTOM_DEPTH -> {
-                            if (customDepthTexture == -1) return null;
                             textureId = customDepthTexture;
                             textureWidth = chainInput.width;
                             textureHeight = chainInput.height;
@@ -271,6 +267,17 @@ public final class RenderGraphExecutor {
     }
 
     record TexelSizeValues(float width, float height, float inverseWidth, float inverseHeight) {}
+
+    /** An absent required depth/mask must skip this effect instead of binding a stale texture unit. */
+    static boolean requiredTextureAvailable(CompiledEffect.ResourceRef.Source source,
+                                            int sceneDepth, int mask, int customDepth) {
+        return switch (source) {
+            case SCENE_DEPTH -> sceneDepth != -1;
+            case CUSTOM_MASK -> mask != -1;
+            case CUSTOM_DEPTH -> customDepth != -1;
+            default -> true;
+        };
+    }
 
     /** Null-safe effect identity — editor-preview effects compile without a source path. */
     private static String sourceName(CompiledEffect effect) {
