@@ -12,7 +12,8 @@ class DynamicMeshCacheTest {
                 .triangle(vertex(0, 0), vertex(1, 0), vertex(0, 1))
                 .build();
         var dynamic = new MutableDynamicMesh(topology);
-        dynamic.update(1, topology.geometry(), tangents(0, 1, 0));
+        float[] firstGeometry = rotateGeometry(topology.geometry());
+        dynamic.update(1, firstGeometry, tangents(0, 1, 0));
         var cache = new DynamicMeshCache();
 
         PhotonMesh firstPose = cache.resolve(dynamic);
@@ -20,7 +21,7 @@ class DynamicMeshCacheTest {
 
         dynamic.update(2, topology.geometry(), tangents(0, 0, 1));
         float[] expectedFirstPoseTangents = topology
-                .withGeometry(topology.geometry(), (java.util.function.Supplier<float[]>) null, 1)
+                .withGeometry(firstGeometry, (java.util.function.Supplier<float[]>) null, 1)
                 .tangents();
         assertArrayEquals(expectedFirstPoseTangents, firstPose.tangents());
 
@@ -40,6 +41,17 @@ class DynamicMeshCacheTest {
             result[offset + 1] = y;
             result[offset + 2] = z;
             result[offset + 3] = 1;
+        }
+        return result;
+    }
+
+    private static float[] rotateGeometry(float[] geometry) {
+        float[] result = geometry.clone();
+        for (int vertex = 0; vertex < result.length / PhotonMesh.FLOATS_PER_GEOMETRY; vertex++) {
+            int offset = vertex * PhotonMesh.FLOATS_PER_GEOMETRY;
+            float x = result[offset];
+            result[offset] = -result[offset + 1];
+            result[offset + 1] = x;
         }
         return result;
     }
