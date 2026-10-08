@@ -330,14 +330,15 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             var uniform = uniforms.get(name);
             if (uniform == null || components.length != uniform.getCount()) return;
             if (isIntegerUniform(uniform.getType())) {
-                switch (components.length) {
-                    case 1 -> uniform.set(Math.round(components[0]));
-                    case 2 -> uniform.set(Math.round(components[0]), Math.round(components[1]));
-                    case 3 -> uniform.set(Math.round(components[0]), Math.round(components[1]), Math.round(components[2]));
-                    case 4 -> uniform.set(Math.round(components[0]), Math.round(components[1]),
-                            Math.round(components[2]), Math.round(components[3]));
+                int[] integerComponents = CustomShaderUniformValues.toIntegerComponents(components);
+                switch (integerComponents.length) {
+                    case 1 -> uniform.set(integerComponents[0]);
+                    case 2 -> uniform.set(integerComponents[0], integerComponents[1]);
+                    case 3 -> uniform.set(integerComponents[0], integerComponents[1], integerComponents[2]);
+                    case 4 -> uniform.set(integerComponents[0], integerComponents[1],
+                            integerComponents[2], integerComponents[3]);
                     default -> Photon.LOGGER.warn("Ignoring unsupported integer shader uniform '{}' length {}",
-                            name, components.length);
+                            name, integerComponents.length);
                 }
             } else {
                 uniform.set(components);
