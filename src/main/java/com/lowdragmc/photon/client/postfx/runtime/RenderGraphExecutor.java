@@ -355,6 +355,22 @@ public final class RenderGraphExecutor {
             };
             bindings.add(new KGSamplerGl.Binding(names.indexOf(entry.getKey()), state));
         }
+        if (pass.customShader() != null) {
+            var info = CustomShaderPass.getInfo(pass.customShader());
+            if (info != null) {
+                int placeholder = resolveSamplerTexture(RenderTypeGraphTypes.Sampler2DValue.defaultValue());
+                var fallbackState = PhotonSamplerState.linearClamp();
+                for (var sampler : info.samplers()) {
+                    if (pass.textures().containsKey(sampler)) continue;
+                    int unit = names.indexOf(sampler);
+                    if (unit < 0) continue;
+                    // The shader instance is cached across draws; bind a placeholder instead of
+                    // inheriting the previous pass's texture when this sampler is not connected.
+                    shader.setSampler(sampler, placeholder);
+                    bindings.add(new KGSamplerGl.Binding(unit, fallbackState));
+                }
+            }
+        }
         KGSamplerBinder.stage(shader, bindings);
     }
 
