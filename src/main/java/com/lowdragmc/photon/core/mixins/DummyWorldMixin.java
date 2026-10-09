@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.core.mixins;
 
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.DummyWorld;
+import com.lowdragmc.photon.core.PhotonSceneTickContext;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.ForgeEventFactory;
 import org.spongepowered.asm.mixin.Mixin;

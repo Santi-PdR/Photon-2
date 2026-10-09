@@ -1,4 +1,4 @@
-package com.lowdragmc.photon.core.mixins;
+package com.lowdragmc.photon.core;
 
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.DummyWorld;
 import net.minecraft.world.level.Level;
