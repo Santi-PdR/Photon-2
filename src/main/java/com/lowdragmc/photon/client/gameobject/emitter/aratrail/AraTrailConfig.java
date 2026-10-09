@@ -36,6 +36,7 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StringTag;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3f;
 
@@ -333,8 +334,8 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
     @Override
     public void deserializeNBT(CompoundTag tag) {
         PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
-        if (tag.contains("customSpace")) {
-            customSpace.deserializeNBT(tag.get("customSpace"));
+        if (tag.get("customSpace") instanceof StringTag customSpaceTag) {
+            customSpace.deserializeNBT(customSpaceTag);
         }
     }
 }

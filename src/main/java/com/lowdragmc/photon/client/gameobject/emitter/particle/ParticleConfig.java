@@ -32,6 +32,7 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StringTag;
 
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -303,8 +304,8 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Override
     public void deserializeNBT(CompoundTag tag) {
         PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
-        if (tag.contains("customSpace")) {
-            customSpace.deserializeNBT(tag.get("customSpace"));
+        if (tag.get("customSpace") instanceof StringTag customSpaceTag) {
+            customSpace.deserializeNBT(customSpaceTag);
         }
     }
 }
