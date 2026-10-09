@@ -1,24 +1,28 @@
 package com.lowdragmc.photon.client.fx;
 
+import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.photon.client.gameobject.IFXObject;
+import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
-import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
-import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter;
-import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.AbstractCurveGraph;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves;
-import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.ParticleRotationMath;
+import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
+import com.lowdragmc.photon.client.render.FXCompositeMode;
+import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import org.junit.jupiter.api.Test;
 import org.joml.Vector2fc;
-import com.lowdragmc.photon.client.render.FXCompositeMode;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,6 +91,33 @@ class PublicApiParityTest {
                 "getSimSpaceRotation/0", "getSimSpaceScale/0", "getSimToWorld/0", "getT/0", "getT/1",
                 "getVelocity/0", "getWorldToSim/0", "inspectSceneInformation/2", "isLooping/0", "self/0",
                 "setAge/1", "setRGBAColor/1"));
+    }
+
+    @Test
+    void particleEmitterInterfacePreservesReferenceParameterAndReturnTypes() {
+        assertEquals(Set.of(
+                signature(Emitter.class, "self"),
+                signature(int.class, "getParticleAmount"),
+                signature(org.joml.Vector3f.class, "getVelocity"),
+                signature(org.joml.Matrix4f.class, "getSimToWorld"),
+                signature(org.joml.Matrix4f.class, "getWorldToSim"),
+                signature(org.joml.Vector3f.class, "getSimSpaceScale"),
+                signature(org.joml.Quaternionf.class, "getSimSpaceRotation"),
+                signature(net.minecraft.world.phys.AABB.class, "getCullBox", float.class),
+                signature(int.class, "getAge"),
+                signature(void.class, "setAge", int.class),
+                signature(boolean.class, "isLooping"),
+                signature(void.class, "setRGBAColor", org.joml.Vector4f.class),
+                signature(org.joml.Vector4f.class, "getRGBAColor"),
+                signature(float.class, "getT"),
+                signature(float.class, "getT", float.class),
+                signature(float.class, "getMemRandom", Object.class),
+                signature(float.class, "getMemRandom", Object.class, Function.class),
+                signature(int.class, "getLightColor", net.minecraft.core.BlockPos.class),
+                signature(int.class, "getLightColor", net.minecraft.core.BlockPos.class, int.class),
+                signature(net.minecraft.util.RandomSource.class, "getRandomSource"),
+                signature(void.class, "inspectSceneInformation", SceneView.class, UIElement.class)),
+                publicAndProtectedSignatures(IParticleEmitter.class));
     }
 
     @Test
@@ -190,6 +221,23 @@ class PublicApiParityTest {
                         || Modifier.isProtected(method.getModifiers()))
                 .map(PublicApiParityTest::shape)
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static Set<String> publicAndProtectedSignatures(Class<?> type) {
+        return Arrays.stream(type.getDeclaredMethods())
+                .filter(method -> Modifier.isPublic(method.getModifiers())
+                        || Modifier.isProtected(method.getModifiers()))
+                .map(PublicApiParityTest::signature)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static String signature(Method method) {
+        return signature(method.getReturnType(), method.getName(), method.getParameterTypes());
+    }
+
+    private static String signature(Class<?> returnType, String name, Class<?>... parameterTypes) {
+        return name + Arrays.stream(parameterTypes).map(Class::getName)
+                .collect(Collectors.joining(",", "(", ")")) + "->" + returnType.getName();
     }
 
     private static Set<String> difference(Set<String> expected, Set<String> actual) {
