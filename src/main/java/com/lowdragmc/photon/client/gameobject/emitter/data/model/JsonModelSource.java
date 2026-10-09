@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.client.renderer.impl.IModelRenderer;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
@@ -9,12 +11,14 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraftforge.api.distmarker.Dist;
@@ -38,6 +42,9 @@ public class JsonModelSource implements IModelSource {
     @Getter
     @Configurable(name = "MeshData.modelLocation")
     private ResourceLocation modelLocation = ResourceLocation.withDefaultNamespace("block/stone");
+    @Nullable
+    private volatile ObjLoaderReference objLoaderReference;
+    private volatile boolean objLoaderChecked;
 
     public JsonModelSource() {
     }
@@ -60,11 +67,13 @@ public class JsonModelSource implements IModelSource {
     @Override
     public void invalidate() {
         PhotonMeshCache.INSTANCE.invalidate(new PhotonMeshCache.JsonKey(modelLocation));
+        objLoaderReference = null;
+        objLoaderChecked = false;
     }
 
     @Override
     public boolean hasAtlasUV() {
-        return true;
+        return getObjLoaderReference() == null;
     }
 
     @Override
@@ -77,6 +86,16 @@ public class JsonModelSource implements IModelSource {
         // do not access the model bakery during reloading (null = retry later, not cached)
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) {
             return null;
+        }
+        // The editor projects can reference OBJ models through Forge/NeoForge's custom model
+        // loader JSON. Photon bakes standalone JSON models itself, so BlockModel.fromStream does
+        // not dispatch that loader; it sees an empty vanilla model and the actual effect vanishes.
+        // Parse those model references through our runtime OBJ path instead.
+        var objReference = getObjLoaderReference();
+        if (objReference != null) {
+            var objSource = new ObjModelSource(objReference.location());
+            objSource.setFlipV(objReference.flipV());
+            return objSource.getMesh();
         }
         var random = RandomSource.create();
         var bakedModel = PhotonModelBaker.bake(modelLocation);
@@ -102,6 +121,40 @@ public class JsonModelSource implements IModelSource {
         }
         return PhotonMesh.fromBakedQuads(quads);
     }
+
+    /** Extract the OBJ target from a Forge/NeoForge OBJ-loader model JSON, if present. */
+    @Nullable
+    private ObjLoaderReference getObjLoaderReference() {
+        if (objLoaderChecked) return objLoaderReference;
+        if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) return null;
+        synchronized (this) {
+            if (objLoaderChecked) return objLoaderReference;
+            try {
+                var file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
+                var resource = Minecraft.getInstance().getResourceManager().getResource(file).orElse(null);
+                if (resource == null) return null; // resource reload may still be in progress; retry later
+                try (var reader = resource.openAsReader()) {
+                    JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
+                    var loader = json.has("loader") ? json.get("loader").getAsString() : "";
+                    if (loader.equals("forge:obj") || loader.equals("neoforge:obj")) {
+                        if (json.has("model") && json.get("model").isJsonPrimitive()) {
+                            var flipV = json.has("flip_v") ? json.get("flip_v").getAsBoolean()
+                                    : json.has("flipV") && json.get("flipV").getAsBoolean();
+                            objLoaderReference = new ObjLoaderReference(
+                                    ResourceLocation.parse(json.get("model").getAsString()), flipV);
+                        }
+                    }
+                    objLoaderChecked = true;
+                }
+            } catch (Exception exception) {
+                objLoaderChecked = true;
+                Photon.LOGGER.warn("Failed to resolve OBJ model loader for {}", modelLocation, exception);
+            }
+        }
+        return objLoaderReference;
+    }
+
+    private record ObjLoaderReference(ResourceLocation location, boolean flipV) { }
 
     @Override
     @OnlyIn(Dist.CLIENT)
