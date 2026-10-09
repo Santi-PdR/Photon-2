@@ -27,6 +27,7 @@ import java.util.function.Supplier;
 @LDLRegisterClient(name = "hdr_color", registry = "photon:number_function")
 public class HDRConstantColor implements HDRColorFunction {
 
+    private HDRColor color = HDRColor.white();
     @Persisted private float red = 1f;
     @Persisted private float green = 1f;
     @Persisted private float blue = 1f;
@@ -47,16 +48,12 @@ public class HDRConstantColor implements HDRColorFunction {
     }
 
     public HDRColor getColor() {
-        return new HDRColor(red, green, blue, alpha, intensity);
+        return color;
     }
 
     public void setColor(HDRColor color) {
-        var safeColor = color == null ? HDRColor.white() : color;
-        this.red = safeColor.getR();
-        this.green = safeColor.getG();
-        this.blue = safeColor.getB();
-        this.intensity = safeColor.getIntensity();
-        this.alpha = safeColor.getA();
+        this.color = color == null ? HDRColor.white() : color;
+        syncPersistedFields();
     }
 
     /** Compatibility setter for the port's earlier RGB/intensity vector API. */
@@ -71,7 +68,8 @@ public class HDRConstantColor implements HDRColorFunction {
 
     @Override
     public void sampleHDR(float t, Supplier<Float> lerp, Vector4f out) {
-        HDRColorCompat.premultiplied(red, green, blue, intensity, alpha, out);
+        HDRColorCompat.premultiplied(color.getR(), color.getG(), color.getB(),
+                color.getIntensity(), color.getA(), out);
     }
 
     @Override
@@ -91,16 +89,20 @@ public class HDRConstantColor implements HDRColorFunction {
     public boolean equals(Object obj) {
         if (obj == this) return true;
         return obj instanceof HDRConstantColor other
-                && Float.compare(red, other.red) == 0
-                && Float.compare(green, other.green) == 0
-                && Float.compare(blue, other.blue) == 0
-                && Float.compare(intensity, other.intensity) == 0
-                && Float.compare(alpha, other.alpha) == 0;
+                && Objects.equals(color, other.color);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(red, green, blue, intensity, alpha);
+        return Objects.hash(color);
+    }
+
+    @Override
+    public CompoundTag serializeNBT() {
+        syncPersistedFields();
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        return tag;
     }
 
     @Override
@@ -113,5 +115,14 @@ public class HDRConstantColor implements HDRColorFunction {
             blue = oldColor.z;
             intensity = oldColor.w;
         }
+        color.set(red, green, blue, alpha, intensity);
+    }
+
+    private void syncPersistedFields() {
+        red = color.getR();
+        green = color.getG();
+        blue = color.getB();
+        intensity = color.getIntensity();
+        alpha = color.getA();
     }
 }

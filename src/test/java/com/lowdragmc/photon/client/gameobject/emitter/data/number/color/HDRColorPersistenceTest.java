@@ -11,10 +11,12 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.util.PersistedCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import org.joml.Vector4f;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class HDRColorPersistenceTest {
     @BeforeAll
@@ -70,12 +72,45 @@ class HDRColorPersistenceTest {
         var original = new HDRRandomColor(
                 new HDRColor(0.1f, 0.2f, 0.3f, 0.4f, 2f),
                 new HDRColor(0.5f, 0.6f, 0.7f, 0.8f, 4f));
+        var colorA = original.getColorA();
+        var colorB = original.getColorB();
+        assertSame(colorA, original.getColorA());
+        assertSame(colorB, original.getColorB());
+        colorA.set(0.15f, 0.25f, 0.35f, 0.45f, 2.5f);
+        colorB.set(0.55f, 0.65f, 0.75f, 0.85f, 4.5f);
+
+        var sample = new Vector4f();
+        original.sampleHDR(0f, () -> 0.5f, sample);
+        assertEquals(1.425f, sample.x, 1.0e-6f);
+        assertEquals(1.775f, sample.y, 1.0e-6f);
+        assertEquals(2.125f, sample.z, 1.0e-6f);
+        assertEquals(0.65f, sample.w, 1.0e-6f);
 
         var tag = (CompoundTag) codec.encodeStart(NbtOps.INSTANCE, original).result().orElseThrow();
         var restored = codec.parse(NbtOps.INSTANCE, tag).result().orElseThrow();
 
-        assertColor(restored.getColorA(), 0.1f, 0.2f, 0.3f, 0.4f, 2f);
-        assertColor(restored.getColorB(), 0.5f, 0.6f, 0.7f, 0.8f, 4f);
+        assertColor(restored.getColorA(), 0.15f, 0.25f, 0.35f, 0.45f, 2.5f);
+        assertColor(restored.getColorB(), 0.55f, 0.65f, 0.75f, 0.85f, 4.5f);
+    }
+
+    @Test
+    void gettersKeepTheReferenceMutableColorContractAndPersistMutations() {
+        var codec = PersistedCodec.createCodec(HDRConstantColor::new);
+        var original = new HDRConstantColor(new HDRColor(0.1f, 0.2f, 0.3f, 0.4f, 1f));
+        var exposedColor = original.getColor();
+        assertSame(exposedColor, original.getColor());
+        exposedColor.set(0.4f, 0.5f, 0.6f, 0.25f, 2f);
+
+        var sample = new Vector4f();
+        original.sampleHDR(0f, () -> 0f, sample);
+        assertEquals(0.8f, sample.x, 1.0e-6f);
+        assertEquals(1f, sample.y, 1.0e-6f);
+        assertEquals(1.2f, sample.z, 1.0e-6f);
+        assertEquals(0.25f, sample.w, 1.0e-6f);
+
+        var tag = (CompoundTag) codec.encodeStart(NbtOps.INSTANCE, original).result().orElseThrow();
+        var restored = codec.parse(NbtOps.INSTANCE, tag).result().orElseThrow();
+        assertColor(restored.getColor(), 0.4f, 0.5f, 0.6f, 0.25f, 2f);
     }
 
     @Test

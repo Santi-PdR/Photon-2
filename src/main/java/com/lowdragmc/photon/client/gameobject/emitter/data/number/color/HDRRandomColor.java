@@ -27,6 +27,8 @@ import java.util.function.Supplier;
 @LDLRegisterClient(name = "hdr_random_color", registry = "photon:number_function")
 public class HDRRandomColor implements HDRColorFunction {
 
+    private HDRColor colorA = HDRColor.black();
+    private HDRColor colorB = HDRColor.white();
     @Persisted private float redA;
     @Persisted private float greenA;
     @Persisted private float blueA;
@@ -54,29 +56,21 @@ public class HDRRandomColor implements HDRColorFunction {
     }
 
     public HDRColor getColorA() {
-        return new HDRColor(redA, greenA, blueA, alphaA, intensityA);
+        return colorA;
     }
 
     public HDRColor getColorB() {
-        return new HDRColor(redB, greenB, blueB, alphaB, intensityB);
+        return colorB;
     }
 
     public void setColorA(HDRColor color) {
-        var safeColor = color == null ? HDRColor.black() : color;
-        this.redA = safeColor.getR();
-        this.greenA = safeColor.getG();
-        this.blueA = safeColor.getB();
-        this.intensityA = safeColor.getIntensity();
-        this.alphaA = safeColor.getA();
+        this.colorA = color == null ? HDRColor.black() : color;
+        syncPersistedFields();
     }
 
     public void setColorB(HDRColor color) {
-        var safeColor = color == null ? HDRColor.white() : color;
-        this.redB = safeColor.getR();
-        this.greenB = safeColor.getG();
-        this.blueB = safeColor.getB();
-        this.intensityB = safeColor.getIntensity();
-        this.alphaB = safeColor.getA();
+        this.colorB = color == null ? HDRColor.white() : color;
+        syncPersistedFields();
     }
 
     /** Compatibility setters for the port's earlier RGB/intensity vector API. */
@@ -97,8 +91,8 @@ public class HDRRandomColor implements HDRColorFunction {
 
     @Override
     public void sampleHDR(float t, Supplier<Float> lerp, Vector4f out) {
-        HDRColorCompat.lerpPremultiplied(redA, greenA, blueA, intensityA, alphaA,
-                redB, greenB, blueB, intensityB, alphaB, lerp.get(), out);
+        HDRColorCompat.lerpPremultiplied(colorA.getR(), colorA.getG(), colorA.getB(), colorA.getIntensity(), colorA.getA(),
+                colorB.getR(), colorB.getG(), colorB.getB(), colorB.getIntensity(), colorB.getA(), lerp.get(), out);
     }
 
     @Override
@@ -141,22 +135,21 @@ public class HDRRandomColor implements HDRColorFunction {
     public boolean equals(Object obj) {
         if (obj == this) return true;
         return obj instanceof HDRRandomColor other
-                && Float.compare(redA, other.redA) == 0
-                && Float.compare(greenA, other.greenA) == 0
-                && Float.compare(blueA, other.blueA) == 0
-                && Float.compare(intensityA, other.intensityA) == 0
-                && Float.compare(alphaA, other.alphaA) == 0
-                && Float.compare(redB, other.redB) == 0
-                && Float.compare(greenB, other.greenB) == 0
-                && Float.compare(blueB, other.blueB) == 0
-                && Float.compare(intensityB, other.intensityB) == 0
-                && Float.compare(alphaB, other.alphaB) == 0;
+                && Objects.equals(colorA, other.colorA)
+                && Objects.equals(colorB, other.colorB);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(redA, greenA, blueA, intensityA, alphaA,
-                redB, greenB, blueB, intensityB, alphaB);
+        return Objects.hash(colorA, colorB);
+    }
+
+    @Override
+    public CompoundTag serializeNBT() {
+        syncPersistedFields();
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        return tag;
     }
 
     @Override
@@ -176,5 +169,22 @@ public class HDRRandomColor implements HDRColorFunction {
             blueB = oldColor.z;
             intensityB = oldColor.w;
         }
+        if (colorA == null) colorA = HDRColor.black();
+        if (colorB == null) colorB = HDRColor.white();
+        colorA.set(redA, greenA, blueA, alphaA, intensityA);
+        colorB.set(redB, greenB, blueB, alphaB, intensityB);
+    }
+
+    private void syncPersistedFields() {
+        redA = colorA.getR();
+        greenA = colorA.getG();
+        blueA = colorA.getB();
+        intensityA = colorA.getIntensity();
+        alphaA = colorA.getA();
+        redB = colorB.getR();
+        greenB = colorB.getG();
+        blueB = colorB.getB();
+        intensityB = colorB.getIntensity();
+        alphaB = colorB.getA();
     }
 }
