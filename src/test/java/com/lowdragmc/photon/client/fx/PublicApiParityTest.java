@@ -34,6 +34,13 @@ class PublicApiParityTest {
     void curveGraphPointCoordinatesPreserveTheReferenceReadOnlyApi() throws NoSuchMethodException {
         var pointCoord = AbstractCurveGraph.class.getDeclaredMethod("pointCoord", ECBCurves.class, int.class);
         assertEquals(Vector2fc.class, pointCoord.getReturnType());
+
+        var handleCoord = AbstractCurveGraph.class.getDeclaredMethod("handleCoord", int.class);
+        assertEquals(Vector2fc.class, handleCoord.getReturnType());
+
+        var toScreen = AbstractCurveGraph.class.getDeclaredMethod("toScreen",
+                Vector2fc.class, float.class, float.class, float.class, float.class);
+        assertEquals(org.joml.Vector2f.class, toScreen.getReturnType());
     }
 
     @Test

@@ -325,7 +325,7 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
     /** The selected point's tangent handle coordinate ({@code kind}: 1 = in, 2 = out), or null if hidden
      *  (no / multiple selection: handles only apply to a single selected point). */
     @Nullable
-    protected Vector2f handleCoord(int kind) {
+    protected Vector2fc handleCoord(int kind) {
         var curvesList = allCurves();
         if (selectedPoints.size() > 1) return null;
         if (selectedSeries < 0 || selectedSeries >= curvesList.size()) return null;
@@ -335,15 +335,15 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
         return selectedPoint < segments.size() ? segments.get(selectedPoint).c0 : null;
     }
 
-    private void positionHandle(UIElement el, @Nullable Vector2f pos) {
+    private void positionHandle(UIElement el, @Nullable Vector2fc pos) {
         if (pos == null) {
             el.setDisplay(false);
             return;
         }
         el.setDisplay(true);
         el.layout(layout -> {
-            layout.leftPercent(pos.x * 100);
-            layout.topPercent((1 - pos.y) * 100);
+            layout.leftPercent(pos.x() * 100);
+            layout.topPercent((1 - pos.y()) * 100);
         });
     }
 
@@ -696,8 +696,8 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
 
     // ------------------------------------------------------------------ drawing
 
-    protected Vector2f toScreen(Vector2f coord, float x, float y, float width, float height) {
-        return new Vector2f(x + width * coord.x, y + height * (1 - coord.y));
+    protected Vector2f toScreen(Vector2fc coord, float x, float y, float width, float height) {
+        return new Vector2f(x + width * coord.x(), y + height * (1 - coord.y()));
     }
 
     protected void drawGraph(GuiGraphics graphics, float mouseX, float mouseY, float x, float y, float width, float height, float partialTick) {
@@ -794,8 +794,14 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
             return null;
         }
         // otherwise exactly the element that would receive the click (top-most hovered)
-        if (inHandle.isHover()) return handleCoord(1);
-        if (outHandle.isHover()) return handleCoord(2);
+        if (inHandle.isHover()) {
+            var handle = handleCoord(1);
+            return handle == null ? null : new Vector2f(handle);
+        }
+        if (outHandle.isHover()) {
+            var handle = handleCoord(2);
+            return handle == null ? null : new Vector2f(handle);
+        }
         for (int s = 0; s < pointElements.size() && s < curvesList.size(); s++) {
             var els = pointElements.get(s);
             for (int i = 0; i < els.size(); i++) {
