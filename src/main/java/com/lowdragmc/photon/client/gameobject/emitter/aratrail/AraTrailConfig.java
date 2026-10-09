@@ -5,8 +5,8 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.*;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.TransformRefConfigurator;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.InstancedRendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
@@ -35,11 +35,13 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
+import net.minecraft.nbt.CompoundTag;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3f;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
@@ -93,7 +95,6 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
     @Configurable(name = "AraTrails.space", tips = "AraTrails.space.tips")
     @ConfigSelector(subConfiguratorBuilder = "createSpaceConfigurator")
     public TrailSpace space = TrailSpace.World;
-    @Persisted
     public final TransformRef customSpace = new TransformRef();
     @Configurable(name = "AraTrails.alignment", tips = "AraTrails.alignment.tips")
     public TrailAlignment alignment = TrailAlignment.View;
@@ -318,6 +319,22 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
                     }
                 }
             }.setTips("AraTrails.customSpace.tips"));
+        }
+    }
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        // LDLib 1 cannot resolve LDLib2's TransformRef as a managed value payload.
+        tag.put("customSpace", customSpace.serializeNBT());
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
+        if (tag.contains("customSpace")) {
+            customSpace.deserializeNBT(tag.get("customSpace"));
         }
     }
 }

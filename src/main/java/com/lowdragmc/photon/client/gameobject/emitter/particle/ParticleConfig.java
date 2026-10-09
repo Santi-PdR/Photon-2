@@ -7,8 +7,8 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSelector;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.TransformRefConfigurator;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;
@@ -31,10 +31,12 @@ import com.mojang.blaze3d.vertex.*;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
+import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.lwjgl.opengl.GL30.glBindVertexArray;
@@ -94,7 +96,6 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Configurable(name = "ParticleConfig.simulationSpace", tips = "photon.emitter.config.simulationSpace")
     @ConfigSelector(subConfiguratorBuilder = "createSpaceConfigurator")
     protected Space simulationSpace = Space.Local;
-    @Persisted
     public final TransformRef customSpace = new TransformRef();
     @Setter
     @Getter
@@ -290,4 +291,20 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
         }
     }
 
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        // LDLib 1 cannot resolve LDLib2's TransformRef as a managed value payload.
+        tag.put("customSpace", customSpace.serializeNBT());
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
+        if (tag.contains("customSpace")) {
+            customSpace.deserializeNBT(tag.get("customSpace"));
+        }
+    }
 }
