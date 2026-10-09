@@ -3,6 +3,8 @@ package com.lowdragmc.photon.client.util;
 import com.lowdragmc.lowdraglib2.utils.LDLibExtraCodecs;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.mojang.serialization.Codec;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.util.Mth;
 import org.joml.Vector4f;
 
@@ -22,22 +24,43 @@ public final class HDRColorCompat {
         return new HDRColor(color.x, color.y, color.z, alpha, color.w);
     }
 
-    /** Keep alpha separate because the legacy LDLib 1.20.1 vector stores intensity in {@code w}. */
-    public static Vector4f toLegacyVector(HDRColor color) {
-        return new Vector4f(color.getR(), color.getG(), color.getB(), color.getIntensity());
+    public static void premultiplied(Vector4f baseIntensity, float alpha, Vector4f out) {
+        premultiplied(baseIntensity.x, baseIntensity.y, baseIntensity.z, baseIntensity.w, alpha, out);
     }
 
-    public static void premultiplied(Vector4f baseIntensity, float alpha, Vector4f out) {
-        out.set(baseIntensity.x * baseIntensity.w, baseIntensity.y * baseIntensity.w,
-                baseIntensity.z * baseIntensity.w, alpha);
+    public static void premultiplied(float red, float green, float blue, float intensity,
+                                     float alpha, Vector4f out) {
+        out.set(red * intensity, green * intensity, blue * intensity, alpha);
     }
 
     public static void lerpPremultiplied(Vector4f a, float alphaA, Vector4f b, float alphaB,
                                          float amount, Vector4f out) {
-        out.set(Mth.lerp(amount, a.x * a.w, b.x * b.w),
-                Mth.lerp(amount, a.y * a.w, b.y * b.w),
-                Mth.lerp(amount, a.z * a.w, b.z * b.w),
+        lerpPremultiplied(a.x, a.y, a.z, a.w, alphaA, b.x, b.y, b.z, b.w, alphaB, amount, out);
+    }
+
+    public static void lerpPremultiplied(float redA, float greenA, float blueA, float intensityA,
+                                         float alphaA, float redB, float greenB, float blueB,
+                                         float intensityB, float alphaB, float amount, Vector4f out) {
+        out.set(Mth.lerp(amount, redA * intensityA, redB * intensityB),
+                Mth.lerp(amount, greenA * intensityA, greenB * intensityB),
+                Mth.lerp(amount, blueA * intensityA, blueB * intensityB),
                 Mth.lerp(amount, alphaA, alphaB));
+    }
+
+    /** Reads the component layout used by the earlier Vector4f persisted representation. */
+    public static Vector4f fromLegacyTag(CompoundTag tag, String key, Vector4f fallback) {
+        if (!tag.contains(key, Tag.TAG_COMPOUND)) return new Vector4f(fallback);
+        var components = tag.getCompound(key);
+        return new Vector4f(component(components, "x", "r", fallback.x),
+                component(components, "y", "g", fallback.y),
+                component(components, "z", "b", fallback.z),
+                component(components, "w", "intensity", fallback.w));
+    }
+
+    private static float component(CompoundTag tag, String primary, String alternate, float fallback) {
+        if (tag.contains(primary, Tag.TAG_FLOAT)) return tag.getFloat(primary);
+        if (tag.contains(alternate, Tag.TAG_FLOAT)) return tag.getFloat(alternate);
+        return fallback;
     }
 
     public static Vector4f black() {

@@ -8,8 +8,12 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunctionConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.configurator.NumberFunctionConfigurator;
 import com.lowdragmc.photon.client.util.HDRColorCompat;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import org.joml.Vector4f;
 
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -23,11 +27,11 @@ import java.util.function.Supplier;
 @LDLRegisterClient(name = "hdr_color", registry = "photon:number_function")
 public class HDRConstantColor implements HDRColorFunction {
 
-    @Persisted
-    private Vector4f color;
-    /** Kept separate because 1.20.1's persisted Vector4f uses {@code w} for intensity. */
-    @Persisted
-    private float alpha = 1f;
+    @Persisted private float red = 1f;
+    @Persisted private float green = 1f;
+    @Persisted private float blue = 1f;
+    @Persisted private float intensity = 1f;
+    @Persisted private float alpha = 1f;
 
     public HDRConstantColor() {
         this(HDRColor.white());
@@ -39,24 +43,25 @@ public class HDRConstantColor implements HDRColorFunction {
 
     /** Compatibility constructor for the port's earlier RGB/intensity vector API. */
     public HDRConstantColor(Vector4f color) {
-        this.color = color == null ? HDRColorCompat.white() : new Vector4f(color);
-        this.alpha = 1f;
+        this(HDRColorCompat.toHDRColor(color == null ? HDRColorCompat.white() : color, 1f));
     }
 
     public HDRColor getColor() {
-        return HDRColorCompat.toHDRColor(color, alpha);
+        return new HDRColor(red, green, blue, alpha, intensity);
     }
 
     public void setColor(HDRColor color) {
         var safeColor = color == null ? HDRColor.white() : color;
-        this.color = HDRColorCompat.toLegacyVector(safeColor);
+        this.red = safeColor.getR();
+        this.green = safeColor.getG();
+        this.blue = safeColor.getB();
+        this.intensity = safeColor.getIntensity();
         this.alpha = safeColor.getA();
     }
 
     /** Compatibility setter for the port's earlier RGB/intensity vector API. */
     public void setColor(Vector4f color) {
-        this.color = color == null ? HDRColorCompat.white() : new Vector4f(color);
-        this.alpha = 1f;
+        setColor(HDRColorCompat.toHDRColor(color == null ? HDRColorCompat.white() : color, 1f));
     }
 
     @Override
@@ -66,7 +71,7 @@ public class HDRConstantColor implements HDRColorFunction {
 
     @Override
     public void sampleHDR(float t, Supplier<Float> lerp, Vector4f out) {
-        HDRColorCompat.premultiplied(color, alpha, out);
+        HDRColorCompat.premultiplied(red, green, blue, intensity, alpha, out);
     }
 
     @Override
@@ -86,11 +91,27 @@ public class HDRConstantColor implements HDRColorFunction {
     public boolean equals(Object obj) {
         if (obj == this) return true;
         return obj instanceof HDRConstantColor other
-                && Objects.equals(color, other.color) && Float.compare(alpha, other.alpha) == 0;
+                && Float.compare(red, other.red) == 0
+                && Float.compare(green, other.green) == 0
+                && Float.compare(blue, other.blue) == 0
+                && Float.compare(intensity, other.intensity) == 0
+                && Float.compare(alpha, other.alpha) == 0;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(color, alpha);
+        return Objects.hash(red, green, blue, intensity, alpha);
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
+        if (!tag.contains("red", Tag.TAG_FLOAT) && tag.contains("color", Tag.TAG_COMPOUND)) {
+            var oldColor = HDRColorCompat.fromLegacyTag(tag, "color", HDRColorCompat.white());
+            red = oldColor.x;
+            green = oldColor.y;
+            blue = oldColor.z;
+            intensity = oldColor.w;
+        }
     }
 }

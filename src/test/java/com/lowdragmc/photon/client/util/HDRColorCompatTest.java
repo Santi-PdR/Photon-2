@@ -13,7 +13,7 @@ class HDRColorCompatTest {
     void roundTripsRgbaAndIntensityThroughTheLegacyVector() {
         var original = new HDRColor(0.25f, 0.5f, 0.75f, 0.35f, 3.5f);
 
-        var legacy = HDRColorCompat.toLegacyVector(original);
+        var legacy = new Vector4f(original.getR(), original.getG(), original.getB(), original.getIntensity());
         var restored = HDRColorCompat.toHDRColor(legacy, original.getA());
 
         assertEquals(original.getR(), restored.getR(), EPSILON);
