@@ -25,6 +25,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassP
 import com.lowdragmc.photon.client.gameobject.particle.IParticle;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.AraTrailParticleRenderer;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
+import com.lowdragmc.photon.util.TransformRefNbt;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -36,7 +37,6 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.StringTag;
 import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3f;
 
@@ -326,16 +326,13 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
     public CompoundTag serializeNBT() {
         var tag = new CompoundTag();
         PersistedParser.serializeNBT(tag, getClass(), this);
-        // LDLib 1 cannot resolve LDLib2's TransformRef as a managed value payload.
-        tag.put("customSpace", customSpace.serializeNBT());
+        TransformRefNbt.writeCustomSpace(tag, customSpace);
         return tag;
     }
 
     @Override
     public void deserializeNBT(CompoundTag tag) {
         PersistedParser.deserializeNBT(tag, new HashMap<>(), getClass(), this);
-        if (tag.get("customSpace") instanceof StringTag customSpaceTag) {
-            customSpace.deserializeNBT(customSpaceTag);
-        }
+        TransformRefNbt.readCustomSpace(tag, customSpace);
     }
 }
