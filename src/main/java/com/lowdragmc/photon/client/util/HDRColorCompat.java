@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.util;
 
 import com.lowdragmc.lowdraglib2.utils.LDLibExtraCodecs;
+import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.mojang.serialization.Codec;
 import net.minecraft.util.Mth;
 import org.joml.Vector4f;
@@ -14,6 +15,29 @@ public final class HDRColorCompat {
 
     public static Vector4f white() {
         return new Vector4f(1f, 1f, 1f, 1f);
+    }
+
+    /** Convert LDLib2's 26.2 RGBA/intensity value to the 1.20.1 persisted RGB/intensity vector. */
+    public static HDRColor toHDRColor(Vector4f color, float alpha) {
+        return new HDRColor(color.x, color.y, color.z, alpha, color.w);
+    }
+
+    /** Keep alpha separate because the legacy LDLib 1.20.1 vector stores intensity in {@code w}. */
+    public static Vector4f toLegacyVector(HDRColor color) {
+        return new Vector4f(color.getR(), color.getG(), color.getB(), color.getIntensity());
+    }
+
+    public static void premultiplied(Vector4f baseIntensity, float alpha, Vector4f out) {
+        out.set(baseIntensity.x * baseIntensity.w, baseIntensity.y * baseIntensity.w,
+                baseIntensity.z * baseIntensity.w, alpha);
+    }
+
+    public static void lerpPremultiplied(Vector4f a, float alphaA, Vector4f b, float alphaB,
+                                         float amount, Vector4f out) {
+        out.set(Mth.lerp(amount, a.x * a.w, b.x * b.w),
+                Mth.lerp(amount, a.y * a.w, b.y * b.w),
+                Mth.lerp(amount, a.z * a.w, b.z * b.w),
+                Mth.lerp(amount, alphaA, alphaB));
     }
 
     public static Vector4f black() {
