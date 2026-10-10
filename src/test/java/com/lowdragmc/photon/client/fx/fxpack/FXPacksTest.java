@@ -3,6 +3,8 @@ package com.lowdragmc.photon.client.fx.fxpack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.PathPackResources;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,6 +20,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,6 +37,27 @@ class FXPacksTest {
         Files.writeString(shader, "{}");
 
         assertEquals(expectedPackRoot, FXPacks.ldlib2EditorPackRoot(ldlibAssets));
+    }
+
+    @Test
+    void nestedLDLibEditorPackServesShaderByItsResourceLocation() throws Exception {
+        var ldlibAssets = tempDir.resolve("ldlib2/assets");
+        var expectedPackRoot = ldlibAssets.resolve("ldlib2/assets");
+        var shader = expectedPackRoot.resolve("assets/ldlib2/shaders/core/tornado_body.json");
+        Files.createDirectories(shader.getParent());
+        Files.writeString(shader, "{\"fragment\":\"ldlib2:tornado_body\"}");
+
+        var packRoot = FXPacks.ldlib2EditorPackRoot(ldlibAssets);
+        assertNotNull(packRoot);
+        try (var pack = new PathPackResources("test/ldlib2-editor", packRoot, false)) {
+            var resource = pack.getResource(PackType.CLIENT_RESOURCES,
+                    ResourceLocation.fromNamespaceAndPath("ldlib2", "shaders/core/tornado_body.json"));
+            assertNotNull(resource);
+            try (var input = resource.get()) {
+                assertEquals("{\"fragment\":\"ldlib2:tornado_body\"}",
+                        new String(input.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
     }
 
     @Test
