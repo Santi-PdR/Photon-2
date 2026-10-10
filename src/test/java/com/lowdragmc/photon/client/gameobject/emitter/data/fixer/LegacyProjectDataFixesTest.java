@@ -93,6 +93,31 @@ class LegacyProjectDataFixesTest {
         return config;
     }
 
+    private static CompoundTag modelRendererConfig(String location) {
+        var model = new CompoundTag();
+        model.putString("modelLocation", location);
+        var renderer = new CompoundTag();
+        renderer.putString("renderMode", "Model");
+        renderer.put("model", model);
+        var config = new CompoundTag();
+        config.put("renderer", renderer);
+        return config;
+    }
+
+    @Test
+    void migratesVersionThreeModelProjectsDirectlyToVersionFive() {
+        var location = "ldlib2:block/tonado_body";
+
+        var renderer = configOf(apply(3, 5, project(modelRendererConfig(location))))
+                .getCompound("renderer");
+        var model = renderer.getCompound("model");
+
+        assertEquals("Model", renderer.getString("renderMode"));
+        assertFalse(model.contains("modelLocation"), "legacy model location must be replaced");
+        assertEquals("json_model", model.getCompound("source").getString("type"));
+        assertEquals(location, model.getCompound("source").getCompound("data").getString("modelLocation"));
+    }
+
     @Test
     void movesMainAndTrailMaterialsIntoRendererMaterialPayloads() {
         var config = materialConfig("texture");
