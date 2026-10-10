@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.fx.fxpack;
 
+import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import net.minecraft.network.chat.Component;
@@ -93,9 +94,31 @@ public final class FXPacks {
      */
     public static RepositorySource repositorySource() {
         return consumer -> {
+            mountLDLib2EditorAssets(consumer);
             mountFolderPacks(consumer);
             mountModPacks(consumer);
         };
+    }
+
+    /**
+     * LDLib2 editor projects can store their resource-pack tree under
+     * {@code <gameDir>/ldlib2/assets/ldlib2/assets}. Its built-in pack is rooted at
+     * {@code <gameDir>/ldlib2}, so that nested tree is otherwise invisible to Minecraft's resource
+     * manager. Mount it as a low-priority resource pack so custom materials and shaders referenced
+     * by {@code .fxproj} files resolve without moving the user's project files.
+     */
+    private static void mountLDLib2EditorAssets(Consumer<Pack> consumer) {
+        var root = ldlib2EditorPackRoot(LDLib2.getAssetsDir().toPath());
+        if (root == null) return;
+        consumer.accept(createPack("fxpack/ldlib2-editor-assets", "LDLib2 editor assets",
+                packId -> new PathPackResources(packId, root, false)));
+        Photon.LOGGER.info("mounted LDLib2 editor resource assets from {}", root);
+    }
+
+    /** Returns the editor's nested resource-pack root, or null when no such assets are present. */
+    static Path ldlib2EditorPackRoot(Path ldlibAssetsDir) {
+        var root = ldlibAssetsDir.resolve("ldlib2/assets");
+        return Files.isDirectory(root.resolve("assets")) ? root : null;
     }
 
     private static void mountFolderPacks(Consumer<Pack> consumer) {
