@@ -19,7 +19,11 @@ import java.nio.file.Path;
  */
 @Mixin(value = FileNode.class, remap = false)
 public abstract class FileNodeCacheMixin {
-    private static final long PHOTON_ASSET_CACHE_NS = 5_000_000_000L;
+    // The directory timestamp already invalidates a listing when entries are added or removed.
+    // Keep a longer fallback for filesystems with coarse or unreliable directory timestamps;
+    // five-second expiry caused the open dialog and asset browser to rescan unchanged folders
+    // repeatedly while they stayed open.
+    private static final long PHOTON_ASSET_CACHE_NS = 60_000_000_000L;
 
     @Shadow @Final public File key;
     @Shadow private long cacheStamp;
