@@ -14,6 +14,7 @@
     "FileNodeCacheMixin",
     "UIVisualLayerMixin",
     "accessor.BlendModeAccessor",
+    "accessor.RegisterGeometryLoadersAccessor",
     "accessor.ParticleEngineAccessor",
     "accessor.ShaderInstanceAccessor",
     "iris.BlendOverrideAccessors$BlendModeOverrideAccessor",

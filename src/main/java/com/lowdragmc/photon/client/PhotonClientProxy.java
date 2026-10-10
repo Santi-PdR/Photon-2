@@ -5,6 +5,8 @@ import com.lowdragmc.photon.PhotonCommonProxy;
 import com.lowdragmc.photon.client.fx.FXHelper;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
+import com.lowdragmc.photon.client.compat.NeoForgeObjLoaderCompat;
+import com.lowdragmc.photon.core.mixins.accessor.RegisterGeometryLoadersAccessor;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
 import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
@@ -27,6 +29,8 @@ import java.util.function.Function;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.event.ModelEvent;
+import net.minecraftforge.client.model.obj.ObjLoader;
 
 
 @OnlyIn(Dist.CLIENT)
@@ -50,6 +54,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         eventBus.addListener(this::shaderRegistry);
         eventBus.addListener(this::registerReloadListeners);
         eventBus.addListener(this::addPackFinders);
+        eventBus.addListener(this::registerGeometryLoaderCompat);
         eventBus.addListener(PhotonEditorKeyMappings::register);
     }
 
@@ -85,6 +90,14 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     @SubscribeEvent
     public void shaderRegistry(RegisterShadersEvent event) {
         PhotonShaders.registerShaders(event);
+    }
+
+    /** Forge 1.20.1 assets can use the NeoForge OBJ loader id; alias it to Forge's implementation. */
+    public void registerGeometryLoaderCompat(ModelEvent.RegisterGeometryLoaders event) {
+        var loaders = ((RegisterGeometryLoadersAccessor) event).photon$getLoaders();
+        if (NeoForgeObjLoaderCompat.registerAlias(loaders, ObjLoader.INSTANCE)) {
+            Photon.LOGGER.info("Registered Forge OBJ loader alias for NeoForge resource packs");
+        }
     }
 
 }
