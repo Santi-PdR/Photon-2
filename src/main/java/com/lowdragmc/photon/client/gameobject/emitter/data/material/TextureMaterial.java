@@ -140,21 +140,6 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     }
 
     public @Nullable ResourceLocation getTextureFromFile(File filePath) {
-        String fullPath = filePath.getPath().replace('\\', '/');
-        int assetsIndex = fullPath.indexOf("assets/");
-        if (assetsIndex == -1) {
-            return null;
-        } else {
-            String relativePath = fullPath.substring(assetsIndex + "assets/".length());
-            int slashIndex = relativePath.indexOf(47);
-            if (slashIndex == -1) {
-                return null;
-            } else {
-                String modId = relativePath.substring(0, slashIndex);
-                String subPath = relativePath.substring(slashIndex + 1);
-                String location = modId + ":" + subPath;
-                return LDLib2.isValidResourceLocation(location) ? ResourceLocation.parse(location) : null;
-            }
-        }
+        return TextureAssetPath.fromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
     }
 }
