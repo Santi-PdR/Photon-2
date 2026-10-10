@@ -31,7 +31,7 @@ class FXPacksTest {
     @Test
     void resolvesNestedLDLibEditorResourcePackRoot() throws Exception {
         var ldlibAssets = tempDir.resolve("ldlib2/assets");
-        var expectedPackRoot = ldlibAssets.resolve("ldlib2/assets");
+        var expectedPackRoot = ldlibAssets.resolve("ldlib2");
         var shader = expectedPackRoot.resolve("assets/ldlib2/shaders/core/tornado_body.json");
         Files.createDirectories(shader.getParent());
         Files.writeString(shader, "{}");
@@ -42,7 +42,7 @@ class FXPacksTest {
     @Test
     void nestedLDLibEditorPackServesShaderByItsResourceLocation() throws Exception {
         var ldlibAssets = tempDir.resolve("ldlib2/assets");
-        var expectedPackRoot = ldlibAssets.resolve("ldlib2/assets");
+        var expectedPackRoot = ldlibAssets.resolve("ldlib2");
         var shader = expectedPackRoot.resolve("assets/ldlib2/shaders/core/tornado_body.json");
         Files.createDirectories(shader.getParent());
         Files.writeString(shader, "{\"fragment\":\"ldlib2:tornado_body\"}");
@@ -63,7 +63,7 @@ class FXPacksTest {
     @Test
     void doesNotMountLDLibEditorAssetsWithoutAResourceTree() throws Exception {
         var ldlibAssets = tempDir.resolve("ldlib2/assets");
-        Files.createDirectories(ldlibAssets.resolve("ldlib2/assets"));
+        Files.createDirectories(ldlibAssets.resolve("ldlib2"));
 
         assertNull(FXPacks.ldlib2EditorPackRoot(ldlibAssets));
     }

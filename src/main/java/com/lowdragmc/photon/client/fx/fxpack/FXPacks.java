@@ -101,11 +101,11 @@ public final class FXPacks {
     }
 
     /**
-     * LDLib2 editor projects can store their resource-pack tree under
-     * {@code <gameDir>/ldlib2/assets/ldlib2/assets}. Its built-in pack is rooted at
-     * {@code <gameDir>/ldlib2}, so that nested tree is otherwise invisible to Minecraft's resource
-     * manager. Mount it as a low-priority resource pack so custom materials and shaders referenced
-     * by {@code .fxproj} files resolve without moving the user's project files.
+     * LDLib2 editor projects can store resource files under
+     * {@code <gameDir>/ldlib2/assets/ldlib2/assets/<namespace>}. LDLib2's built-in pack is rooted at
+     * {@code <gameDir>/ldlib2}, which sees only {@code assets/<namespace>} directly beneath that
+     * root. Mount {@code <gameDir>/ldlib2/assets/ldlib2} as a low-priority pack so the nested
+     * {@code assets/<namespace>} tree becomes visible without moving the user's project files.
      */
     private static void mountLDLib2EditorAssets(Consumer<Pack> consumer) {
         var root = ldlib2EditorPackRoot(LDLib2.getAssetsDir().toPath());
@@ -117,7 +117,7 @@ public final class FXPacks {
 
     /** Returns the editor's nested resource-pack root, or null when no such assets are present. */
     static Path ldlib2EditorPackRoot(Path ldlibAssetsDir) {
-        var root = ldlibAssetsDir.resolve("ldlib2/assets");
+        var root = ldlibAssetsDir.resolve("ldlib2");
         return Files.isDirectory(root.resolve("assets")) ? root : null;
     }
 
