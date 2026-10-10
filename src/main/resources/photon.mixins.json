@@ -10,6 +10,7 @@
     "MinecraftMixin",
     "ParticleEngineMixin",
     "DummyWorldMixin",
+    "FileNodeCacheMixin",
     "UIVisualLayerMixin",
     "accessor.BlendModeAccessor",
     "accessor.ParticleEngineAccessor",

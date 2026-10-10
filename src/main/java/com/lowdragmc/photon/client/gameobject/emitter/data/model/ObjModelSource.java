@@ -91,13 +91,21 @@ public class ObjModelSource implements IModelSource {
             return null;
         }
         try {
-            var resource = Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null);
-            Path nestedFile = resource == null ? LDLibModelAssets.findNested(modelLocation, modelLocation.getPath()) : null;
+            // Resolve LDLib2's editable asset tree first so the model selected by an FX project
+            // cannot be shadowed by an older resource-pack copy with the same ResourceLocation.
+            Path nestedFile = LDLibModelAssets.findNested(modelLocation, modelLocation.getPath());
+            var resource = nestedFile == null
+                    ? Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null)
+                    : null;
             if (resource == null && nestedFile == null) {
                 throw new java.io.FileNotFoundException(modelLocation.toString());
             }
             try (var in = resource != null ? resource.open() : Files.newInputStream(nestedFile)) {
                 var mesh = ObjMeshParser.parse(in, flipV);
+                if (mesh.isEmpty()) {
+                    Photon.LOGGER.warn("OBJ model {} contains no renderable faces (resolved from {})",
+                            modelLocation, nestedFile != null ? nestedFile : modelLocation);
+                }
                 // track the editable disk copy (if any) so pollFileChanges can hot-reload it
                 var file = nestedFile != null ? nestedFile.toFile()
                         : new File(LDLib2.getAssetsDir(), modelLocation.getNamespace() + "/" + modelLocation.getPath());

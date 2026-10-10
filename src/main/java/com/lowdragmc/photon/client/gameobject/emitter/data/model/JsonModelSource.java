@@ -133,8 +133,13 @@ public class JsonModelSource implements IModelSource {
             if (objLoaderChecked) return objLoaderReference;
             try {
                 var file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
-                var resource = Minecraft.getInstance().getResourceManager().getResource(file).orElse(null);
-                Path nestedFile = resource == null ? LDLibModelAssets.findNested(modelLocation, file.getPath()) : null;
+                // LDLib2 projects and their assets live outside the active Minecraft resource
+                // packs. Prefer that editable copy when present; otherwise a stale/overriding pack
+                // entry can make an FX project silently resolve a different model JSON.
+                Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+                var resource = nestedFile == null
+                        ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
+                        : null;
                 if (resource == null && nestedFile == null) {
                     return null; // resource reload may still be in progress; retry later
                 }
