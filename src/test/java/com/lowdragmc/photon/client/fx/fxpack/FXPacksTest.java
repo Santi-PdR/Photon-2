@@ -5,6 +5,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -15,6 +16,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,6 +68,12 @@ class FXPacksTest {
             try (var input = effectResource.get()) {
                 assertEquals("photon effect fixture", new String(input.readAllBytes(), StandardCharsets.UTF_8));
             }
+        }
+
+        var resourcePack = new PathPackResources("test/ldlib2-editor-enumeration", packRoot, false);
+        try (var resourceManager = new MultiPackResourceManager(PackType.CLIENT_RESOURCES, List.of(resourcePack))) {
+            var effects = resourceManager.listResources("fx", location -> location.getPath().endsWith(".fx"));
+            assertTrue(effects.containsKey(ResourceLocation.fromNamespaceAndPath("photon", "fx/hanabi.fx")));
         }
     }
 
