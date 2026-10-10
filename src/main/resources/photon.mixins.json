@@ -13,6 +13,7 @@
     "PathPackResourcesMixin",
     "FileNodeCacheMixin",
     "UIVisualLayerMixin",
+    "LDProgramDefineManagerMixin",
     "accessor.BlendModeAccessor",
     "accessor.RegisterGeometryLoadersAccessor",
     "accessor.ParticleEngineAccessor",
