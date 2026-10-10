@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.ConfiguratorParser;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigHDR;
@@ -46,22 +47,29 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     public static class PixelArt extends ToggleGroup {
         @Configurable
         @ConfigNumber(range = {1, Integer.MAX_VALUE})
+        @Persisted
         public int bits = 8;
     }
 
     @Configurable(name = "TextureMaterial.texture")
+    @Persisted
     protected ResourceLocation texture = Photon.id("textures/particle/circle.png");
     @Configurable(name = "TextureMaterial.discardThreshold")
     @ConfigNumber(range = {0, 1})
+    @Persisted
     protected float discardThreshold = 0.1f;
     @Configurable(name = "TextureMaterial.hdr")
     @ConfigHDR
+    @Persisted
     protected HDRColor hdr = HDRColor.black();
     @Configurable(name = "TextureMaterial.hdrMode")
+    @Persisted
     protected HDRMode hdrMode = HDRMode.ADDITIVE;
     @Configurable(name = "TextureMaterial.pixelArt", subConfigurable = true)
+    @Persisted(subPersisted = true)
     protected final PixelArt pixelArt = new PixelArt();
     @Configurable(name = "TextureMaterial.softParticles", subConfigurable = true)
+    @Persisted(subPersisted = true)
     protected final SoftParticles softParticles = new SoftParticles();
     public TextureMaterial() {
     }

@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -51,14 +52,17 @@ public class ExternalForcesSetting extends ToggleGroup {
 
     @Configurable(name = "ExternalForcesSetting.multiplier", tips = "photon.emitter.config.externalForces.multiplier")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 2}, xAxis = "lifetime", yAxis = "multiplier"))
+    @Persisted
     protected NumberFunction multiplier = NumberFunction.constant(1);
 
     @Configurable(name = "ExternalForcesSetting.influenceFilter", tips = "photon.emitter.config.externalForces.influenceFilter")
+    @Persisted
     protected Filter influenceFilter = Filter.SceneAll;
 
     @Configurable(name = "ExternalForcesSetting.influenceList", tips = "photon.emitter.config.externalForces.influenceList")
     @ConfigList(configuratorMethod = "buildRefConfigurator", addDefaultMethod = "addDefaultRef")
     @ReadOnlyManaged(serializeMethod = "refsSerialize", deserializeMethod = "refsDeserialize")
+    @Persisted
     protected List<TransformRef> influenceList = new ArrayList<>();
 
     /** Whether the given force field passes this setting's influence filter (matched by transform id). */

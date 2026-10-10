@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
@@ -33,6 +34,7 @@ public class CurveTexture implements AutoCloseable, IConfigurable, RegistryAware
     private final int height;
     @Configurable(name = "curves", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildCurveConfigurator", addDefaultMethod = "addDefaultCurve")
+    @Persisted
     private final List<Curve> curves = new ArrayList<>();
     // runtime
     private boolean isDirty = false;

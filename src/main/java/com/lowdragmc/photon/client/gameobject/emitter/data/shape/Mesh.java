@@ -25,6 +25,7 @@ public class Mesh implements IShape {
     @Getter
     @Setter
     @Configurable(name = "Mesh.type", tips = "photon.emitter.config.shape.mesh.type")
+    @Persisted
     private Type type = Type.Triangle;
 
     @Getter

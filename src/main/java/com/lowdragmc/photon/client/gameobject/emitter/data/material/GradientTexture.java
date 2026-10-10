@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
@@ -32,6 +33,7 @@ public class GradientTexture implements AutoCloseable, IConfigurable, RegistryAw
     private final int height;
     @Configurable(name = "gradients", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildGradientConfigurator", addDefaultMethod = "addDefaultGradient")
+    @Persisted
     private final List<GradientColor> gradients = new ArrayList<>();
     // runtime
     private boolean isDirty = false;

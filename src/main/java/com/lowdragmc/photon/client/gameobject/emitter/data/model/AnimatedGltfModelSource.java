@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
@@ -42,9 +43,11 @@ import java.util.function.Consumer;
 public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.modelLocation")
+    @Persisted
     private ResourceLocation modelLocation = Photon.id("models/missing.glb");
     @Getter
     @Configurable(name = "GltfModelSource.flipV", tips = "photon.model_source.gltf_model.flipV.tips")
+    @Persisted
     private boolean flipV;
     @Getter
     private String animation = "";
@@ -52,29 +55,36 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
             addDefaultMethod = "addDefaultAnimationFile")
     @Configurable(name = "AnimatedGltfModelSource.animationFiles",
             tips = "photon.model_source.animated_gltf_model.animationFiles.tips", persisted = false)
+    @Persisted
     private List<ResourceLocation> animationFiles = new ArrayList<>();
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.speed")
+    @Persisted
     private float speed = 1f;
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.loop")
+    @Persisted
     private boolean loop = true;
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.perParticlePhase",
             tips = "photon.model_source.animated_gltf_model.perParticlePhase.tips")
+    @Persisted
     private boolean perParticlePhase;
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.frames",
             tips = "photon.model_source.animated_gltf_model.frames.tips")
     @ConfigNumber(range = {2, 240})
+    @Persisted
     private int frames = 30;
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.phaseSource",
             tips = "photon.model_source.animated_gltf_model.phaseSource.tips")
+    @Persisted
     private PhaseSource phaseSource = PhaseSource.Random;
     @Getter
     @Configurable(name = "AnimatedGltfModelSource.interpolate",
             tips = "photon.model_source.animated_gltf_model.interpolate.tips")
+    @Persisted
     private boolean interpolate = true;
 
     public enum PhaseSource { Random, Lifetime }

@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
@@ -36,9 +37,11 @@ import java.util.Objects;
 public class ObjModelSource implements IModelSource {
     @Getter
     @Configurable(name = "ObjModelSource.modelLocation")
+    @Persisted
     private ResourceLocation modelLocation = Photon.id("models/missing.obj");
     @Getter
     @Configurable(name = "ObjModelSource.flipV", tips = "photon.model_source.obj_model.flipV.tips")
+    @Persisted
     private boolean flipV = true;
 
     public ObjModelSource() {

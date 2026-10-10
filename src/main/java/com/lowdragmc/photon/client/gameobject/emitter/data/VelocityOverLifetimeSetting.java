@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.utils.Vector3fHelper;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
@@ -45,29 +46,36 @@ public class VelocityOverLifetimeSetting extends ToggleGroup {
      * afterwards. {@link ForceOverLifetimeSetting} resolves the same enum by the same rule.
      */
     @Configurable(name = "VelocityOverLifetimeSetting.space", tips = "photon.emitter.config.velocityOverLifetime.space")
+    @Persisted
     protected ValueSpace space = ValueSpace.Local;
 
     @Configurable(name = "VelocityOverLifetimeSetting.linear", tips = "photon.emitter.config.velocityOverLifetime.linear")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 1, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "additional velocity")))
+    @Persisted
     protected NumberFunction3 linear = new NumberFunction3(0, 0, 0);
 
     @Configurable(name = "VelocityOverLifetimeSetting.orbitalMode", tips = "photon.emitter.config.velocityOverLifetime.orbitalMode")
+    @Persisted
     protected OrbitalMode orbitalMode = OrbitalMode.AngularVelocity;
 
     @Configurable(name = "VelocityOverLifetimeSetting.orbital", tips = "photon.emitter.config.velocityOverLifetime.orbital")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 1, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "orbital velocity")))
+    @Persisted
     protected NumberFunction3 orbital = new NumberFunction3(0, 0, 0);
 
     @Configurable(name = "VelocityOverLifetimeSetting.offset", tips = "photon.emitter.config.velocityOverLifetime.offset")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 1, curveConfig = @CurveConfig(bound = {-3, 3}, xAxis = "lifetime", yAxis = "orbital offset")))
+    @Persisted
     protected NumberFunction3 offset = new NumberFunction3(0, 0, 0);
 
     @Configurable(name = "VelocityOverLifetimeSetting.radial", tips = "photon.emitter.config.velocityOverLifetime.radial")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "speed modifier"))
+    @Persisted
     protected NumberFunction radial = NumberFunction.constant(0);
 
     @Configurable(name = "VelocityOverLifetimeSetting.speedModifier", tips = "photon.emitter.config.velocityOverLifetime.speedModifier")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "speed modifier"))
+    @Persisted
     protected NumberFunction speedModifier = NumberFunction.constant(1);
 
     public Runtime createRuntime() {

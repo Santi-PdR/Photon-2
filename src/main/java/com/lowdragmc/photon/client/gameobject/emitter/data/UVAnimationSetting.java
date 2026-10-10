@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
@@ -34,29 +35,34 @@ public class UVAnimationSetting extends ToggleGroup {
     @Getter
     @Configurable(name = "UVAnimationSetting.tiles", tips = "photon.emitter.config.uvAnimation.tiles")
     @ConfigNumber(range = {1, Integer.MAX_VALUE}, type = ConfigNumber.Type.INTEGER)
+    @Persisted
     protected Vector2i tiles = new Vector2i(1, 1);
 
     @Setter
     @Getter
     @Configurable(name = "UVAnimationSetting.animation", tips = "photon.emitter.config.uvAnimation.animation")
+    @Persisted
     protected Animation animation = Animation.WholeSheet;
 
     @Setter
     @Getter
     @Configurable(name = "UVAnimationSetting.frameOverTime", tips = "photon.emitter.config.uvAnimation.frameOverTime")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, curveConfig = @CurveConfig(bound = {0, 4}, xAxis = "lifetime", yAxis = "frame over time"))
+    @Persisted
     protected NumberFunction frameOverTime = NumberFunction.constant(0);
 
     @Setter
     @Getter
     @Configurable(name = "UVAnimationSetting.startFrame", tips = "photon.emitter.config.uvAnimation.startFrame")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class}, min = 0)
+    @Persisted
     protected NumberFunction startFrame = NumberFunction.constant(0);
 
     @Setter
     @Getter
     @Configurable(name = "UVAnimationSetting.cycle", tips = "photon.emitter.config.uvAnimation.cycle")
     @ConfigNumber(range = {0, Integer.MAX_VALUE}, wheel = 1)
+    @Persisted
     protected float cycle = 1;
 
     public Vector4f getUVs(IParticle particle, float partialTicks) {

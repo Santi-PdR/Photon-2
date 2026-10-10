@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.shape;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.utils.Vector3fHelper;
@@ -22,6 +23,7 @@ public class Box implements IShape {
 
     @Getter @Setter
     @Configurable(name = "Box.emitForm")
+    @Persisted
     private Type emitFrom = Type.Volume;
 
     @Override

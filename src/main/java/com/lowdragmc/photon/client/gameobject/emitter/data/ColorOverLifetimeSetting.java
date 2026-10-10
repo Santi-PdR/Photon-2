@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
@@ -27,6 +28,7 @@ public class ColorOverLifetimeSetting extends ToggleGroup {
 
     @Configurable(name = "color", tips = "photon.emitter.config.colorOverLifetime.color")
     @NumberFunctionConfig(types = {Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     protected NumberFunction color = new Gradient();
 
     public Runtime createRuntime() {

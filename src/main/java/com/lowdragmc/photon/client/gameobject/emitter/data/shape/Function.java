@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.shape;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.utils.Vector3fHelper;
@@ -23,6 +24,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String x = "0";
     @Getter
     @Setter
@@ -32,6 +34,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String y = "0";
     @Getter
     @Setter
@@ -41,6 +44,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String z = "0";
 
     @Getter
@@ -51,6 +55,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String speedX = "0";
     @Getter
     @Setter
@@ -60,6 +65,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String speedY = "0";
     @Getter
     @Setter
@@ -69,6 +75,7 @@ public class Function implements IShape {
             "photon.gui.editor.shape.function.tooltips.2",
             "photon.gui.editor.shape.function.tooltips.3"
     })
+    @Persisted
     private String speedZ = "0";
 
     // runtime

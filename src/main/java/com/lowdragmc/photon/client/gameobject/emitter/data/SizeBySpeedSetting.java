@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.math.Range;
@@ -27,10 +28,12 @@ public class SizeBySpeedSetting extends ToggleGroup {
 
     @Configurable(name = "NoiseSetting.size", tips = "photon.emitter.config.sizeBySpeed.size")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "speed", yAxis = "size")))
+    @Persisted
     protected NumberFunction3 size = new NumberFunction3(1, 1, 1);
 
     @Configurable(name = "ColorBySpeedSetting.speedRange", tips = "photon.emitter.config.sizeBySpeed.speedRange")
     @ConfigNumber(range = {0, 1000}, type = ConfigNumber.Type.FLOAT)
+    @Persisted
     protected Range speedRange = Range.of(0f, 1f);
 
     public Runtime createRuntime() {

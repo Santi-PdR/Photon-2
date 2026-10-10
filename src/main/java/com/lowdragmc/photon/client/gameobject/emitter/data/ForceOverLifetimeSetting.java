@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.*;
@@ -26,12 +27,14 @@ public class ForceOverLifetimeSetting extends ToggleGroup {
 
     @Configurable(name = "ForceOverLifetimeSetting.force", tips = "photon.emitter.config.forceOverLifetime.force")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "force")))
+    @Persisted
     protected NumberFunction3 force = new NumberFunction3(0, 0, 0);
 
     /** The space the force vector is expressed in. @see ValueSpace */
     @Setter
     @Getter
     @Configurable(name = "ForceOverLifetimeSetting.simulationSpace", tips = "photon.emitter.config.simulationSpace")
+    @Persisted
     protected ValueSpace simulationSpace = ValueSpace.Local;
 
     public Runtime createRuntime() {

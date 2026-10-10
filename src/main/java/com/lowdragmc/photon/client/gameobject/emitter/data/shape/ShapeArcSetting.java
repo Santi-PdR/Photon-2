@@ -29,6 +29,7 @@ public class ShapeArcSetting implements IConfigurable, IPersistedSerializable {
 
     @Configurable(name = "ShapeArcSetting.arcMode", tips = "photon.emitter.config.shape.arc.mode")
     @ConfigSelector(subConfiguratorBuilder = "buildModeConfigurator")
+    @Persisted
     private ShapeArcMode arcMode = ShapeArcMode.Random;
     @Persisted
     private float arcSpread = 0.0f;

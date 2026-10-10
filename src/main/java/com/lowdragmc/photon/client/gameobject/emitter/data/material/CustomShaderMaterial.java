@@ -70,8 +70,10 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Persisted
     private ResourceLocation shaderLocation = Photon.id("circle");
     @Configurable(name = "SamplerCurve", subConfigurable = true)
+    @Persisted(subPersisted = true)
     public final CurveTexture curveTexture = new CurveTexture(MAX_SAMPLING, MAX_SAMPLER);
     @Configurable(name = "SamplerGradient", subConfigurable = true)
+    @Persisted(subPersisted = true)
     public final GradientTexture gradientTexture = new GradientTexture(MAX_SAMPLING, MAX_SAMPLER);
     @Nullable
     private LDShaderHolder shaderHolder;

@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
@@ -35,10 +36,12 @@ import java.util.Objects;
 public class GltfModelSource implements IModelSource {
     @Getter
     @Configurable(name = "GltfModelSource.modelLocation")
+    @Persisted
     private ResourceLocation modelLocation = Photon.id("models/missing.glb");
     /** glTF's UV origin is already top-left like Minecraft's, so unlike OBJ this defaults to off. */
     @Getter
     @Configurable(name = "GltfModelSource.flipV", tips = "photon.model_source.gltf_model.flipV.tips")
+    @Persisted
     private boolean flipV = false;
 
     public GltfModelSource() {

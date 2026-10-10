@@ -40,14 +40,18 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     public ResourceLocation spriteLocation = ResourceLocation.parse("");
     @Configurable(name = "TextureMaterial.discardThreshold")
     @ConfigNumber(range = {0, 1})
+    @Persisted
     protected float discardThreshold = 0.1f;
     @Configurable(name = "TextureMaterial.hdr")
     @ConfigHDR
+    @Persisted
     protected HDRColor hdr = HDRColor.black();
     @Configurable(name = "TextureMaterial.hdrMode")
+    @Persisted
     protected TextureMaterial.HDRMode hdrMode = TextureMaterial.HDRMode.ADDITIVE;
     @Configurable(name = "TextureMaterial.softParticles", subConfigurable = true)
     @Getter
+    @Persisted(subPersisted = true)
     protected final SoftParticles softParticles = new SoftParticles();
     private static final Map<String, ShaderInstance> spriteHDRParticleShaders = new HashMap<>();
 

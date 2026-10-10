@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.math.Range;
@@ -30,10 +31,12 @@ public class LifetimeByEmitterSpeedSetting extends ToggleGroup {
 
     @Configurable(name = "LifetimeByEmitterSpeedSetting.multiplier", tips = "photon.emitter.config.lifetimeByEmitterSpeed.multiplier")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "multiplier", yAxis = "emitter velocity"))
+    @Persisted
     protected NumberFunction multiplier = NumberFunction.constant(1);
 
     @Configurable(name = "ColorBySpeedSetting.speedRange", tips = "photon.emitter.config.lifetimeByEmitterSpeed.speedRange")
     @ConfigNumber(range = {0, 1000}, type = ConfigNumber.Type.FLOAT)
+    @Persisted
     protected Range speedRange = Range.of(0f, 1f);
 
     public Runtime createRuntime() {

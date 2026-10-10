@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lowdragmc.lowdraglib2.LDLib2;
@@ -43,6 +44,7 @@ import java.util.Objects;
 public class JsonModelSource implements IModelSource {
     @Getter
     @Configurable(name = "MeshData.modelLocation")
+    @Persisted
     private ResourceLocation modelLocation = ResourceLocation.withDefaultNamespace("block/stone");
     @Nullable
     private volatile ObjLoaderReference objLoaderReference;

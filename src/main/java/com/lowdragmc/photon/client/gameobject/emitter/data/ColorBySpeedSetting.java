@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.math.Range;
@@ -28,10 +29,12 @@ public class ColorBySpeedSetting extends ToggleGroup {
 
     @Configurable(name = "color", tips = "photon.emitter.config.colorBySpeed.color")
     @NumberFunctionConfig(types = {Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     protected NumberFunction color = new Gradient();
 
     @Configurable(name = "ColorBySpeedSetting.speedRange", tips = "photon.emitter.config.colorBySpeed.speedRange")
     @ConfigNumber(range = {0, 1000})
+    @Persisted
     protected Range speedRange = Range.of(0f, 1f);
 
     public Runtime createRuntime() {

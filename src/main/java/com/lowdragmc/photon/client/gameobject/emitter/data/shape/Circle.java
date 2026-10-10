@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.shape;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
@@ -21,17 +22,21 @@ public class Circle implements IShape {
     @Setter
     @Configurable(name = "radius")
     @ConfigNumber(range = {0, 1000})
+    @Persisted
     private float radius = .5f;
     @Getter @Setter
     @Configurable(name = "radiusThickness")
     @ConfigNumber(range = {0, 1})
+    @Persisted
     private float radiusThickness = 1;
     @Getter @Setter
     @Configurable(name = "arc")
     @ConfigNumber(range = {0, 360}, wheel = 10)
+    @Persisted
     private float arc = 360;
     @Getter
     @Configurable(name = "ShapeArcSetting", subConfigurable = true, tips = "photon.emitter.config.shape.arc")
+    @Persisted(subPersisted = true)
     private final ShapeArcSetting shapeArc = new ShapeArcSetting();
 
     @Override

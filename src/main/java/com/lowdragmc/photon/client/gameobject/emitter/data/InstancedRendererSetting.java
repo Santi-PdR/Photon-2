@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import lombok.EqualsAndHashCode;
@@ -22,6 +23,7 @@ public class InstancedRendererSetting extends RendererSetting {
 
     @Configurable(name = "ParticleRendererSetting.useGPUInstance")
     @EqualsAndHashCode.Include
+    @Persisted
     private boolean useGPUInstance = false;
 
     /** Slot-based per-emitter render override (see {@link RendererSetting.Runtime}) + the {@code useGPUInstance} slot. */

@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSelector;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
@@ -51,37 +52,45 @@ public class TrailsSetting extends ToggleGroup {
     @Getter
     @Configurable(name = "TrailsSetting.ratio", tips = "photon.emitter.config.trails.ratio")
     @ConfigNumber(range = {0f, 1f})
+    @Persisted
     protected float ratio = 1f;
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.lifetime", tips = "photon.emitter.config.trails.lifetime")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, max = 1, defaultValue = 1, curveConfig = @CurveConfig(xAxis = "lifetime", yAxis = "trail length"))
+    @Persisted
     protected NumberFunction lifetime = NumberFunction.constant(1f);
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.dieWithParticles", tips = "photon.emitter.config.trails.dieWithParticles")
+    @Persisted
     protected boolean dieWithParticles = false;
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.sizeAffectsWidth", tips = "photon.emitter.config.trails.sizeAffectsWidth")
+    @Persisted
     protected boolean sizeAffectsWidth = true;
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.sizeAffectsLifetime", tips = "photon.emitter.config.trails.sizeAffectsLifetime")
+    @Persisted
     protected boolean sizeAffectsLifetime = false;
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.inheritParticleColor", tips = "photon.emitter.config.trails.inheritParticleColor")
+    @Persisted
     protected boolean inheritParticleColor = true;
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.colorOverLifetime", tips = "photon.emitter.config.trails.colorOverLifetime")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     protected NumberFunction colorOverLifetime = new Gradient();
     @Setter
     @Getter
     @Configurable(name = "TrailsSetting.trailType")
     @ConfigSelector(subConfiguratorBuilder = "createTrailTypeConfigurator")
+    @Persisted
     protected TrailType trailType = TrailType.TRAIL;
 
     public final TrailConfig config = new TrailConfig();

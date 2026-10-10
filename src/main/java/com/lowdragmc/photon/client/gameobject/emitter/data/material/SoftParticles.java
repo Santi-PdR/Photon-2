@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
@@ -27,11 +28,14 @@ public class SoftParticles extends ToggleGroup {
 
     @Configurable(name = "TextureMaterial.softParticles.distance")
     @ConfigNumber(range = {0.001, 64})
+    @Persisted
     public float distance = 1f;
     @Configurable(name = "TextureMaterial.softParticles.power")
     @ConfigNumber(range = {0.01, 16})
+    @Persisted
     public float power = 1f;
     @Configurable(name = "TextureMaterial.softParticles.fade")
+    @Persisted
     public Fade fade = Fade.BOTH;
 
     public void copyFrom(SoftParticles other) {

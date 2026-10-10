@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
@@ -32,10 +33,12 @@ public class InheritVelocitySetting extends ToggleGroup {
     }
 
     @Configurable(name = "InheritVelocitySetting.mode", tips = "photon.emitter.config.inheritVelocity.mode")
+    @Persisted
     protected Mode mode = Mode.INITIAL;
 
     @Configurable(name = "InheritVelocitySetting.multiply", tips = "photon.emitter.config.inheritVelocity.multiply")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "speed modifier"))
+    @Persisted
     protected NumberFunction multiply = NumberFunction.constant(1);
 
     public Runtime createRuntime() {
