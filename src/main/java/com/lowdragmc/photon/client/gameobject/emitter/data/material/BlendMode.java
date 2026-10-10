@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.mojang.blaze3d.systems.RenderSystem;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -29,16 +30,22 @@ public class BlendMode {
     }
 
     @Configurable(name = "BlendMode.enableBlend")
+    @Persisted
     private boolean enableBlend;
     @Configurable(name = "BlendMode.srcColorFactor")
+    @Persisted
     private SourceFactor srcColorFactor;
     @Configurable(name = "BlendMode.dstColorFactor")
+    @Persisted
     private DestFactor dstColorFactor;
     @Configurable(name = "BlendMode.srcAlphaFactor")
+    @Persisted
     private SourceFactor srcAlphaFactor;
     @Configurable(name = "BlendMode.dstAlphaFactor")
+    @Persisted
     private DestFactor dstAlphaFactor;
     @Configurable(name = "BlendMode.blendFunc")
+    @Persisted
     private BlendFuc blendFunc;
 
     private BlendMode(boolean enableBlend, SourceFactor srcColorFactor, DestFactor dstColorFactor, SourceFactor srcAlphaFactor, DestFactor dstAlphaFactor, BlendFuc blendFunc) {

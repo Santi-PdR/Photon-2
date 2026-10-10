@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
@@ -70,23 +71,28 @@ public class RendererSetting {
     }
 
     @Configurable(name = "RendererSetting.materials", collapse = false)
+    @Persisted
     @ConfigList(configuratorMethod = "createMaterialConfigurator", addDefaultMethod = "addDefaultMaterial")
     @ReadOnlyManaged(serializeMethod = "materialSerialize", deserializeMethod = "materialDeserialize")
     @EqualsAndHashCode.Include
     protected List<MaterialSetting> materials = new ArrayList<>();
 
     @Configurable(name = "RendererSetting.layer", tips = "photon.emitter.config.renderer.layer")
+    @Persisted
     @EqualsAndHashCode.Include
     protected Layer layer = Layer.Translucent;
 
     @Configurable(name = "RendererSetting.cull", subConfigurable = true, tips = "photon.emitter.config.renderer.cull")
+    @Persisted(subPersisted = true)
     protected final Cull cull = new Cull();
 
     @Configurable(name = "photon.emitter.config.renderer.orderInLayer", tips = "photon.emitter.config.renderer.orderInLayer.tips")
+    @Persisted
     @EqualsAndHashCode.Include
     protected int orderInLayer = 0;
 
     @Configurable(name = "photon.emitter.config.renderer.vertexSortingMode", tips = "photon.emitter.config.renderer.vertexSortingMode.tips")
+    @Persisted
     @EqualsAndHashCode.Include
     protected SortMode vertexSortingMode = SortMode.NONE;
 
@@ -94,6 +100,7 @@ public class RendererSetting {
      *  default) follows {@code PhotonConfig.fxCompositeMode}. Part of the batching key: passes with
      *  different modes accumulate into different targets and must never merge into one draw. */
     @Configurable(name = "photon.emitter.config.renderer.compositeMode", tips = "photon.emitter.config.renderer.compositeMode.tips")
+    @Persisted
     @EqualsAndHashCode.Include
     protected FXCompositeMode compositeMode = FXCompositeMode.INHERIT;
 
@@ -102,6 +109,7 @@ public class RendererSetting {
      *  Mask/Depth input nodes. Part of the batching key — passes with different mask settings must
      *  not merge ({@link CustomMaskSetting#equals}). */
     @Configurable(name = "photon.emitter.config.renderer.customMask", subConfigurable = true, tips = "photon.emitter.config.renderer.writeCustomMask.tips")
+    @Persisted(subPersisted = true)
     @EqualsAndHashCode.Include
     protected final CustomMaskSetting customMask = new CustomMaskSetting();
 
@@ -111,6 +119,7 @@ public class RendererSetting {
         @Getter
         @Setter
         @Configurable(name = "photon.emitter.config.renderer.maskGroup", tips = "photon.emitter.config.renderer.maskGroup.tips")
+        @Persisted
         protected String maskGroup = "default";
 
         /** 0 = off (the mask covers the whole geometry, i.e. a rectangle for billboards); above 0
@@ -119,6 +128,7 @@ public class RendererSetting {
         @Getter
         @Setter
         @Configurable(name = "photon.emitter.config.renderer.maskAlphaCutoff", tips = "photon.emitter.config.renderer.maskAlphaCutoff.tips")
+        @Persisted
         @ConfigNumber(range = {0, 1})
         protected float maskAlphaCutoff = 0f;
 
@@ -154,6 +164,7 @@ public class RendererSetting {
         @Setter
         @Getter
         @Configurable
+        @Persisted
         @ConfigNumber(range = {-Float.MAX_VALUE, Float.MAX_VALUE})
         protected AABB cullBox = new AABB(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
 

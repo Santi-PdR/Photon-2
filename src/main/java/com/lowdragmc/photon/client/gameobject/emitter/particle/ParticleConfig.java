@@ -9,6 +9,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.TransformRefConfigurator;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
 import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;
@@ -51,104 +52,137 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.duration", tips = "photon.emitter.config.duration")
+    @Persisted
     @ConfigNumber(range = {1, Integer.MAX_VALUE})
     protected int duration = 100;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.looping", tips = "photon.emitter.config.looping")
+    @Persisted
     protected boolean looping = true;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.prewarm", tips = "photon.emitter.config.prewarm")
+    @Persisted
     @ConfigNumber(range = {0, Integer.MAX_VALUE})
     protected int prewarm = 0;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startDelay", tips = "photon.emitter.config.startDelay")
+    @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, min = 0, curveConfig = @CurveConfig(bound = {0, 100}, xAxis = "duration", yAxis = "delay"))
     protected NumberFunction startDelay = NumberFunction.constant(0);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startLifetime", tips = "photon.emitter.config.startLifetime")
+    @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, min = 0, defaultValue = 100, curveConfig = @CurveConfig(bound = {0, 200}, xAxis = "duration", yAxis = "life time"))
     protected NumberFunction startLifetime = NumberFunction.constant(100);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startSpeed", tips = "photon.emitter.config.startSpeed")
+    @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "duration", yAxis = "speed"))
     protected NumberFunction startSpeed = NumberFunction.constant(1);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startSize", tips = "photon.emitter.config.startSize")
+    @Persisted
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.1f, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "size")))
     protected NumberFunction3 startSize = new NumberFunction3(0.1, 0.1, 0.1);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startRotation", tips = "photon.emitter.config.startRotation")
+    @Persisted
     @NumberFunction3Config(affectX = false, affectY = false, common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 360}, xAxis = "duration", yAxis = "rotation")))
     protected NumberFunction3 startRotation = new NumberFunction3(0, 0, 0);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startColor", tips = "photon.emitter.config.startColor")
+    @Persisted
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
     protected NumberFunction startColor = NumberFunction.color(-1);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.simulationSpace", tips = "photon.emitter.config.simulationSpace")
+    @Persisted
     @ConfigSelector(subConfiguratorBuilder = "createSpaceConfigurator")
     protected Space simulationSpace = Space.Local;
     public final TransformRef customSpace = new TransformRef();
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.maxParticles", tips = "photon.emitter.config.maxParticles")
+    @Persisted
     @ConfigNumber(range = {0, 100000}, wheel = 100)
     protected int maxParticles = 2000;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.parallelUpdate", tips = {"photon.emitter.config.parallelUpdate.0",
             "photon.emitter.config.parallelUpdate.1"})
+    @Persisted
     protected boolean parallelUpdate = false;
     @Configurable(name = "ParticleConfig.emission", subConfigurable = true, tips = "photon.emitter.config.emission")
+    @Persisted(subPersisted = true)
     public final EmissionSetting emission = new EmissionSetting();
     @Configurable(name = "ParticleConfig.shape", subConfigurable = true, tips = "photon.emitter.config.shape")
+    @Persisted(subPersisted = true)
     public final ShapeSetting shape = new ShapeSetting();
     @Configurable(name = "ParticleConfig.renderer", subConfigurable = true, tips = "photon.emitter.config.renderer")
+    @Persisted(subPersisted = true)
     public final ParticleRendererSetting renderer = new ParticleRendererSetting(this);
     @Configurable(name = "ParticleConfig.physics", subConfigurable = true, tips = "photon.emitter.config.physics")
+    @Persisted(subPersisted = true)
     public final PhysicsSetting physics = new PhysicsSetting();
     @Configurable(name = "ParticleConfig.fixedLight", subConfigurable = true, tips = "photon.emitter.config.lights")
+    @Persisted(subPersisted = true)
     public final LightOverLifetimeSetting lights = new LightOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.velocityOverLifetime", subConfigurable = true, tips = "photon.emitter.config.velocityOverLifetime")
+    @Persisted(subPersisted = true)
     public final VelocityOverLifetimeSetting velocityOverLifetime = new VelocityOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.inheritVelocity", subConfigurable = true, tips = "photon.emitter.config.inheritVelocity")
+    @Persisted(subPersisted = true)
     public final InheritVelocitySetting inheritVelocity = new InheritVelocitySetting();
     @Configurable(name = "ParticleConfig.lifetimeByEmitterSpeed", subConfigurable = true, tips = "photon.emitter.config.lifetimeByEmitterSpeed")
+    @Persisted(subPersisted = true)
     public final LifetimeByEmitterSpeedSetting lifetimeByEmitterSpeed = new LifetimeByEmitterSpeedSetting();
     @Configurable(name = "ParticleConfig.forceOverLifetime", subConfigurable = true, tips = "photon.emitter.config.forceOverLifetime")
+    @Persisted(subPersisted = true)
     public final ForceOverLifetimeSetting forceOverLifetime = new ForceOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.externalForces", subConfigurable = true, tips = "photon.emitter.config.externalForces")
+    @Persisted(subPersisted = true)
     public final ExternalForcesSetting externalForces = new ExternalForcesSetting();
     @Configurable(name = "ParticleConfig.colorOverLifetime", subConfigurable = true, tips = "photon.emitter.config.colorOverLifetime")
+    @Persisted(subPersisted = true)
     public final ColorOverLifetimeSetting colorOverLifetime = new ColorOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.colorBySpeed", subConfigurable = true, tips = "photon.emitter.config.colorBySpeed")
+    @Persisted(subPersisted = true)
     public final ColorBySpeedSetting colorBySpeed = new ColorBySpeedSetting();
     @Configurable(name = "ParticleConfig.sizeOverLifetime", subConfigurable = true, tips = "photon.emitter.config.sizeOverLifetime")
+    @Persisted(subPersisted = true)
     public final SizeOverLifetimeSetting sizeOverLifetime = new SizeOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.sizeBySpeed", subConfigurable = true, tips = "photon.emitter.config.sizeBySpeed")
+    @Persisted(subPersisted = true)
     public final SizeBySpeedSetting sizeBySpeed = new SizeBySpeedSetting();
     @Configurable(name = "ParticleConfig.rotationOverLifetime", subConfigurable = true, tips = "photon.emitter.config.rotationOverLifetime")
+    @Persisted(subPersisted = true)
     public final RotationOverLifetimeSetting rotationOverLifetime = new RotationOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.rotationBySpeed", subConfigurable = true, tips = "photon.emitter.config.rotationBySpeed")
+    @Persisted(subPersisted = true)
     public final RotationBySpeedSetting rotationBySpeed = new RotationBySpeedSetting();
     @Configurable(name = "ParticleConfig.noise", subConfigurable = true, tips = "photon.emitter.config.noise")
+    @Persisted(subPersisted = true)
     public final NoiseSetting noise = new NoiseSetting();
     @Configurable(name = "ParticleConfig.uvAnimation", subConfigurable = true, tips = "photon.emitter.config.uvAnimation")
+    @Persisted(subPersisted = true)
     public final UVAnimationSetting uvAnimation = new UVAnimationSetting();
     @Configurable(name = "ParticleConfig.trails", subConfigurable = true, tips = "photon.emitter.config.trails")
+    @Persisted(subPersisted = true)
     public final TrailsSetting trails = new TrailsSetting();
     @Configurable(name = "ParticleConfig.subEmitters", subConfigurable = true, tips = "photon.emitter.config.sub_emitters")
+    @Persisted(subPersisted = true)
     public final SubEmittersSetting subEmitters = new SubEmittersSetting();
     @Configurable(name = "ParticleConfig.additionalGPUDataSetting", subConfigurable = true, tips = "photon.emitter.config.additional_gpu_data")
+    @Persisted(subPersisted = true)
     public final ParticleAdditionalGPUDataSetting additionalGPUDataSetting = new ParticleAdditionalGPUDataSetting(this);
 
     // runtime

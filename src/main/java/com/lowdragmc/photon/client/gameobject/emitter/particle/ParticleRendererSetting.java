@@ -10,6 +10,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.NumberConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurator;
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
@@ -108,6 +109,7 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
     @EqualsAndHashCode.Include
     protected float lengthScale = 2.0f;
     @Configurable(name = "ParticleRendererSetting.useGPUInstance")
+    @Persisted
     @EqualsAndHashCode.Include
     private boolean useGPUInstance = false;
     @Persisted
@@ -358,6 +360,18 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
 
     private void onFacingSettingChanged() {
         clearRenderPassInstance();
+    }
+
+    /** LDLib 1's persisted parser reaches this renderer through {@code ParticleConfig.renderer}. */
+    @Override
+    public void deserializeNBT(@NotNull CompoundTag tag) {
+        deserializeNBT(Platform.getFrozenRegistry(), tag);
+    }
+
+    /** Preserve the provider-aware model payload when LDLib 1 recursively serializes this field. */
+    @Override
+    public CompoundTag serializeNBT() {
+        return serializeNBT(Platform.getFrozenRegistry());
     }
 
     @Override

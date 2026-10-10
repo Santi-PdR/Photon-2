@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
@@ -30,14 +31,19 @@ import java.util.Optional;
 public class MaterialSetting implements IConfigurable, IPersistedSerializable {
     @Nonnull
     @Configurable(name = "material")
+    @Persisted
     protected IMaterial material;
     @Configurable(name = "MaterialSetting.blendMode", subConfigurable = true)
+    @Persisted(subPersisted = true)
     protected final BlendMode blendMode = new BlendMode();
     @Configurable
+    @Persisted
     protected boolean cull = true;
     @Configurable
+    @Persisted
     protected boolean depthTest = true;
     @Configurable
+    @Persisted
     protected boolean depthMask = false;
 
     public MaterialSetting() {

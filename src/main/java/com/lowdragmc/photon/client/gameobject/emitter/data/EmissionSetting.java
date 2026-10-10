@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.Constant;
@@ -47,17 +48,21 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     }
 
     @Configurable(name = "EmissionSetting.emissionRate", tips = "photon.emitter.config.emission.emissionRate")
+    @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.5f, curveConfig = @CurveConfig(bound = {0, 5}, xAxis = "duration", yAxis = "emission rate"))
     protected NumberFunction emissionRate = NumberFunction.constant(0.5f);
 
     @Configurable(name = "EmissionSetting.distanceRate", tips = "photon.emitter.config.emission.distanceRate")
+    @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.5f, curveConfig = @CurveConfig(bound = {0, 5}, xAxis = "duration", yAxis = "emission rate"))
     protected NumberFunction distanceRate = NumberFunction.constant(0);
 
     @Configurable(name = "EmissionSetting.emissionMode", tips = "photon.emitter.config.emission.emissionMode")
+    @Persisted
     protected Mode emissionMode = Mode.Exacting;
 
     @Configurable(name = "EmissionSetting.bursts", tips = "photon.emitter.config.emission.bursts")
+    @Persisted
     @ConfigList(configuratorMethod = "buildBurstConfigurator", addDefaultMethod = "addDefaultBurst")
     @ReadOnlyManaged(serializeMethod = "burstsSerialize", deserializeMethod = "burstsDeserialize")
     protected List<Burst> bursts = new ArrayList<>();
@@ -194,20 +199,25 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     }
 
     public static class Burst implements IConfigurable, IPersistedSerializable{
+        @Persisted
         @Configurable(name = "Burst.time", tips = "photon.emitter.config.emission.bursts.time")
         @ConfigNumber(range = {0, Integer.MAX_VALUE}, wheel = 1)
         public int time = 0;
         @Setter
         @Getter
+        @Persisted
         @Configurable(name = "Burst.count", tips = "photon.emitter.config.emission.bursts.count")
         @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 50, curveConfig = @CurveConfig(bound = {0, 50}, xAxis = "duration", yAxis = "emit count"))
         protected NumberFunction count = NumberFunction.constant(50);
+        @Persisted
         @Configurable(name = "Burst.cycles", tips = "photon.emitter.config.emission.bursts.cycles")
         @ConfigNumber(range = {0, Integer.MAX_VALUE})
         public int cycles = 1;
+        @Persisted
         @Configurable(name = "Burst.interval", tips = "photon.emitter.config.emission.bursts.interval")
         @ConfigNumber(range = {1, Integer.MAX_VALUE}, wheel = 1)
         public int interval = 1;
+        @Persisted
         @Configurable(name = "Burst.probability", tips = "photon.emitter.config.emission.bursts.probability")
         @ConfigNumber(range = {0, 1})
         public float probability = 1;
