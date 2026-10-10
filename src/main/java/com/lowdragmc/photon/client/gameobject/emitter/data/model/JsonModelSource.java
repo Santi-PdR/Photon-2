@@ -27,6 +27,8 @@ import net.minecraftforge.client.model.data.ModelData;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Objects;
 
@@ -132,8 +134,11 @@ public class JsonModelSource implements IModelSource {
             try {
                 var file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
                 var resource = Minecraft.getInstance().getResourceManager().getResource(file).orElse(null);
-                if (resource == null) return null; // resource reload may still be in progress; retry later
-                try (var reader = resource.openAsReader()) {
+                Path nestedFile = resource == null ? LDLibModelAssets.findNested(modelLocation, file.getPath()) : null;
+                if (resource == null && nestedFile == null) {
+                    return null; // resource reload may still be in progress; retry later
+                }
+                try (var reader = resource != null ? resource.openAsReader() : Files.newBufferedReader(nestedFile)) {
                     JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
                     var loader = json.has("loader") ? json.get("loader").getAsString() : "";
                     if (loader.equals("forge:obj") || loader.equals("neoforge:obj")) {

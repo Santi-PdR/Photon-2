@@ -19,6 +19,8 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Objects;
 
 /**
@@ -88,14 +90,22 @@ public class ObjModelSource implements IModelSource {
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) {
             return null;
         }
-        try (var in = Minecraft.getInstance().getResourceManager().open(modelLocation)) {
-            var mesh = ObjMeshParser.parse(in, flipV);
-            // track the editable disk copy (if any) so pollFileChanges can hot-reload it
-            var file = new File(LDLib2.getAssetsDir(), modelLocation.getNamespace() + "/" + modelLocation.getPath());
-            if (file.isFile()) {
-                PhotonMeshCache.INSTANCE.trackFile(key(), file);
+        try {
+            var resource = Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null);
+            Path nestedFile = resource == null ? LDLibModelAssets.findNested(modelLocation, modelLocation.getPath()) : null;
+            if (resource == null && nestedFile == null) {
+                throw new java.io.FileNotFoundException(modelLocation.toString());
             }
-            return mesh;
+            try (var in = resource != null ? resource.open() : Files.newInputStream(nestedFile)) {
+                var mesh = ObjMeshParser.parse(in, flipV);
+                // track the editable disk copy (if any) so pollFileChanges can hot-reload it
+                var file = nestedFile != null ? nestedFile.toFile()
+                        : new File(LDLib2.getAssetsDir(), modelLocation.getNamespace() + "/" + modelLocation.getPath());
+                if (file.isFile()) {
+                    PhotonMeshCache.INSTANCE.trackFile(key(), file);
+                }
+                return mesh;
+            }
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load OBJ model {}", modelLocation, e);
             return PhotonMesh.EMPTY;
