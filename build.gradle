@@ -371,6 +371,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar',
                     'META-INF/jarjar/kilagraph-forge-1.20.1-forge4710-20.1.0.15.jar',
                     "META-INF/jarjar/kotlinruntime-${project.kotlinforforge_version}.jar",
+                    'com/lowdragmc/photon/ServerCommands.class',
                     'photon.mixins.json',
                     'photon.refmap.json',
                     'assets/photon/textures/icon.png'
