@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnimatedGltfAdditionalNbtTest {
     @BeforeAll
@@ -48,14 +48,15 @@ class AnimatedGltfAdditionalNbtTest {
     }
 
     @Test
-    void omitsEmptyAdditionalPayloadAndClearsReusedSourceWhenAbsent() {
+    void emptyAdditionalPayloadAndMissingPayloadClearReusedSource() {
         var provider = RegistryAccess.EMPTY;
         var empty = new AnimatedGltfModelSource();
-        assertFalse(empty.serializeNBT(provider).contains("_additional"));
+        var additional = empty.serializeAdditionalNBT(provider);
+        assertTrue(additional instanceof CompoundTag compound && compound.isEmpty());
 
         var reused = new AnimatedGltfModelSource();
         reused.setAnimationFiles(List.of(ResourceLocation.fromNamespaceAndPath("example", "old.glb")));
-        reused.deserializeNBT(provider, new CompoundTag());
+        reused.deserializeAdditionalNBT(new CompoundTag(), provider);
 
         assertEquals(List.of(), reused.getAnimationFiles());
     }
