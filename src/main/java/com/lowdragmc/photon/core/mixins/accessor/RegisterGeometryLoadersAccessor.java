@@ -11,6 +11,6 @@ import java.util.Map;
 /** Exposes Forge's in-progress model-loader map so Photon can alias NeoForge OBJ assets on Forge. */
 @Mixin(ModelEvent.RegisterGeometryLoaders.class)
 public interface RegisterGeometryLoadersAccessor {
-    @Accessor("loaders")
+    @Accessor(value = "loaders", remap = false)
     Map<ResourceLocation, IGeometryLoader<?>> photon$getLoaders();
 }
