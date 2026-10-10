@@ -40,22 +40,31 @@ class FXPacksTest {
     }
 
     @Test
-    void nestedLDLibEditorPackServesShaderByItsResourceLocation() throws Exception {
+    void nestedLDLibEditorPackServesShadersAndEffectsByTheirResourceLocations() throws Exception {
         var ldlibAssets = tempDir.resolve("ldlib2/assets");
         var expectedPackRoot = ldlibAssets.resolve("ldlib2");
         var shader = expectedPackRoot.resolve("assets/ldlib2/shaders/core/tornado_body.json");
+        var effect = expectedPackRoot.resolve("assets/photon/fx/hanabi.fx");
         Files.createDirectories(shader.getParent());
+        Files.createDirectories(effect.getParent());
         Files.writeString(shader, "{\"fragment\":\"ldlib2:tornado_body\"}");
+        Files.writeString(effect, "photon effect fixture");
 
         var packRoot = FXPacks.ldlib2EditorPackRoot(ldlibAssets);
         assertNotNull(packRoot);
         try (var pack = new PathPackResources("test/ldlib2-editor", packRoot, false)) {
-            var resource = pack.getResource(PackType.CLIENT_RESOURCES,
+            var shaderResource = pack.getResource(PackType.CLIENT_RESOURCES,
                     ResourceLocation.fromNamespaceAndPath("ldlib2", "shaders/core/tornado_body.json"));
-            assertNotNull(resource);
-            try (var input = resource.get()) {
+            assertNotNull(shaderResource);
+            try (var input = shaderResource.get()) {
                 assertEquals("{\"fragment\":\"ldlib2:tornado_body\"}",
                         new String(input.readAllBytes(), StandardCharsets.UTF_8));
+            }
+            var effectResource = pack.getResource(PackType.CLIENT_RESOURCES,
+                    ResourceLocation.fromNamespaceAndPath("photon", "fx/hanabi.fx"));
+            assertNotNull(effectResource);
+            try (var input = effectResource.get()) {
+                assertEquals("photon effect fixture", new String(input.readAllBytes(), StandardCharsets.UTF_8));
             }
         }
     }
