@@ -91,4 +91,15 @@ class AdditionalGPUAttribLayoutTest {
         assertTrue(attributes.stream().allMatch(attribute ->
                 attribute.location() < AdditionalGPUDataSetting.MAX_VERTEX_ATTRIBUTES));
     }
+
+    @Test
+    void modelCustomShaderTimeChannelKeepsLocationNineWhenRandomIsNotEnabled() {
+        var kind = PhotonGpuChannels.Kind.TILE_MODEL;
+        var timeMask = PhotonGpuChannels.maskOf(kind, Set.of("addition_gpu_data.t"));
+
+        var attributes = AdditionalGPUDataSetting.planAttribs(kind, timeMask, 0, 0);
+
+        assertEquals(1, attributes.size());
+        assertEquals(new AdditionalGPUDataSetting.PlannedAttrib(9, 1, 0), attributes.get(0));
+    }
 }
