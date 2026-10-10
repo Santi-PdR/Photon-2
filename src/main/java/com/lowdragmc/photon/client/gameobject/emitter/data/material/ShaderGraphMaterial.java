@@ -183,13 +183,13 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
     public ShaderInstance getShader(MaterialContext context) {
         var entry = refreshEntry();
         if (entry == null || !entry.isValid()) {
-            return PhotonShaders.getHDRParticleShader();
+            return PhotonShaders.getHDRParticleShader(context);
         }
         boolean renderingPreview = context.isRenderingPreview();
         var shader = renderingPreview ? entry.previewVariant() : entry.variant(context.getVariantKey(), context.getShaderDefines());
         var compiled = renderingPreview ? entry.getPreviewCompiled() : entry.getCompiled();
         if (shader == null || compiled == null) {
-            return PhotonShaders.getHDRParticleShader();
+            return PhotonShaders.getHDRParticleShader(context);
         }
         // Stage this material's uniforms/samplers on the shared shader — uploaded by the draw's apply().
         KGBuiltinUniforms.bind(shader, compiled.builtinUniforms());

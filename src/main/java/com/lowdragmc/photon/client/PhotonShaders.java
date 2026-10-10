@@ -1,13 +1,17 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.lowdraglib2.client.shader.LDLibShaders;
+import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import com.lowdragmc.lowdraglib2.client.shader.management.Shader;
 import com.lowdragmc.lowdraglib2.client.shader.management.ShaderProgram;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.postfx.shadergraph.runtime.FullscreenGraphRuntime;
 import com.lowdragmc.photon.client.shadergraph.runtime.ShaderGraphRuntime;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.shaders.Program;
 import lombok.Getter;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraftforge.api.distmarker.Dist;
@@ -15,9 +19,13 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 
 import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @OnlyIn(Dist.CLIENT)
 public class PhotonShaders {
+    private static final Map<String, ShaderInstance> HDR_PARTICLE_VARIANTS = new ConcurrentHashMap<>();
+    private static final Map<String, ShaderInstance> PIXEL_HDR_PARTICLE_VARIANTS = new ConcurrentHashMap<>();
     private static Shader CATMULL_ROM;
     private static ShaderProgram CATMULL_ROM_PROGRAM;
     @Getter
@@ -46,6 +54,42 @@ public class PhotonShaders {
     private static ShaderInstance weightMaskMixShader;
     @Getter
     private static ShaderInstance maskUnionShader;
+
+    /**
+     * Return an HDR particle shader whose vertex inputs match the active render path. Shader Graph
+     * and custom-shader materials use this as an error fallback; returning the registered base
+     * shader for an instanced draw would interpret model-instance attributes as ordinary vertices.
+     */
+    public static ShaderInstance getHDRParticleShader(MaterialContext context) {
+        return getHDRParticleShader(context, false);
+    }
+
+    public static ShaderInstance getHDRParticleShader(MaterialContext context, boolean pixelArt) {
+        var base = pixelArt ? pixelHDRParticleShader : HDRParticleShader;
+        var defines = context.getShaderDefines();
+        if (defines.isEmpty()) return base;
+
+        var cache = pixelArt ? PIXEL_HDR_PARTICLE_VARIANTS : HDR_PARTICLE_VARIANTS;
+        var variantKey = context.getVariantKey();
+        return cache.computeIfAbsent(variantKey, key -> {
+            var baseShader = base;
+            if (baseShader != null) {
+                Program.Type.FRAGMENT.getPrograms().remove(baseShader.getFragmentProgram().getName());
+                Program.Type.VERTEX.getPrograms().remove(baseShader.getVertexProgram().getName());
+            }
+            defines.forEach(LDProgramDefineManager::addProgramDefine);
+            try {
+                return LDShaderInstance.create(Photon.id(pixelArt ? "pixel_hdr_particle" : "hdr_particle"),
+                        DefaultVertexFormat.BLOCK);
+            } catch (Throwable e) {
+                Photon.LOGGER.error("Failed to create {} HDR particle fallback for render variant {}",
+                        pixelArt ? "pixel-art" : "", variantKey, e);
+                return baseShader;
+            } finally {
+                defines.forEach(LDProgramDefineManager::removeProgramDefine);
+            }
+        });
+    }
     @Getter
     private static ShaderInstance irisCompositeShader;
 

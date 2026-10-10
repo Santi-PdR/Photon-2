@@ -1,8 +1,6 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
-import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
-import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import com.lowdragmc.lowdraglib2.configurator.ConfiguratorParser;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigHDR;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -16,9 +14,7 @@ import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
-import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,8 +26,6 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
-import java.util.HashMap;
-import java.util.Map;
 
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
@@ -69,10 +63,6 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     protected final PixelArt pixelArt = new PixelArt();
     @Configurable(name = "TextureMaterial.softParticles", subConfigurable = true)
     protected final SoftParticles softParticles = new SoftParticles();
-    // runtime
-    private static final Map<String, ShaderInstance> hdrParticleShaders = new HashMap<>();
-    private static final Map<String, ShaderInstance> pixelHDRParticleShaders = new HashMap<>();
-
     public TextureMaterial() {
     }
 
@@ -94,50 +84,9 @@ public class TextureMaterial extends ShaderInstanceMaterial {
 
     @Override
     public ShaderInstance getShader(MaterialContext context) {
-        // The whole define SET matters, not just the path: PHOTON_TANGENT changes the mesh attribute
-        // layout, and every material on a pass shares one VAO — compiling this one without it would
-        // read brightness out of the tangent slot.
-        var defines = new java.util.HashSet<>(context.getShaderDefines());
-        // Soft particles are controlled by the per-draw uniform. Keep their sampler and uniform
-        // active in the base shader too; compile-time removal makes Minecraft warn about JSON
-        // samplers/uniforms that the base shader declares but the GLSL optimizer removes.
-        var variantKey = context.getVariantKey();
-        if (defines.isEmpty()) {
-            return pixelArt.isEnable() ? PhotonShaders.getPixelHDRParticleShader() : PhotonShaders.getHDRParticleShader();
-        } else {
-            if (pixelArt.isEnable()) {
-                return pixelHDRParticleShaders.computeIfAbsent(variantKey, key -> {
-                    // remove cache
-                    Program.Type.FRAGMENT.getPrograms().remove(PhotonShaders.getPixelHDRParticleShader().getFragmentProgram().getName());
-                    Program.Type.VERTEX.getPrograms().remove(PhotonShaders.getPixelHDRParticleShader().getVertexProgram().getName());
-                    defines.forEach(LDProgramDefineManager::addProgramDefine);
-                    try {
-                        return LDShaderInstance.create(Photon.id("pixel_hdr_particle"), DefaultVertexFormat.BLOCK);
-                    } catch (Throwable e) {
-                        Photon.LOGGER.error("Failed to create pixel HDR particle shader", e);
-                        throw new RuntimeException(e);
-                    } finally {
-                        // finally, not after the try: a throw used to leak the define into every later compile
-                        defines.forEach(LDProgramDefineManager::removeProgramDefine);
-                    }
-                });
-            } else {
-                return hdrParticleShaders.computeIfAbsent(variantKey, key -> {
-                    // remove cache
-                    Program.Type.FRAGMENT.getPrograms().remove(PhotonShaders.getHDRParticleShader().getFragmentProgram().getName());
-                    Program.Type.VERTEX.getPrograms().remove(PhotonShaders.getHDRParticleShader().getVertexProgram().getName());
-                    defines.forEach(LDProgramDefineManager::addProgramDefine);
-                    try {
-                        return LDShaderInstance.create(Photon.id("hdr_particle"), DefaultVertexFormat.BLOCK);
-                    } catch (Throwable e) {
-                        Photon.LOGGER.error("Failed to create HDR particle shader", e);
-                        throw new RuntimeException(e);
-                    } finally {
-                        defines.forEach(LDProgramDefineManager::removeProgramDefine);
-                    }
-                });
-            }
-        }
+        return pixelArt.isEnable()
+                ? PhotonShaders.getHDRParticleShader(context, true)
+                : PhotonShaders.getHDRParticleShader(context);
     }
 
     @Override

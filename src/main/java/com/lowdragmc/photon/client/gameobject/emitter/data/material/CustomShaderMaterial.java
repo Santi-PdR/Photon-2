@@ -307,12 +307,12 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public ShaderInstance getShader(MaterialContext context) {
         if (shaderHolder == null) {
             if (isCompiledError()) {
-                return PhotonShaders.getHDRParticleShader();
+                return PhotonShaders.getHDRParticleShader(context);
             }
             recompile();
         }
         if (shaderHolder == null) {
-            return PhotonShaders.getHDRParticleShader();
+            return PhotonShaders.getHDRParticleShader(context);
         }
         var defines = context.getShaderDefines();
         LDShaderInstance shader;
