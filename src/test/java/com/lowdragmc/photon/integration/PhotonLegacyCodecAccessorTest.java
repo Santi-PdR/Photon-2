@@ -9,15 +9,15 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-class PhotonResourcePathPersistenceTest {
+class PhotonLegacyCodecAccessorTest {
     @Test
-    void ldlib1PayloadBridgeRoundTripsCodecBackedValuesThroughNbt() {
-        var file = "file(./ldlib2/assets/ldlib2/resources/global/shield.material.nbt)";
+    void genericCodecBridgeRoundTripsTheShieldMaterialPathTokenThroughNbt() {
+        var path = "file(./ldlib2/assets/ldlib2/resources/global/shield.material.nbt)";
         var accessor = PhotonLDLibClientPlugin.legacyCodecAccessor(String.class, Codec.STRING);
 
-        var payload = assertInstanceOf(NbtTagPayload.class, accessor.serialize(AccessorOp.PERSISTED, file));
+        var payload = assertInstanceOf(NbtTagPayload.class, accessor.serialize(AccessorOp.PERSISTED, path));
         var tag = assertInstanceOf(net.minecraft.nbt.StringTag.class, payload.getPayload());
-        assertEquals(file, tag.getAsString());
-        assertEquals(file, accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload));
+        assertEquals(path, tag.getAsString());
+        assertEquals(path, accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload));
     }
 }
