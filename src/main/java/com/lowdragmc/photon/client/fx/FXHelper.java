@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.gui.editor.FXProject;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -83,6 +84,7 @@ public class FXHelper {
         try (var inputStream = Minecraft.getInstance().getResourceManager().open(resourceLocation);) {
             var tag = NbtIo.readCompressed(inputStream);
             tag = applyVersionFixes(tag);
+            tag = LDLibPersistenceCompat.normalize(tag);
             if (tag.contains("resources", Tag.TAG_COMPOUND)) {
                 // short-lived dev format that embedded assets in the .fx — superseded by .fxpack
                 Photon.LOGGER.warn("fx {} carries an embedded 'resources' section, which is no longer "

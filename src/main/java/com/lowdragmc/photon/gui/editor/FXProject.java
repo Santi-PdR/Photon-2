@@ -30,10 +30,12 @@ import com.lowdragmc.photon.gui.editor.resource.GradientResource;
 import com.lowdragmc.photon.gui.editor.resource.MaterialResource;
 import com.lowdragmc.photon.gui.editor.resource.MeshResource;
 import com.lowdragmc.photon.gui.editor.resource.ShaderGraphResource;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import lombok.Getter;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -98,11 +100,21 @@ public class FXProject implements IProject {
 
     @Override
     public void deserializeNBT(@NotNull HolderLookup.Provider provider, @NotNull CompoundTag nbt) {
-        // apply data fix for cross-version
-        var version = Math.max(1, nbt.getCompound("meta").getInt("version_num"));
+        var data = nbt.getCompound("data");
+        var metadata = nbt.getCompound("meta");
+        if (!metadata.contains("version_num", Tag.TAG_INT)) {
+            // Early Photon/LDLib2 projects have no version metadata. Their actual schema is unknown;
+            // applying the V1 migration chain to them can rewrite fields that are already in a newer format.
+            // The FX deserializers retain their own legacy fallbacks for these unversioned files.
+            deserializeProject(provider, LDLibPersistenceCompat.normalize(data));
+            return;
+        }
+
+        // Apply data fixes only when the project declares a schema version.
+        var version = Math.max(1, metadata.getInt("version_num"));
         try {
-            var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, nbt.getCompound("data"));
-            deserializeProject(provider, fixedData);
+            var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, data);
+            deserializeProject(provider, LDLibPersistenceCompat.normalize(fixedData));
         } catch (RuntimeException exception) {
             // LDLib2's file picker intentionally reduces loader exceptions to a generic "Loading Failed" popup.
             // Keep the actionable cause in latest.log so a broken project can be diagnosed from the client log.
