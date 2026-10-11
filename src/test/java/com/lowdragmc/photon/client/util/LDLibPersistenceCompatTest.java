@@ -84,8 +84,8 @@ class LDLibPersistenceCompatTest {
         fxData.put("fxObjects", fxObjects);
         var root = new CompoundTag();
         root.put("fxData", fxData);
-        byte nbtPayloadType = nbtPayloadType();
-        LDLibPersistenceCompat.normalize(root, nbtPayloadType);
+        nbtPayloadType();
+        LDLibPersistenceCompat.normalize(root);
 
         var normalizedBurstList = root.getCompound("fxData").getList("fxObjects", ListTag.TAG_COMPOUND)
                 .getCompound(0).getCompound("config").getList("bursts", ListTag.TAG_COMPOUND);
