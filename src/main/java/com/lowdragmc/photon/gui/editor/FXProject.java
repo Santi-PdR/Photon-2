@@ -102,24 +102,24 @@ public class FXProject implements IProject {
     public void deserializeNBT(@NotNull HolderLookup.Provider provider, @NotNull CompoundTag nbt) {
         var data = nbt.getCompound("data");
         var metadata = nbt.getCompound("meta");
-        if (!metadata.contains("version_num", Tag.TAG_INT)) {
-            // Early Photon/LDLib2 projects have no version metadata. Their actual schema is unknown;
-            // applying the V1 migration chain to them can rewrite fields that are already in a newer format.
-            // The FX deserializers retain their own legacy fallbacks for these unversioned files.
-            deserializeProject(provider, LDLibPersistenceCompat.normalize(data));
-            return;
-        }
-
-        // Apply data fixes only when the project declares a schema version.
-        var version = Math.max(1, metadata.getInt("version_num"));
+        var hasVersion = metadata.contains("version_num", Tag.TAG_INT);
+        var version = hasVersion ? Math.max(1, metadata.getInt("version_num")) : -1;
         try {
-            var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, data);
-            deserializeProject(provider, LDLibPersistenceCompat.normalize(fixedData));
+            if (hasVersion) {
+                // Apply data fixes only when the project declares a schema version.
+                var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, data);
+                deserializeProject(provider, LDLibPersistenceCompat.normalize(fixedData));
+            } else {
+                // Early Photon/LDLib2 projects have no version metadata. Their actual schema is unknown;
+                // applying the V1 migration chain to them can rewrite fields that are already in a newer format.
+                // The FX deserializers retain their own legacy fallbacks for these unversioned files.
+                deserializeProject(provider, LDLibPersistenceCompat.normalize(data));
+            }
         } catch (RuntimeException exception) {
             // LDLib2's file picker intentionally reduces loader exceptions to a generic "Loading Failed" popup.
             // Keep the actionable cause in latest.log so a broken project can be diagnosed from the client log.
             Photon.LOGGER.error("Failed to load Photon FX project data (project version {}, target version {})",
-                    version, VERSION, exception);
+                    hasVersion ? version : "unknown", VERSION, exception);
             throw exception;
         }
     }
