@@ -22,6 +22,9 @@ public final class LDLibPersistenceCompat {
     }
 
     public static CompoundTag normalize(CompoundTag root) {
+        if (!containsManagedListEnvelope(root)) {
+            return root;
+        }
         byte nbtPayloadType = TypedPayloadRegistries.getId(NbtTagPayload.class);
         if (nbtPayloadType < 0) {
             throw new IllegalStateException("LDLib NBT payload type is not registered before Photon project load");
@@ -31,11 +34,34 @@ public final class LDLibPersistenceCompat {
     }
 
     static CompoundTag normalize(CompoundTag root, byte nbtPayloadType) {
-        normalizeTag(root, null, nbtPayloadType);
+        normalizeTag(root, nbtPayloadType);
         return root;
     }
 
-    private static Tag normalizeTag(Tag tag, String fieldName, byte nbtPayloadType) {
+    private static boolean containsManagedListEnvelope(Tag tag) {
+        if (tag instanceof CompoundTag compound) {
+            for (var key : compound.getAllKeys()) {
+                var child = compound.get(key);
+                if (MANAGED_LIST_FIELDS.contains(key)
+                        && child instanceof CompoundTag envelope
+                        && envelope.contains("payload", Tag.TAG_LIST)) {
+                    return true;
+                }
+                if (containsManagedListEnvelope(child)) {
+                    return true;
+                }
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var child : list) {
+                if (containsManagedListEnvelope(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static Tag normalizeTag(Tag tag, byte nbtPayloadType) {
         if (tag instanceof CompoundTag compound) {
             for (var key : new ArrayList<>(compound.getAllKeys())) {
                 var child = compound.get(key);
@@ -44,11 +70,11 @@ public final class LDLibPersistenceCompat {
                         && envelope.contains("payload", Tag.TAG_LIST)) {
                     child = toLegacyArrayPayload(envelope.getList("payload", Tag.TAG_COMPOUND), nbtPayloadType);
                 }
-                compound.put(key, normalizeTag(child, key, nbtPayloadType));
+                compound.put(key, normalizeTag(child, nbtPayloadType));
             }
         } else if (tag instanceof ListTag list) {
             for (int index = 0; index < list.size(); index++) {
-                list.set(index, normalizeTag(list.get(index), fieldName, nbtPayloadType));
+                list.set(index, normalizeTag(list.get(index), nbtPayloadType));
             }
         }
         return tag;

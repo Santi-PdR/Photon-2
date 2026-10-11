@@ -10,6 +10,15 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class LDLibPersistenceCompatTest {
     @Test
+    void leavesTagsWithoutManagedListEnvelopesAlone() {
+        var root = new CompoundTag();
+        root.putString("ordinary", "value");
+
+        assertSame(root, LDLibPersistenceCompat.normalize(root));
+        assertEquals("value", root.getString("ordinary"));
+    }
+
+    @Test
     void unwrapsManagedListFieldsRecursivelyForLegacyLdlib() {
         var burst = new CompoundTag();
         burst.putInt("time", 12);
