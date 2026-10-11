@@ -7,17 +7,13 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
-import java.util.Set;
 
 /**
- * Converts LDLib2's managed-list envelope to the ListTag format read by LDLib 1.0.x's
- * {@code PersistedParser}. Photon 26.2 serializes these fields as {@code {uid, payload}}, while
- * the requested 1.20.1 runtime uses the older parser, which expects the payload list directly.
+ * Converts LDLib2's managed-list envelopes to the ListTag format read by LDLib 1.0.x's
+ * {@code PersistedParser}. Photon 26.2 serializes them as {@code {uid, payload}}, while the
+ * requested 1.20.1 runtime uses the older parser, which expects the payload list directly.
  */
 public final class LDLibPersistenceCompat {
-    private static final Set<String> MANAGED_LIST_FIELDS = Set.of(
-            "bursts", "materials", "influenceList", "emitters");
-
     private LDLibPersistenceCompat() {
     }
 
@@ -42,9 +38,7 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
-                if (MANAGED_LIST_FIELDS.contains(key)
-                        && child instanceof CompoundTag envelope
-                        && envelope.contains("payload", Tag.TAG_LIST)) {
+                if (isManagedListEnvelope(child)) {
                     return true;
                 }
                 if (containsManagedListEnvelope(child)) {
@@ -65,9 +59,8 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (var key : new ArrayList<>(compound.getAllKeys())) {
                 var child = compound.get(key);
-                if (MANAGED_LIST_FIELDS.contains(key)
-                        && child instanceof CompoundTag envelope
-                        && envelope.contains("payload", Tag.TAG_LIST)) {
+                if (isManagedListEnvelope(child)) {
+                    var envelope = (CompoundTag) child;
                     child = toLegacyArrayPayload(envelope.getList("payload", Tag.TAG_COMPOUND), nbtPayloadType);
                 }
                 compound.put(key, normalizeTag(child, nbtPayloadType));
@@ -78,6 +71,14 @@ public final class LDLibPersistenceCompat {
             }
         }
         return tag;
+    }
+
+    /** LDLib2's managed-list wrapper is identified by its exact {@code {uid, payload}} shape. */
+    private static boolean isManagedListEnvelope(Tag tag) {
+        if (!(tag instanceof CompoundTag envelope) || envelope.getAllKeys().size() != 2) {
+            return false;
+        }
+        return envelope.contains("uid", Tag.TAG_INT) && envelope.contains("payload", Tag.TAG_LIST);
     }
 
     /** LDLib 1 ArrayPayload requires {@code {t, p}} per element; LDLib2 stores each value directly. */

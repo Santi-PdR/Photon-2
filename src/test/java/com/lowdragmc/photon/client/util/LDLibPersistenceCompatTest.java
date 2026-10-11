@@ -33,6 +33,8 @@ class LDLibPersistenceCompatTest {
         config.put("materials", envelope(new CompoundTag()));
         config.put("influenceList", envelope(new CompoundTag()));
         config.put("emitters", envelope(new CompoundTag()));
+        // Real Photon/LDLib data can contain managed arrays whose field names vary by setting.
+        config.put("customManagedArray", envelope(new CompoundTag()));
         var fxObject = new CompoundTag();
         fxObject.put("config", config);
         var objects = new ListTag();
@@ -49,7 +51,7 @@ class LDLibPersistenceCompatTest {
 
         var normalizedConfig = root.getCompound("fxData").getList("fxObjects", 10)
                 .getCompound(0).getCompound("config");
-        for (var field : new String[]{"bursts", "materials", "influenceList", "emitters"}) {
+        for (var field : new String[]{"bursts", "materials", "influenceList", "emitters", "customManagedArray"}) {
             assertInstanceOf(ListTag.class, normalizedConfig.get(field), field);
             var element = ((ListTag) normalizedConfig.get(field)).getCompound(0);
             assertEquals(42, element.getByte("t"), field);
