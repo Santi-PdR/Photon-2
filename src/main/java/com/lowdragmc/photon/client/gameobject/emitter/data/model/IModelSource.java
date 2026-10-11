@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.util.PhotonCodecLog;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
@@ -90,14 +91,7 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable,
      */
     @Nullable
     static ResourceLocation getAssetLocationFromFile(File file) {
-        String fullPath = file.getPath().replace('\\', '/');
-        int assetsIndex = fullPath.indexOf("assets/");
-        if (assetsIndex == -1) return null;
-        String relativePath = fullPath.substring(assetsIndex + "assets/".length());
-        int slashIndex = relativePath.indexOf('/');
-        if (slashIndex == -1) return null;
-        String location = relativePath.substring(0, slashIndex) + ":" + relativePath.substring(slashIndex + 1);
-        return LDLib2.isValidResourceLocation(location) ? ResourceLocation.parse(location) : null;
+        return PhotonAssetPath.fromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
     }
 
     /** The source's geometry via the shared cache; {@link PhotonMesh#EMPTY} when unavailable. */

@@ -49,6 +49,7 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.lang.ref.Cleaner;
 import java.util.HashMap;
 import java.util.Map;
@@ -504,41 +505,11 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     @Nullable
     public static ResourceLocation getShaderFromFile(File filePath) {
-        String fullPath = filePath.getPath().replace('\\', '/');
+        return getShaderFromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
+    }
 
-        // find the "assets/" directory in the path
-        var assetsIndex = fullPath.indexOf("assets/");
-        if (assetsIndex == -1) {
-            return null;
-        }
-
-        var relativePath = fullPath.substring(assetsIndex + "assets/".length());
-
-        // find mod_id
-        var slashIndex = relativePath.indexOf('/');
-        if (slashIndex == -1) {
-            return null;
-        }
-
-        var modId = relativePath.substring(0, slashIndex);
-        var subPath = relativePath.substring(slashIndex + 1);
-
-        // find shader location
-        var shaderIndex = subPath.indexOf("shaders/core/");
-        if (shaderIndex == -1) {
-            return null;
-        }
-
-        var shaderPath = subPath.substring(shaderIndex + "shaders/core/".length());
-        if (!shaderPath.endsWith(".json")) {
-            return null;
-        }
-
-        var location = modId + ":" + shaderPath.substring(0, shaderPath.length() - 5); // remove ".json" suffix
-
-        if (LDLib2.isValidResourceLocation(location)) {
-            return ResourceLocation.parse(location);
-        }
-        return null;
+    @Nullable
+    static ResourceLocation getShaderFromFile(Path assetsDirectory, Path filePath) {
+        return com.lowdragmc.photon.client.util.PhotonAssetPath.shaderLocationFromFile(assetsDirectory, filePath);
     }
 }
