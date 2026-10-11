@@ -153,15 +153,24 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
          * that lands in {@code [start, end)}.
          */
         private int burstTriggers(Burst bust, int count, RandomSource randomSource, float start, float end) {
+            return burstTriggers(bust.time, bust.interval, bust.cycles, bust.probability,
+                    count, randomSource, start, end);
+        }
+
+        static int burstTriggers(int time, int interval, int cycles, float probability, int count,
+                                 RandomSource randomSource, float start, float end) {
             var number = 0;
-            int firstK = (int) Math.ceil((start - bust.time) / bust.interval);
+            // Persisted projects can bypass the configurator's minimum interval of one tick.
+            // Clamp malformed zero/negative values here so a burst cannot loop forever.
+            interval = Math.max(1, interval);
+            int firstK = (int) Math.ceil((start - time) / interval);
             if (firstK < 0) firstK = 0;
             for (int k = firstK; ; k++) {
-                if (bust.cycles > 0 && k >= bust.cycles) break;
-                float triggerAge = bust.time + (long) k * bust.interval;
+                if (cycles > 0 && k >= cycles) break;
+                float triggerAge = time + (long) k * interval;
                 if (triggerAge < start) continue;
                 if (triggerAge >= end) break;
-                if (randomSource.nextFloat() < bust.probability) {
+                if (randomSource.nextFloat() < probability) {
                     number += count;
                 }
             }
