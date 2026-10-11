@@ -1,6 +1,8 @@
 package com.lowdragmc.photon.integration;
 
 import com.lowdragmc.lowdraglib2.compat.network.codec.ByteBufCodecs;
+import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.lowdraglib2.syncdata.AccessorRegistries;
 import com.lowdragmc.lowdraglib2.syncdata.accessor.direct.CustomDirectAccessor;
@@ -25,6 +27,9 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+
+import java.io.File;
+import java.nio.file.Path;
 
 /** Client-only LDLib2 accessors, loaded by the common plugin only through {@link net.minecraftforge.fml.DistExecutor}. */
 @OnlyIn(Dist.CLIENT)
@@ -88,7 +93,8 @@ public final class PhotonLDLibClientPlugin {
         // LDLib2-backed material fields are still persisted by LDLib1's parser through Photon codecs.
         // UIResourceMaterial stores its file/builtin reference as IResourcePath, so bridge LDLib2's
         // own versioned path codec just like the Photon model/material interfaces below.
-        registerLegacyCodecAccessor(IResourcePath.class, IResourcePath.CODEC);
+        registerLegacyCodecAccessor(IResourcePath.class,
+                editorResourcePathCodec(IResourcePath.CODEC, LDLib2.getAssetsDir().toPath()));
         registerLegacyCodecAccessor(NumberFunction.class, NumberFunction.CODEC);
         registerLegacyCodecAccessor(NumberFunction3.class, NumberFunction3.CODEC);
         registerLegacyCodecAccessor(IShape.class, IShape.CODEC);
@@ -100,6 +106,29 @@ public final class PhotonLDLibClientPlugin {
     private static <T> void registerLegacyCodecAccessor(Class<T> type, Codec<T> codec) {
         TypedPayloadRegistries.register(NbtTagPayload.class, NbtTagPayload::new,
                 legacyCodecAccessor(type, codec), 1000);
+    }
+
+    static Codec<IResourcePath> editorResourcePathCodec(Codec<IResourcePath> codec, Path assetsDir) {
+        return codec.xmap(path -> {
+            if (!(path instanceof FilePath filePath)) return path;
+            var resolved = resolveEditorResourceFile(filePath.getPath(), filePath.getFile(), assetsDir);
+            return resolved.equals(filePath.getFile()) ? path : new FilePath(resolved);
+        }, path -> path);
+    }
+
+    static File resolveEditorResourceFile(String storedPath, File resolvedFile, Path assetsDir) {
+        if (resolvedFile.isFile() || storedPath == null || !storedPath.startsWith("./ldlib2/assets/")) {
+            return resolvedFile;
+        }
+        try {
+            var root = assetsDir.toAbsolutePath().normalize();
+            var relative = Path.of(storedPath.substring(2)).normalize();
+            if (relative.isAbsolute() || relative.startsWith("..")) return resolvedFile;
+            var candidate = root.resolve(relative).normalize();
+            return candidate.startsWith(root) && candidate.toFile().isFile() ? candidate.toFile() : resolvedFile;
+        } catch (RuntimeException ignored) {
+            return resolvedFile;
+        }
     }
 
     static <T> CustomObjectAccessor<T> legacyCodecAccessor(Class<T> type, Codec<T> codec) {
