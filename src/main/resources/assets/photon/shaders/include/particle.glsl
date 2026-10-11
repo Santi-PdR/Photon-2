@@ -1,9 +1,7 @@
 // MC 1.20.1's fog include takes (ModelViewMat, position, FogShape), while newer FX
-// projects use (position, FogShape). Preserve both forms for custom Photon materials.
-#define PHOTON_FOG_DISTANCE_2(position, shape) fog_distance(ModelViewMat, position, shape)
-#define PHOTON_FOG_DISTANCE_3(model_view, position, shape) fog_distance(model_view, position, shape)
-#define PHOTON_FOG_DISTANCE_SELECT(_1, _2, _3, NAME, ...) NAME
-#define fog_distance(...) PHOTON_FOG_DISTANCE_SELECT(__VA_ARGS__, PHOTON_FOG_DISTANCE_3, PHOTON_FOG_DISTANCE_2)(__VA_ARGS__)
+// projects use (position, FogShape). Rewrite the newer two-argument form. The one
+// Photon shader that calls the 1.20.1 three-argument form undefines this macro first.
+#define fog_distance(position, shape) fog_distance(ModelViewMat, position, shape)
 
 #ifdef PARTICLE_MODEL_INSTANCE
 // Sorted model draws keep the original instance records and shift divisor-1 attributes.

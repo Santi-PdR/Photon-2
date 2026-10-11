@@ -18,6 +18,7 @@ void main() {
 
     gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
 
+    #undef fog_distance
     vertexDistance = fog_distance(ModelViewMat, data.Position, FogShape);
     texCoord0 = data.UV;
     vertexColor = data.Color * texelFetch(Sampler2, data.LightUV / 16, 0);

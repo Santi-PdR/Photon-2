@@ -23,20 +23,12 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 /** Client-only LDLib2 accessors, loaded by the common plugin only through {@link net.minecraftforge.fml.DistExecutor}. */
 @OnlyIn(Dist.CLIENT)
 public final class PhotonLDLibClientPlugin {
+    private static boolean legacyAccessorsRegistered;
+
     private PhotonLDLibClientPlugin() {
     }
 
     public static void registerAccessors() {
-        // Photon 1.20.1 still uses LDLib 1's PersistedParser for the editor's saved FX
-        // configs, alongside LDLib2 for the editor UI. Register the codec-backed values
-        // with both libraries; LDLib 1 otherwise rejects NumberFunction3 during load.
-        TypedPayloadRegistries.init();
-        registerLegacyCodecAccessor(NumberFunction.class, NumberFunction.CODEC);
-        registerLegacyCodecAccessor(NumberFunction3.class, NumberFunction3.CODEC);
-        registerLegacyCodecAccessor(IShape.class, IShape.CODEC);
-        registerLegacyCodecAccessor(IModelSource.class, IModelSource.CODEC);
-        registerLegacyCodecAccessor(IMaterial.class, IMaterial.CODEC);
-
         AccessorRegistries.registerAccessor(CustomDirectAccessor.builder(NumberFunction.class)
                 .codec(NumberFunction.CODEC)
                 .streamCodec(ByteBufCodecs.fromCodec(NumberFunction.CODEC))
@@ -62,6 +54,17 @@ public final class PhotonLDLibClientPlugin {
                 .streamCodec(ByteBufCodecs.fromCodec(IMaterial.CODEC))
                 .copyMark(IMaterial::copy)
                 .build());
+    }
+
+    /** Register old LDLib typed payload accessors before its registry becomes immutable. */
+    public static synchronized void registerLegacyAccessors() {
+        if (legacyAccessorsRegistered) return;
+        registerLegacyCodecAccessor(NumberFunction.class, NumberFunction.CODEC);
+        registerLegacyCodecAccessor(NumberFunction3.class, NumberFunction3.CODEC);
+        registerLegacyCodecAccessor(IShape.class, IShape.CODEC);
+        registerLegacyCodecAccessor(IModelSource.class, IModelSource.CODEC);
+        registerLegacyCodecAccessor(IMaterial.class, IMaterial.CODEC);
+        legacyAccessorsRegistered = true;
     }
 
     private static <T> void registerLegacyCodecAccessor(Class<T> type, Codec<T> codec) {
