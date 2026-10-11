@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.client.util;
 
+import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
+import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -20,26 +22,53 @@ public final class LDLibPersistenceCompat {
     }
 
     public static CompoundTag normalize(CompoundTag root) {
-        normalizeTag(root, null);
+        byte nbtPayloadType = TypedPayloadRegistries.getId(NbtTagPayload.class);
+        if (nbtPayloadType < 0) {
+            throw new IllegalStateException("LDLib NBT payload type is not registered before Photon project load");
+        }
+        normalize(root, nbtPayloadType);
         return root;
     }
 
-    private static Tag normalizeTag(Tag tag, String fieldName) {
+    static CompoundTag normalize(CompoundTag root, byte nbtPayloadType) {
+        normalizeTag(root, null, nbtPayloadType);
+        return root;
+    }
+
+    private static Tag normalizeTag(Tag tag, String fieldName, byte nbtPayloadType) {
         if (tag instanceof CompoundTag compound) {
             for (var key : new ArrayList<>(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (MANAGED_LIST_FIELDS.contains(key)
                         && child instanceof CompoundTag envelope
                         && envelope.contains("payload", Tag.TAG_LIST)) {
-                    child = envelope.get("payload");
+                    child = toLegacyArrayPayload(envelope.getList("payload", Tag.TAG_COMPOUND), nbtPayloadType);
                 }
-                compound.put(key, normalizeTag(child, key));
+                compound.put(key, normalizeTag(child, key, nbtPayloadType));
             }
         } else if (tag instanceof ListTag list) {
             for (int index = 0; index < list.size(); index++) {
-                list.set(index, normalizeTag(list.get(index), fieldName));
+                list.set(index, normalizeTag(list.get(index), fieldName, nbtPayloadType));
             }
         }
         return tag;
+    }
+
+    /** LDLib 1 ArrayPayload requires {@code {t, p}} per element; LDLib2 stores each value directly. */
+    private static ListTag toLegacyArrayPayload(ListTag payload, byte nbtPayloadType) {
+        var legacyPayload = new ListTag();
+        for (var entry : payload) {
+            if (entry instanceof CompoundTag compound
+                    && compound.contains("t", Tag.TAG_BYTE)
+                    && compound.contains("p")) {
+                legacyPayload.add(entry.copy());
+                continue;
+            }
+            var wrapped = new CompoundTag();
+            wrapped.putByte("t", nbtPayloadType);
+            wrapped.put("p", entry.copy());
+            legacyPayload.add(wrapped);
+        }
+        return legacyPayload;
     }
 }

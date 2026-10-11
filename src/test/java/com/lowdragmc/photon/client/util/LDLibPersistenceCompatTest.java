@@ -30,16 +30,20 @@ class LDLibPersistenceCompatTest {
         unrelated.put("payload", new ListTag());
         root.put("unrelated", unrelated);
 
-        LDLibPersistenceCompat.normalize(root);
+        LDLibPersistenceCompat.normalize(root, (byte) 42);
 
         var normalizedConfig = root.getCompound("fxData").getList("fxObjects", 10)
                 .getCompound(0).getCompound("config");
         for (var field : new String[]{"bursts", "materials", "influenceList", "emitters"}) {
             assertInstanceOf(ListTag.class, normalizedConfig.get(field), field);
+            var element = ((ListTag) normalizedConfig.get(field)).getCompound(0);
+            assertEquals(42, element.getByte("t"), field);
+            assertInstanceOf(CompoundTag.class, element.get("p"), field);
         }
-        assertEquals(12, normalizedConfig.getList("bursts", 10).getCompound(0).getInt("time"));
+        var normalizedBurst = normalizedConfig.getList("bursts", 10).getCompound(0).getCompound("p");
+        assertEquals(12, normalizedBurst.getInt("time"));
         assertInstanceOf(ListTag.class, root.getCompound("unrelated").get("payload"));
-        assertSame(root, LDLibPersistenceCompat.normalize(root));
+        assertSame(root, LDLibPersistenceCompat.normalize(root, (byte) 42));
     }
 
     private static CompoundTag envelope(CompoundTag entry) {
