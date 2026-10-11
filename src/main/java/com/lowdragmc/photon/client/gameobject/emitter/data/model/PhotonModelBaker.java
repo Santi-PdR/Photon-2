@@ -17,6 +17,8 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -76,12 +78,19 @@ final class PhotonModelBaker implements ModelBaker {
         }
         try {
             var file = ModelBakery.MODEL_LISTER.idToFile(location);
-            var resource = Minecraft.getInstance().getResourceManager().getResource(file).orElse(null);
-            if (resource == null) {
+            // LDLib2 keeps editable assets under <assets>/<namespace>/assets/<namespace>. Prefer
+            // that copy just as JsonModelSource does for Forge/NeoForge OBJ-loader references;
+            // otherwise a model that exists only in the editor tree silently becomes MISSING_MODEL,
+            // or an older resource-pack override wins over the model the project is editing.
+            Path nestedFile = LDLibModelAssets.findNested(location, file.getPath());
+            var resource = nestedFile == null
+                    ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
+                    : null;
+            if (resource == null && nestedFile == null) {
                 return ModelFactory.getUnBakedModel(ModelBakery.MISSING_MODEL_LOCATION);
             }
             BlockModel model;
-            try (var reader = resource.openAsReader()) {
+            try (var reader = nestedFile == null ? resource.openAsReader() : Files.newBufferedReader(nestedFile)) {
                 model = BlockModel.fromStream(reader);
             }
             model.name = location.toString();
