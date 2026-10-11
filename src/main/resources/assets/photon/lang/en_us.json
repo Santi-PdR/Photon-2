@@ -915,7 +915,6 @@
   "photon.force_field.multiplyDragByParticleSize": "Larger particles receive more drag.",
   "ForceFieldConfig.multiplyDragByParticleVelocity": "Multiply by Velocity",
   "photon.force_field.multiplyDragByParticleVelocity": "Faster particles receive more drag.",
-  "item.photon.blade_test": "Blade FX Rotation Test",
   "FXObjectAnimationView.size": "Size",
   "FXObjectAnimationView.speed": "Speed",
   "FXObjectAnimationView.selfRotation": "Self Rotation",
