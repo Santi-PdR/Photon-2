@@ -49,4 +49,17 @@ public final class PhotonAssetPath {
         return ResourceLocation.tryBuild(assetLocation.getNamespace(),
                 shaderPath.substring(0, shaderPath.length() - 5));
     }
+
+    @Nullable
+    public static ResourceLocation modelLocationFromFile(Path assetsDirectory, Path filePath) {
+        var assetLocation = fromFile(assetsDirectory, filePath);
+        if (assetLocation == null) return null;
+
+        var modelPath = assetLocation.getPath();
+        var modelPrefix = "models/";
+        if (!modelPath.startsWith(modelPrefix) || !modelPath.endsWith(".json")) return null;
+        var locationPath = modelPath.substring(modelPrefix.length(), modelPath.length() - ".json".length());
+        return locationPath.isEmpty() ? null
+                : ResourceLocation.tryBuild(assetLocation.getNamespace(), locationPath);
+    }
 }

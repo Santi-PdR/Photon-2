@@ -4,7 +4,6 @@ import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.lowdragmc.lowdraglib2.LDLib2;
-import com.lowdragmc.lowdraglib2.client.renderer.impl.IModelRenderer;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -14,6 +13,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -175,15 +175,13 @@ public class JsonModelSource implements IModelSource {
             if (mui == null) return;
             Dialog.showFileDialog("ldlib.gui.editor.tips.select_model", LDLib2.getAssetsDir(), true, node -> {
                 if (!node.getKey().isFile() || node.getKey().getName().toLowerCase().endsWith(".json".toLowerCase())) {
-                    if (node.getKey().isFile()) {
-                        return IModelRenderer.getModelFromFile(node.getKey()) != null;
-                    }
+                    if (node.getKey().isFile()) return getModelLocationFromFile(node.getKey()) != null;
                     return true; // allow directories
                 }
                 return false;
             }, r -> {
                 if (r != null && r.isFile()) {
-                    var newModel = IModelRenderer.getModelFromFile(r);
+                    var newModel = getModelLocationFromFile(r);
                     if (newModel == null) return;
                     if (newModel.equals(modelLocation)) return;
                     setModelLocation(newModel);
@@ -196,6 +194,10 @@ public class JsonModelSource implements IModelSource {
                 .setOnClick(event -> { invalidate(); buttonConfigurator.notifyChanges(); })
                 .setText("photon.reload_mesh").layout(layout -> layout.alignSelf(AlignItems.CENTER)));
         father.addConfigurators(buttonConfigurator, reloadButton);
+    }
+
+    private static ResourceLocation getModelLocationFromFile(java.io.File file) {
+        return PhotonAssetPath.modelLocationFromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
     }
 
     @Override

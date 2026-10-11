@@ -42,4 +42,24 @@ class PhotonAssetPathTest {
         assertNull(PhotonAssetPath.shaderLocationFromFile(ASSETS,
                 ASSETS.resolve("ldlib2/assets/ldlib2/textures/particle/smoke.json")));
     }
+
+    @Test
+    void mapsModelJsonFilesInTheLDLib2AssetTreeToModelLocations() {
+        assertEquals(ResourceLocation.parse("ldlib2:block/crystal"),
+                PhotonAssetPath.modelLocationFromFile(ASSETS,
+                        ASSETS.resolve("ldlib2/models/block/crystal.json")));
+    }
+
+    @Test
+    void mapsModelJsonFilesInNestedNamespacesToModelLocations() {
+        assertEquals(ResourceLocation.parse("demo:block/crystal"),
+                PhotonAssetPath.modelLocationFromFile(ASSETS,
+                        ASSETS.resolve("ldlib2/assets/demo/models/block/crystal.json")));
+    }
+
+    @Test
+    void rejectsJsonFilesOutsideTheModelsDirectoryWhenSelectingAModel() {
+        assertNull(PhotonAssetPath.modelLocationFromFile(ASSETS,
+                ASSETS.resolve("ldlib2/textures/unrelated.json")));
+    }
 }
