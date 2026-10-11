@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.number.color;
 
 import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
+import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.accessor.PrimitiveAccessor;
 import com.lowdragmc.lowdraglib.syncdata.accessor.ResourceLocationAccessor;
@@ -13,16 +14,22 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.util.PersistedCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Vector4f;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.function.Supplier;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class HDRColorPersistenceTest {
     @BeforeAll
@@ -45,6 +52,19 @@ class HDRColorPersistenceTest {
         if (PhotonRegistries.MATERIALS == null) {
             PhotonRegistries.MATERIALS = AutoRegistry.LDLibRegisterClient.create(
                     Photon.id("material"), IMaterial.class, AutoRegistry::noArgsCreator);
+        }
+        var materialRegistry = PhotonRegistries.MATERIALS;
+        var textureAnnotation = TextureMaterial.class.getAnnotation(LDLRegisterClient.class);
+        if (!materialRegistry.containKey(textureAnnotation.name())) {
+            materialRegistry.register(textureAnnotation.name(), AutoRegistry.Holder
+                    .<LDLRegisterClient, IMaterial, Supplier<IMaterial>>of(textureAnnotation,
+                            TextureMaterial.class, TextureMaterial::new));
+        }
+        var spriteAnnotation = SpriteMaterial.class.getAnnotation(LDLRegisterClient.class);
+        if (!materialRegistry.containKey(spriteAnnotation.name())) {
+            materialRegistry.register(spriteAnnotation.name(), AutoRegistry.Holder
+                    .<LDLRegisterClient, IMaterial, Supplier<IMaterial>>of(spriteAnnotation,
+                            SpriteMaterial.class, SpriteMaterial::new));
         }
     }
 
@@ -70,14 +90,29 @@ class HDRColorPersistenceTest {
         var hdrField = TextureMaterial.class.getDeclaredField("hdr");
         hdrField.setAccessible(true);
         hdrField.set(original, new HDRColor(0.15f, 0.35f, 0.55f, 0.75f, 2.5f));
-        // Exercise the same registry-aware overload that PersistedCodec uses for materials,
-        // rather than calling the HDR helper directly and bypassing IMaterial's bridge.
-        var tag = original.serializeNBT(null);
-
-        var restored = new TextureMaterial();
-        restored.deserializeNBT(null, tag);
+        // Exercise the material resource wrapper, including its registry dispatch and
+        // registry-aware NBT bridge, rather than bypassing either layer in the test.
+        var wrapper = original.serializeWrapper();
+        assertNotNull(wrapper);
+        var restored = assertInstanceOf(TextureMaterial.class, IMaterial.deserializeWrapper(wrapper));
         var color = (HDRColor) hdrField.get(restored);
         assertColor(color, 0.15f, 0.35f, 0.55f, 0.75f, 2.5f);
+    }
+
+    @Test
+    void spriteMaterialPersistsHdrThroughTheRegistryAwareLdlibBridge() throws ReflectiveOperationException {
+        var original = new SpriteMaterial();
+        original.spriteLocation = ResourceLocation.withDefaultNamespace("particle/smoke");
+        var hdrField = SpriteMaterial.class.getDeclaredField("hdr");
+        hdrField.setAccessible(true);
+        hdrField.set(original, new HDRColor(0.12f, 0.32f, 0.52f, 0.72f, 2.2f));
+
+        var wrapper = original.serializeWrapper();
+        assertNotNull(wrapper);
+        var restored = assertInstanceOf(SpriteMaterial.class, IMaterial.deserializeWrapper(wrapper));
+        var color = (HDRColor) hdrField.get(restored);
+        assertColor(color, 0.12f, 0.32f, 0.52f, 0.72f, 2.2f);
+        assertEquals(original.spriteLocation, restored.spriteLocation);
     }
 
     @Test
