@@ -15,6 +15,7 @@
     "UIVisualLayerMixin",
     "LDProgramDefineManagerMixin",
     "LDLibPayloadRegistryMixin",
+    "FileMenuProjectLoadMixin",
     "accessor.BlendModeAccessor",
     "accessor.RegisterGeometryLoadersAccessor",
     "accessor.ParticleEngineAccessor",
