@@ -46,6 +46,11 @@ class LDLibPersistenceCompatTest {
         var unrelated = new CompoundTag();
         unrelated.put("payload", new ListTag());
         root.put("unrelated", unrelated);
+        var domainPayload = new CompoundTag();
+        domainPayload.putInt("uid", 7);
+        domainPayload.put("payload", new ListTag());
+        domainPayload.putString("kind", "domain-data");
+        root.put("domainPayload", domainPayload);
 
         LDLibPersistenceCompat.normalize(root, (byte) 42);
 
@@ -60,6 +65,8 @@ class LDLibPersistenceCompatTest {
         var normalizedBurst = normalizedConfig.getList("bursts", 10).getCompound(0).getCompound("p");
         assertEquals(12, normalizedBurst.getInt("time"));
         assertInstanceOf(ListTag.class, root.getCompound("unrelated").get("payload"));
+        assertEquals("domain-data", root.getCompound("domainPayload").getString("kind"));
+        assertInstanceOf(ListTag.class, root.getCompound("domainPayload").get("payload"));
         assertSame(root, LDLibPersistenceCompat.normalize(root, (byte) 42));
     }
 
