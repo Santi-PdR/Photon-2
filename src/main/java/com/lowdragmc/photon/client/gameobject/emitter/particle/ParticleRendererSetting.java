@@ -376,7 +376,7 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
 
     @Override
     public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
-        IPersistedSerializable.super.deserializeNBT(tag);
+        super.deserializeNBT(tag);
         if (facingMode == null) {
             facingMode = FacingMode.DEFAULT;
         }
@@ -389,7 +389,7 @@ public class ParticleRendererSetting extends RendererSetting implements IConfigu
 
     @Override
     public CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
-        var tag = IPersistedSerializable.super.serializeNBT();
+        var tag = super.serializeNBT();
         if (renderMode == Mode.Model && model != null) {
             tag.put("model", model.serializeNBT(provider));
         }

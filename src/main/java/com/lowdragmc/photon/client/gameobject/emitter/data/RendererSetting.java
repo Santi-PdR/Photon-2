@@ -6,6 +6,11 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
@@ -19,7 +24,9 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.phys.AABB;
@@ -36,7 +43,7 @@ import java.util.function.Supplier;
 @Getter
 @Setter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class RendererSetting {
+public class RendererSetting implements IPersistedSerializable {
 
     public enum Layer {
         Opaque(PhotonStage.AFTER_OPAQUE_FEATURES),
@@ -71,7 +78,6 @@ public class RendererSetting {
     }
 
     @Configurable(name = "RendererSetting.materials", collapse = false)
-    @Persisted
     @ConfigList(configuratorMethod = "createMaterialConfigurator", addDefaultMethod = "addDefaultMaterial")
     @ReadOnlyManaged(serializeMethod = "materialSerialize", deserializeMethod = "materialDeserialize")
     @EqualsAndHashCode.Include
@@ -202,6 +208,62 @@ public class RendererSetting {
             materials.add(addDefaultMaterial());
         }
         return materials;
+    }
+
+    /**
+     * Photon 26.2 uses LDLib2's read-only managed list for editor UI, while the runtime still
+     * targets LDLib 1.0.x. LDLib 1's generic collection accessor cannot deserialize the
+     * {@code IMaterial} child accessor inside this list, so persist material entries explicitly
+     * as the legacy ArrayPayload format instead of routing this field through PersistedParser.
+     */
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        tag.put("materials", encodeMaterialTags(materials.stream().map(MaterialSetting::serializeNBT).toList()));
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        var persistedFields = tag.copy();
+        var encodedMaterials = persistedFields.get("materials");
+        persistedFields.remove("materials");
+        PersistedParser.deserializeNBT(persistedFields, new java.util.HashMap<>(), getClass(), this);
+
+        if (encodedMaterials instanceof ListTag list) {
+            var decoded = new ArrayList<MaterialSetting>();
+            for (var materialTag : decodeMaterialTags(list)) {
+                var material = new MaterialSetting();
+                material.deserializeNBT(materialTag);
+                decoded.add(material);
+            }
+            materials = decoded;
+        } else if (encodedMaterials != null) {
+            throw new IllegalArgumentException("Renderer materials are not stored as an LDLib ArrayPayload: " + encodedMaterials.getType());
+        }
+    }
+
+    static ListTag encodeMaterialTags(List<CompoundTag> materialTags) {
+        var payloads = new ITypedPayload<?>[materialTags.size()];
+        for (int index = 0; index < materialTags.size(); index++) {
+            payloads[index] = NbtTagPayload.of(materialTags.get(index));
+        }
+        return (ListTag) ArrayPayload.of(payloads).serializeNBT();
+    }
+
+    static List<CompoundTag> decodeMaterialTags(ListTag list) {
+        var arrayPayload = new ArrayPayload();
+        arrayPayload.deserializeNBT(list);
+        var materialTags = new ArrayList<CompoundTag>();
+        for (var payload : arrayPayload.getPayload()) {
+            var value = payload.getPayload();
+            if (!(value instanceof CompoundTag materialTag)) {
+                throw new IllegalArgumentException("Renderer material entry is not a compound tag: " + value);
+            }
+            materialTags.add(materialTag);
+        }
+        return materialTags;
     }
 
     public void setOwnerRenderPass(@Nullable PhotonFXRenderPass ownerRenderPass) {

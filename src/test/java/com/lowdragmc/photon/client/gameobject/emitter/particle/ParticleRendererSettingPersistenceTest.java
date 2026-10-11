@@ -14,6 +14,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.forcefield.ForceFieldConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ExternalForcesSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -23,6 +24,7 @@ import java.lang.reflect.Field;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ParticleRendererSettingPersistenceTest {
@@ -81,6 +83,15 @@ class ParticleRendererSettingPersistenceTest {
                                 "ExternalForcesSetting serializes TransformRef entries explicitly for LDLib 1");
                         assertTrue(field.isAnnotationPresent(com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged.class),
                                 "LDLib2 still uses its managed-list configurator bridge");
+                        continue;
+                    }
+                    if (dataClass == RendererSetting.class && field.getName().equals("materials")) {
+                        assertTrue(IPersistedSerializable.class.isAssignableFrom(dataClass),
+                                "RendererSetting serializes MaterialSetting entries explicitly for LDLib 1");
+                        assertTrue(field.isAnnotationPresent(com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged.class),
+                                "LDLib2 still uses its managed-list configurator bridge");
+                        assertFalse(field.isAnnotationPresent(Persisted.class),
+                                "the incompatible LDLib 1 collection accessor must not process materials");
                         continue;
                     }
                     if (persisted == null && field.getName().equals("hdr")

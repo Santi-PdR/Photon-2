@@ -179,24 +179,11 @@ public class TileParticleRenderer {
                 quaternion = computeBillboardQuaternion(particle, renderMode, camera, partialTicks, rotation);
             }
 
-            var rawVertexes = new Vector3f[]{
-                    new Vector3f(-1.0F, -1.0F, 0.0F),
-                    new Vector3f(-1.0F, 1.0F, 0.0F),
-                    new Vector3f(1.0F, 1.0F, 0.0F),
-                    new Vector3f(1.0F, -1.0F, 0.0F),
-            };
+            var vertices = ParticleQuadGeometry.transformedBillboardVertices(finalSizeX, finalSizeY, finalSizeZ,
+                    spaceScale, quaternion, new Vector3f(x, y, z));
             // 1.20.1's camera-facing particle convention uses a clockwise quad when viewed
             // from +Z. Its visible face and normal therefore point towards -Z.
             var normal = new Vector3f(0, 0, -1);
-
-            for (var i = 0; i < 4; ++i) {
-                var vertex = rawVertexes[i];
-                vertex.mul(finalSizeX, finalSizeY, finalSizeZ);
-                vertex = quaternion.transform(vertex);
-                vertex.mul(spaceScale);
-                vertex.add(x, y, z);
-            }
-
             normal = quaternion.transform(normal);
 
             var uvs = particle.getRealUVs(partialTicks);
@@ -212,13 +199,13 @@ public class TileParticleRenderer {
                 u1 = swap;
             }
 
-            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z())
+            buffer.vertex(vertices[0].x(), vertices[0].y(), vertices[0].z())
                     .color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z())
+            buffer.vertex(vertices[1].x(), vertices[1].y(), vertices[1].z())
                     .color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z())
+            buffer.vertex(vertices[2].x(), vertices[2].y(), vertices[2].z())
                     .color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z())
+            buffer.vertex(vertices[3].x(), vertices[3].y(), vertices[3].z())
                     .color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
         }
     }
