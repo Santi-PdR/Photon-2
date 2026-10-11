@@ -100,8 +100,16 @@ public class FXProject implements IProject {
     public void deserializeNBT(@NotNull HolderLookup.Provider provider, @NotNull CompoundTag nbt) {
         // apply data fix for cross-version
         var version = Math.max(1, nbt.getCompound("meta").getInt("version_num"));
-        var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, nbt.getCompound("data"));
-        deserializeProject(provider, fixedData);
+        try {
+            var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, nbt.getCompound("data"));
+            deserializeProject(provider, fixedData);
+        } catch (RuntimeException exception) {
+            // LDLib2's file picker intentionally reduces loader exceptions to a generic "Loading Failed" popup.
+            // Keep the actionable cause in latest.log so a broken project can be diagnosed from the client log.
+            Photon.LOGGER.error("Failed to load Photon FX project data (project version {}, target version {})",
+                    version, VERSION, exception);
+            throw exception;
+        }
     }
 
     @Override
