@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonCodecLog;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -15,7 +16,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.Mth;
 import org.joml.Vector3f;
@@ -37,11 +37,12 @@ public interface IShape extends IConfigurable, IPersistedSerializable, ILDLRegis
                     .orElseGet(() -> MapCodec.<IShape>unit(new Dot()).codec()));
 
     default CompoundTag serializeWrapper() {
-        return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(new CompoundTag());
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "shape " + getClass().getSimpleName());
+        return encoded instanceof CompoundTag compound ? compound : new CompoundTag();
     }
 
     static IShape deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(new Dot());
+        return PhotonCodecLog.decodeOr(CODEC, tag, "shape", Dot::new);
     }
 
     void nextPosVel(TileParticle particle, IParticleEmitter emitter, Vector3f position, Vector3f rotation, Vector3f scale);

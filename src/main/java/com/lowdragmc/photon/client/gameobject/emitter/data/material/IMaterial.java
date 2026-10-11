@@ -13,6 +13,7 @@ import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
 import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonCodecLog;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
@@ -21,7 +22,6 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -63,11 +63,12 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable,
 
     @Nullable
     default CompoundTag serializeWrapper() {
-        return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(null);
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "material " + getClass().getSimpleName());
+        return encoded instanceof CompoundTag compound ? compound : null;
     }
 
     static IMaterial deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(MISSING);
+        return PhotonCodecLog.decodeOr(CODEC, tag, "material", () -> MISSING);
     }
 
     ShaderInstance begin(MaterialContext context);
@@ -118,9 +119,8 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable,
     }
 
     default IMaterial copy() {
-        return CODEC.encodeStart(NbtOps.INSTANCE, this).result()
-                .flatMap(tag -> CODEC.parse(NbtOps.INSTANCE, tag).result())
-                .orElse(MISSING);
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "material copy " + getClass().getSimpleName());
+        return encoded == null ? MISSING : PhotonCodecLog.decodeOr(CODEC, encoded, "material copy", () -> MISSING);
     }
 
     default void createPreview(ConfiguratorGroup father) {

@@ -4,12 +4,12 @@ import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonCodecLog;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Color;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.configurator.NumberFunctionConfigurator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.RandomSource;
 
@@ -36,11 +36,12 @@ public interface NumberFunction extends IPersistedSerializable, ILDLRegisterClie
     }
 
     default CompoundTag serializeWrapper() {
-        return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(new CompoundTag());
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "number function " + getClass().getSimpleName());
+        return encoded instanceof CompoundTag compound ? compound : new CompoundTag();
     }
 
     static NumberFunction deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(ZERO);
+        return PhotonCodecLog.decodeOr(CODEC, tag, "number function", () -> ZERO);
     }
 
     static NumberFunction copy(NumberFunction function) {

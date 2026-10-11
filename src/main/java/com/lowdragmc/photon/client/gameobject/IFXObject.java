@@ -8,6 +8,7 @@ import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.utils.LDLibExtraCodecs;
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.DummyWorld;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonCodecLog;
 import com.lowdragmc.photon.client.fx.IEffectExecutor;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
@@ -16,7 +17,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
 import org.joml.Quaternionf;
@@ -42,12 +42,13 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
 
     @Nullable
     default CompoundTag serializeWrapper() {
-        return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(null);
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "FX object " + getName());
+        return encoded instanceof CompoundTag compound ? compound : null;
     }
 
     @Nullable
     static IFXObject deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null);
+        return PhotonCodecLog.decodeOr(CODEC, tag, "FX object", () -> null);
     }
 
     default IGuiTexture getIcon() {
@@ -187,7 +188,8 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
      * copy this object
      */
     default IFXObject deepCopy() {
-        return CODEC.encodeStart(NbtOps.INSTANCE, this).result().flatMap((tag) -> CODEC.parse(NbtOps.INSTANCE, tag).result()).orElse(null);
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "FX object copy " + getName());
+        return encoded == null ? null : PhotonCodecLog.decodeOr(CODEC, encoded, "FX object copy", () -> null);
     }
 
     default IFXObject shallowCopy() {

@@ -6,11 +6,11 @@ import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.util.PersistedCodec;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonCodecLog;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.EndTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.core.HolderLookup;
 import com.lowdragmc.photon.util.RegistryAwareNBTSerializable;
@@ -63,7 +63,8 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable,
     }
 
     default CompoundTag serializeWrapper() {
-        return (CompoundTag) CODEC.encodeStart(NbtOps.INSTANCE, this).result().orElse(new CompoundTag());
+        var encoded = PhotonCodecLog.encodeOrNull(CODEC, this, "model source " + getClass().getSimpleName());
+        return encoded instanceof CompoundTag compound ? compound : new CompoundTag();
     }
 
     static IModelSource deserializeWrapper(Tag tag) {
@@ -79,7 +80,7 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable,
             AnimationFileListNbt.migrateLegacyConfig(copy);
             normalized = copy;
         }
-        return CODEC.parse(NbtOps.INSTANCE, normalized).result().orElseGet(JsonModelSource::new);
+        return PhotonCodecLog.decodeOr(CODEC, normalized, "model source", JsonModelSource::new);
     }
 
     /**
