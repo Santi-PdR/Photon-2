@@ -61,7 +61,16 @@ public final class LDLibPersistenceCompat {
                 var child = compound.get(key);
                 if (isManagedListEnvelope(child)) {
                     var envelope = (CompoundTag) child;
-                    child = toLegacyArrayPayload(envelope.getList("payload", Tag.TAG_COMPOUND), nbtPayloadType);
+                    var payload = (ListTag) envelope.get("payload");
+                    // LDLib2 ReadOnlyManaged fields can use a custom serializer that returns a
+                    // ListTag directly (Photon's force-field influenceList stores UUID strings).
+                    // Preserve those scalar entries for LDLib 1's matching custom deserializer;
+                    // object collections instead need the legacy ArrayPayload element wrappers.
+                    if (!isStringList(payload)) {
+                        child = toLegacyArrayPayload(payload, nbtPayloadType);
+                    } else {
+                        child = payload.copy();
+                    }
                 }
                 compound.put(key, normalizeTag(child, nbtPayloadType));
             }
@@ -79,6 +88,10 @@ public final class LDLibPersistenceCompat {
             return false;
         }
         return envelope.contains("uid", Tag.TAG_INT) && envelope.contains("payload", Tag.TAG_LIST);
+    }
+
+    private static boolean isStringList(ListTag list) {
+        return list.isEmpty() || list.getElementType() == Tag.TAG_STRING;
     }
 
     /** LDLib 1 ArrayPayload requires {@code {t, p}} per element; LDLib2 stores each value directly. */

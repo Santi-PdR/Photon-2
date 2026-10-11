@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,6 +115,21 @@ class LDLibPersistenceCompatTest {
     }
 
     @Test
+    void preservesStringEntriesForCustomReadOnlyManagedListDeserializers() {
+        var expectedRef = "a3d8bb14-3241-4810-9053-9e364c7a005b";
+        var refs = new ListTag();
+        refs.add(StringTag.valueOf(expectedRef));
+        var config = new CompoundTag();
+        config.put("influenceList", envelope(refs));
+
+        LDLibPersistenceCompat.normalize(config, (byte) 42);
+
+        var normalized = config.getList("influenceList", ListTag.TAG_STRING);
+        assertEquals(1, normalized.size());
+        assertEquals(expectedRef, normalized.getString(0));
+    }
+
+    @Test
     void migratesAndLoadsManagedListsAtRealShieldProjectPaths() {
         var material = new CompoundTag();
         material.putString("type", "sprite");
@@ -209,6 +225,10 @@ class LDLibPersistenceCompatTest {
     private static CompoundTag envelope(CompoundTag entry) {
         var payload = new ListTag();
         payload.add(entry);
+        return envelope(payload);
+    }
+
+    private static CompoundTag envelope(ListTag payload) {
         var envelope = new CompoundTag();
         envelope.putInt("uid", 1);
         envelope.put("payload", payload);

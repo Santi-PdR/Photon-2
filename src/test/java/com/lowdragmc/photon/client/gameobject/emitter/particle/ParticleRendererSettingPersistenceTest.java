@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.particle;
 
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraPhysicsSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailConfig;
@@ -12,6 +13,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.forcefield.ForceFieldConfig;
+import com.lowdragmc.photon.client.gameobject.emitter.data.ExternalForcesSetting;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -74,6 +76,13 @@ class ParticleRendererSettingPersistenceTest {
                     if (configurable == null) continue;
 
                     Persisted persisted = field.getAnnotation(Persisted.class);
+                    if (dataClass == ExternalForcesSetting.class && field.getName().equals("influenceList")) {
+                        assertTrue(IPersistedSerializable.class.isAssignableFrom(dataClass),
+                                "ExternalForcesSetting serializes TransformRef entries explicitly for LDLib 1");
+                        assertTrue(field.isAnnotationPresent(com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged.class),
+                                "LDLib2 still uses its managed-list configurator bridge");
+                        continue;
+                    }
                     if (persisted == null && field.getName().equals("hdr")
                             && IMaterial.class.isAssignableFrom(dataClass)) {
                         continue; // Serialized explicitly through HDRColor.CODEC by the material bridge.

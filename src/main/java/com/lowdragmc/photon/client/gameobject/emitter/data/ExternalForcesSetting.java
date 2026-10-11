@@ -1,6 +1,8 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
+import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -20,6 +22,7 @@ import com.lowdragmc.photon.client.gameobject.particle.IParticle;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import lombok.Getter;
 import lombok.Setter;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
@@ -41,7 +44,7 @@ import java.util.function.Supplier;
 @OnlyIn(Dist.CLIENT)
 @Setter
 @Getter
-public class ExternalForcesSetting extends ToggleGroup {
+public class ExternalForcesSetting extends ToggleGroup implements IPersistedSerializable {
 
     public enum Filter {
         /** every active force field in the same FX scene affects this emitter */
@@ -62,9 +65,24 @@ public class ExternalForcesSetting extends ToggleGroup {
 
     @Configurable(name = "ExternalForcesSetting.influenceList", tips = "photon.emitter.config.externalForces.influenceList")
     @ConfigList(configuratorMethod = "buildRefConfigurator", addDefaultMethod = "addDefaultRef")
-    @ReadOnlyManaged(serializeMethod = "refsSerialize", deserializeMethod = "refsDeserialize")
-    @Persisted
+    @com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged(serializeMethod = "refsSerialize", deserializeMethod = "refsDeserialize")
     protected List<TransformRef> influenceList = new ArrayList<>();
+
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        tag.put("influenceList", refsSerialize(influenceList));
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        var persistedFields = tag.copy();
+        persistedFields.remove("influenceList");
+        PersistedParser.deserializeNBT(persistedFields, new java.util.HashMap<>(), getClass(), this);
+        influenceList = refsDeserialize(tag.getList("influenceList", Tag.TAG_STRING));
+    }
 
     /** Whether the given force field passes this setting's influence filter (matched by transform id). */
     public boolean isInfluencedBy(ForceFieldObject field) {

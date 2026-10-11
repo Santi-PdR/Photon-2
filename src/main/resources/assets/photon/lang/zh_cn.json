@@ -912,5 +912,6 @@
   "PhysicsSetting.collidedFriction": "碰撞摩擦",
   "photon.emitter.config.physics.collidedFriction": "发生碰撞后的摩擦系数",
   "SamplerCurve": "曲线采样",
-  "SamplerGradient": "渐变采样"
+  "SamplerGradient": "渐变采样",
+  "item.photon.blade_test": "旧版 Photon 测试道具"
 }

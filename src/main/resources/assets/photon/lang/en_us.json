@@ -922,5 +922,6 @@
   "PhysicsSetting.collidedFriction": "Collided Friction",
   "photon.emitter.config.physics.collidedFriction": "Friction applied when particles is collided",
   "SamplerCurve": "Sampler Curve",
-  "SamplerGradient": "Sampler Gradient"
+  "SamplerGradient": "Sampler Gradient",
+  "item.photon.blade_test": "Legacy Photon Test Item"
 }
