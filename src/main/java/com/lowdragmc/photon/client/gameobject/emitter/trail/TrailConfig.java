@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.gameobject.emitter.data.InstancedRendererSetting;
@@ -46,31 +47,37 @@ public class TrailConfig implements IConfigurable, IPersistedSerializable {
     @Getter
     @Configurable(name = "ParticleConfig.duration", tips = "photon.emitter.config.duration")
     @ConfigNumber(range = {1, Integer.MAX_VALUE})
+    @Persisted
     protected int duration = 100;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.looping", tips = "photon.emitter.config.looping")
+    @Persisted
     protected boolean looping = true;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startDelay", tips = "photon.emitter.config.startDelay")
     @ConfigNumber(range = {0, Integer.MAX_VALUE})
+    @Persisted
     protected int startDelay = 0;
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.time", tips = "photon.emitter.trail.config.time")
     @ConfigNumber(range = {0f, Integer.MAX_VALUE})
+    @Persisted
     protected int time = 20;
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.minVertexDistance", tips = "photon.emitter.trail.config.minVertexDistance")
     @ConfigNumber(range = {0f, Float.MAX_VALUE})
+    @Persisted
     protected float minVertexDistance = 0.05f;
     @Getter
     @Configurable(name = "TrailConfig.smoothInterpolation", tips = {
             "photon.emitter.trail.config.smoothInterpolation.0",
             "photon.emitter.trail.config.smoothInterpolation.1",
     })
+    @Persisted
     protected boolean smoothInterpolation = false;
     @Getter
 //    @Configurable(tips = {
@@ -81,27 +88,34 @@ public class TrailConfig implements IConfigurable, IPersistedSerializable {
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.uvMode", tips = "photon.emitter.trail.config.uvMode")
+    @Persisted
     protected TrailParticle.UVMode uvMode = TrailParticle.UVMode.Stretch;
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.widthOverTrail", tips = "photon.emitter.trail.config.widthOverTrail")
     @NumberFunctionConfig(types = {Constant.class, Curve.class}, min = 0, defaultValue = 0.1f, curveConfig = @CurveConfig(bound = {0, 0.1f}, xAxis = "trail position", yAxis = "width"))
+    @Persisted
     protected NumberFunction widthOverTrail = NumberFunction.constant(0.2f);
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.colorOverTrail", tips = "photon.emitter.trail.config.colorOverTrail")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     protected NumberFunction colorOverTrail = new Gradient();
     @Getter
     @Configurable(name = "ParticleConfig.renderer", subConfigurable = true, tips = "photon.emitter.config.renderer")
+    @Persisted(subPersisted = true)
     public final InstancedRendererSetting renderer = new InstancedRendererSetting();
     @Getter
     @Configurable(name = "ParticleConfig.fixedLight", subConfigurable = true, tips = "photon.emitter.config.lights")
+    @Persisted(subPersisted = true)
     public final LightOverLifetimeSetting lights = new LightOverLifetimeSetting();
     @Getter
     @Configurable(name = "ParticleConfig.uvAnimation", subConfigurable = true, tips = "photon.emitter.config.uvAnimation")
+    @Persisted(subPersisted = true)
     public final UVAnimationSetting uvAnimation = new UVAnimationSetting();
     @Configurable(name = "ParticleConfig.additionalGPUDataSetting", subConfigurable = true, tips = "photon.emitter.config.additional_gpu_data")
+    @Persisted(subPersisted = true)
     public final TrailAdditionalGPUDataSetting additionalGPUDataSetting = new TrailAdditionalGPUDataSetting(this);
 
     // runtime

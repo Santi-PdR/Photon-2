@@ -59,34 +59,41 @@ public class BeamConfig implements IConfigurable, IPersistedSerializable {
     @Getter
     @Configurable(name = "ParticleConfig.duration", tips = "photon.emitter.config.duration")
     @ConfigNumber(range = {1, Integer.MAX_VALUE})
+    @Persisted
     protected int duration = 100;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.looping", tips = "photon.emitter.config.looping")
+    @Persisted
     protected boolean looping = true;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startDelay", tips = "photon.emitter.config.startDelay")
     @ConfigNumber(range = {0, Integer.MAX_VALUE})
+    @Persisted
     protected int startDelay = 0;
     @Getter
     @Configurable(name = "BeamConfig.end", tips = "photon.emitter.beam.config.end")
     @ConfigNumber(range = {-Float.MAX_VALUE, Float.MAX_VALUE})
+    @Persisted
     protected Vector3f end = new Vector3f(0, 0, -3);
     @Setter
     @Getter
     @Configurable(name = "BeamConfig.width", tips = "photon.emitter.beam.config.width")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "width"))
+    @Persisted
     protected NumberFunction width = NumberFunction.constant(0.2);
     @Setter
     @Getter
     @Configurable(name = "BeamConfig.emitRate", tips = "photon.emitter.beam.config.emitRate")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "width"))
+    @Persisted
     protected NumberFunction emitRate = NumberFunction.constant(0);
     @Setter
     @Getter
     @Configurable(name = "BeamConfig.raycast", tips = "photon.emitter.beam.config.raycast")
     @ConfigSelector(subConfiguratorBuilder = "raycastSubConfiguratorBuilder")
+    @Persisted
     protected RaycastMode raycast = RaycastMode.NONE;
     @Setter
     @Getter
@@ -100,16 +107,21 @@ public class BeamConfig implements IConfigurable, IPersistedSerializable {
     @Getter
     @Configurable(name = "BeamConfig.color", tips = "photon.emitter.beam.config.color")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     protected NumberFunction color = new Color();
     @Getter
     @Configurable(name = "ParticleConfig.renderer", subConfigurable = true, tips = "photon.emitter.config.renderer")
+    @Persisted(subPersisted = true)
     public final InstancedRendererSetting renderer = new InstancedRendererSetting();
     @Configurable(name = "ParticleConfig.uvAnimation", subConfigurable = true, tips = "photon.emitter.config.uvAnimation")
+    @Persisted(subPersisted = true)
     public final UVAnimationSetting uvAnimation = new UVAnimationSetting();
     @Getter
     @Configurable(name = "ParticleConfig.fixedLight", subConfigurable = true, tips = "photon.emitter.config.lights")
+    @Persisted(subPersisted = true)
     public final LightOverLifetimeSetting lights = new LightOverLifetimeSetting();
     @Configurable(name = "ParticleConfig.additionalGPUDataSetting", subConfigurable = true, tips = "photon.emitter.config.additional_gpu_data")
+    @Persisted(subPersisted = true)
     public final BeamAdditionalGPUDataSetting additionalGPUDataSetting = new BeamAdditionalGPUDataSetting(this);
 
     public enum RaycastMode {

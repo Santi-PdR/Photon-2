@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.TransformRefConfigurator;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
 import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.InstancedRendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
@@ -86,98 +87,129 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
     @Getter
     @Configurable(name = "ParticleConfig.duration", tips = "photon.emitter.config.duration")
     @ConfigNumber(range = {1, Integer.MAX_VALUE})
+    @Persisted
     protected int duration = 100;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.looping", tips = "photon.emitter.config.looping")
+    @Persisted
     protected boolean looping = true;
     @Configurable(name = "AraTrails.section", subConfigurable = true, tips = "AraTrails.section.tips")
+    @Persisted(subPersisted = true)
     public final TrailSection section = new TrailSection();
     @Configurable(name = "AraTrails.space", tips = "AraTrails.space.tips")
     @ConfigSelector(subConfiguratorBuilder = "createSpaceConfigurator")
+    @Persisted
     public TrailSpace space = TrailSpace.World;
     public final TransformRef customSpace = new TransformRef();
     @Configurable(name = "AraTrails.alignment", tips = "AraTrails.alignment.tips")
+    @Persisted
     public TrailAlignment alignment = TrailAlignment.View;
     @Configurable(name = "AraTrails.sorting", tips = "AraTrails.sorting.tips")
+    @Persisted
     public TrailSorting sorting = TrailSorting.OlderOnTop;
     @Configurable(name = "AraTrails.thickness", tips = "AraTrails.thickness.tips")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float thickness = 0.2f;
     @Configurable(name = "AraTrails.smoothness", tips = "AraTrails.smoothness.tips")
     @ConfigNumber(range = {1, 8})
+    @Persisted
     public int smoothness = 1;
     @Configurable(name = "AraTrails.smoothingDistance")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float smoothingDistance = 0.05f;
     @Configurable(name = "AraTrails.highQualityCorners", tips = "AraTrails.highQualityCorners.tips")
+    @Persisted
     public boolean highQualityCorners = false;
     @Configurable(name = "AraTrails.cornerRoundness")
     @ConfigNumber(range = {0, 12})
+    @Persisted
     public int cornerRoundness = 5;
 
     @ConfigHeader("AraTrails.Length")
     @Configurable(name = "AraTrails.thicknessOverLength", tips = "AraTrails.thicknessOverLength.tips")
     @NumberFunctionConfig(types = {Constant.class, Curve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 1f}, xAxis = "trail length", yAxis = "thickness"))
+    @Persisted
     public NumberFunction thicknessOverLength = NumberFunction.constant(1f);    /**< maps trail length to thickness.*/
     @Configurable(name = "AraTrails.colorOverLength", tips = "AraTrails.colorOverLength.tips")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     public NumberFunction colorOverLength = NumberFunction.color(-1);
 
     @ConfigHeader("AraTrails.Time")
     @Configurable(name = "AraTrails.thicknessOverTime", tips = "AraTrails.thicknessOverTime.tips")
     @NumberFunctionConfig(types = {Constant.class, Curve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 1f}, xAxis = "trail length", yAxis = "thickness"))
+    @Persisted
     public NumberFunction thicknessOverTime = NumberFunction.constant(1f);  /**< maps trail lifetime to thickness.*/
     @Configurable(name = "AraTrails.thicknessOverSegmentTime", tips = "AraTrails.thicknessOverSegmentTime.tips")
     @NumberFunctionConfig(types = {Constant.class, Curve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 1f}, xAxis = "trail length", yAxis = "thickness"))
+    @Persisted
     public NumberFunction thicknessOverSegmentTime = NumberFunction.constant(1f);  /**< maps segment lifetime to thickness.*/
     @Configurable(name = "AraTrails.colorOverTime", tips = "AraTrails.colorOverTime.tips")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     public NumberFunction colorOverTime = NumberFunction.color(-1);
     @Configurable(name = "AraTrails.colorOverSegmentTime", tips = "AraTrails.colorOverSegmentTime.tips")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @Persisted
     public NumberFunction colorOverSegmentTime = NumberFunction.color(-1);
 
 
     @ConfigHeader("AraTrails.Emission")
     @Configurable(name = "AraTrails.emit")
+    @Persisted
     public boolean emit = true;
     @Configurable(name = "AraTrails.initialThickness", tips = "AraTrails.initialThickness.tips")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float initialThickness = 1;
     @Configurable(name = "AraTrails.initialColor", tips = "AraTrails.initialColor.tips")
     @ConfigColor
+    @Persisted
     public int initialColor = -1;
     @Configurable(name = "AraTrails.initialVelocity", tips = "AraTrails.initialVelocity.tips")
+    @Persisted
     public Vector3f initialVelocity = new Vector3f(0, 0, 0);
     @Configurable(name = "AraTrails.minSpawnTime", tips = "AraTrails.minSpawnTime.tips")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float timeInterval = 0.05f;
     @Configurable(name = "AraTrails.minDistance", tips = "AraTrails.minDistance.tips")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float minDistance = 0.025f;
     @Configurable(name = "AraTrails.time", tips = "AraTrails.time.tips")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
+    @Persisted
     public float time = 1f;
 
     @ConfigHeader("AraTrails.Physics")
     @Configurable(name = "AraTrails.physicsSetting", subConfigurable = true, tips = "AraTrails.physicsSetting.tips")
+    @Persisted(subPersisted = true)
     public final AraPhysicsSetting physicsSetting = new AraPhysicsSetting();
 
     @ConfigHeader("AraTrails.Rendering")
     @Configurable(name = "AraTrails.textureMode", tips = "AraTrails.textureMode.tips")
+    @Persisted
     public TextureMode textureMode = TextureMode.Stretch;
     @Configurable(name = "AraTrails.uvFactor", tips = "AraTrails.uvFactor.tips")
+    @Persisted
     public float uvFactor = 1;
     @Configurable(name = "AraTrails.uvWidthFactor", tips = "AraTrails.uvWidthFactor.tips")
+    @Persisted
     public float uvWidthFactor = 1;
     @Configurable(name = "AraTrails.tileAnchor", tips = "AraTrails.tileAnchor.tips")
     @ConfigNumber(range = {0, 1})
+    @Persisted
     public float tileAnchor = 1;
     @Getter
     @Configurable(name = "ParticleConfig.renderer", subConfigurable = true, tips = "photon.emitter.config.renderer")
+    @Persisted(subPersisted = true)
     public final InstancedRendererSetting renderer = new InstancedRendererSetting();
     @Configurable(name = "ParticleConfig.additionalGPUDataSetting", subConfigurable = true, tips = "photon.emitter.config.additional_gpu_data")
+    @Persisted(subPersisted = true)
     public final AraTrailAdditionalGPUDataSetting additionalGPUDataSetting = new AraTrailAdditionalGPUDataSetting(this);
 
     // runtime

@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.aratrail;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class TrailSection extends ToggleGroup {
     @Configurable(name = "TrailSection.vertices")
+    @Persisted
     public List<Vector2f> vertices = new ArrayList<>();
 
     public TrailSection() {
