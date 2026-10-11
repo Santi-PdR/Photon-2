@@ -27,6 +27,12 @@ class EmissionSettingBurstTest {
         assertEquals(3, triggers(2, 0, 3, 1, 0, 8));
     }
 
+    @Test
+    void zeroProbabilitySuppressesEveryEligibleTrigger() {
+        assertEquals(0, EmissionSetting.Runtime.burstTriggers(0, 1, 0, 0f,
+                5, RandomSource.create(1), 0, 4));
+    }
+
     private static int triggers(int time, int interval, int cycles, int count, float start, float end) {
         return EmissionSetting.Runtime.burstTriggers(time, interval, cycles, 1f,
                 count, RandomSource.create(1), start, end);
