@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.Test;
@@ -101,6 +102,86 @@ class LDLibPersistenceCompatTest {
         assertEquals(1, decodedBurst.getInt("interval"));
         assertEquals(1.0f, decodedBurst.getFloat("probability"));
         assertEquals(0, decodedBurst.getInt("time"));
+    }
+
+    @Test
+    void migratesAndLoadsManagedListsAtRealShieldProjectPaths() {
+        var material = new CompoundTag();
+        material.putString("type", "sprite");
+        var burst = new CompoundTag();
+        burst.putInt("time", 0);
+
+        var renderer = new CompoundTag();
+        renderer.put("materials", envelope(material));
+        var emission = new CompoundTag();
+        emission.put("bursts", envelope(burst));
+
+        var araRenderer = new CompoundTag();
+        araRenderer.put("materials", envelope(material));
+        var araConfig = new CompoundTag();
+        araConfig.put("renderer", araRenderer);
+        var trailRenderer = new CompoundTag();
+        trailRenderer.put("materials", envelope(material));
+        var trailConfig = new CompoundTag();
+        trailConfig.put("renderer", trailRenderer);
+        var trails = new CompoundTag();
+        trails.put("araConfig", araConfig);
+        trails.put("config", trailConfig);
+
+        var config = new CompoundTag();
+        config.put("renderer", renderer);
+        config.put("emission", emission);
+        config.put("trails", trails);
+        var fxObjectData = new CompoundTag();
+        fxObjectData.put("config", config);
+        var fxObject = new CompoundTag();
+        fxObject.put("data", fxObjectData);
+        var fxObjects = new ListTag();
+        fxObjects.add(fxObject);
+        var fxData = new CompoundTag();
+        fxData.put("fxObjects", fxObjects);
+        var fx = new CompoundTag();
+        fx.put("fxData", fxData);
+        var projectData = new CompoundTag();
+        projectData.put("fx", fx);
+
+        // shield.fxproj declares schema v3; load follows the same data-fixer then compatibility
+        // normalization order as FXProject.deserializeNBT before LDLib 1's persisted parser runs.
+        var migrated = PhotonFXProjectDataFixer.INSTANCE.applyFixes(3, 5, projectData);
+        nbtPayloadType();
+        LDLibPersistenceCompat.normalize(migrated);
+
+        var loadedConfig = migrated.getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", ListTag.TAG_COMPOUND).getCompound(0)
+                .getCompound("data").getCompound("config");
+        assertLegacyArrayPayload(loadedConfig.getCompound("emission").getList("bursts", ListTag.TAG_COMPOUND),
+                "time", 0);
+        assertLegacyArrayPayload(loadedConfig.getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
+                "type", "sprite");
+        assertLegacyArrayPayload(loadedConfig.getCompound("trails").getCompound("araConfig")
+                        .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
+                "type", "sprite");
+        assertLegacyArrayPayload(loadedConfig.getCompound("trails").getCompound("config")
+                        .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
+                "type", "sprite");
+    }
+
+    private static void assertLegacyArrayPayload(ListTag list, String valueKey, int expected) {
+        var decoded = decodeLegacyArray(list);
+        assertEquals(expected, ((CompoundTag) decoded.getPayload()).getInt(valueKey));
+    }
+
+    private static void assertLegacyArrayPayload(ListTag list, String valueKey, String expected) {
+        var decoded = decodeLegacyArray(list);
+        assertEquals(expected, ((CompoundTag) decoded.getPayload()).getString(valueKey));
+    }
+
+    private static NbtTagPayload decodeLegacyArray(ListTag list) {
+        var payload = new ArrayPayload();
+        payload.deserializeNBT(list);
+        var decoded = (ITypedPayload<?>[]) payload.getPayload();
+        assertEquals(1, decoded.length);
+        return assertInstanceOf(NbtTagPayload.class, decoded[0]);
     }
 
     private static byte nbtPayloadType() {
