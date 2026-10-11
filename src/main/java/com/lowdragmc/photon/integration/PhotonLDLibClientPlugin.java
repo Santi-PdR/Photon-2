@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.integration;
 
 import com.lowdragmc.lowdraglib2.compat.network.codec.ByteBufCodecs;
+import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.lowdraglib2.syncdata.AccessorRegistries;
 import com.lowdragmc.lowdraglib2.syncdata.accessor.direct.CustomDirectAccessor;
 import com.lowdragmc.lowdraglib.syncdata.AccessorOp;
@@ -84,6 +85,10 @@ public final class PhotonLDLibClientPlugin {
     public static synchronized void registerLegacyAccessors() {
         if (legacyAccessorsRegistered) return;
         registerLegacyCodecAccessor(Number.class, NUMBER_CODEC);
+        // LDLib2-backed material fields are still persisted by LDLib1's parser through Photon codecs.
+        // UIResourceMaterial stores its file/builtin reference as IResourcePath, so bridge LDLib2's
+        // own versioned path codec just like the Photon model/material interfaces below.
+        registerLegacyCodecAccessor(IResourcePath.class, IResourcePath.CODEC);
         registerLegacyCodecAccessor(NumberFunction.class, NumberFunction.CODEC);
         registerLegacyCodecAccessor(NumberFunction3.class, NumberFunction3.CODEC);
         registerLegacyCodecAccessor(IShape.class, IShape.CODEC);
