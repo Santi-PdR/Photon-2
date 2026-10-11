@@ -104,12 +104,9 @@ public class JsonModelSource implements IModelSource {
         var random = RandomSource.create();
         var bakedModel = PhotonModelBaker.bake(modelLocation);
         if (bakedModel == null) {
-            var fallbackLocation = ResourceLocation.withDefaultNamespace("block/stone");
-            bakedModel = PhotonModelBaker.bake(fallbackLocation);
-        }
-        // The model cache treats null as "not ready; try again next frame". A resource reload can
-        // begin after the LoadingOverlay check above, leaving even the fallback temporarily unavailable.
-        if (bakedModel == null) {
+            // The mesh cache treats null as "not ready; retry next frame". Never cache a different
+            // model (previously block/stone) under the requested model's key when a reload races
+            // the bake; that made a transient resource gap permanently render unrelated geometry.
             return null;
         }
         var quads = new ArrayList<Pair<BakedQuad, Float>>();
