@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Loads and bakes standalone JSON models directly from the active resource packs. */
 @OnlyIn(Dist.CLIENT)
@@ -55,17 +56,39 @@ final class PhotonModelBaker implements ModelBaker {
 
     @Override
     public UnbakedModel getModel(ResourceLocation location) {
+        return resolveModel(location, 0);
+    }
+
+    /**
+     * LDLib2's editable asset tree is authoritative for a model while that file exists. Only fall
+     * back to Forge/LDLib's bakery cache when there is no editable copy; otherwise a model already
+     * baked from an older resource-pack version can shadow the file the user is editing.
+     */
+    private UnbakedModel resolveModel(ResourceLocation location, int depth) {
         var cached = models.get(location);
         if (cached != null) return cached;
-
-        // Reuse models already loaded by Forge/LDLib, including vanilla's built-in generated and
-        // block-entity parents. This also preserves custom unbaked model implementations.
-        var bakeryCached = ModelFactory.getCachedModel(location);
-        if (bakeryCached != null) return bakeryCached;
-
         if (location.equals(GENERATED_MODEL)) return ModelBakery.GENERATION_MARKER;
         if (location.equals(ENTITY_MODEL)) return ModelBakery.BLOCK_ENTITY_MARKER;
-        return readStandalone(location, 0);
+
+        Path nestedFile = findNestedModel(location);
+        return selectModelSource(nestedFile,
+                () -> readStandalone(location, depth),
+                () -> ModelFactory.getCachedModel(location),
+                () -> readStandalone(location, depth));
+    }
+
+    /** Small, testable priority rule: editable file, existing bakery model, then resource manager. */
+    static <T> T selectModelSource(Path nestedFile, Supplier<T> editable, Supplier<T> bakery,
+                                   Supplier<T> resourceManager) {
+        if (nestedFile != null) return editable.get();
+        T cached = bakery.get();
+        return cached != null ? cached : resourceManager.get();
+    }
+
+    @Nullable
+    private static Path findNestedModel(ResourceLocation location) {
+        var file = ModelBakery.MODEL_LISTER.idToFile(location);
+        return LDLibModelAssets.findNested(location, file.getPath());
     }
 
     @Nullable
@@ -97,12 +120,7 @@ final class PhotonModelBaker implements ModelBaker {
             // Cache before resolving parents so a cycle terminates at the repeated model. The
             // vanilla resolver then logs and breaks the loop instead of recursing indefinitely.
             models.put(location, model);
-            model.resolveParents(parent -> {
-                if (parent.equals(GENERATED_MODEL)) return ModelBakery.GENERATION_MARKER;
-                if (parent.equals(ENTITY_MODEL)) return ModelBakery.BLOCK_ENTITY_MARKER;
-                var existing = ModelFactory.getCachedModel(parent);
-                return existing != null ? existing : readStandalone(parent, depth + 1);
-            });
+            model.resolveParents(parent -> resolveModel(parent, depth + 1));
             return model;
         } catch (Exception exception) {
             Photon.LOGGER.warn("Failed to read standalone JSON model {}", location, exception);
