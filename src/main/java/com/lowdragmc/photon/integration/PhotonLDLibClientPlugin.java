@@ -99,20 +99,24 @@ public final class PhotonLDLibClientPlugin {
 
     private static <T> void registerLegacyCodecAccessor(Class<T> type, Codec<T> codec) {
         TypedPayloadRegistries.register(NbtTagPayload.class, NbtTagPayload::new,
-                new CustomObjectAccessor<T>(type, false) {
-                    @Override
-                    public ITypedPayload<?> serialize(AccessorOp op, T value) {
-                        Tag encoded = codec.encodeStart(NbtOps.INSTANCE, value).getOrThrow(false,
-                                error -> Photon.LOGGER.error("Failed to persist {}: {}", type.getSimpleName(), error));
-                        return NbtTagPayload.of(encoded);
-                    }
+                legacyCodecAccessor(type, codec), 1000);
+    }
 
-                    @Override
-                    public T deserialize(AccessorOp op, ITypedPayload<?> payload) {
-                        Tag encoded = (Tag) payload.getPayload();
-                        return codec.parse(NbtOps.INSTANCE, encoded).getOrThrow(false,
-                                error -> Photon.LOGGER.error("Failed to restore {}: {}", type.getSimpleName(), error));
-                    }
-                }, 1000);
+    static <T> CustomObjectAccessor<T> legacyCodecAccessor(Class<T> type, Codec<T> codec) {
+        return new CustomObjectAccessor<>(type, false) {
+            @Override
+            public ITypedPayload<?> serialize(AccessorOp op, T value) {
+                Tag encoded = codec.encodeStart(NbtOps.INSTANCE, value).getOrThrow(false,
+                        error -> Photon.LOGGER.error("Failed to persist {}: {}", type.getSimpleName(), error));
+                return NbtTagPayload.of(encoded);
+            }
+
+            @Override
+            public T deserialize(AccessorOp op, ITypedPayload<?> payload) {
+                Tag encoded = (Tag) payload.getPayload();
+                return codec.parse(NbtOps.INSTANCE, encoded).getOrThrow(false,
+                        error -> Photon.LOGGER.error("Failed to restore {}: {}", type.getSimpleName(), error));
+            }
+        };
     }
 }
