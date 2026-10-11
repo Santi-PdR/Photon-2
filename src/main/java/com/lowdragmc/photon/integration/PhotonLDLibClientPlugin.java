@@ -15,6 +15,11 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape;
 import com.lowdragmc.photon.Photon;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.Decoder;
+import com.mojang.serialization.DynamicOps;
+import com.mojang.serialization.Encoder;
+import com.mojang.datafixers.util.Pair;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
@@ -23,6 +28,25 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 /** Client-only LDLib2 accessors, loaded by the common plugin only through {@link net.minecraftforge.fml.DistExecutor}. */
 @OnlyIn(Dist.CLIENT)
 public final class PhotonLDLibClientPlugin {
+    /** Preserve the concrete numeric representation used by NbtOps (byte/int/float/double, etc.). */
+    static final Codec<Number> NUMBER_CODEC = Codec.of(new Encoder<>() {
+        @Override
+        public <T> DataResult<T> encode(Number value, DynamicOps<T> ops, T prefix) {
+            T encoded;
+            if (value instanceof Byte number) encoded = ops.createByte(number);
+            else if (value instanceof Short number) encoded = ops.createShort(number);
+            else if (value instanceof Integer number) encoded = ops.createInt(number);
+            else if (value instanceof Long number) encoded = ops.createLong(number);
+            else if (value instanceof Float number) encoded = ops.createFloat(number);
+            else encoded = ops.createDouble(value.doubleValue());
+            return ops.mergeToPrimitive(prefix, encoded);
+        }
+    }, new Decoder<>() {
+        @Override
+        public <T> DataResult<Pair<Number, T>> decode(DynamicOps<T> ops, T input) {
+            return ops.getNumberValue(input).map(value -> Pair.of(value, input));
+        }
+    });
     private static boolean legacyAccessorsRegistered;
 
     private PhotonLDLibClientPlugin() {
@@ -59,6 +83,7 @@ public final class PhotonLDLibClientPlugin {
     /** Register old LDLib typed payload accessors before its registry becomes immutable. */
     public static synchronized void registerLegacyAccessors() {
         if (legacyAccessorsRegistered) return;
+        registerLegacyCodecAccessor(Number.class, NUMBER_CODEC);
         registerLegacyCodecAccessor(NumberFunction.class, NumberFunction.CODEC);
         registerLegacyCodecAccessor(NumberFunction3.class, NumberFunction3.CODEC);
         registerLegacyCodecAccessor(IShape.class, IShape.CODEC);
