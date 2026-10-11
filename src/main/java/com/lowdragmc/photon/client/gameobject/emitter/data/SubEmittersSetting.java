@@ -151,7 +151,8 @@ public class SubEmittersSetting extends ToggleGroup {
         protected Event event = Event.Birth;
         @Configurable(name = "Emitter.emitProbability", tips = "photon.emitter.config.sub_emitters.emitter.emit_probability")
         @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, max = 1, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "probability", yAxis = "lifetime"))
-        @Persisted
+        @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
+    @Persisted
         protected NumberFunction emitProbability = NumberFunction.constant(0);
         @Configurable(name = "Emitter.tickInterval", tips = "photon.emitter.config.sub_emitters.emitter.tick_interval")
         @ConfigNumber(range = {1, Integer.MAX_VALUE})

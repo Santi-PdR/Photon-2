@@ -69,36 +69,42 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startDelay", tips = "photon.emitter.config.startDelay")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, min = 0, curveConfig = @CurveConfig(bound = {0, 100}, xAxis = "duration", yAxis = "delay"))
     protected NumberFunction startDelay = NumberFunction.constant(0);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startLifetime", tips = "photon.emitter.config.startLifetime")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, min = 0, defaultValue = 100, curveConfig = @CurveConfig(bound = {0, 200}, xAxis = "duration", yAxis = "life time"))
     protected NumberFunction startLifetime = NumberFunction.constant(100);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startSpeed", tips = "photon.emitter.config.startSpeed")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "duration", yAxis = "speed"))
     protected NumberFunction startSpeed = NumberFunction.constant(1);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startSize", tips = "photon.emitter.config.startSize")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.1f, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "size")))
     protected NumberFunction3 startSize = new NumberFunction3(0.1, 0.1, 0.1);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startRotation", tips = "photon.emitter.config.startRotation")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunction3Config(affectX = false, affectY = false, common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 360}, xAxis = "duration", yAxis = "rotation")))
     protected NumberFunction3 startRotation = new NumberFunction3(0, 0, 0);
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startColor", tips = "photon.emitter.config.startColor")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
     protected NumberFunction startColor = NumberFunction.color(-1);

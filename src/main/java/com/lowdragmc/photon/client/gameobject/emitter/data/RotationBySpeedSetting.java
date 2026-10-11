@@ -32,16 +32,19 @@ public class RotationBySpeedSetting extends ToggleGroup {
 
     @Configurable(name = "RotationBySpeedSetting.roll", tips = "photon.emitter.config.rotation.roll")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 360}, xAxis = "speed", yAxis = "roll"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction roll = NumberFunction.constant(0);
 
     @Configurable(name = "RotationBySpeedSetting.pitch", tips = "photon.emitter.config.rotation.pitch")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 360}, xAxis = "speed", yAxis = "pitch"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction pitch = NumberFunction.constant(0);
 
     @Configurable(name = "RotationBySpeedSetting.yaw", tips = "photon.emitter.config.rotation.yaw")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 360}, xAxis = "speed", yAxis = "yaw"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction yaw = NumberFunction.constant(0);
 

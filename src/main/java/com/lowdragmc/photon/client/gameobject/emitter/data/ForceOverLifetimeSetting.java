@@ -27,6 +27,7 @@ public class ForceOverLifetimeSetting extends ToggleGroup {
 
     @Configurable(name = "ForceOverLifetimeSetting.force", tips = "photon.emitter.config.forceOverLifetime.force")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "force")))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction3 force = new NumberFunction3(0, 0, 0);
 

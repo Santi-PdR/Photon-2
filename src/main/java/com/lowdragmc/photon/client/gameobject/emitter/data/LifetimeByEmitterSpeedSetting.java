@@ -31,6 +31,7 @@ public class LifetimeByEmitterSpeedSetting extends ToggleGroup {
 
     @Configurable(name = "LifetimeByEmitterSpeedSetting.multiplier", tips = "photon.emitter.config.lifetimeByEmitterSpeed.multiplier")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "multiplier", yAxis = "emitter velocity"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction multiplier = NumberFunction.constant(1);
 

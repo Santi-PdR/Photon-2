@@ -16,6 +16,9 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import lombok.Setter;
@@ -60,7 +63,6 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     protected float discardThreshold = 0.1f;
     @Configurable(name = "TextureMaterial.hdr")
     @ConfigHDR
-    @Persisted
     protected HDRColor hdr = HDRColor.black();
     @Configurable(name = "TextureMaterial.hdrMode")
     @Persisted
@@ -76,6 +78,18 @@ public class TextureMaterial extends ShaderInstanceMaterial {
 
     public TextureMaterial(ResourceLocation texture) {
         this.texture = texture;
+    }
+
+    @Override
+    public void serializePhotonPersistedFields(CompoundTag tag) {
+        HDRColor.CODEC.encodeStart(NbtOps.INSTANCE, hdr).result().ifPresent(value -> tag.put("hdr", value));
+    }
+
+    @Override
+    public void deserializePhotonPersistedFields(CompoundTag tag) {
+        if (tag.contains("hdr", Tag.TAG_COMPOUND)) {
+            HDRColor.CODEC.parse(NbtOps.INSTANCE, tag.get("hdr")).result().ifPresent(value -> hdr = value);
+        }
     }
 
     @Override

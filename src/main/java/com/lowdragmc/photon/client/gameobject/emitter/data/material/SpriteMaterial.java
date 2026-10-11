@@ -21,6 +21,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.TextureManager;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -44,7 +47,6 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     protected float discardThreshold = 0.1f;
     @Configurable(name = "TextureMaterial.hdr")
     @ConfigHDR
-    @Persisted
     protected HDRColor hdr = HDRColor.black();
     @Configurable(name = "TextureMaterial.hdrMode")
     @Persisted
@@ -54,6 +56,18 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     @Persisted(subPersisted = true)
     protected final SoftParticles softParticles = new SoftParticles();
     private static final Map<String, ShaderInstance> spriteHDRParticleShaders = new HashMap<>();
+
+    @Override
+    public void serializePhotonPersistedFields(CompoundTag tag) {
+        HDRColor.CODEC.encodeStart(NbtOps.INSTANCE, hdr).result().ifPresent(value -> tag.put("hdr", value));
+    }
+
+    @Override
+    public void deserializePhotonPersistedFields(CompoundTag tag) {
+        if (tag.contains("hdr", Tag.TAG_COMPOUND)) {
+            HDRColor.CODEC.parse(NbtOps.INSTANCE, tag.get("hdr")).result().ifPresent(value -> hdr = value);
+        }
+    }
 
     @Nullable
     private SpriteSet getSpriteSet() {

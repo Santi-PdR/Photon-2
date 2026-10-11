@@ -34,6 +34,7 @@ public class ShapeArcSetting implements IConfigurable, IPersistedSerializable {
     @Persisted
     private float arcSpread = 0.0f;
 
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(
             types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class},

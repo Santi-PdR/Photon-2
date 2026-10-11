@@ -94,12 +94,14 @@ public class TrailConfig implements IConfigurable, IPersistedSerializable {
     @Getter
     @Configurable(name = "TrailConfig.widthOverTrail", tips = "photon.emitter.trail.config.widthOverTrail")
     @NumberFunctionConfig(types = {Constant.class, Curve.class}, min = 0, defaultValue = 0.1f, curveConfig = @CurveConfig(bound = {0, 0.1f}, xAxis = "trail position", yAxis = "width"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction widthOverTrail = NumberFunction.constant(0.2f);
     @Setter
     @Getter
     @Configurable(name = "TrailConfig.colorOverTrail", tips = "photon.emitter.trail.config.colorOverTrail")
     @NumberFunctionConfig(types = {Color.class, RandomColor.class, Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction colorOverTrail = new Gradient();
     @Getter

@@ -28,6 +28,7 @@ public class ColorOverLifetimeSetting extends ToggleGroup {
 
     @Configurable(name = "color", tips = "photon.emitter.config.colorOverLifetime.color")
     @NumberFunctionConfig(types = {Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction color = new Gradient();
 

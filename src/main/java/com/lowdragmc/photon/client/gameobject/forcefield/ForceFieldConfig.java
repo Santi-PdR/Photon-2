@@ -52,21 +52,25 @@ public class ForceFieldConfig implements IConfigurable, IPersistedSerializable {
 
     @Configurable(name = "ForceFieldConfig.directionX", tips = "photon.force_field.direction")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "force"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction directionX = NumberFunction.constant(0);
 
     @Configurable(name = "ForceFieldConfig.directionY", tips = "photon.force_field.direction")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "force"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction directionY = NumberFunction.constant(0);
 
     @Configurable(name = "ForceFieldConfig.directionZ", tips = "photon.force_field.direction")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "force"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction directionZ = NumberFunction.constant(0);
 
     @Configurable(name = "ForceFieldConfig.gravity", tips = "photon.force_field.gravity")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "gravity"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction gravity = NumberFunction.constant(0);
 
@@ -77,6 +81,7 @@ public class ForceFieldConfig implements IConfigurable, IPersistedSerializable {
 
     @Configurable(name = "ForceFieldConfig.rotationSpeed", tips = "photon.force_field.rotationSpeed")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-2, 2}, xAxis = "lifetime", yAxis = "speed"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction rotationSpeed = NumberFunction.constant(0);
 
@@ -97,6 +102,7 @@ public class ForceFieldConfig implements IConfigurable, IPersistedSerializable {
 
     @Configurable(name = "ForceFieldConfig.drag", tips = "photon.force_field.drag")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, curveConfig = @CurveConfig(bound = {0, 2}, xAxis = "lifetime", yAxis = "drag"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction drag = NumberFunction.constant(0);
 

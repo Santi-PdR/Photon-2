@@ -38,6 +38,7 @@ public class InheritVelocitySetting extends ToggleGroup {
 
     @Configurable(name = "InheritVelocitySetting.multiply", tips = "photon.emitter.config.inheritVelocity.multiply")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "speed modifier"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction multiply = NumberFunction.constant(1);
 

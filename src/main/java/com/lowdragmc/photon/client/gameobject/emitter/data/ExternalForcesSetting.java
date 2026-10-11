@@ -52,6 +52,7 @@ public class ExternalForcesSetting extends ToggleGroup {
 
     @Configurable(name = "ExternalForcesSetting.multiplier", tips = "photon.emitter.config.externalForces.multiplier")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 1f, curveConfig = @CurveConfig(bound = {0, 2}, xAxis = "lifetime", yAxis = "multiplier"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction multiplier = NumberFunction.constant(1);
 

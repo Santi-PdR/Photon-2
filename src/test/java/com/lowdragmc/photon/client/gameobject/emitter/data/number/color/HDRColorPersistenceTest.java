@@ -8,6 +8,8 @@ import com.lowdragmc.lowdraglib.syncdata.payload.PrimitiveTypedPayload;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.util.PersistedCodec;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -28,6 +30,10 @@ class HDRColorPersistenceTest {
             PhotonRegistries.NUMBER_FUNCTIONS = AutoRegistry.LDLibRegisterClient.create(
                     Photon.id("number_function"), NumberFunction.class, AutoRegistry::noArgsCreator);
         }
+        if (PhotonRegistries.MATERIALS == null) {
+            PhotonRegistries.MATERIALS = AutoRegistry.LDLibRegisterClient.create(
+                    Photon.id("material"), IMaterial.class, AutoRegistry::noArgsCreator);
+        }
     }
 
     @Test
@@ -44,6 +50,22 @@ class HDRColorPersistenceTest {
         assertEquals(0.6f, color.getB(), 1.0e-6f);
         assertEquals(0.35f, color.getA(), 1.0e-6f);
         assertEquals(3f, color.getIntensity(), 1.0e-6f);
+    }
+
+    @Test
+    void textureMaterialPersistsHdrThroughTheLdlib2CodecBridge() throws ReflectiveOperationException {
+        var original = new TextureMaterial();
+        var hdrField = TextureMaterial.class.getDeclaredField("hdr");
+        hdrField.setAccessible(true);
+        hdrField.set(original, new HDRColor(0.15f, 0.35f, 0.55f, 0.75f, 2.5f));
+        var tag = new CompoundTag();
+
+        original.serializePhotonPersistedFields(tag);
+
+        var restored = new TextureMaterial();
+        restored.deserializePhotonPersistedFields(tag);
+        var color = (HDRColor) hdrField.get(restored);
+        assertColor(color, 0.15f, 0.35f, 0.55f, 0.75f, 2.5f);
     }
 
     @Test

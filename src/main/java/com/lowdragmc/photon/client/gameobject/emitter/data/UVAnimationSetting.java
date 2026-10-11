@@ -48,6 +48,7 @@ public class UVAnimationSetting extends ToggleGroup {
     @Getter
     @Configurable(name = "UVAnimationSetting.frameOverTime", tips = "photon.emitter.config.uvAnimation.frameOverTime")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, curveConfig = @CurveConfig(bound = {0, 4}, xAxis = "lifetime", yAxis = "frame over time"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction frameOverTime = NumberFunction.constant(0);
 
@@ -55,6 +56,7 @@ public class UVAnimationSetting extends ToggleGroup {
     @Getter
     @Configurable(name = "UVAnimationSetting.startFrame", tips = "photon.emitter.config.uvAnimation.startFrame")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class}, min = 0)
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction startFrame = NumberFunction.constant(0);
 

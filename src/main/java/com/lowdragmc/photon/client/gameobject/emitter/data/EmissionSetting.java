@@ -48,11 +48,13 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     }
 
     @Configurable(name = "EmissionSetting.emissionRate", tips = "photon.emitter.config.emission.emissionRate")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.5f, curveConfig = @CurveConfig(bound = {0, 5}, xAxis = "duration", yAxis = "emission rate"))
     protected NumberFunction emissionRate = NumberFunction.constant(0.5f);
 
     @Configurable(name = "EmissionSetting.distanceRate", tips = "photon.emitter.config.emission.distanceRate")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 0.5f, curveConfig = @CurveConfig(bound = {0, 5}, xAxis = "duration", yAxis = "emission rate"))
     protected NumberFunction distanceRate = NumberFunction.constant(0);
@@ -205,7 +207,8 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         public int time = 0;
         @Setter
         @Getter
-        @Persisted
+        @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
+    @Persisted
         @Configurable(name = "Burst.count", tips = "photon.emitter.config.emission.bursts.count")
         @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 50, curveConfig = @CurveConfig(bound = {0, 50}, xAxis = "duration", yAxis = "emit count"))
         protected NumberFunction count = NumberFunction.constant(50);

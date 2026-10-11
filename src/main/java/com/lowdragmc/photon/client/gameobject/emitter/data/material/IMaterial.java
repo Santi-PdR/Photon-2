@@ -76,12 +76,21 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable,
         return new CompoundTag();
     }
 
+    /** Writes Photon fields that the legacy LDLib 1 persisted-field accessor cannot represent. */
+    default void serializePhotonPersistedFields(CompoundTag tag) {
+    }
+
+    /** Reads Photon fields written by {@link #serializePhotonPersistedFields(CompoundTag)}. */
+    default void deserializePhotonPersistedFields(CompoundTag tag) {
+    }
+
     default void deserializeAdditionalNBT(Tag tag, HolderLookup.Provider provider) {
     }
 
     @Override
     default CompoundTag serializeNBT(HolderLookup.Provider provider) {
         var tag = IPersistedSerializable.super.serializeNBT();
+        serializePhotonPersistedFields(tag);
         var additional = serializeAdditionalNBT(provider);
         if (additional != null && !(additional instanceof CompoundTag compound && compound.isEmpty())
                 && !(additional instanceof net.minecraft.nbt.ListTag list && list.isEmpty())) {
@@ -93,6 +102,7 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable,
     @Override
     default void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag) {
         IPersistedSerializable.super.deserializeNBT(tag);
+        deserializePhotonPersistedFields(tag);
         deserializeAdditionalNBT(tag.get("_additional"), provider);
     }
 

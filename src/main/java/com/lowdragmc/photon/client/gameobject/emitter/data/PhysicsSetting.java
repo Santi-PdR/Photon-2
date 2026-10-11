@@ -37,26 +37,32 @@ public class PhysicsSetting extends ToggleGroup {
     protected boolean removedWhenCollided = false;
     @Configurable(name = "PhysicsSetting.friction", tips = "photon.emitter.config.physics.friction")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, max = 1, defaultValue = 1, curveConfig = @CurveConfig(xAxis = "duration", yAxis = "friction"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction friction = NumberFunction.constant(1);
     @Configurable(name = "PhysicsSetting.collidedFriction", tips = "photon.emitter.config.physics.collidedFriction")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, max = 1, defaultValue = 1, curveConfig = @CurveConfig(xAxis = "duration", yAxis = "friction"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction collidedFriction = NumberFunction.constant(0.7f);
     @Configurable(name = "PhysicsSetting.gravity", tips = "photon.emitter.config.physics.gravity")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "gravity"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction gravity = NumberFunction.constant(0);
     @Configurable(name = "PhysicsSetting.bounceChance", tips = "photon.emitter.config.physics.bounceChance")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, max = 1, defaultValue = 1, curveConfig = @CurveConfig(xAxis = "duration", yAxis = "bounce chance"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction bounceChance = NumberFunction.constant(1);
     @Configurable(name = "PhysicsSetting.bounceRate", tips = "photon.emitter.config.physics.bounceRate")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, defaultValue = 1, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "bounce rate"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction bounceRate = NumberFunction.constant(1);
     @Configurable(name = "PhysicsSetting.bounceSpreadRate", tips = "photon.emitter.config.physics.bounceSpreadRate")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, min = 0, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "duration", yAxis = "spread"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction bounceSpreadRate = NumberFunction.constant(0);
 

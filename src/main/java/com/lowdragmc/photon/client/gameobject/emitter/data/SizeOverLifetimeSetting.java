@@ -26,6 +26,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 public class SizeOverLifetimeSetting extends ToggleGroup {
 
     @Configurable(name = "NoiseSetting.size", tips = "photon.emitter.config.sizeOverLifetime.size")
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "size")))
     protected NumberFunction3 size = new NumberFunction3(1, 1, 1);

@@ -28,6 +28,7 @@ public class SizeBySpeedSetting extends ToggleGroup {
 
     @Configurable(name = "NoiseSetting.size", tips = "photon.emitter.config.sizeBySpeed.size")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "speed", yAxis = "size")))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction3 size = new NumberFunction3(1, 1, 1);
 

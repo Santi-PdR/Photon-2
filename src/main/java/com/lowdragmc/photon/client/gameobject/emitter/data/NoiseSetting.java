@@ -58,16 +58,19 @@ public class NoiseSetting extends ToggleGroup {
 
     @Configurable(name = "NoiseSetting.position", tips = "photon.emitter.config.noise.position")
     @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {0, 1}, xAxis = "lifetime", yAxis = "strength")))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction3 position = new NumberFunction3(0.1, 0.1, 0.1);
 
     @Configurable(name = "NoiseSetting.rotation", tips = "photon.emitter.config.noise.rotation")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, wheelDur = 10, curveConfig = @CurveConfig(bound = {0, 180}, xAxis = "lifetime", yAxis = "rotation amount"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction rotation = NumberFunction.constant(0);
 
     @Configurable(name = "NoiseSetting.size", tips = "photon.emitter.config.noise.size")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "size amount"))
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction size = NumberFunction.constant(0);
 
@@ -178,7 +181,8 @@ public class NoiseSetting extends ToggleGroup {
         @Getter
         @Configurable
         @NumberFunctionConfig(types = {Curve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "base noise", yAxis = "remap result"))
-        @Persisted
+        @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
+    @Persisted
         protected NumberFunction remapCurve = new Curve(Integer.MIN_VALUE, Integer.MAX_VALUE, -1, 1, 1f, "base noise", "remap result");
     }
 

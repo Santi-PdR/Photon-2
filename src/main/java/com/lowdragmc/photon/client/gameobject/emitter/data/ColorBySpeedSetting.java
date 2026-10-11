@@ -29,6 +29,7 @@ public class ColorBySpeedSetting extends ToggleGroup {
 
     @Configurable(name = "color", tips = "photon.emitter.config.colorBySpeed.color")
     @NumberFunctionConfig(types = {Gradient.class, RandomGradient.class}, defaultValue = -1)
+    @com.lowdragmc.lowdraglib.syncdata.annotation.LazyManaged
     @Persisted
     protected NumberFunction color = new Gradient();
 
