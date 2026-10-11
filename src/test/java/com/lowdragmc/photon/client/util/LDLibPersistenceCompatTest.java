@@ -4,10 +4,16 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
+import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.gameobject.emitter.data.ExternalForcesSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class LDLibPersistenceCompatTest {
+    @BeforeAll
+    static void initializeNumberFunctionCodecRegistry() {
+        if (PhotonRegistries.NUMBER_FUNCTIONS == null) {
+            PhotonRegistries.NUMBER_FUNCTIONS = AutoRegistry.LDLibRegisterClient.create(
+                    Photon.id("number_function"), NumberFunction.class, AutoRegistry::noArgsCreator);
+        }
+    }
+
     @Test
     void leavesTagsWithoutManagedListEnvelopesAlone() {
         var root = new CompoundTag();
@@ -127,6 +141,10 @@ class LDLibPersistenceCompatTest {
         var normalized = config.getList("influenceList", ListTag.TAG_STRING);
         assertEquals(1, normalized.size());
         assertEquals(expectedRef, normalized.getString(0));
+
+        var setting = new ExternalForcesSetting();
+        setting.deserializeNBT(config);
+        assertEquals(expectedRef, setting.getInfluenceList().get(0).getTransformId().toString());
     }
 
     @Test
