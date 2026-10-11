@@ -4,7 +4,11 @@ import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.accessor.PrimitiveAccessor;
+import com.lowdragmc.lowdraglib.syncdata.accessor.ResourceLocationAccessor;
+import com.lowdragmc.lowdraglib.syncdata.accessor.EnumAccessor;
+import com.lowdragmc.lowdraglib.syncdata.payload.EnumValuePayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.PrimitiveTypedPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
@@ -25,6 +29,14 @@ class HDRColorPersistenceTest {
     static void initializeNumberFunctionCodecRegistry() {
         TypedPayloadRegistries.register(PrimitiveTypedPayload.FloatPayload.class,
                 PrimitiveTypedPayload.FloatPayload::new, new PrimitiveAccessor.FloatAccessor(), 0);
+        TypedPayloadRegistries.register(PrimitiveTypedPayload.IntPayload.class,
+                PrimitiveTypedPayload.IntPayload::new, new PrimitiveAccessor.IntAccessor(), 0);
+        TypedPayloadRegistries.register(PrimitiveTypedPayload.BooleanPayload.class,
+                PrimitiveTypedPayload.BooleanPayload::new, new PrimitiveAccessor.BooleanAccessor(), 0);
+        TypedPayloadRegistries.register(StringPayload.class, StringPayload::new,
+                new ResourceLocationAccessor(), 1);
+        TypedPayloadRegistries.register(EnumValuePayload.class, EnumValuePayload::new,
+                new EnumAccessor(), 1);
         TypedPayloadRegistries.postInit();
         if (PhotonRegistries.NUMBER_FUNCTIONS == null) {
             PhotonRegistries.NUMBER_FUNCTIONS = AutoRegistry.LDLibRegisterClient.create(
@@ -53,17 +65,17 @@ class HDRColorPersistenceTest {
     }
 
     @Test
-    void textureMaterialPersistsHdrThroughTheLdlib2CodecBridge() throws ReflectiveOperationException {
+    void textureMaterialPersistsHdrThroughTheRegistryAwareLdlibBridge() throws ReflectiveOperationException {
         var original = new TextureMaterial();
         var hdrField = TextureMaterial.class.getDeclaredField("hdr");
         hdrField.setAccessible(true);
         hdrField.set(original, new HDRColor(0.15f, 0.35f, 0.55f, 0.75f, 2.5f));
-        var tag = new CompoundTag();
-
-        original.serializePhotonPersistedFields(tag);
+        // Exercise the same registry-aware overload that PersistedCodec uses for materials,
+        // rather than calling the HDR helper directly and bypassing IMaterial's bridge.
+        var tag = original.serializeNBT(null);
 
         var restored = new TextureMaterial();
-        restored.deserializePhotonPersistedFields(tag);
+        restored.deserializeNBT(null, tag);
         var color = (HDRColor) hdrField.get(restored);
         assertColor(color, 0.15f, 0.35f, 0.55f, 0.75f, 2.5f);
     }
