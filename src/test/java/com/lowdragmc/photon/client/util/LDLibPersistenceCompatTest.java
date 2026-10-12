@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.lowdraglib.syncdata.accessor.Vector3fAccessor;
 import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
@@ -69,6 +70,11 @@ class LDLibPersistenceCompatTest {
         assertEquals(-0.75f, normalizedPivot.getFloat("z"));
         assertInstanceOf(ListTag.class, transform.get("localPosition"));
         assertEquals(3, transform.getList("localPosition", ListTag.TAG_FLOAT).size());
+
+        var vector = new Vector3fAccessor().deserialize(null, NbtTagPayload.of(normalizedPivot));
+        assertEquals(0.25f, vector.x);
+        assertEquals(0.5f, vector.y);
+        assertEquals(-0.75f, vector.z);
     }
 
     @Test
