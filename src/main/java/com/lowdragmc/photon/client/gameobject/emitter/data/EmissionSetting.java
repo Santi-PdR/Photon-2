@@ -6,6 +6,7 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
@@ -18,14 +19,18 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.util.RandomSource;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -64,10 +69,38 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     protected Mode emissionMode = Mode.Exacting;
 
     @Configurable(name = "EmissionSetting.bursts", tips = "photon.emitter.config.emission.bursts")
-    @Persisted
     @ConfigList(configuratorMethod = "buildBurstConfigurator", addDefaultMethod = "addDefaultBurst")
     @ReadOnlyManaged(serializeMethod = "burstsSerialize", deserializeMethod = "burstsDeserialize")
     protected List<Burst> bursts = new ArrayList<>();
+
+    /** LDLib 1's generic readonly collection accessor cannot restore LDLib2-managed Burst entries. */
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        tag.put("bursts", LDLibPersistenceCompat.encodePayloadList(bursts.stream().map(Burst::serializeNBT).toList()));
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        var persistedFields = tag.copy();
+        var encodedBursts = persistedFields.get("bursts");
+        persistedFields.remove("bursts");
+        PersistedParser.deserializeNBT(persistedFields, new HashMap<>(), getClass(), this);
+
+        if (encodedBursts instanceof ListTag list) {
+            var decoded = new ArrayList<Burst>();
+            for (var burstTag : LDLibPersistenceCompat.decodePayloadList(list)) {
+                var burst = new Burst();
+                burst.deserializeNBT(burstTag);
+                decoded.add(burst);
+            }
+            bursts = decoded;
+        } else if (encodedBursts != null) {
+            throw new IllegalArgumentException("Emission bursts are not stored as an LDLib ArrayPayload: " + encodedBursts.getType());
+        }
+    }
 
     public Runtime createRuntime() {
         return new Runtime(this);

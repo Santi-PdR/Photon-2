@@ -8,9 +8,6 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
-import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
-import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
-import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
@@ -19,6 +16,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRen
 import com.lowdragmc.photon.client.PhotonParticleManager;
 import com.lowdragmc.photon.client.render.FXCompositeMode;
 import com.lowdragmc.photon.client.render.PhotonStage;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import lombok.EqualsAndHashCode;
@@ -220,7 +218,7 @@ public class RendererSetting implements IPersistedSerializable {
     public CompoundTag serializeNBT() {
         var tag = new CompoundTag();
         PersistedParser.serializeNBT(tag, getClass(), this);
-        tag.put("materials", encodeMaterialTags(materials.stream().map(MaterialSetting::serializeNBT).toList()));
+        tag.put("materials", LDLibPersistenceCompat.encodePayloadList(materials.stream().map(MaterialSetting::serializeNBT).toList()));
         return tag;
     }
 
@@ -233,7 +231,7 @@ public class RendererSetting implements IPersistedSerializable {
 
         if (encodedMaterials instanceof ListTag list) {
             var decoded = new ArrayList<MaterialSetting>();
-            for (var materialTag : decodeMaterialTags(list)) {
+            for (var materialTag : LDLibPersistenceCompat.decodePayloadList(list)) {
                 var material = new MaterialSetting();
                 material.deserializeNBT(materialTag);
                 decoded.add(material);
@@ -242,28 +240,6 @@ public class RendererSetting implements IPersistedSerializable {
         } else if (encodedMaterials != null) {
             throw new IllegalArgumentException("Renderer materials are not stored as an LDLib ArrayPayload: " + encodedMaterials.getType());
         }
-    }
-
-    static ListTag encodeMaterialTags(List<CompoundTag> materialTags) {
-        var payloads = new ITypedPayload<?>[materialTags.size()];
-        for (int index = 0; index < materialTags.size(); index++) {
-            payloads[index] = NbtTagPayload.of(materialTags.get(index));
-        }
-        return (ListTag) ArrayPayload.of(payloads).serializeNBT();
-    }
-
-    static List<CompoundTag> decodeMaterialTags(ListTag list) {
-        var arrayPayload = new ArrayPayload();
-        arrayPayload.deserializeNBT(list);
-        var materialTags = new ArrayList<CompoundTag>();
-        for (var payload : arrayPayload.getPayload()) {
-            var value = payload.getPayload();
-            if (!(value instanceof CompoundTag materialTag)) {
-                throw new IllegalArgumentException("Renderer material entry is not a compound tag: " + value);
-            }
-            materialTags.add(materialTag);
-        }
-        return materialTags;
     }
 
     public void setOwnerRenderPass(@Nullable PhotonFXRenderPass ownerRenderPass) {

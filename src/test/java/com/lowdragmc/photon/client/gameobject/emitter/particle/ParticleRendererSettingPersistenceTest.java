@@ -14,7 +14,9 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.forcefield.ForceFieldConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ExternalForcesSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.SubEmittersSetting;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -92,6 +94,16 @@ class ParticleRendererSettingPersistenceTest {
                                 "LDLib2 still uses its managed-list configurator bridge");
                         assertFalse(field.isAnnotationPresent(Persisted.class),
                                 "the incompatible LDLib 1 collection accessor must not process materials");
+                        continue;
+                    }
+                    if ((dataClass == EmissionSetting.class && field.getName().equals("bursts"))
+                            || (dataClass == SubEmittersSetting.class && field.getName().equals("emitters"))) {
+                        assertTrue(IPersistedSerializable.class.isAssignableFrom(dataClass),
+                                "managed object lists are serialized explicitly for LDLib 1");
+                        assertTrue(field.isAnnotationPresent(com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged.class),
+                                "LDLib2 still uses its managed-list configurator bridge");
+                        assertFalse(field.isAnnotationPresent(Persisted.class),
+                                "the incompatible LDLib 1 collection accessor must not process " + field.getName());
                         continue;
                     }
                     if (persisted == null && field.getName().equals("hdr")

@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.ui.SearchComponentConfigurator;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
@@ -21,12 +22,15 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.RandomConstant
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -35,6 +39,7 @@ import org.joml.Quaternionf;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
@@ -48,13 +53,41 @@ import java.util.function.Supplier;
 @OnlyIn(Dist.CLIENT)
 @Setter
 @Getter
-public class SubEmittersSetting extends ToggleGroup {
+public class SubEmittersSetting extends ToggleGroup implements IPersistedSerializable {
 
     @Configurable(name = "SubEmittersSetting.emitters")
     @ConfigList(configuratorMethod = "buildEmitterConfigurator", addDefaultMethod = "addDefaultEmitter")
     @ReadOnlyManaged(serializeMethod = "emittersSerialize", deserializeMethod = "emittersDeserialize")
-    @Persisted
     protected List<Emitter> emitters = new ArrayList<>();
+
+    /** LDLib 1's generic readonly collection accessor cannot restore LDLib2-managed Emitter entries. */
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, getClass(), this);
+        tag.put("emitters", LDLibPersistenceCompat.encodePayloadList(emitters.stream().map(Emitter::serializeNBT).toList()));
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        var persistedFields = tag.copy();
+        var encodedEmitters = persistedFields.get("emitters");
+        persistedFields.remove("emitters");
+        PersistedParser.deserializeNBT(persistedFields, new HashMap<>(), getClass(), this);
+
+        if (encodedEmitters instanceof ListTag list) {
+            var decoded = new ArrayList<Emitter>();
+            for (var emitterTag : LDLibPersistenceCompat.decodePayloadList(list)) {
+                var emitter = new Emitter();
+                emitter.deserializeNBT(emitterTag);
+                decoded.add(emitter);
+            }
+            emitters = decoded;
+        } else if (encodedEmitters != null) {
+            throw new IllegalArgumentException("Sub-emitters are not stored as an LDLib ArrayPayload: " + encodedEmitters.getType());
+        }
+    }
 
     public Runtime createRuntime() {
         return new Runtime(this);

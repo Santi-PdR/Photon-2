@@ -1,12 +1,15 @@
 package com.lowdragmc.photon.client.util;
 
 import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
+import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Converts LDLib2's managed-list envelopes to the ListTag format read by LDLib 1.0.x's
@@ -15,6 +18,30 @@ import java.util.ArrayList;
  */
 public final class LDLibPersistenceCompat {
     private LDLibPersistenceCompat() {
+    }
+
+    /** Encode object-list compounds using the legacy wrapper format expected by LDLib 1.0.x. */
+    public static ListTag encodePayloadList(List<CompoundTag> entries) {
+        var payloads = new ITypedPayload<?>[entries.size()];
+        for (int index = 0; index < entries.size(); index++) {
+            payloads[index] = NbtTagPayload.of(entries.get(index));
+        }
+        return (ListTag) ArrayPayload.of(payloads).serializeNBT();
+    }
+
+    /** Decode an LDLib 1.0.x ArrayPayload into its compound entries. */
+    public static List<CompoundTag> decodePayloadList(ListTag list) {
+        var arrayPayload = new ArrayPayload();
+        arrayPayload.deserializeNBT(list);
+        var entries = new ArrayList<CompoundTag>();
+        for (var payload : arrayPayload.getPayload()) {
+            var value = payload.getPayload();
+            if (!(value instanceof CompoundTag compound)) {
+                throw new IllegalArgumentException("Managed list entry is not a compound tag: " + value);
+            }
+            entries.add(compound);
+        }
+        return entries;
     }
 
     public static CompoundTag normalize(CompoundTag root) {

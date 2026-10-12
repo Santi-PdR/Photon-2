@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,10 +33,10 @@ class RendererSettingPersistenceTest {
         var second = new CompoundTag();
         second.putBoolean("cull", false);
 
-        ListTag encoded = RendererSetting.encodeMaterialTags(java.util.List.of(first, second));
+        ListTag encoded = LDLibPersistenceCompat.encodePayloadList(java.util.List.of(first, second));
         assertInstanceOf(ListTag.class, encoded);
 
-        var decoded = RendererSetting.decodeMaterialTags(encoded);
+        var decoded = LDLibPersistenceCompat.decodePayloadList(encoded);
         assertEquals(2, decoded.size());
         assertTrue(decoded.get(0).getBoolean("depthMask"));
         assertFalse(decoded.get(1).getBoolean("cull"));
