@@ -10,6 +10,7 @@ import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Converts LDLib2's managed-list envelopes to the ListTag format read by LDLib 1.0.x's
@@ -17,6 +18,10 @@ import java.util.List;
  * requested 1.20.1 runtime uses the older parser, which expects the payload list directly.
  */
 public final class LDLibPersistenceCompat {
+    /** Persisted Photon Vector3f fields which LDLib 2 writes as three-float lists. */
+    private static final Set<String> VECTOR3F_FIELDS = Set.of(
+            "customDirection", "end", "gravity", "initialVelocity", "modelPivot");
+
     private LDLibPersistenceCompat() {
     }
 
@@ -45,11 +50,12 @@ public final class LDLibPersistenceCompat {
     }
 
     public static CompoundTag normalize(CompoundTag root) {
-        if (!containsManagedListEnvelope(root)) {
+        if (!containsCompatibilityData(root)) {
             return root;
         }
-        byte nbtPayloadType = TypedPayloadRegistries.getId(NbtTagPayload.class);
-        if (nbtPayloadType < 0) {
+        byte nbtPayloadType = containsManagedListEnvelope(root)
+                ? TypedPayloadRegistries.getId(NbtTagPayload.class) : -1;
+        if (containsManagedListEnvelope(root) && nbtPayloadType < 0) {
             throw new IllegalStateException("LDLib NBT payload type is not registered before Photon project load");
         }
         normalize(root, nbtPayloadType);
@@ -65,10 +71,7 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
-                if (isManagedListEnvelope(child)) {
-                    return true;
-                }
-                if (containsManagedListEnvelope(child)) {
+                if (isManagedListEnvelope(child) || containsManagedListEnvelope(child)) {
                     return true;
                 }
             }
@@ -82,11 +85,34 @@ public final class LDLibPersistenceCompat {
         return false;
     }
 
+    private static boolean containsCompatibilityData(Tag tag) {
+        if (tag instanceof CompoundTag compound) {
+            for (var key : compound.getAllKeys()) {
+                var child = compound.get(key);
+                if (isManagedListEnvelope(child) || isVector3fField(key, child)) {
+                    return true;
+                }
+                if (containsCompatibilityData(child)) {
+                    return true;
+                }
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var child : list) {
+                if (containsCompatibilityData(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static Tag normalizeTag(Tag tag, byte nbtPayloadType) {
         if (tag instanceof CompoundTag compound) {
             for (var key : new ArrayList<>(compound.getAllKeys())) {
                 var child = compound.get(key);
-                if (isManagedListEnvelope(child)) {
+                if (isVector3fField(key, child)) {
+                    child = toLegacyVector3f((ListTag) child);
+                } else if (isManagedListEnvelope(child)) {
                     var envelope = (CompoundTag) child;
                     var payload = (ListTag) envelope.get("payload");
                     // LDLib2 ReadOnlyManaged fields can use a custom serializer that returns a
@@ -119,6 +145,24 @@ public final class LDLibPersistenceCompat {
 
     private static boolean isStringList(ListTag list) {
         return list.isEmpty() || list.getElementType() == Tag.TAG_STRING;
+    }
+
+    /** LDLib 2 persists JOML vectors as [x, y, z]; LDLib 1's managed accessor expects {x,y,z}. */
+    private static boolean isVector3fField(String key, Tag value) {
+        if (!VECTOR3F_FIELDS.contains(key) || !(value instanceof ListTag list) || list.size() != 3) {
+            return false;
+        }
+        return list.getElementType() == Tag.TAG_FLOAT
+                || list.getElementType() == Tag.TAG_DOUBLE
+                || list.getElementType() == Tag.TAG_INT;
+    }
+
+    private static CompoundTag toLegacyVector3f(ListTag vector) {
+        var legacyVector = new CompoundTag();
+        legacyVector.putFloat("x", vector.getFloat(0));
+        legacyVector.putFloat("y", vector.getFloat(1));
+        legacyVector.putFloat("z", vector.getFloat(2));
+        return legacyVector;
     }
 
     /** LDLib 1 ArrayPayload requires {@code {t, p}} per element; LDLib2 stores each value directly. */

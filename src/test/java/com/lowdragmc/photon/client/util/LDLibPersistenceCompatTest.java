@@ -11,6 +11,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.ExternalForcesSetting
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.FloatTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,6 +38,37 @@ class LDLibPersistenceCompatTest {
 
         assertSame(root, LDLibPersistenceCompat.normalize(root));
         assertEquals("value", root.getString("ordinary"));
+    }
+
+    @Test
+    void migratesLdlib2VectorListsForLegacyLdlibManagedAccessors() {
+        var modelPivot = new ListTag();
+        modelPivot.add(FloatTag.valueOf(0.25f));
+        modelPivot.add(FloatTag.valueOf(0.5f));
+        modelPivot.add(FloatTag.valueOf(-0.75f));
+        var renderer = new CompoundTag();
+        renderer.put("modelPivot", modelPivot);
+
+        // LDLib2 scene transforms use their own list format and must remain untouched.
+        var localPosition = new ListTag();
+        localPosition.add(FloatTag.valueOf(1));
+        localPosition.add(FloatTag.valueOf(2));
+        localPosition.add(FloatTag.valueOf(3));
+        var transform = new CompoundTag();
+        transform.put("localPosition", localPosition);
+
+        var root = new CompoundTag();
+        root.put("renderer", renderer);
+        root.put("transform", transform);
+
+        LDLibPersistenceCompat.normalize(root);
+
+        var normalizedPivot = renderer.getCompound("modelPivot");
+        assertEquals(0.25f, normalizedPivot.getFloat("x"));
+        assertEquals(0.5f, normalizedPivot.getFloat("y"));
+        assertEquals(-0.75f, normalizedPivot.getFloat("z"));
+        assertInstanceOf(ListTag.class, transform.get("localPosition"));
+        assertEquals(3, transform.getList("localPosition", ListTag.TAG_FLOAT).size());
     }
 
     @Test
