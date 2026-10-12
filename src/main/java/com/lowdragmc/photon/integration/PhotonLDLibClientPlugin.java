@@ -15,25 +15,30 @@ import com.lowdragmc.lowdraglib.syncdata.accessor.CustomObjectAccessor;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.IModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3;
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape;
-import net.minecraft.nbt.CompoundTag;
+import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Decoder;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.Encoder;
 import com.mojang.datafixers.util.Pair;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import org.joml.Vector2f;
+import org.joml.Vector2i;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.List;
 
 /** Client-only LDLib2 accessors, loaded by the common plugin only through {@link net.minecraftforge.fml.DistExecutor}. */
 @OnlyIn(Dist.CLIENT)
@@ -57,6 +62,16 @@ public final class PhotonLDLibClientPlugin {
             return ops.getNumberValue(input).map(value -> Pair.of(value, input));
         }
     });
+    static final Codec<Vector2f> VECTOR2F_CODEC = Codec.FLOAT.listOf().comapFlatMap(values ->
+            values.size() == 2
+                    ? DataResult.success(new Vector2f(values.get(0), values.get(1)))
+                    : DataResult.error(() -> "Expected a two-element Vector2f, got " + values.size()),
+            value -> List.of(value.x, value.y));
+    static final Codec<Vector2i> VECTOR2I_CODEC = Codec.INT.listOf().comapFlatMap(values ->
+            values.size() == 2
+                    ? DataResult.success(new Vector2i(values.get(0), values.get(1)))
+                    : DataResult.error(() -> "Expected a two-element Vector2i, got " + values.size()),
+            value -> List.of(value.x, value.y));
     private static boolean legacyAccessorsRegistered;
 
     private PhotonLDLibClientPlugin() {
@@ -94,6 +109,9 @@ public final class PhotonLDLibClientPlugin {
     public static synchronized void registerLegacyAccessors() {
         if (legacyAccessorsRegistered) return;
         registerLegacyCodecAccessor(Number.class, NUMBER_CODEC);
+        registerLegacyCodecAccessor(ECBCurves.class, ECBCurves.CODEC);
+        registerLegacyCodecAccessor(Vector2f.class, VECTOR2F_CODEC);
+        registerLegacyCodecAccessor(Vector2i.class, VECTOR2I_CODEC);
         // Photon 26.2's speed-based settings persist LDLib2 Range values. The LDLib1
         // PersistedParser used by the 1.20.1 port cannot infer an accessor for this type,
         // so route it through LDLib2's canonical NBT codec as well.
@@ -102,6 +120,10 @@ public final class PhotonLDLibClientPlugin {
         // They are persisted inside Photon color functions and gradient textures.
         TypedPayloadRegistries.register(NbtTagPayload.class, NbtTagPayload::new,
                 legacyGradientColorAccessor(), 1000);
+        // Mesh emitters persist MeshData directly (rather than as a sub-persisted object).
+        // Bridge its provider-aware serializer so LDLib1 history snapshots can retain the model source.
+        TypedPayloadRegistries.register(NbtTagPayload.class, NbtTagPayload::new,
+                legacyMeshDataAccessor(), 1000);
         // LDLib2-backed material fields are still persisted by LDLib1's parser through Photon codecs.
         // UIResourceMaterial stores its file/builtin reference as IResourcePath, so bridge LDLib2's
         // own versioned path codec just like the Photon model/material interfaces below.
@@ -171,6 +193,22 @@ public final class PhotonLDLibClientPlugin {
             @Override
             public GradientColor deserialize(AccessorOp op, ITypedPayload<?> payload) {
                 var value = new GradientColor();
+                value.deserializeNBT(Platform.getFrozenRegistry(), (CompoundTag) payload.getPayload());
+                return value;
+            }
+        };
+    }
+
+    static CustomObjectAccessor<MeshData> legacyMeshDataAccessor() {
+        return new CustomObjectAccessor<>(MeshData.class, false) {
+            @Override
+            public ITypedPayload<?> serialize(AccessorOp op, MeshData value) {
+                return NbtTagPayload.of(value.serializeNBT(Platform.getFrozenRegistry()));
+            }
+
+            @Override
+            public MeshData deserialize(AccessorOp op, ITypedPayload<?> payload) {
+                var value = new MeshData();
                 value.deserializeNBT(Platform.getFrozenRegistry(), (CompoundTag) payload.getPayload());
                 return value;
             }
