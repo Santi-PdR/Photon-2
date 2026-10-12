@@ -1,9 +1,11 @@
 package com.lowdragmc.photon.integration;
 
-import com.lowdragmc.lowdraglib2.compat.network.codec.ByteBufCodecs;
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.compat.network.codec.ByteBufCodecs;
 import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
+import com.lowdragmc.lowdraglib2.math.GradientColor;
 import com.lowdragmc.lowdraglib2.math.Range;
 import com.lowdragmc.lowdraglib2.syncdata.AccessorRegistries;
 import com.lowdragmc.lowdraglib2.syncdata.accessor.direct.CustomDirectAccessor;
@@ -12,12 +14,13 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.accessor.CustomObjectAccessor;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.IModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3;
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape;
-import com.lowdragmc.photon.Photon;
+import net.minecraft.nbt.CompoundTag;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Decoder;
@@ -95,6 +98,10 @@ public final class PhotonLDLibClientPlugin {
         // PersistedParser used by the 1.20.1 port cannot infer an accessor for this type,
         // so route it through LDLib2's canonical NBT codec as well.
         registerLegacyCodecAccessor(Range.class, Range.CODEC);
+        // Gradient colors are provider-aware NBT values rather than Codec-backed values.
+        // They are persisted inside Photon color functions and gradient textures.
+        TypedPayloadRegistries.register(NbtTagPayload.class, NbtTagPayload::new,
+                legacyGradientColorAccessor(), 1000);
         // LDLib2-backed material fields are still persisted by LDLib1's parser through Photon codecs.
         // UIResourceMaterial stores its file/builtin reference as IResourcePath, so bridge LDLib2's
         // own versioned path codec just like the Photon model/material interfaces below.
@@ -150,6 +157,22 @@ public final class PhotonLDLibClientPlugin {
                 Tag encoded = (Tag) payload.getPayload();
                 return codec.parse(NbtOps.INSTANCE, encoded).getOrThrow(false,
                         error -> Photon.LOGGER.error("Failed to restore {}: {}", type.getSimpleName(), error));
+            }
+        };
+    }
+
+    static CustomObjectAccessor<GradientColor> legacyGradientColorAccessor() {
+        return new CustomObjectAccessor<>(GradientColor.class, false) {
+            @Override
+            public ITypedPayload<?> serialize(AccessorOp op, GradientColor value) {
+                return NbtTagPayload.of(value.serializeNBT(Platform.getFrozenRegistry()));
+            }
+
+            @Override
+            public GradientColor deserialize(AccessorOp op, ITypedPayload<?> payload) {
+                var value = new GradientColor();
+                value.deserializeNBT(Platform.getFrozenRegistry(), (CompoundTag) payload.getPayload());
+                return value;
             }
         };
     }

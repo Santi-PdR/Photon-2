@@ -3,6 +3,7 @@ package com.lowdragmc.photon.integration;
 import com.lowdragmc.lowdraglib.syncdata.AccessorOp;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
+import com.lowdragmc.lowdraglib2.math.GradientColor;
 import com.lowdragmc.lowdraglib2.math.Range;
 import com.mojang.serialization.Codec;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,18 @@ class PhotonLegacyCodecAccessorTest {
         var restored = accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload);
         assertEquals(2.5f, restored.getA().floatValue());
         assertEquals(8.5f, restored.getB().floatValue());
+    }
+
+    @Test
+    void gradientColorBridgeRoundTripsPhotonGradientFunctionsThroughLegacyLdlibPersistence() {
+        var gradient = new GradientColor(0xFFFF0000, 0xFF0000FF);
+        gradient.addAlpha(0.25f, 0.4f);
+        gradient.addAlpha(0.75f, 0.9f);
+        var accessor = PhotonLDLibClientPlugin.legacyGradientColorAccessor();
+
+        var payload = assertInstanceOf(NbtTagPayload.class, accessor.serialize(AccessorOp.PERSISTED, gradient));
+        var tag = assertInstanceOf(net.minecraft.nbt.CompoundTag.class, payload.getPayload());
+        assertEquals(gradient, accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload));
     }
 
     @Test
