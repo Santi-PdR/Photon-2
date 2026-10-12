@@ -3,6 +3,7 @@ package com.lowdragmc.photon.integration;
 import com.lowdragmc.lowdraglib.syncdata.AccessorOp;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
+import com.lowdragmc.lowdraglib2.math.Range;
 import com.mojang.serialization.Codec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,6 +28,21 @@ class PhotonLegacyCodecAccessorTest {
         var tag = assertInstanceOf(net.minecraft.nbt.StringTag.class, payload.getPayload());
         assertEquals(path, tag.getAsString());
         assertEquals(path, accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload));
+    }
+
+    @Test
+    void rangeCodecBridgeRoundTripsPhotonSpeedRangesThroughLegacyLdlibPersistence() {
+        var range = Range.of(2.5f, 8.5f);
+        var accessor = PhotonLDLibClientPlugin.legacyCodecAccessor(Range.class, Range.CODEC);
+
+        var payload = assertInstanceOf(NbtTagPayload.class, accessor.serialize(AccessorOp.PERSISTED, range));
+        var tag = assertInstanceOf(net.minecraft.nbt.CompoundTag.class, payload.getPayload());
+        assertEquals(2.5f, tag.getFloat("a"));
+        assertEquals(8.5f, tag.getFloat("b"));
+
+        var restored = accessor.deserialize(AccessorOp.PERSISTED, (ITypedPayload<?>) payload);
+        assertEquals(2.5f, restored.getA().floatValue());
+        assertEquals(8.5f, restored.getB().floatValue());
     }
 
     @Test

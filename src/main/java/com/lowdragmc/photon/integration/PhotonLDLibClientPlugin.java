@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.compat.network.codec.ByteBufCodecs;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
+import com.lowdragmc.lowdraglib2.math.Range;
 import com.lowdragmc.lowdraglib2.syncdata.AccessorRegistries;
 import com.lowdragmc.lowdraglib2.syncdata.accessor.direct.CustomDirectAccessor;
 import com.lowdragmc.lowdraglib.syncdata.AccessorOp;
@@ -90,6 +91,10 @@ public final class PhotonLDLibClientPlugin {
     public static synchronized void registerLegacyAccessors() {
         if (legacyAccessorsRegistered) return;
         registerLegacyCodecAccessor(Number.class, NUMBER_CODEC);
+        // Photon 26.2's speed-based settings persist LDLib2 Range values. The LDLib1
+        // PersistedParser used by the 1.20.1 port cannot infer an accessor for this type,
+        // so route it through LDLib2's canonical NBT codec as well.
+        registerLegacyCodecAccessor(Range.class, Range.CODEC);
         // LDLib2-backed material fields are still persisted by LDLib1's parser through Photon codecs.
         // UIResourceMaterial stores its file/builtin reference as IResourcePath, so bridge LDLib2's
         // own versioned path codec just like the Photon model/material interfaces below.
