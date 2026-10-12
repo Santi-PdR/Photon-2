@@ -18,6 +18,8 @@ import net.minecraft.nbt.StringTag;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -42,13 +44,15 @@ class LDLibPersistenceCompatTest {
     }
 
     @Test
-    void migratesLdlib2VectorListsForLegacyLdlibManagedAccessors() {
-        var modelPivot = new ListTag();
-        modelPivot.add(FloatTag.valueOf(0.25f));
-        modelPivot.add(FloatTag.valueOf(0.5f));
-        modelPivot.add(FloatTag.valueOf(-0.75f));
+    void migratesPersistedLdlib2VectorListsForLegacyLdlibManagedAccessors() {
         var renderer = new CompoundTag();
-        renderer.put("modelPivot", modelPivot);
+        for (var field : List.of("customDirection", "end", "gravity", "initialVelocity", "modelPivot")) {
+            var vector = new ListTag();
+            vector.add(FloatTag.valueOf(0.25f));
+            vector.add(FloatTag.valueOf(0.5f));
+            vector.add(FloatTag.valueOf(-0.75f));
+            renderer.put(field, vector);
+        }
 
         // LDLib2 scene transforms use their own list format and must remain untouched.
         var localPosition = new ListTag();
@@ -64,17 +68,15 @@ class LDLibPersistenceCompatTest {
 
         LDLibPersistenceCompat.normalize(root);
 
-        var normalizedPivot = renderer.getCompound("modelPivot");
-        assertEquals(0.25f, normalizedPivot.getFloat("x"));
-        assertEquals(0.5f, normalizedPivot.getFloat("y"));
-        assertEquals(-0.75f, normalizedPivot.getFloat("z"));
         assertInstanceOf(ListTag.class, transform.get("localPosition"));
         assertEquals(3, transform.getList("localPosition", ListTag.TAG_FLOAT).size());
 
-        var vector = new Vector3fAccessor().deserialize(null, NbtTagPayload.of(normalizedPivot));
-        assertEquals(0.25f, vector.x);
-        assertEquals(0.5f, vector.y);
-        assertEquals(-0.75f, vector.z);
+        for (var field : List.of("customDirection", "end", "gravity", "initialVelocity", "modelPivot")) {
+            var vector = new Vector3fAccessor().deserialize(null, NbtTagPayload.of(renderer.getCompound(field)));
+            assertEquals(0.25f, vector.x, field);
+            assertEquals(0.5f, vector.y, field);
+            assertEquals(-0.75f, vector.z, field);
+        }
     }
 
     @Test
