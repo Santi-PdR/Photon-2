@@ -82,13 +82,39 @@ repositories {
 
 def preparePhotonLdlib2Runtime = tasks.register('preparePhotonLdlib2Runtime', Exec) {
     group = 'build setup'
-    description = 'Removes LDLib2’s private Kotlin stdlib so Photon uses the profile’s KotlinForForge runtime.'
+    description = 'Relocates LDLib2 and its Kotlin runtime into a private package namespace for pack compatibility.'
     def ldlib2Source = rootProject.file('libs/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
     def ldlib2Output = rootProject.file('build/prepared-runtime/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
+    def kotlinSource = rootProject.file("libs/kotlinforforge-${kotlin_runtime_source_kff_version}.jar")
+    def relocator = rootProject.file('gradle/RelocateKotlinJar.java')
+    def asmDirectory = new File(gradle.gradleHomeDir, 'lib')
+    def asmJars = fileTree(asmDirectory).matching {
+        include 'asm-*.jar', 'asm-commons-*.jar'
+    }.files
+    def asmCore = asmJars.find { it.name ==~ /asm-\d+(\.\d+)+\.jar/ }
+    def asmVersion = asmCore?.name?.replaceFirst(/^asm-/, '')?.replaceFirst(/\.jar$/, '')
+    def asmCommons = asmJars.find { it.name == "asm-commons-${asmVersion}.jar" }
+    if (asmCore == null || asmCommons == null) {
+        throw new GradleException("Could not find matching ASM and asm-commons jars in ${asmDirectory}")
+    }
+    def asmClasspathFiles = [asmCore, asmCommons]
+    def java17Launcher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
     inputs.file(ldlib2Source)
+    inputs.file(kotlinSource)
+    inputs.file(relocator)
+    inputs.files(asmClasspathFiles)
     inputs.file(rootProject.file('gradle/prepare-ldlib2-runtime.py'))
     outputs.file(ldlib2Output)
-    commandLine 'python3', rootProject.file('gradle/prepare-ldlib2-runtime.py'), ldlib2Source, ldlib2Output
+    doFirst {
+        commandLine 'python3', rootProject.file('gradle/prepare-ldlib2-runtime.py'),
+                ldlib2Source, kotlinSource, ldlib2Output,
+                java17Launcher.get().executablePath.asFile.absolutePath,
+                asmClasspathFiles.collect { it.absolutePath }.join(File.pathSeparator),
+                kotlin_runtime_version,
+                relocator
+    }
 }
 
 base {
@@ -185,9 +211,8 @@ dependencies {
     implementation fg.deobf("local:ldlib-forge-1.20.1:${ldlib_version}")
     implementation fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all")
     implementation fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15")
-    // KFF is supplied by the modpack. Photon must not bundle another Kotlin module:
-    // the duplicate kotlin.* packages crash Forge's JPMS layer when other mods are present.
-    compileOnly fg.deobf("local:kotlinforforge:${kotlinforforge_version}")
+    // LDLib2 requires Kotlin 2.1.20+. Photon privately relocates that runtime to avoid
+    // colliding with the older Kotlin 2.0 runtime supplied by the target pack's KFF 4.11.
     def ldlib2Runtime = jarJar(fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all"))
     jarJar.ranged(ldlib2Runtime, "[2.2.39.a,)")
     def kilaGraphRuntime = jarJar(fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15"))
@@ -207,6 +232,10 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.named('compileJava').configure {
+    dependsOn preparePhotonLdlib2Runtime
 }
 
 tasks.named('jarJar').configure {
@@ -237,7 +266,6 @@ tasks.withType(ProcessResources).configureEach {
             "ldlib_version_range": ldlib_version_range,
             "ldlib2_version_range": ldlib2_version_range,
             "kilagraph_version_range": kilagraph_version_range,
-            "kotlinforforge_version": kotlinforforge_version,
         ]
     inputs.properties replaceProperties
 
@@ -271,12 +299,11 @@ tasks.named('jarJar').configure {
     finalizedBy 'reobfJarJar'
 }
 
-// ForgeGradle resolves the source LDLib2 jar before the prepared copy exists. Normalize the
-// final JarJar artifact after reobfuscation to remove LDLib2's Kotlin module; the profile's KFF
-// dependency supplies the compatible runtime.
+// ForgeGradle resolves the source LDLib2 jar before the prepared copy exists. Replace it after
+// reobfuscation with the package-relocated copy that privately carries Kotlin 2.2.21.
 def normalizeJarJarLdlib2 = tasks.register('normalizeJarJarLdlib2') {
     group = 'build setup'
-    description = 'Replaces nested LDLib2 with a copy that uses the profile KotlinForForge runtime.'
+    description = 'Replaces nested LDLib2 with its privately relocated Kotlin runtime copy.'
     dependsOn tasks.matching { it.name == 'reobfJarJar' }
     dependsOn preparePhotonLdlib2Runtime
     outputs.upToDateWhen { false }
@@ -430,9 +457,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'versionRange = "[1.20.1]"',
                     "versionRange = \"${project.forge_version_range}\"",
                     'modId = "ldlib"',
-                    "versionRange = \"${project.ldlib_version_range}\"",
-                    'modId = "kotlinforforge"',
-                    "versionRange = \"[${project.kotlinforforge_version},)\""
+                    "versionRange = \"${project.ldlib_version_range}\""
             ]
             def missingMetadata = requiredMetadata.findAll { !metadata.contains(it) }
             if (!missingMetadata.isEmpty()) {
@@ -475,7 +500,7 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
 
             if (jarJarMetadata.jars.any { it.identifier?.artifact == 'kotlinruntime'
                     || it.identifier?.artifact == 'kotlin-stdlib' }) {
-                throw new GradleException('Photon must not package a Kotlin runtime; use the required profile KFF')
+                throw new GradleException('Photon must not package a top-level unrelocated Kotlin runtime')
             }
             if (zip.entries().toList().any { it.name.startsWith('kotlin/')
                     || it.name.startsWith('kotlinx/') || it.name.startsWith('_COROUTINE/')
@@ -486,21 +511,41 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
             def nestedLdlib2 = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
                     zip.getInputStream(zip.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar'))
                             .withCloseable { it.readAllBytes() }))
-            def ldlib2HasKotlinStdlib = false
+            def privateKotlinRuntime = null
             try {
                 def nestedEntry
                 while ((nestedEntry = nestedLdlib2.nextEntry) != null) {
-                    if (nestedEntry.name.startsWith('META-INF/jarjar/kotlin-stdlib-')
+                    if (nestedEntry.name.startsWith('META-INF/jarjar/photon-kotlin-runtime-')
                             && nestedEntry.name.endsWith('.jar')) {
-                        ldlib2HasKotlinStdlib = true
+                        privateKotlinRuntime = nestedLdlib2.readAllBytes()
                         break
                     }
                 }
             } finally {
                 nestedLdlib2.close()
             }
-            if (ldlib2HasKotlinStdlib) {
-                throw new GradleException('Photon LDLib2 copy must not bundle a second Kotlin stdlib provider')
+            if (privateKotlinRuntime == null) {
+                throw new GradleException('Photon LDLib2 copy is missing its relocated private Kotlin runtime')
+            }
+            def runtimeZip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(privateKotlinRuntime))
+            def hasPrivateIntrinsics = false
+            def hasUnrelocatedKotlinPackage = false
+            try {
+                def nestedEntry
+                while ((nestedEntry = runtimeZip.nextEntry) != null) {
+                    if (nestedEntry.name == 'com/lowdragmc/photon/internal/embedded/kotlin/jvm/internal/Intrinsics.class') {
+                        hasPrivateIntrinsics = true
+                    }
+                    if (nestedEntry.name.startsWith('kotlin/') || nestedEntry.name.startsWith('kotlinx/')
+                            || nestedEntry.name.startsWith('_COROUTINE/')) {
+                        hasUnrelocatedKotlinPackage = true
+                    }
+                }
+            } finally {
+                runtimeZip.close()
+            }
+            if (!hasPrivateIntrinsics || hasUnrelocatedKotlinPackage) {
+                throw new GradleException('Photon Kotlin runtime is incomplete or contains unrelocated package paths')
             }
 
             def entries = zip.entries()
@@ -558,83 +603,67 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
     }
 }
 
-def verifyKffLanguageProvider = tasks.register('verifyKffLanguageProvider') {
+def verifyKotlinRuntimeIsolation = tasks.register('verifyKotlinRuntimeIsolation') {
     group = 'verification'
-    description = 'Executes the profile KFF scan visitor and validates its Kotlin runtime in a Forge JPMS layer.'
+    description = 'Validates the Photon-private Kotlin runtime against the target pack’s KFF 4.11 JPMS modules.'
     dependsOn normalizeJarJarLdlib2
-    inputs.file(rootProject.file('gradle/KotlinLanguageProviderProbe.java'))
-    inputs.file(rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar"))
+    inputs.file(rootProject.file('libs/kotlinforforge-4.11.0.jar'))
+    inputs.file(rootProject.file('gradle/KotlinRuntimeLayerProbe.java'))
     doLast {
         def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
-        def moduleDirectory = rootProject.file('build/kff-language-provider-probe')
+        def moduleDirectory = rootProject.file('build/kotlin-runtime-isolation')
         delete(moduleDirectory)
         moduleDirectory.mkdirs()
-
         def modules = []
-        def kffFilePath = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
-        def kff = new java.util.zip.ZipFile(kffFilePath)
-        try {
-            def kffFile = new File(moduleDirectory, "kotlinforforge-${project.kotlinforforge_version}.jar")
-            kffFile.bytes = kffFilePath.bytes
-            modules << kffFile
-            def kffMetadata = new groovy.json.JsonSlurper().parseText(
-                    new String(kff.getInputStream(kff.getEntry('META-INF/jarjar/metadata.json')).withCloseable {
-                        it.readAllBytes()
-                    }, java.nio.charset.StandardCharsets.UTF_8))
-            kffMetadata.jars.each { dependency ->
-                def nested = new File(moduleDirectory, "${dependency.identifier.artifact}-${dependency.version.artifactVersion}.jar")
-                nested.bytes = kff.getInputStream(kff.getEntry(dependency.path)).withCloseable { it.readAllBytes() }
-                modules << nested
+
+        def extractDependencies = { File archive, String label ->
+            def outer = new java.util.zip.ZipFile(archive)
+            try {
+                def metadataEntry = outer.getEntry('META-INF/jarjar/metadata.json')
+                if (metadataEntry == null) return []
+                def metadata = new groovy.json.JsonSlurper().parseText(
+                        new String(outer.getInputStream(metadataEntry).withCloseable { it.readAllBytes() },
+                                java.nio.charset.StandardCharsets.UTF_8))
+                metadata.jars.collect { dependency ->
+                    def nested = new File(moduleDirectory,
+                            "${label}-${dependency.identifier.artifact}-${dependency.version.artifactVersion}.jar")
+                    nested.bytes = outer.getInputStream(outer.getEntry(dependency.path)).withCloseable { it.readAllBytes() }
+                    nested
+                }
+            } finally {
+                outer.close()
             }
-        } finally {
-            kff.close()
-        }
-        def outer = new java.util.zip.ZipFile(artifact)
-        try {
-            def ldlib2Entry = outer.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
-            def ldlib2File = new File(moduleDirectory, 'ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
-            ldlib2File.bytes = outer.getInputStream(ldlib2Entry).withCloseable { it.readAllBytes() }
-            modules << ldlib2File
-            modules << artifact
-        } finally {
-            outer.close()
         }
 
-        def requiredClasses = [
-                'net/minecraftforge/forgespi/language/ModFileScanData.class',
-                'org/objectweb/asm/Type.class',
-                'net/minecraftforge/fml/Logging.class',
-                'org/apache/logging/log4j/Logger.class'
-        ]
-        def compileJars = configurations.compileClasspath.files.findAll { it.isFile() && it.name.endsWith('.jar') }
-        requiredClasses.each { classEntry ->
-            def owner = compileJars.find { candidate ->
-                def candidateZip = new java.util.zip.ZipFile(candidate)
-                try {
-                    candidateZip.getEntry(classEntry) != null
-                } finally {
-                    candidateZip.close()
-                }
-            }
-            if (owner == null) {
-                throw new GradleException("Cannot locate ${classEntry} for the KFF language-provider probe")
-            }
-            if (!modules.contains(owner)) modules << owner
-        }
+        def kff = rootProject.file('libs/kotlinforforge-4.11.0.jar')
+        def kffCopy = new File(moduleDirectory, 'kotlinforforge-4.11.0.jar')
+        kffCopy.bytes = kff.bytes
+        modules << kffCopy
+        modules.addAll(extractDependencies(kffCopy, 'kff'))
+
+        def photonCopy = new File(moduleDirectory, artifact.name)
+        photonCopy.bytes = artifact.bytes
+        modules << photonCopy
+        def photonDependencies = extractDependencies(photonCopy, 'photon')
+        modules.addAll(photonDependencies)
+        def ldlib2 = photonDependencies.find { it.name.contains('ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all') }
+        if (ldlib2 == null) throw new GradleException('Photon artifact has no bundled LDLib2 module')
+        modules.addAll(extractDependencies(ldlib2, 'ldlib2'))
 
         def javaLauncher = javaToolchains.launcherFor {
             languageVersion = JavaLanguageVersion.of(17)
         }.get()
+        def modulePath = modules.collect { it.absolutePath }.join(File.pathSeparator)
         exec {
             executable javaLauncher.executablePath.asFile
-            args(([rootProject.file('gradle/KotlinLanguageProviderProbe.java')] + modules)
-                    .collect { it.absolutePath })
+            args '--module-path', modulePath, '--add-modules', 'ALL-MODULE-PATH',
+                    rootProject.file('gradle/KotlinRuntimeLayerProbe.java')
         }
     }
 }
 
 tasks.named('check') {
-    dependsOn verifyCommonSideArtifact, verifyKffLanguageProvider
+    dependsOn verifyCommonSideArtifact, verifyKotlinRuntimeIsolation
 }
 
 tasks.withType(JavaCompile).configureEach {
