@@ -80,19 +80,15 @@ repositories {
     }
 }
 
-def prepareKotlinRuntime = tasks.register('prepareKotlinRuntime', Exec) {
+def preparePhotonLdlib2Runtime = tasks.register('preparePhotonLdlib2Runtime', Exec) {
     group = 'build setup'
-    description = 'Packages KFF as kotlin.stdlib and removes LDLib2’s duplicate from Photon’s private copy.'
-    def sourceArchive = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
-    def outputArchive = rootProject.file("libs/kotlinruntime-${project.kotlinforforge_version}.jar")
+    description = 'Removes LDLib2’s private Kotlin stdlib so Photon uses the profile’s KotlinForForge runtime.'
     def ldlib2Source = rootProject.file('libs/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
     def ldlib2Output = rootProject.file('build/prepared-runtime/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
-    inputs.file(sourceArchive)
     inputs.file(ldlib2Source)
-    inputs.file(rootProject.file('gradle/prepare-kotlin-runtime.py'))
-    outputs.file(outputArchive)
+    inputs.file(rootProject.file('gradle/prepare-ldlib2-runtime.py'))
     outputs.file(ldlib2Output)
-    commandLine 'python3', rootProject.file('gradle/prepare-kotlin-runtime.py'), sourceArchive, outputArchive, ldlib2Source, ldlib2Output
+    commandLine 'python3', rootProject.file('gradle/prepare-ldlib2-runtime.py'), ldlib2Source, ldlib2Output
 }
 
 base {
@@ -189,13 +185,13 @@ dependencies {
     implementation fg.deobf("local:ldlib-forge-1.20.1:${ldlib_version}")
     implementation fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all")
     implementation fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15")
-    implementation "local:kotlinruntime:${kotlinforforge_version}"
+    // KFF is supplied by the modpack. Photon must not bundle another Kotlin module:
+    // the duplicate kotlin.* packages crash Forge's JPMS layer when other mods are present.
+    compileOnly fg.deobf("local:kotlinforforge:${kotlinforforge_version}")
     def ldlib2Runtime = jarJar(fg.deobf("local:ldlib2-forge-1.20.1:2.2.39.a+forge.1.20.1-all"))
     jarJar.ranged(ldlib2Runtime, "[2.2.39.a,)")
     def kilaGraphRuntime = jarJar(fg.deobf("local:kilagraph-forge-1.20.1-forge4710:20.1.0.15"))
     jarJar.ranged(kilaGraphRuntime, "[20.1.0.15,)")
-    def kotlinRuntime = jarJar("local:kotlinruntime:${kotlinforforge_version}")
-    jarJar.ranged(kotlinRuntime, "[${kotlinforforge_version},)")
 
     // Optional shader-pack integration for Forge 1.20.1 (Oculus is the Iris port).
     localImplementation fg.deobf("maven.modrinth:embeddium:${embeddium_version}")
@@ -213,11 +209,8 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.named('compileJava').configure {
-    dependsOn prepareKotlinRuntime
-}
 tasks.named('jarJar').configure {
-    dependsOn prepareKotlinRuntime
+    dependsOn preparePhotonLdlib2Runtime
 }
 
 mixin {
@@ -244,6 +237,7 @@ tasks.withType(ProcessResources).configureEach {
             "ldlib_version_range": ldlib_version_range,
             "ldlib2_version_range": ldlib2_version_range,
             "kilagraph_version_range": kilagraph_version_range,
+            "kotlinforforge_version": kotlinforforge_version,
         ]
     inputs.properties replaceProperties
 
@@ -277,14 +271,14 @@ tasks.named('jarJar').configure {
     finalizedBy 'reobfJarJar'
 }
 
-// ForgeGradle can resolve the flatDir LDLib2 module before prepareKotlinRuntime has generated
-// its replacement, especially on a clean CI checkout. Normalize the final JarJar artifact after
-// reobfuscation so its private LDLib2 copy always drops the duplicate Kotlin stdlib provider.
+// ForgeGradle resolves the source LDLib2 jar before the prepared copy exists. Normalize the
+// final JarJar artifact after reobfuscation to remove LDLib2's Kotlin module; the profile's KFF
+// dependency supplies the compatible runtime.
 def normalizeJarJarLdlib2 = tasks.register('normalizeJarJarLdlib2') {
     group = 'build setup'
-    description = 'Replaces the nested LDLib2 archive with its prepared, single-Kotlin-runtime copy.'
+    description = 'Replaces nested LDLib2 with a copy that uses the profile KotlinForForge runtime.'
     dependsOn tasks.matching { it.name == 'reobfJarJar' }
-    dependsOn prepareKotlinRuntime
+    dependsOn preparePhotonLdlib2Runtime
     outputs.upToDateWhen { false }
     doLast {
         def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
@@ -370,7 +364,6 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'META-INF/jarjar/metadata.json',
                     'META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar',
                     'META-INF/jarjar/kilagraph-forge-1.20.1-forge4710-20.1.0.15.jar',
-                    "META-INF/jarjar/kotlinruntime-${project.kotlinforforge_version}.jar",
                     'com/lowdragmc/photon/ServerCommands.class',
                     'photon.mixins.json',
                     'photon.refmap.json',
@@ -437,7 +430,9 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                     'versionRange = "[1.20.1]"',
                     "versionRange = \"${project.forge_version_range}\"",
                     'modId = "ldlib"',
-                    "versionRange = \"${project.ldlib_version_range}\""
+                    "versionRange = \"${project.ldlib_version_range}\"",
+                    'modId = "kotlinforforge"',
+                    "versionRange = \"[${project.kotlinforforge_version},)\""
             ]
             def missingMetadata = requiredMetadata.findAll { !metadata.contains(it) }
             if (!missingMetadata.isEmpty()) {
@@ -478,56 +473,14 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
                 throw new GradleException('The nested KilaGraph jar is not the Forge 47.4.10 build')
             }
 
-            def kotlinDependency = jarJarMetadata.jars.find { dependency ->
-                dependency.identifier?.artifact == 'kotlinruntime'
+            if (jarJarMetadata.jars.any { it.identifier?.artifact == 'kotlinruntime'
+                    || it.identifier?.artifact == 'kotlin-stdlib' }) {
+                throw new GradleException('Photon must not package a Kotlin runtime; use the required profile KFF')
             }
-            if (kotlinDependency?.version?.artifactVersion != project.kotlinforforge_version
-                    || kotlinDependency?.version?.range != "[${project.kotlinforforge_version},)") {
-                throw new GradleException("Photon must package the local Kotlin runtime ${project.kotlinforforge_version}")
-            }
-            def kotlinRuntimePath = kotlinDependency.path
-            def nestedKotlinRuntime = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
-                    zip.getInputStream(zip.getEntry(kotlinRuntimePath)).withCloseable { it.readAllBytes() }))
-            def kotlinRuntimeManifest = null
-            def kotlinRuntimeHasStdlibClass = false
-            def kotlinRuntimeHasCoroutines = false
-            def kotlinRuntimeHasModuleDescriptor = false
-            def nestedKffModules = null
-            try {
-                def nestedEntry
-                while ((nestedEntry = nestedKotlinRuntime.nextEntry) != null) {
-                    if (nestedEntry.name == 'META-INF/MANIFEST.MF') {
-                        kotlinRuntimeManifest = new String(nestedKotlinRuntime.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
-                    } else if (nestedEntry.name.startsWith('kotlin/')
-                            || nestedEntry.name.startsWith('META-INF/versions/9/kotlin/')
-                            || nestedEntry.name.startsWith('_COROUTINE/')) {
-                        kotlinRuntimeHasStdlibClass = true
-                    } else if (nestedEntry.name == 'kotlinx/coroutines/CoroutineScope.class') {
-                        kotlinRuntimeHasCoroutines = true
-                    } else if (nestedEntry.name.endsWith('module-info.class')) {
-                        kotlinRuntimeHasModuleDescriptor = true
-                    } else if (nestedEntry.name == 'META-INF/jarjar/metadata.json') {
-                        nestedKffModules = new groovy.json.JsonSlurper().parseText(
-                                new String(nestedKotlinRuntime.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
-                    }
-                }
-            } finally {
-                nestedKotlinRuntime.close()
-            }
-            if (kotlinRuntimeManifest == null
-                    || !kotlinRuntimeManifest.contains('Automatic-Module-Name: kotlin.stdlib')
-                    || !kotlinRuntimeManifest.contains('Photon-Kotlin-Stdlib-Version: 2.1.20')
-                    || kotlinRuntimeHasModuleDescriptor
-                    || !kotlinRuntimeHasStdlibClass
-                    || !kotlinRuntimeHasCoroutines) {
-                throw new GradleException('Photon must package KFF as the sole kotlin.stdlib provider')
-            }
-            def requiredKffArtifacts = ['kfflang', 'kfflib', 'kffmod']
-            if (nestedKffModules == null || requiredKffArtifacts.any { required ->
-                !nestedKffModules.jars.any { it.identifier?.artifact == required
-                        && it.version?.artifactVersion == project.kotlinforforge_version }
-            }) {
-                throw new GradleException('Photon Kotlin runtime is missing the nested KFF language, library, or mod modules')
+            if (zip.entries().toList().any { it.name.startsWith('kotlin/')
+                    || it.name.startsWith('kotlinx/') || it.name.startsWith('_COROUTINE/')
+                    || it.name.startsWith('META-INF/jarjar/kotlinruntime-') }) {
+                throw new GradleException('Photon artifact contains a duplicate Kotlin runtime package')
             }
 
             def nestedLdlib2 = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(
@@ -607,9 +560,10 @@ def verifyCommonSideArtifact = tasks.register('verifyCommonSideArtifact') {
 
 def verifyKffLanguageProvider = tasks.register('verifyKffLanguageProvider') {
     group = 'verification'
-    description = 'Executes KotlinForForge’s scan visitor in an isolated Forge JPMS layer.'
+    description = 'Executes the profile KFF scan visitor and validates its Kotlin runtime in a Forge JPMS layer.'
     dependsOn normalizeJarJarLdlib2
     inputs.file(rootProject.file('gradle/KotlinLanguageProviderProbe.java'))
+    inputs.file(rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar"))
     doLast {
         def artifact = tasks.named('jarJar').get().archiveFile.get().asFile
         def moduleDirectory = rootProject.file('build/kff-language-provider-probe')
@@ -617,32 +571,31 @@ def verifyKffLanguageProvider = tasks.register('verifyKffLanguageProvider') {
         moduleDirectory.mkdirs()
 
         def modules = []
+        def kffFilePath = rootProject.file("libs/kotlinforforge-${project.kotlinforforge_version}.jar")
+        def kff = new java.util.zip.ZipFile(kffFilePath)
+        try {
+            def kffFile = new File(moduleDirectory, "kotlinforforge-${project.kotlinforforge_version}.jar")
+            kffFile.bytes = kffFilePath.bytes
+            modules << kffFile
+            def kffMetadata = new groovy.json.JsonSlurper().parseText(
+                    new String(kff.getInputStream(kff.getEntry('META-INF/jarjar/metadata.json')).withCloseable {
+                        it.readAllBytes()
+                    }, java.nio.charset.StandardCharsets.UTF_8))
+            kffMetadata.jars.each { dependency ->
+                def nested = new File(moduleDirectory, "${dependency.identifier.artifact}-${dependency.version.artifactVersion}.jar")
+                nested.bytes = kff.getInputStream(kff.getEntry(dependency.path)).withCloseable { it.readAllBytes() }
+                modules << nested
+            }
+        } finally {
+            kff.close()
+        }
         def outer = new java.util.zip.ZipFile(artifact)
         try {
-            def runtimePath = "META-INF/jarjar/kotlinruntime-${project.kotlinforforge_version}.jar"
-            def runtimeBytes = outer.getInputStream(outer.getEntry(runtimePath)).withCloseable { it.readAllBytes() }
-            def runtimeCarrier = new File(moduleDirectory, "kotlinruntime-${project.kotlinforforge_version}.jar")
-            runtimeCarrier.bytes = runtimeBytes
-            modules << runtimeCarrier
-            def runtimeZip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(runtimeBytes))
-            try {
-                def runtimeEntry
-                while ((runtimeEntry = runtimeZip.nextEntry) != null) {
-                    if (runtimeEntry.name.startsWith('META-INF/jarjar/kff')
-                            && runtimeEntry.name.endsWith('.jar')) {
-                        def destination = new File(moduleDirectory, runtimeEntry.name.substring('META-INF/jarjar/'.length()))
-                        destination.bytes = runtimeZip.readAllBytes()
-                        modules << destination
-                    }
-                }
-            } finally {
-                runtimeZip.close()
-            }
-
             def ldlib2Entry = outer.getEntry('META-INF/jarjar/ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
             def ldlib2File = new File(moduleDirectory, 'ldlib2-forge-1.20.1-2.2.39.a+forge.1.20.1-all.jar')
             ldlib2File.bytes = outer.getInputStream(ldlib2Entry).withCloseable { it.readAllBytes() }
             modules << ldlib2File
+            modules << artifact
         } finally {
             outer.close()
         }

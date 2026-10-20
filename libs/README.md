@@ -2,9 +2,9 @@
 
 Photon's profile-facing legacy dependency is LDLib `1.0.52.a`, from the local `ghouls` profile. It is declared in `META-INF/mods.toml` and included in the development classpath.
 
-Photon still uses newer LDLib2 and KilaGraph APIs for its editor, graph resources, and renderer. Their Forge 1.20.1 runtime jars are nested in the `-all.jar` artifact so a profile does not need separate copies. The KotlinForForge 4.11.0 runtime jar already present in `test-1` is nested as a library; it has no `mods.toml`, so Photon does not declare it as a Forge mod dependency.
+Photon still uses newer LDLib2 and KilaGraph APIs for its editor, graph resources, and renderer. Their Forge 1.20.1 runtime jars are nested in the `-all.jar` artifact so a profile does not need separate copies. KotlinForForge 4.12.0 or newer is a separate required mod dependency. The project uses the local KFF 4.12.0 archive for compilation and its JPMS/provider verification; it is not included in Photon.
 
-The artifact carries the licenses for the bundled components under `META-INF/licenses/`: LDLib2 (LGPL-3.0), KotlinForForge (LGPL-2.1), Kotlin runtime libraries (Apache-2.0), and KilaGraph (MIT). Their jars remain under `META-INF/jarjar/`.
+The artifact carries the licenses for the bundled components under `META-INF/licenses/`: LDLib2 (LGPL-3.0) and KilaGraph (MIT). KotlinForForge (LGPL-2.1) is a required profile dependency; Photon deliberately does not embed a second Kotlin runtime because that creates JPMS split packages with the installed KFF module.
 
 ## KilaGraph for Forge 47.4.10
 

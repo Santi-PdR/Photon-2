@@ -22,9 +22,11 @@ public final class KotlinLanguageProviderProbe {
         ModuleFinder finder = ModuleFinder.of(modulePaths);
         Set<String> roots = new HashSet<>();
         finder.findAll().forEach(module -> roots.add(module.descriptor().name()));
-        if (!roots.contains("kotlin.stdlib")
-                || !roots.contains("thedarkcolour.kotlinforforge.kfflang")) {
-            throw new IllegalStateException("KFF and kotlin.stdlib must be resolved in the probe layer");
+        if (!roots.contains("thedarkcolour.kotlinforforge")
+                || !roots.contains("thedarkcolour.kotlinforforge.kfflang")
+                || !roots.contains("photon.forge")
+                || roots.contains("kotlin.stdlib")) {
+            throw new IllegalStateException("Unexpected Forge JPMS roots: " + roots);
         }
 
         Configuration configuration = ModuleLayer.boot().configuration()
@@ -49,8 +51,19 @@ public final class KotlinLanguageProviderProbe {
             throw new IllegalStateException("An empty scan must not register Kotlin mod targets");
         }
         Class<?> intrinsics = Class.forName(
-                "kotlin.jvm.internal.Intrinsics", false, layer.findLoader("kotlin.stdlib"));
+                "kotlin.jvm.internal.Intrinsics", false, layer.findLoader("thedarkcolour.kotlinforforge"));
+        Class<?> versionClass = Class.forName(
+                "kotlin.KotlinVersion", true, layer.findLoader("thedarkcolour.kotlinforforge"));
+        Object currentVersion = versionClass.getField("CURRENT").get(null);
+        int major = (int) versionClass.getMethod("getMajor").invoke(currentVersion);
+        int minor = (int) versionClass.getMethod("getMinor").invoke(currentVersion);
+        int patch = (int) versionClass.getMethod("getPatch").invoke(currentVersion);
+        if (major < 2 || (major == 2 && minor < 1) || (major == 2 && minor == 1 && patch < 20)) {
+            throw new IllegalStateException("LDLib2 requires Kotlin 2.1.20 or newer, found "
+                    + major + "." + minor + "." + patch);
+        }
         System.out.println("KFF scan visitor executed with " + intrinsics.getModule().getName()
-                + " across " + roots.size() + " resolved modules.");
+                + " across " + roots.size() + " resolved modules; Kotlin "
+                + major + "." + minor + "." + patch + " satisfies LDLib2.");
     }
 }
