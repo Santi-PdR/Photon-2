@@ -12,6 +12,7 @@ import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonShaders;
+import com.lowdragmc.photon.client.ShaderVariantCache;
 import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -56,6 +57,11 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     @Persisted(subPersisted = true)
     protected final SoftParticles softParticles = new SoftParticles();
     private static final Map<String, ShaderInstance> spriteHDRParticleShaders = new HashMap<>();
+
+    /** Close lazy variants before Minecraft reloads the resource-backed base shader. */
+    public static void invalidateShaderVariants(@Nullable ShaderInstance baseShader) {
+        ShaderVariantCache.clearAndClose(spriteHDRParticleShaders, ShaderInstance::close, baseShader);
+    }
 
     @Override
     public void serializePhotonPersistedFields(CompoundTag tag) {

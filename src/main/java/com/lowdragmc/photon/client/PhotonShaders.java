@@ -108,6 +108,15 @@ public class PhotonShaders {
     }
 
     public static void registerShaders(RegisterShadersEvent registerShadersEvent) {
+        // Lazy shader variants are not owned by Minecraft's registered shader list. Close and
+        // forget them before a resource reload replaces the base instances; otherwise their old
+        // GL programs keep being returned from the static caches after textures/shaders reload.
+        ShaderVariantCache.clearAndClose(HDR_PARTICLE_VARIANTS, ShaderInstance::close, HDRParticleShader);
+        ShaderVariantCache.clearAndClose(PIXEL_HDR_PARTICLE_VARIANTS, ShaderInstance::close, pixelHDRParticleShader);
+        com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial
+                .invalidateShaderVariants(spriteHDRParticleShader);
+        com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial
+                .invalidateAllShaderResources();
         // fires on every resource reload — drop lazily-loaded custom pass shaders so they re-resolve,
         // and compact the mask-group id table (ids are per-frame-resolved, safe to reassign)
         com.lowdragmc.photon.client.postfx.runtime.CustomShaderPass.clearAll();

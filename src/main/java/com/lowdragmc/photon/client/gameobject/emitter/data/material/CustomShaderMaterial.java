@@ -51,9 +51,13 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.lang.ref.Cleaner;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
@@ -66,6 +70,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public static final String DEPTH_CONVENTION_KEY = "depthConvention";
     /** Value used by Photon 26.2 for its native reverse-Z depth convention. */
     public static final String DEPTH_CONVENTION_NATIVE = "reverse_z";
+    /** Live editor/world materials whose LDShaderHolder programs are not owned by Minecraft's reload list. */
+    private static final Set<CustomShaderMaterial> LIVE_MATERIALS = Collections.synchronizedSet(
+            Collections.newSetFromMap(new WeakHashMap<>()));
 
     @Getter
     @Persisted
@@ -88,8 +95,12 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     private PhotonCustomUniforms customUniforms;
     @Nullable
     private JsonObject cachedShaderJson;
+    /** Shader UI values retained while the resource reload invalidates the GL-backed holder. */
+    @Nullable
+    private CompoundTag pendingShaderData;
 
     public CustomShaderMaterial() {
+        LIVE_MATERIALS.add(this);
         samplerTexturesCleanable = AutoCloseCleaner.registerRenderThread(this,
                 new SamplerTextures(curveTexture, gradientTexture));
     }
@@ -112,6 +123,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     }
 
     public void setShader(ResourceLocation shaderLocation) {
+        pendingShaderData = null;
         this.shaderLocation = shaderLocation;
         recompile();
     }
@@ -149,6 +161,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         var shaderData = new CompoundTag();
         if (shaderHolder != null) {
             shaderData.put("shaderData", shaderHolder.serializeNBT(provider));
+        } else if (pendingShaderData != null) {
+            shaderData.put("shaderData", pendingShaderData.copy());
         }
         if (!uniformOverrides.isEmpty()) {
             shaderData.put("uniformOverrides", CustomShaderUniformNbt.write(uniformOverrides));
@@ -188,6 +202,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     }
 
     public void recompile() {
+        var previousData = pendingShaderData;
+        pendingShaderData = null;
         compiledErrorMessage = "";
         customUniforms = null;
         cachedShaderJson = null;
@@ -203,7 +219,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         try {
             this.shaderHolder = loadShaderHolder(shaderLocation);
             this.shaderCleanable = AutoCloseCleaner.registerRenderThread(this, this.shaderHolder);
+            restoreShaderData(previousData);
         } catch (Throwable e) {
+            pendingShaderData = previousData;
             Photon.LOGGER.error("Failed to recompile shader", e);
             // Never blank, and never null: a blank message reads as "no error", and this flag is the
             // only thing stopping getShader() from re-running the whole compile on every frame it
@@ -212,6 +230,38 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             this.compiledErrorMessage = describeFailure(e);
             this.shaderCleanable = null;
         }
+    }
+
+    private void restoreShaderData(@Nullable CompoundTag shaderData) {
+        if (shaderData == null || shaderHolder == null) return;
+        shaderHolder.deserializeNBT(Platform.getFrozenRegistry(), shaderData);
+        attachDynamicSamplers(shaderHolder);
+        attachDynamicUniforms(shaderHolder);
+    }
+
+    /** Invalidate every still-live custom material after Minecraft has reloaded shader resources. */
+    public static void invalidateAllShaderResources() {
+        final var snapshot = new ArrayList<CustomShaderMaterial>();
+        synchronized (LIVE_MATERIALS) {
+            snapshot.addAll(LIVE_MATERIALS);
+        }
+        for (var material : snapshot) {
+            material.invalidateShaderResource();
+        }
+    }
+
+    private void invalidateShaderResource() {
+        if (shaderHolder != null) {
+            pendingShaderData = shaderHolder.serializeNBT(Platform.getFrozenRegistry());
+        }
+        compiledErrorMessage = "";
+        customUniforms = null;
+        cachedShaderJson = null;
+        if (shaderCleanable != null) {
+            shaderCleanable.clean();
+            shaderCleanable = null;
+        }
+        shaderHolder = null;
     }
 
     private static String describeFailure(Throwable e) {
