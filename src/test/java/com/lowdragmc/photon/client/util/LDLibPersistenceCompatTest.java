@@ -190,7 +190,24 @@ class LDLibPersistenceCompatTest {
     @Test
     void migratesAndLoadsManagedListsAtRealShieldProjectPaths() {
         var material = new CompoundTag();
-        material.putString("type", "sprite");
+        var materialData = new CompoundTag();
+        materialData.putString("resourcePath",
+                "file(./ldlib2/assets/ldlib2/resources/global/shield.material.nbt)");
+        var materialWrapper = new CompoundTag();
+        materialWrapper.putString("type", "ui_resource_material");
+        materialWrapper.put("data", materialData);
+        material.put("material", materialWrapper);
+        var blendMode = new CompoundTag();
+        blendMode.putBoolean("enableBlend", true);
+        blendMode.putString("srcColorFactor", "SRC_ALPHA");
+        blendMode.putString("dstColorFactor", "ONE_MINUS_SRC_ALPHA");
+        blendMode.putString("srcAlphaFactor", "ONE");
+        blendMode.putString("dstAlphaFactor", "ZERO");
+        blendMode.putString("blendFunc", "ADD");
+        material.put("blendMode", blendMode);
+        material.putBoolean("cull", false);
+        material.putBoolean("depthTest", true);
+        material.putBoolean("depthMask", false);
         var burst = new CompoundTag();
         burst.putInt("time", 0);
 
@@ -239,14 +256,21 @@ class LDLibPersistenceCompatTest {
                 .getCompound("data").getCompound("config");
         assertLegacyArrayPayload(loadedConfig.getCompound("emission").getList("bursts", ListTag.TAG_COMPOUND),
                 "time", 0);
-        assertLegacyArrayPayload(loadedConfig.getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
-                "type", "sprite");
-        assertLegacyArrayPayload(loadedConfig.getCompound("trails").getCompound("araConfig")
-                        .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
-                "type", "sprite");
-        assertLegacyArrayPayload(loadedConfig.getCompound("trails").getCompound("config")
-                        .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND),
-                "type", "sprite");
+        var loadedMaterial = decodeLegacyArray(loadedConfig.getCompound("renderer")
+                .getList("materials", ListTag.TAG_COMPOUND)).getPayload();
+        assertEquals("ui_resource_material", ((CompoundTag) loadedMaterial).getCompound("material").getString("type"));
+        assertEquals("file(./ldlib2/assets/ldlib2/resources/global/shield.material.nbt)",
+                ((CompoundTag) loadedMaterial).getCompound("material").getCompound("data").getString("resourcePath"));
+        assertEquals("ADD", ((CompoundTag) loadedMaterial).getCompound("blendMode").getString("blendFunc"));
+        assertEquals(false, ((CompoundTag) loadedMaterial).getBoolean("cull"));
+        var loadedAraMaterial = decodeLegacyArray(loadedConfig.getCompound("trails").getCompound("araConfig")
+                .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND)).getPayload();
+        assertEquals("ui_resource_material", ((CompoundTag) loadedAraMaterial)
+                .getCompound("material").getString("type"));
+        var loadedTrailMaterial = decodeLegacyArray(loadedConfig.getCompound("trails").getCompound("config")
+                .getCompound("renderer").getList("materials", ListTag.TAG_COMPOUND)).getPayload();
+        assertEquals("ui_resource_material", ((CompoundTag) loadedTrailMaterial)
+                .getCompound("material").getString("type"));
     }
 
     private static void assertLegacyArrayPayload(ListTag list, String valueKey, int expected) {

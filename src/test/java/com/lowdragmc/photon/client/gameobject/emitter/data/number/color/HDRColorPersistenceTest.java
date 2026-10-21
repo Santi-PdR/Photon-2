@@ -8,6 +8,7 @@ import com.lowdragmc.lowdraglib.syncdata.accessor.PrimitiveAccessor;
 import com.lowdragmc.lowdraglib.syncdata.accessor.ResourceLocationAccessor;
 import com.lowdragmc.lowdraglib.syncdata.accessor.EnumAccessor;
 import com.lowdragmc.lowdraglib.syncdata.payload.EnumValuePayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.PrimitiveTypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import com.lowdragmc.photon.Photon;
@@ -19,6 +20,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMater
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.util.PersistedCodec;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.mojang.blaze3d.platform.GlStateManager.DestFactor;
 import com.mojang.blaze3d.platform.GlStateManager.SourceFactor;
 import net.minecraft.nbt.CompoundTag;
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.function.Supplier;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -48,6 +51,8 @@ class HDRColorPersistenceTest {
                 new ResourceLocationAccessor(), 1);
         TypedPayloadRegistries.register(EnumValuePayload.class, EnumValuePayload::new,
                 new EnumAccessor(), 1);
+        TypedPayloadRegistries.registerSimple(NbtTagPayload.class, NbtTagPayload::new,
+                net.minecraft.nbt.Tag.class, 99);
         TypedPayloadRegistries.postInit();
         if (PhotonRegistries.NUMBER_FUNCTIONS == null) {
             PhotonRegistries.NUMBER_FUNCTIONS = AutoRegistry.LDLibRegisterClient.create(
@@ -147,6 +152,22 @@ class HDRColorPersistenceTest {
         assertEquals(SourceFactor.SRC_ALPHA, restored.getBlendMode().getSrcAlphaFactor());
         assertEquals(DestFactor.ONE, restored.getBlendMode().getDstAlphaFactor());
         assertEquals(BlendMode.BlendFuc.SUB, restored.getBlendMode().getBlendFunc());
+    }
+
+    @Test
+    void rendererMaterialListRestoresConcreteMaterialsFromLegacyLdlibPayload() {
+        var sprite = new SpriteMaterial();
+        sprite.spriteLocation = ResourceLocation.withDefaultNamespace("particle/smoke");
+        var encoded = LDLibPersistenceCompat.encodePayloadList(
+                List.of(new MaterialSetting(sprite).serializeNBT()));
+
+        var decoded = LDLibPersistenceCompat.decodePayloadList(encoded);
+        assertEquals(1, decoded.size());
+        var restored = new MaterialSetting(new TextureMaterial());
+        restored.deserializeNBT(decoded.get(0));
+
+        var restoredMaterial = assertInstanceOf(SpriteMaterial.class, restored.getMaterial());
+        assertEquals(sprite.spriteLocation, restoredMaterial.spriteLocation);
     }
 
     @Test
