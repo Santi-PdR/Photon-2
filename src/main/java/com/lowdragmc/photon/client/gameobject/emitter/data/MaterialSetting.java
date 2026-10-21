@@ -66,7 +66,9 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
     @Override
     public CompoundTag serializeNBT() {
         var tag = new CompoundTag();
-        PersistedParser.serializeNBT(tag, BlendMode.class, blendMode);
+        var blendModeTag = new CompoundTag();
+        PersistedParser.serializeNBT(blendModeTag, BlendMode.class, blendMode);
+        tag.put("blendMode", blendModeTag);
         tag.putBoolean("cull", cull);
         tag.putBoolean("depthTest", depthTest);
         tag.putBoolean("depthMask", depthMask);

@@ -14,10 +14,13 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.util.PersistedCodec;
+import com.mojang.blaze3d.platform.GlStateManager.DestFactor;
+import com.mojang.blaze3d.platform.GlStateManager.SourceFactor;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.resources.ResourceLocation;
@@ -123,6 +126,12 @@ class HDRColorPersistenceTest {
         var original = new MaterialSetting(originalMaterial);
         original.setCull(false);
         original.setDepthMask(true);
+        original.getBlendMode().setEnableBlend(true);
+        original.getBlendMode().setSrcColorFactor(SourceFactor.ONE);
+        original.getBlendMode().setDstColorFactor(DestFactor.ONE_MINUS_SRC_ALPHA);
+        original.getBlendMode().setSrcAlphaFactor(SourceFactor.SRC_ALPHA);
+        original.getBlendMode().setDstAlphaFactor(DestFactor.ONE);
+        original.getBlendMode().setBlendFunc(BlendMode.BlendFuc.SUB);
 
         var serialized = original.serializeNBT();
         var restored = new MaterialSetting(new TextureMaterial());
@@ -132,6 +141,12 @@ class HDRColorPersistenceTest {
         assertEquals(originalMaterial.spriteLocation, material.spriteLocation);
         assertEquals(false, restored.isCull());
         assertEquals(true, restored.isDepthMask());
+        assertEquals(true, restored.getBlendMode().isEnableBlend());
+        assertEquals(SourceFactor.ONE, restored.getBlendMode().getSrcColorFactor());
+        assertEquals(DestFactor.ONE_MINUS_SRC_ALPHA, restored.getBlendMode().getDstColorFactor());
+        assertEquals(SourceFactor.SRC_ALPHA, restored.getBlendMode().getSrcAlphaFactor());
+        assertEquals(DestFactor.ONE, restored.getBlendMode().getDstAlphaFactor());
+        assertEquals(BlendMode.BlendFuc.SUB, restored.getBlendMode().getBlendFunc());
     }
 
     @Test
