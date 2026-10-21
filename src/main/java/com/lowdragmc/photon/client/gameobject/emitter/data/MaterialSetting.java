@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import com.lowdragmc.lowdraglib.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode;
@@ -12,15 +13,19 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
 import com.lowdragmc.photon.gui.editor.resource.MaterialResource;
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import com.lowdragmc.lowdraglib.gui.editor.runtime.PersistedParser;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.lwjgl.opengl.GL11;
 
 import javax.annotation.Nonnull;
+import java.util.HashMap;
 import java.util.Optional;
 
 @OnlyIn(Dist.CLIENT)
@@ -52,6 +57,39 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
 
     public MaterialSetting(@Nonnull IMaterial material) {
         this.material = material;
+    }
+
+    /**
+     * Persist the registry-dispatched material wrapper explicitly; the legacy LDLib parser cannot
+     * reconstruct an {@link IMaterial} subtype from the generic field alone.
+     */
+    @Override
+    public CompoundTag serializeNBT() {
+        var tag = new CompoundTag();
+        PersistedParser.serializeNBT(tag, BlendMode.class, blendMode);
+        tag.putBoolean("cull", cull);
+        tag.putBoolean("depthTest", depthTest);
+        tag.putBoolean("depthMask", depthMask);
+        var materialTag = material.serializeWrapper();
+        if (materialTag == null) {
+            throw new IllegalStateException("Failed to serialize Photon material " + material.getClass().getName());
+        }
+        tag.put("material", materialTag);
+        return tag;
+    }
+
+    @Override
+    public void deserializeNBT(CompoundTag tag) {
+        if (tag.contains("blendMode", Tag.TAG_COMPOUND)) {
+            PersistedParser.deserializeNBT(tag.getCompound("blendMode"), new HashMap<>(), BlendMode.class, blendMode);
+        }
+        if (tag.contains("cull", Tag.TAG_BYTE)) cull = tag.getBoolean("cull");
+        if (tag.contains("depthTest", Tag.TAG_BYTE)) depthTest = tag.getBoolean("depthTest");
+        if (tag.contains("depthMask", Tag.TAG_BYTE)) depthMask = tag.getBoolean("depthMask");
+        var materialTag = tag.get("material");
+        if (materialTag != null) {
+            material = IMaterial.deserializeWrapper(materialTag);
+        }
     }
 
     /**

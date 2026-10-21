@@ -13,6 +13,7 @@ import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
+import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
@@ -113,6 +114,24 @@ class HDRColorPersistenceTest {
         var color = (HDRColor) hdrField.get(restored);
         assertColor(color, 0.12f, 0.32f, 0.52f, 0.72f, 2.2f);
         assertEquals(original.spriteLocation, restored.spriteLocation);
+    }
+
+    @Test
+    void materialSettingRestoresTheAuthoredMaterialTypeAndProperties() {
+        var originalMaterial = new SpriteMaterial();
+        originalMaterial.spriteLocation = ResourceLocation.withDefaultNamespace("particle/smoke");
+        var original = new MaterialSetting(originalMaterial);
+        original.setCull(false);
+        original.setDepthMask(true);
+
+        var serialized = original.serializeNBT();
+        var restored = new MaterialSetting(new TextureMaterial());
+        restored.deserializeNBT(serialized);
+
+        var material = assertInstanceOf(SpriteMaterial.class, restored.getMaterial());
+        assertEquals(originalMaterial.spriteLocation, material.spriteLocation);
+        assertEquals(false, restored.isCull());
+        assertEquals(true, restored.isDepthMask());
     }
 
     @Test
