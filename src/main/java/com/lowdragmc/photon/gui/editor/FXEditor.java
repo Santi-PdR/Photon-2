@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.utils.Transfo
 import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import com.lowdragmc.photon.gui.editor.view.FXTimelineView;
@@ -124,13 +125,33 @@ public class FXEditor extends Editor {
     @Override
     protected void loadNewProject(IProject project, @Nullable File projectFile) {
         if (project instanceof FXProject fxProject) {
-            super.loadNewProject(project, projectFile);
-            this.runtime = fxProject.getFx().createInternalRuntime();
-            this.runtime.root.updatePos(new Vector3f(0.5f, 2, 0.5f));
-            hierarchyView.loadFXRuntime(runtime);
-            timelineView.rebuild();
-            sceneView.loadScene();
-            reloadEffect();
+            var phase = "LDLib2 project resources and history";
+            try {
+                super.loadNewProject(project, projectFile);
+                phase = "Photon effect runtime creation";
+                this.runtime = fxProject.getFx().createInternalRuntime();
+                this.runtime.root.updatePos(new Vector3f(0.5f, 2, 0.5f));
+                phase = "Photon hierarchy initialization";
+                hierarchyView.loadFXRuntime(runtime);
+                phase = "Photon timeline initialization";
+                timelineView.rebuild();
+                phase = "Photon scene initialization";
+                sceneView.loadScene();
+                phase = "Photon initial effect playback";
+                reloadEffect();
+            } catch (RuntimeException | Error failure) {
+                Photon.LOGGER.error("Failed to initialize Photon FX project {} during {}",
+                        projectFile == null ? "<unsaved>" : projectFile.getName(), phase, failure);
+                try {
+                    // LDLib2 sets currentProject before loading its resources/history and before
+                    // this method finishes. If Photon setup then fails, roll back that partial
+                    // state so the editor does not remain attached to a half-open project.
+                    closeCurrentProject();
+                } catch (RuntimeException | Error cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+                throw failure;
+            }
         }
     }
 
