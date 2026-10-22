@@ -368,14 +368,37 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             return PhotonShaders.getHDRParticleShader(context);
         }
         var defines = context.getShaderDefines();
-        LDShaderInstance shader;
-        if (defines.isEmpty()) {
-            shader = shaderHolder.getShaderInstance();
-        } else {
-            shader = shaderHolder.getShaderInstance(defines);
+        try {
+            LDShaderInstance shader = defines.isEmpty()
+                    ? shaderHolder.getShaderInstance()
+                    : shaderHolder.getShaderInstance(defines);
+            applyUniformOverrides(shader);
+            return shader;
+        } catch (Throwable failure) {
+            // A shader can compile as the base program and still fail when LDLib2 builds a
+            // define-specific variant. Keep that failure on the same safe path as a base compile
+            // failure instead of letting it escape through the particle render loop. Preserve the
+            // base program's editable values before closing it so a later resource reload/retry
+            // does not silently discard the user's shader settings.
+            var failedHolder = shaderHolder;
+            if (failedHolder != null) {
+                try {
+                    pendingShaderData = failedHolder.serializeNBT(Platform.getFrozenRegistry());
+                } catch (Throwable saveFailure) {
+                    failure.addSuppressed(saveFailure);
+                }
+            }
+            if (shaderCleanable != null) {
+                shaderCleanable.clean();
+                shaderCleanable = null;
+            }
+            shaderHolder = null;
+            customUniforms = null;
+            compiledErrorMessage = describeFailure(failure);
+            Photon.LOGGER.error("Failed to compile Photon shader {} with defines {}", shaderLocation,
+                    defines, failure);
+            return PhotonShaders.getHDRParticleShader(context);
         }
-        applyUniformOverrides(shader);
-        return shader;
     }
 
     /** Set a user-defined shader uniform without recompiling; values are saved with this material. */
