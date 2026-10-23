@@ -16,6 +16,7 @@
     "LDProgramDefineManagerMixin",
     "LDLibPayloadRegistryMixin",
     "FileMenuProjectLoadMixin",
+    "EditorProjectLoadDiagnosticsMixin",
     "accessor.BlendModeAccessor",
     "accessor.EditorProjectStateAccessor",
     "accessor.RegisterGeometryLoadersAccessor",
