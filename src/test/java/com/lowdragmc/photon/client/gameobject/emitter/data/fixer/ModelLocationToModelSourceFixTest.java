@@ -15,7 +15,7 @@ import java.util.function.BiFunction;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-/** V4 to V5 migration checks using Forge 1.20.1's NBT accessors and no client classes. */
+/** V3/V4 to V5 migration checks using Forge 1.20.1's NBT accessors and no client classes. */
 class ModelLocationToModelSourceFixTest {
     private static final BiFunction<Integer, Schema, Schema> SAME = Schema::new;
 
@@ -31,7 +31,11 @@ class ModelLocationToModelSourceFixTest {
     }
 
     private static CompoundTag apply(CompoundTag data) {
-        var fixed = fixer().update(PhotonReferences.FX_PROJECT, new Dynamic<>(NbtOps.INSTANCE, data), 4, 5);
+        return apply(data, 4);
+    }
+
+    private static CompoundTag apply(CompoundTag data, int fromVersion) {
+        var fixed = fixer().update(PhotonReferences.FX_PROJECT, new Dynamic<>(NbtOps.INSTANCE, data), fromVersion, 5);
         return (CompoundTag) fixed.getValue();
     }
 
@@ -111,6 +115,17 @@ class ModelLocationToModelSourceFixTest {
         assertFalse(model.contains("modelLocation"), "legacy key must be replaced");
         assertJsonSourceWrapper(model.getCompound("source"), "photon:block/character");
         assertEquals("Model", renderer.getString("renderMode"));
+    }
+
+    @Test
+    void wrapsRendererModelFromVersionThreeProject() {
+        // The test-1 tornado.fxproj uses schema version 3, so its actual migration starts two steps earlier.
+        var fixed = apply(project(modelRendererConfig("ldlib2:block/tonado_body")), 3);
+        var renderer = configOf(fixed).getCompound("renderer");
+        var model = renderer.getCompound("model");
+
+        assertFalse(model.contains("modelLocation"), "legacy key must be replaced");
+        assertJsonSourceWrapper(model.getCompound("source"), "ldlib2:block/tonado_body");
     }
 
     @Test
