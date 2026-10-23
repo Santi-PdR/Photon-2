@@ -222,7 +222,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             restoreShaderData(previousData);
         } catch (Throwable e) {
             pendingShaderData = previousData;
-            Photon.LOGGER.error("Failed to recompile shader", e);
+            Photon.LOGGER.error("Failed to compile Photon shader {}", shaderLocation, e);
             // Never blank, and never null: a blank message reads as "no error", and this flag is the
             // only thing stopping getShader() from re-running the whole compile on every frame it
             // draws — which would build (and strand) a GL program per frame per material.
