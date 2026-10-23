@@ -49,6 +49,7 @@ public class JsonModelSource implements IModelSource {
     @Nullable
     private volatile ObjLoaderReference objLoaderReference;
     private volatile boolean objLoaderChecked;
+    private volatile long objLoaderGeneration = Long.MIN_VALUE;
 
     public JsonModelSource() {
     }
@@ -73,6 +74,7 @@ public class JsonModelSource implements IModelSource {
         PhotonMeshCache.INSTANCE.invalidate(new PhotonMeshCache.JsonKey(modelLocation));
         objLoaderReference = null;
         objLoaderChecked = false;
+        objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
     }
 
     @Override
@@ -97,6 +99,12 @@ public class JsonModelSource implements IModelSource {
         // Parse those model references through our runtime OBJ path instead.
         var objReference = getObjLoaderReference();
         if (objReference != null) {
+            // The JSON key caches the delegated OBJ mesh too. Track the OBJ dependency against
+            // that key so changing the referenced path invalidates both the OBJ and JSON entries.
+            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objReference.location().getPath());
+            if (nestedObj != null) {
+                PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
+            }
             var objSource = new ObjModelSource(objReference.location());
             objSource.setFlipV(objReference.flipV());
             return objSource.getMesh();
@@ -126,6 +134,16 @@ public class JsonModelSource implements IModelSource {
     /** Extract the OBJ target from a Forge/NeoForge OBJ-loader model JSON, if present. */
     @Nullable
     private ObjLoaderReference getObjLoaderReference() {
+        long generation = PhotonMeshCache.INSTANCE.generation();
+        if (objLoaderGeneration != generation) {
+            synchronized (this) {
+                if (objLoaderGeneration != generation) {
+                    objLoaderReference = null;
+                    objLoaderChecked = false;
+                    objLoaderGeneration = generation;
+                }
+            }
+        }
         if (objLoaderChecked) return objLoaderReference;
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) return null;
         synchronized (this) {
@@ -136,6 +154,9 @@ public class JsonModelSource implements IModelSource {
                 // packs. Prefer that editable copy when present; otherwise a stale/overriding pack
                 // entry can make an FX project silently resolve a different model JSON.
                 Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+                if (nestedFile != null) {
+                    PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedFile.toFile());
+                }
                 var resource = nestedFile == null
                         ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
                         : null;
@@ -154,9 +175,11 @@ public class JsonModelSource implements IModelSource {
                         }
                     }
                     objLoaderChecked = true;
+                    objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
                 }
             } catch (Exception exception) {
                 objLoaderChecked = true;
+                objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
                 Photon.LOGGER.warn("Failed to resolve OBJ model loader for {}", modelLocation, exception);
             }
         }

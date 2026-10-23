@@ -33,16 +33,18 @@ final class PhotonModelBaker implements ModelBaker {
     private static final ResourceLocation GENERATED_MODEL = ResourceLocation.fromNamespaceAndPath("minecraft", "builtin/generated");
     private static final ResourceLocation ENTITY_MODEL = ResourceLocation.fromNamespaceAndPath("minecraft", "builtin/entity");
 
+    private final PhotonMeshCache.JsonKey cacheKey;
     private final Map<ResourceLocation, UnbakedModel> models = new HashMap<>();
     private final Set<ResourceLocation> resolving = new HashSet<>();
     private final Function<Material, TextureAtlasSprite> textureGetter = Material::sprite;
 
-    private PhotonModelBaker() {
+    private PhotonModelBaker(PhotonMeshCache.JsonKey cacheKey) {
+        this.cacheKey = cacheKey;
     }
 
     @Nullable
     static BakedModel bake(ResourceLocation modelLocation) {
-        var baker = new PhotonModelBaker();
+        var baker = new PhotonModelBaker(new PhotonMeshCache.JsonKey(modelLocation));
         try {
             UnbakedModel model = baker.getModel(modelLocation);
             if (model == null) return null;
@@ -71,6 +73,11 @@ final class PhotonModelBaker implements ModelBaker {
         if (location.equals(ENTITY_MODEL)) return ModelBakery.BLOCK_ENTITY_MARKER;
 
         Path nestedFile = findNestedModel(location);
+        if (nestedFile != null) {
+            // A standalone model can inherit geometry from several editable parent JSON files.
+            // All dependencies belong to the root mesh cache key so editing any parent rebakes it.
+            PhotonMeshCache.INSTANCE.trackFile(cacheKey, nestedFile.toFile());
+        }
         return selectModelSource(nestedFile,
                 () -> readStandalone(location, depth),
                 () -> ModelFactory.getCachedModel(location),

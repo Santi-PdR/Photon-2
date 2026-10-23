@@ -59,4 +59,38 @@ class PhotonMeshCacheTest {
             cache.invalidate(key);
         }
     }
+
+    @Test
+    void pollingAnyTrackedParentInvalidatesTheRootMesh() throws Exception {
+        var cache = PhotonMeshCache.INSTANCE;
+        var key = new PhotonMeshCache.JsonKey(ResourceLocation.fromNamespaceAndPath("photon_test", "parent-chain"));
+        var rootFile = tempDir.resolve("root.json");
+        var parentFile = tempDir.resolve("parent.json");
+        Files.writeString(rootFile, "root");
+        Files.writeString(parentFile, "parent");
+        var timestamp = Files.getLastModifiedTime(parentFile);
+        var attempts = new AtomicInteger();
+        var generation = cache.generation();
+        try {
+            cache.trackFile(key, rootFile.toFile());
+            cache.trackFile(key, parentFile.toFile());
+            cache.get(key, ignored -> {
+                attempts.incrementAndGet();
+                return PhotonMesh.EMPTY;
+            });
+
+            Files.writeString(parentFile, "updated parent");
+            Files.setLastModifiedTime(parentFile, FileTime.fromMillis(timestamp.toMillis() + 5_000));
+            cache.pollFileChanges();
+
+            assertEquals(generation + 1, cache.generation());
+            cache.get(key, ignored -> {
+                attempts.incrementAndGet();
+                return PhotonMesh.EMPTY;
+            });
+            assertEquals(2, attempts.get());
+        } finally {
+            cache.invalidate(key);
+        }
+    }
 }

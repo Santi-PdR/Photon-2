@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -38,12 +39,12 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     public record GltfKey(ResourceLocation location, boolean flipV) {
     }
 
-    private record FileStamp(File file, long lastModified) {
+    private record FileStamp(File file, long lastModified, long length) {
     }
 
     private final ConcurrentHashMap<Object, PhotonMesh> cache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Object, SkinnedModel> skinnedCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Object, FileStamp> fileStamps = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Object, ConcurrentHashMap<Path, FileStamp>> fileStamps = new ConcurrentHashMap<>();
     private volatile long generation;
 
     private PhotonMeshCache() {
@@ -77,7 +78,9 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
 
     /** Watch the disk file backing {@code key}; {@link #pollFileChanges()} invalidates the entry when it changes. */
     public void trackFile(Object key, File file) {
-        fileStamps.put(key, new FileStamp(file, file.lastModified()));
+        var normalized = file.toPath().toAbsolutePath().normalize();
+        var snapshot = new FileStamp(normalized.toFile(), file.lastModified(), file.length());
+        fileStamps.computeIfAbsent(key, ignored -> new ConcurrentHashMap<>()).put(normalized, snapshot);
     }
 
     public void invalidate(Object key) {
@@ -90,7 +93,10 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     /** Invalidate every entry whose tracked disk file changed (or vanished) since it was loaded. */
     public void pollFileChanges() {
         for (var entry : fileStamps.entrySet()) {
-            if (entry.getValue().file.lastModified() != entry.getValue().lastModified) {
+            boolean changed = entry.getValue().values().stream().anyMatch(stamp ->
+                    !stamp.file.isFile() || stamp.file.lastModified() != stamp.lastModified
+                            || stamp.file.length() != stamp.length);
+            if (changed) {
                 invalidate(entry.getKey());
             }
         }
