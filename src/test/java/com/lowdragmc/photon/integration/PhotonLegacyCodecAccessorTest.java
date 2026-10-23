@@ -95,12 +95,12 @@ class PhotonLegacyCodecAccessorTest {
     void resolvesMissingEditorFileUnderLdlibAssetsRoot() throws Exception {
         var storedPath = "./ldlib2/assets/ldlib2/resources/global/shield.material.nbt";
         var assetsDir = tempDir.resolve("ldlib2/assets");
-        var actualFile = assetsDir.resolve("ldlib2/assets/ldlib2/resources/global/shield.material.nbt");
+        var actualFile = assetsDir.resolve("ldlib2/resources/global/shield.material.nbt");
         Files.createDirectories(actualFile.getParent());
         Files.createFile(actualFile);
 
         var resolved = PhotonLDLibClientPlugin.resolveEditorResourceFile(
-                storedPath, tempDir.resolve(storedPath.substring(2)).toFile(), assetsDir);
+                storedPath, tempDir.resolve("missing/original/path/shield.material.nbt").toFile(), assetsDir);
 
         assertEquals(actualFile.toFile(), resolved);
     }

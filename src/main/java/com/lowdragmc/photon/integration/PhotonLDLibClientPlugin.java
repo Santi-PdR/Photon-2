@@ -151,12 +151,16 @@ public final class PhotonLDLibClientPlugin {
     }
 
     static File resolveEditorResourceFile(String storedPath, File resolvedFile, Path assetsDir) {
-        if (resolvedFile.isFile() || storedPath == null || !storedPath.startsWith("./ldlib2/assets/")) {
+        final String assetsPrefix = "./ldlib2/assets/";
+        if (resolvedFile.isFile() || storedPath == null || !storedPath.startsWith(assetsPrefix)) {
             return resolvedFile;
         }
         try {
             var root = assetsDir.toAbsolutePath().normalize();
-            var relative = Path.of(storedPath.substring(2)).normalize();
+            // The stored path is game-directory-relative, while assetsDir already points at
+            // <game>/ldlib2/assets. Resolve only the part below that root; keeping the prefix
+            // here would incorrectly look under <game>/ldlib2/assets/ldlib2/assets/.
+            var relative = Path.of(storedPath.substring(assetsPrefix.length())).normalize();
             if (relative.isAbsolute() || relative.startsWith("..")) return resolvedFile;
             var candidate = root.resolve(relative).normalize();
             return candidate.startsWith(root) && candidate.toFile().isFile() ? candidate.toFile() : resolvedFile;
