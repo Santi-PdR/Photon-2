@@ -22,15 +22,17 @@ This document defines the evidence and validation workflow for the Photon 2 Forg
 
 ## Tool and skill routing
 
-- **Port behavior:** `minecraft-port-fidelity` establishes the original-to-Forge comparison and deviation record.
-- **Binary, format, and API questions:** `reverse-engineering` guides provenance, targeted bytecode/format inspection, confidence, and safe probes.
-- **Missing or incorrect resources:** `santi-asset-forensics` traces the exact path from source and registration to the final JAR.
-- **Crashes and regressions:** `santi-debug-efficient` narrows the failure, hypothesis, fix, and validator.
-- **Build and release files:** `verification-build` and `santi-artifact-verification` check the smallest useful build, packaged contents, and artifact identity.
-- **Remote repository state:** `santi-github-engineering` uses targeted GitHub queries and verifies CI before reporting it.
-- **Long-running work:** `santi-handoff` keeps a compact state record at meaningful milestones; do not duplicate full logs or source into it.
+Start broad or resumed work with `santi-task-router`, then identify the project using `santi-project-router`. When Photon-specific history or architecture matters, load only the Photon project summary and this repository's current handoff through `santi-project-intelligence` / `santi-handoff`; verify their claims against the checkout. Use `santi-task-contract` to keep large investigations bounded by an objective, scope, validator, repair policy, and completion condition. `santi-minecraft-master` is the umbrella workflow; select only the relevant specialized skills below.
 
-Use shell search and targeted reads for repository work, Gradle with Java 17 for this Forge target, and `gh` for remote branch/CI state. Use browser lookup only when the original source, official artifact, or current external documentation is missing locally. Image/video inspection can support a visual comparison when supplied, but cannot replace a runtime check. The currently recommended external plugins are not needed for this workflow; do not install them unless a concrete task requires one.
+- **Port behavior and upstream parity:** `minecraft-port-fidelity` defines the original-to-Forge comparison and deviation record. Use `reverse-engineering` for original JAR, bytecode, serialized-format, or dependency-API questions.
+- **Missing or incorrect assets:** `santi-asset-forensics` traces the exact resource from project/source through registration and packaging into the final JAR.
+- **Crashes and regressions:** `santi-debug-efficient` narrows the first meaningful failure, a concrete root-cause hypothesis, the smallest fix, and a fitting validator.
+- **Build and deliverables:** `verification-build` chooses focused checks before the full relevant build; `santi-artifact-verification` checks packaged contents, metadata, dependencies, and SHA-256.
+- **GitHub state:** `santi-github-engineering` checks the actual remote branch, Actions runs, and published artifacts with targeted `gh` queries. Never infer CI state from local success.
+- **Large investigations:** `santi-large-task` may divide only independent, bounded workstreams when the active collaboration policy permits delegation. Keep integration, final validation, and user-facing status in the primary workflow. Otherwise proceed sequentially.
+- **Long-running work:** use `santi-handoff` at meaningful milestones so a resumed task can continue from verified state without rereading whole logs or audits. `santi-token-efficient` supports narrow searches and compact evidence, without skipping required validation.
+
+Use `rg` and focused shell reads for source, Java 17 and Gradle for the Forge 1.20.1 target, `javap`/archive inspection for binaries, and `gh` for GitHub state. Use web lookup only when the local original/reference or authoritative external documentation is missing. Supplied screenshots and videos can establish visual expectations and observed UI state; they do not prove the port's runtime behavior. UI automation is not a substitute for permission to launch Minecraft. The active instruction for this project is **do not open Minecraft**, so runtime/editor/render checks must wait for a user-provided log or an explicit later change to that instruction. Do not install recommended external plugins just because they appear in the catalog; none is needed for the current source, build, artifact, or GitHub checks.
 
 ## Current verification boundary
 
