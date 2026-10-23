@@ -3,8 +3,9 @@ package com.lowdragmc.photon.client.gameobject.emitter.renderpipeline;
  import com.lowdragmc.photon.Photon;
  import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
  import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
- import com.lowdragmc.photon.client.gameobject.emitter.data.material.*;
- import com.lowdragmc.photon.client.gameobject.particle.IParticle;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.*;
+import com.lowdragmc.photon.client.gameobject.particle.IParticle;
+import com.lowdragmc.photon.client.postprocessing.ResourceDisposal;
 import com.lowdragmc.photon.client.render.PhotonShaderDefaults;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
@@ -20,6 +21,7 @@ import org.lwjgl.opengl.GL11;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -337,7 +339,9 @@ public abstract class PhotonFXRenderPass {
         var material = materialSetting.getMaterial();
         boolean began = false;
         boolean applied = false;
+        boolean preStarted = false;
         ShaderInstance shader = null;
+        Throwable operationFailure = null;
         final ShaderInstance[] shaderRef = new ShaderInstance[1];
         try {
             shader = material.begin(context);
@@ -351,18 +355,20 @@ public abstract class PhotonFXRenderPass {
             PhotonShaderDefaults.setup(shader);
             shader.apply();
             applied = true;
+            // Register cleanup before applying state: pre() mutates several global GL states, so
+            // even a partial failure must still attempt to restore them.
+            preStarted = true;
             materialSetting.pre();
             drawCall.accept(shader);
+        } catch (RuntimeException | Error failure) {
+            operationFailure = failure;
+            throw failure;
         } finally {
-            if (applied && shader != null) {
-                shader.clear();
-            }
-            if (began) {
-                material.end(context);
-            }
-            if (applied) {
-                materialSetting.post();
-            }
+            var cleanups = new ArrayList<Runnable>(3);
+            if (applied && shader != null) cleanups.add(shader::clear);
+            if (began) cleanups.add(() -> material.end(context));
+            if (preStarted) cleanups.add(materialSetting::post);
+            ResourceDisposal.runAllPreservingFailure(operationFailure, cleanups.toArray(Runnable[]::new));
         }
     }
 
