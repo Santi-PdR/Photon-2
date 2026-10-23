@@ -17,6 +17,7 @@
     "LDLibPayloadRegistryMixin",
     "FileMenuProjectLoadMixin",
     "accessor.BlendModeAccessor",
+    "accessor.EditorProjectStateAccessor",
     "accessor.RegisterGeometryLoadersAccessor",
     "accessor.ParticleEngineAccessor",
     "accessor.ShaderInstanceAccessor",

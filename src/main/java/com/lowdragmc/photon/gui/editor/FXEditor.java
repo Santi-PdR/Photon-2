@@ -8,6 +8,7 @@ import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.core.mixins.accessor.EditorProjectStateAccessor;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import com.lowdragmc.photon.gui.editor.view.FXTimelineView;
@@ -157,30 +158,38 @@ public class FXEditor extends Editor {
 
     @Override
     protected void closeCurrentProject() {
+        var projectBeingClosed = getCurrentProject();
         Throwable failure = null;
         try {
             super.closeCurrentProject();
         } catch (RuntimeException | Error closeFailure) {
             failure = closeFailure;
         }
-        try {
-            hierarchyView.clearFXRuntime();
-        } catch (RuntimeException | Error cleanupFailure) {
-            failure = appendFailure(failure, cleanupFailure);
+        if (failure != null) {
+            if (projectBeingClosed != null) {
+                failure = attemptCleanup(failure, () -> projectBeingClosed.onClosed(this));
+                ((EditorProjectStateAccessor) this).photon$setCurrentProject(null);
+            }
+            currentProjectFile = null;
+            failure = attemptCleanup(failure, inspectorView::clear);
+            failure = attemptCleanup(failure, resourceView::clear);
+            failure = attemptCleanup(failure, historyView::clearHistory);
         }
-        try {
-            timelineView.clear();
-        } catch (RuntimeException | Error cleanupFailure) {
-            failure = appendFailure(failure, cleanupFailure);
-        }
-        try {
-            sceneView.clearScene();
-        } catch (RuntimeException | Error cleanupFailure) {
-            failure = appendFailure(failure, cleanupFailure);
-        }
+        failure = attemptCleanup(failure, hierarchyView::clearFXRuntime);
+        failure = attemptCleanup(failure, timelineView::clear);
+        failure = attemptCleanup(failure, sceneView::clearScene);
         runtime = null;
         if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
         if (failure instanceof Error errorFailure) throw errorFailure;
+    }
+
+    private static Throwable attemptCleanup(@Nullable Throwable previous, Runnable cleanup) {
+        try {
+            cleanup.run();
+        } catch (RuntimeException | Error cleanupFailure) {
+            return appendFailure(previous, cleanupFailure);
+        }
+        return previous;
     }
 
     private static Throwable appendFailure(@Nullable Throwable previous, Throwable next) {
