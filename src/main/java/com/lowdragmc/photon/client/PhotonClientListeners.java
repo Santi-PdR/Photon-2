@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client;
 
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.compat.iris.IrisOverlay;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.OpaqueDepthCapture;
 import com.lowdragmc.photon.client.render.MaterialPreviewRenderer;
 import com.lowdragmc.photon.client.postfx.PhotonPostFX;
@@ -14,16 +15,36 @@ import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.client.event.RegisterClientCommandsEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.event.TickEvent;
 
 import java.util.List;
 
 @EventBusSubscriber(modid = Photon.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.FORGE)
 public class PhotonClientListeners {
+    private static final long MESH_FILE_POLL_INTERVAL_NANOS = 1_000_000_000L;
+    private static long lastMeshFilePollNanos;
+    private static boolean hasPolledMeshFiles;
+
     @SubscribeEvent
     public static void onRegisterCommands(RegisterClientCommandsEvent event) {
         var dispatcher = event.getDispatcher();
         List<LiteralArgumentBuilder<CommandSourceStack>> commands = ClientCommands.createClientCommands();
         commands.forEach(dispatcher::register);
+    }
+
+    /**
+     * Poll editable OBJ/glTF files at a low rate so disk edits invalidate cached geometry without
+     * doing filesystem metadata checks in the render loop. Reloading the cache changes mesh
+     * identity; particle renderers then rebuild their static instance buffers on their next draw.
+     */
+    @SubscribeEvent
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        long now = System.nanoTime();
+        if (hasPolledMeshFiles && now - lastMeshFilePollNanos < MESH_FILE_POLL_INTERVAL_NANOS) return;
+        lastMeshFilePollNanos = now;
+        hasPolledMeshFiles = true;
+        PhotonMeshCache.INSTANCE.pollFileChanges();
     }
 
     /**
