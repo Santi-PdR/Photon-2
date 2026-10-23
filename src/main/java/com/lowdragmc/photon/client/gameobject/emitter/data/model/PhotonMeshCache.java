@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
@@ -45,7 +46,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     private final ConcurrentHashMap<Object, PhotonMesh> cache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Object, SkinnedModel> skinnedCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Object, ConcurrentHashMap<Path, FileStamp>> fileStamps = new ConcurrentHashMap<>();
-    private volatile long generation;
+    private final AtomicLong generation = new AtomicLong();
 
     private PhotonMeshCache() {
     }
@@ -73,7 +74,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
 
     /** Changes whenever any cache entry is invalidated, including resource or editable-file reloads. */
     public long generation() {
-        return generation;
+        return generation.get();
     }
 
     /** Watch the disk file backing {@code key}; {@link #pollFileChanges()} invalidates the entry when it changes. */
@@ -87,7 +88,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
         cache.remove(key);
         skinnedCache.remove(key);
         fileStamps.remove(key);
-        generation++;
+        generation.incrementAndGet();
     }
 
     /** Invalidate every entry whose tracked disk file changed (or vanished) since it was loaded. */
@@ -107,7 +108,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
         skinnedCache.clear();
         fileStamps.clear();
         AnimatedPose.clear();
-        generation++;
+        generation.incrementAndGet();
     }
 
     @Override

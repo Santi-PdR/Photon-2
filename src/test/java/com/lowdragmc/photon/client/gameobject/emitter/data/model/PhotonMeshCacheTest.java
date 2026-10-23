@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -92,5 +93,18 @@ class PhotonMeshCacheTest {
         } finally {
             cache.invalidate(key);
         }
+    }
+
+    @Test
+    void concurrentInvalidationsDoNotLoseGenerationChanges() {
+        var cache = PhotonMeshCache.INSTANCE;
+        int invalidations = 256;
+        var generation = cache.generation();
+
+        IntStream.range(0, invalidations).parallel().forEach(index -> cache.invalidate(
+                new PhotonMeshCache.ObjKey(
+                        ResourceLocation.fromNamespaceAndPath("photon_test", "parallel/" + index), true)));
+
+        assertEquals(generation + invalidations, cache.generation());
     }
 }
