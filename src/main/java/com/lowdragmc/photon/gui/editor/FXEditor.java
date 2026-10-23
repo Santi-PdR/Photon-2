@@ -157,10 +157,35 @@ public class FXEditor extends Editor {
 
     @Override
     protected void closeCurrentProject() {
-        super.closeCurrentProject();
-        hierarchyView.clearFXRuntime();
-        timelineView.clear();
-        sceneView.clearScene();
+        Throwable failure = null;
+        try {
+            super.closeCurrentProject();
+        } catch (RuntimeException | Error closeFailure) {
+            failure = closeFailure;
+        }
+        try {
+            hierarchyView.clearFXRuntime();
+        } catch (RuntimeException | Error cleanupFailure) {
+            failure = appendFailure(failure, cleanupFailure);
+        }
+        try {
+            timelineView.clear();
+        } catch (RuntimeException | Error cleanupFailure) {
+            failure = appendFailure(failure, cleanupFailure);
+        }
+        try {
+            sceneView.clearScene();
+        } catch (RuntimeException | Error cleanupFailure) {
+            failure = appendFailure(failure, cleanupFailure);
+        }
         runtime = null;
+        if (failure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+        if (failure instanceof Error errorFailure) throw errorFailure;
+    }
+
+    private static Throwable appendFailure(@Nullable Throwable previous, Throwable next) {
+        if (previous == null) return next;
+        previous.addSuppressed(next);
+        return previous;
     }
 }
