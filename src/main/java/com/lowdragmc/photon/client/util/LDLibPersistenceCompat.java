@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -58,13 +59,27 @@ public final class LDLibPersistenceCompat {
         if (containsManagedListEnvelope(root) && nbtPayloadType < 0) {
             throw new IllegalStateException("LDLib NBT payload type is not registered before Photon project load");
         }
-        normalize(root, nbtPayloadType);
+        byte stringPayloadType = containsAdditionalDataStringSet(root)
+                ? TypedPayloadRegistries.getId(StringPayload.class) : -1;
+        if (containsAdditionalDataStringSet(root) && stringPayloadType < 0) {
+            throw new IllegalStateException("LDLib string payload type is not registered before Photon project load");
+        }
+        normalize(root, nbtPayloadType, stringPayloadType);
         return root;
     }
 
     static CompoundTag normalize(CompoundTag root, byte nbtPayloadType) {
-        normalizeTag(root, nbtPayloadType);
+        byte stringPayloadType = containsAdditionalDataStringSet(root)
+                ? TypedPayloadRegistries.getId(StringPayload.class) : -1;
+        if (containsAdditionalDataStringSet(root) && stringPayloadType < 0) {
+            throw new IllegalStateException("LDLib string payload type is not registered before Photon project load");
+        }
+        normalize(root, nbtPayloadType, stringPayloadType);
         return root;
+    }
+
+    private static void normalize(CompoundTag root, byte nbtPayloadType, byte stringPayloadType) {
+        normalizeTag(root, nbtPayloadType, stringPayloadType);
     }
 
     private static boolean containsManagedListEnvelope(Tag tag) {
@@ -89,7 +104,8 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
-                if (isManagedListEnvelope(child) || isVector3fField(key, child)) {
+                if (isManagedListEnvelope(child) || isVector3fField(key, child)
+                        || isAdditionalDataStringSet(key, child)) {
                     return true;
                 }
                 if (containsCompatibilityData(child)) {
@@ -106,7 +122,26 @@ public final class LDLibPersistenceCompat {
         return false;
     }
 
-    private static Tag normalizeTag(Tag tag, byte nbtPayloadType) {
+    private static boolean containsAdditionalDataStringSet(Tag tag) {
+        if (tag instanceof CompoundTag compound) {
+            for (var key : compound.getAllKeys()) {
+                var child = compound.get(key);
+                if (isAdditionalDataStringSet(key, child)) return true;
+                if (isManagedListEnvelope(child)) {
+                    var payload = ((CompoundTag) child).get("payload");
+                    if (isAdditionalDataStringSet(key, payload)) return true;
+                }
+                if (containsAdditionalDataStringSet(child)) return true;
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var child : list) {
+                if (containsAdditionalDataStringSet(child)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static Tag normalizeTag(Tag tag, byte nbtPayloadType, byte stringPayloadType) {
         if (tag instanceof CompoundTag compound) {
             for (var key : new ArrayList<>(compound.getAllKeys())) {
                 var child = compound.get(key);
@@ -119,20 +154,29 @@ public final class LDLibPersistenceCompat {
                     // ListTag directly (Photon's force-field influenceList stores UUID strings).
                     // Preserve those scalar entries for LDLib 1's matching custom deserializer;
                     // object collections instead need the legacy ArrayPayload element wrappers.
-                    if (!isStringList(payload)) {
+                    if (isAdditionalDataStringSet(key, payload)) {
+                        child = toLegacyStringArrayPayload(payload, stringPayloadType);
+                    } else if (!isStringList(payload)) {
                         child = toLegacyArrayPayload(payload, nbtPayloadType);
                     } else {
                         child = payload.copy();
                     }
+                } else if (isAdditionalDataStringSet(key, child)) {
+                    child = toLegacyStringArrayPayload((ListTag) child, stringPayloadType);
                 }
-                compound.put(key, normalizeTag(child, nbtPayloadType));
+                compound.put(key, normalizeTag(child, nbtPayloadType, stringPayloadType));
             }
         } else if (tag instanceof ListTag list) {
             for (int index = 0; index < list.size(); index++) {
-                list.set(index, normalizeTag(list.get(index), nbtPayloadType));
+                list.set(index, normalizeTag(list.get(index), nbtPayloadType, stringPayloadType));
             }
         }
         return tag;
+    }
+
+    /** LDLib 1's {@code Set<String>} accessor requires StringPayload entries wrapped as {@code {t,p}}. */
+    private static boolean isAdditionalDataStringSet(String key, Tag value) {
+        return "additionalData".equals(key) && value instanceof ListTag list && isStringList(list);
     }
 
     /** LDLib2's managed-list wrapper is identified by its exact {@code {uid, payload}} shape. */
@@ -177,6 +221,23 @@ public final class LDLibPersistenceCompat {
             }
             var wrapped = new CompoundTag();
             wrapped.putByte("t", nbtPayloadType);
+            wrapped.put("p", entry.copy());
+            legacyPayload.add(wrapped);
+        }
+        return legacyPayload;
+    }
+
+    private static ListTag toLegacyStringArrayPayload(ListTag payload, byte stringPayloadType) {
+        var legacyPayload = new ListTag();
+        for (var entry : payload) {
+            if (entry instanceof CompoundTag compound
+                    && compound.contains("t", Tag.TAG_BYTE)
+                    && compound.contains("p")) {
+                legacyPayload.add(entry.copy());
+                continue;
+            }
+            var wrapped = new CompoundTag();
+            wrapped.putByte("t", stringPayloadType);
             wrapped.put("p", entry.copy());
             legacyPayload.add(wrapped);
         }

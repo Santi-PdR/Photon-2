@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
+import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import com.lowdragmc.lowdraglib.syncdata.accessor.Vector3fAccessor;
 import com.lowdragmc.lowdraglib2.registry.AutoRegistry;
 import com.lowdragmc.photon.Photon;
@@ -188,6 +189,25 @@ class LDLibPersistenceCompatTest {
     }
 
     @Test
+    void wrapsAdditionalGpuDataStringsForLegacyLdlibSetAccessor() {
+        var expectedPath = "addition_gpu_data.t";
+        var additionalData = new ListTag();
+        additionalData.add(StringTag.valueOf(expectedPath));
+        var setting = new CompoundTag();
+        setting.put("additionalData", additionalData);
+
+        stringPayloadType();
+        LDLibPersistenceCompat.normalize(setting);
+
+        var payload = new ArrayPayload();
+        payload.deserializeNBT(setting.getList("additionalData", ListTag.TAG_COMPOUND));
+        var decoded = (ITypedPayload<?>[]) payload.getPayload();
+        assertEquals(1, decoded.length);
+        var stringPayload = assertInstanceOf(StringPayload.class, decoded[0]);
+        assertEquals(expectedPath, stringPayload.getPayload());
+    }
+
+    @Test
     void migratesAndLoadsManagedListsAtRealShieldProjectPaths() {
         var material = new CompoundTag();
         var materialData = new CompoundTag();
@@ -300,6 +320,19 @@ class LDLibPersistenceCompatTest {
                 assumeTrue(false, "LDLib payload registry is already frozen without Photon client bootstrap");
             }
             id = TypedPayloadRegistries.getId(NbtTagPayload.class);
+        }
+        return id;
+    }
+
+    private static byte stringPayloadType() {
+        byte id = TypedPayloadRegistries.getId(StringPayload.class);
+        if (id < 0) {
+            try {
+                TypedPayloadRegistries.register(StringPayload.class, StringPayload::new, null, 1001);
+            } catch (IllegalStateException registryAlreadyLoaded) {
+                assumeTrue(false, "LDLib payload registry is already frozen without Photon client bootstrap");
+            }
+            id = TypedPayloadRegistries.getId(StringPayload.class);
         }
         return id;
     }
