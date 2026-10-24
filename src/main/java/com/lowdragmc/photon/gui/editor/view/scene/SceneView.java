@@ -91,6 +91,7 @@ public class SceneView extends View implements FXSceneOptions {
     private long pendingSimulateTarget = -1;
     /** Port-specific: parameter edits require a fresh emission, even at the current time. */
     private long pendingParameterReplay = -1;
+    private long lastSlowFrameLogNanos;
 
     public SceneView(FXEditor fxEditor) {
         super("editor.scene", Icons.CAMERA);
@@ -160,19 +161,35 @@ public class SceneView extends View implements FXSceneOptions {
     @Override
     public void drawContents(@NotNull GUIContext context) {
         // flush before the children draw so the seek result is visible this frame
+        long seekStarted = System.nanoTime();
         flushPendingSimulate();
+        logSlowEditorWork("scene seek", seekStarted);
         // keep the floating panels pinned to their anchor corner when the scene is resized
         fxObjectInfoView.reflowIfSceneResized();
         fxObjectAnimationView.reflowIfSceneResized();
+        long drawStarted = System.nanoTime();
         super.drawContents(context);
+        logSlowEditorWork("scene rendering", drawStarted);
     }
 
     @Override
     public void screenTick() {
         try (var ignored = PhotonSceneTickContext.suppressVirtualLevelEvents(level)) {
+            long started = System.nanoTime();
             flushPendingSimulate(); // fallback for frames where the view isn't drawn
             super.screenTick();
+            logSlowEditorWork("scene tick", started);
         }
+    }
+
+    private void logSlowEditorWork(String phase, long startedNanos) {
+        if (fxEditor.runtime == null) return;
+        long now = System.nanoTime();
+        long elapsed = now - startedNanos;
+        if (elapsed < 250_000_000L || now - lastSlowFrameLogNanos < 5_000_000_000L) return;
+        lastSlowFrameLogNanos = now;
+        Photon.LOGGER.warn("Photon FX editor {} took {} ms (project preview active)", phase,
+                elapsed / 1_000_000L);
     }
 
     public void simulateTo(long time) {

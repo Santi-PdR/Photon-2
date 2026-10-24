@@ -127,22 +127,35 @@ public class FXEditor extends Editor {
     protected void loadNewProject(IProject project, @Nullable File projectFile) {
         if (project instanceof FXProject fxProject) {
             var phase = "LDLib2 project resources and history";
+            var phaseStarted = System.nanoTime();
             try {
                 super.loadNewProject(project, projectFile);
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
                 phase = "Photon effect runtime creation";
+                phaseStarted = System.nanoTime();
                 this.runtime = fxProject.getFx().createInternalRuntime();
                 this.runtime.root.updatePos(new Vector3f(0.5f, 2, 0.5f));
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
                 phase = "Photon hierarchy initialization";
+                phaseStarted = System.nanoTime();
                 hierarchyView.loadFXRuntime(runtime);
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
                 phase = "Photon timeline initialization";
+                phaseStarted = System.nanoTime();
                 timelineView.rebuild();
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
                 phase = "Photon scene initialization";
+                phaseStarted = System.nanoTime();
                 sceneView.loadScene();
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
                 phase = "Photon initial effect playback";
+                phaseStarted = System.nanoTime();
                 reloadEffect();
+                logProjectLoadPhase(projectFile, phase, phaseStarted);
             } catch (RuntimeException | Error failure) {
-                Photon.LOGGER.error("Failed to initialize Photon FX project {} during {}",
-                        projectFile == null ? "<unsaved>" : projectFile.getName(), phase, failure);
+                Photon.LOGGER.error("Failed to initialize Photon FX project {} during {} after {} ms",
+                        projectFile == null ? "<unsaved>" : projectFile.getName(), phase,
+                        (System.nanoTime() - phaseStarted) / 1_000_000L, failure);
                 try {
                     // LDLib2 sets currentProject before loading its resources/history and before
                     // this method finishes. If Photon setup then fails, roll back that partial
@@ -154,6 +167,12 @@ public class FXEditor extends Editor {
                 throw failure;
             }
         }
+    }
+
+    private static void logProjectLoadPhase(@Nullable File projectFile, String phase, long startedNanos) {
+        Photon.LOGGER.info("Initialized Photon FX project {} phase '{}' in {} ms",
+                projectFile == null ? "<unsaved>" : projectFile.getName(), phase,
+                (System.nanoTime() - startedNanos) / 1_000_000L);
     }
 
     @Override
