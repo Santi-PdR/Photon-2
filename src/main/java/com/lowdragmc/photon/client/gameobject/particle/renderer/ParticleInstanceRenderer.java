@@ -121,12 +121,12 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
             var triangles = new ArrayList<Integer>();
 
             for (int quad = 0; quad < quadCount; quad++) {
-                float u0 = 0, v0 = 0, uw = 1, vh = 1;
+                float u0 = 0, v0 = 0, u1 = 1, v1 = 1;
                 if (remapUV) {
                     u0 = bounds[quad * 4];
                     v0 = bounds[quad * 4 + 1];
-                    uw = bounds[quad * 4 + 2] - u0;
-                    vh = bounds[quad * 4 + 3] - v0;
+                    u1 = bounds[quad * 4 + 2];
+                    v1 = bounds[quad * 4 + 3];
                 }
 
                 for (int corner = 0; corner < 4; corner++) {
@@ -135,8 +135,8 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
                     var u = vertices[off + 3];
                     var v = vertices[off + 4];
                     if (remapUV) {
-                        u = (u - u0) / uw;
-                        v = (v - v0) / vh;
+                        u = AtlasUvRemap.normalize(u, u0, u1);
+                        v = AtlasUvRemap.normalize(v, v0, v1);
                     }
 
                     vertexBuffer.put(vertices[off] + pivotPoint.x)
