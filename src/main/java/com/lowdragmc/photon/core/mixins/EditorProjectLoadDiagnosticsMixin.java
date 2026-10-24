@@ -28,8 +28,11 @@ public abstract class EditorProjectLoadDiagnosticsMixin {
             remap = false
     )
     private void photon$logResourceViewFailure(ResourceView resourceView, Resources resources) {
+        boolean photonProject = isPhotonProject(resourceView.editor);
+        if (photonProject) logPhaseStart(resourceView.editor, "LDLib2 resource-view initialization");
         try {
             resourceView.loadResources(resources);
+            if (photonProject) logPhaseComplete(resourceView.editor, "LDLib2 resource-view initialization");
         } catch (RuntimeException | Error failure) {
             logFailure("resource-view initialization", resourceView.editor, failure);
             throw failure;
@@ -46,8 +49,12 @@ public abstract class EditorProjectLoadDiagnosticsMixin {
     )
     private SerializableRecordAction<?> photon$logInitialHistoryFailure(HistoryView historyView, Component name,
                                                                         INBTSerializable<?> project) {
+        boolean photonProject = isPhotonProject(historyView.editor);
+        if (photonProject) logPhaseStart(historyView.editor, "LDLib2 initial history snapshot");
         try {
-            return historyView.recordSerializableObject(name, project);
+            var action = historyView.recordSerializableObject(name, project);
+            if (photonProject) logPhaseComplete(historyView.editor, "LDLib2 initial history snapshot");
+            return action;
         } catch (RuntimeException | Error failure) {
             logFailure("initial history snapshot", historyView.editor, failure);
             throw failure;
@@ -63,12 +70,31 @@ public abstract class EditorProjectLoadDiagnosticsMixin {
             remap = false
     )
     private void photon$logProjectOnLoadFailure(IProject project, Editor editor) {
+        boolean photonProject = isPhotonProject(editor);
+        if (photonProject) logPhaseStart(editor, "Photon project onLoad callback");
         try {
             project.onLoad(editor);
+            if (photonProject) logPhaseComplete(editor, "Photon project onLoad callback");
         } catch (RuntimeException | Error failure) {
             logFailure("project onLoad callback", editor, failure);
             throw failure;
         }
+    }
+
+    private static boolean isPhotonProject(Editor editor) {
+        return editor.getCurrentProject() instanceof FXProject;
+    }
+
+    private static void logPhaseStart(Editor editor, String phase) {
+        var file = editor.getCurrentProjectFile();
+        Photon.LOGGER.info("Starting Photon FX project {} subphase '{}'",
+                file == null ? "<unsaved>" : file.getName(), phase);
+    }
+
+    private static void logPhaseComplete(Editor editor, String phase) {
+        var file = editor.getCurrentProjectFile();
+        Photon.LOGGER.info("Completed Photon FX project {} subphase '{}'",
+                file == null ? "<unsaved>" : file.getName(), phase);
     }
 
     private static void logFailure(String phase, Editor editor, Throwable failure) {
