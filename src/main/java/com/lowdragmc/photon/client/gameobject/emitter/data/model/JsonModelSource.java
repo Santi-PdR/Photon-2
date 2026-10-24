@@ -107,7 +107,10 @@ public class JsonModelSource implements IModelSource {
             }
             var objSource = new ObjModelSource(objReference.location());
             objSource.setFlipV(objReference.flipV());
-            return objSource.getMesh();
+            // Upstream's JSON model source always goes through baked quads, whose mesh conversion
+            // shifts positions by -0.5 on every axis. The Forge OBJ-loader fallback must preserve
+            // that JSON-model coordinate contract; standalone ObjModelSource intentionally stays raw.
+            return objSource.getMesh().translated(-0.5f, -0.5f, -0.5f);
         }
         var random = RandomSource.create();
         var bakedModel = PhotonModelBaker.bake(modelLocation);

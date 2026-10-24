@@ -202,6 +202,23 @@ public final class PhotonMesh {
         return result;
     }
 
+    /**
+     * Return this mesh translated in model space while preserving UVs, face data and topology.
+     * This is used when an OBJ is reached through a Minecraft JSON model: the baked-quad path
+     * centers every JSON model by subtracting half a block from each position.
+     */
+    public PhotonMesh translated(float x, float y, float z) {
+        if ((x == 0f && y == 0f && z == 0f) || isEmpty()) return this;
+        float[] shifted = geometry().clone();
+        for (int vertex = 0; vertex < vertexCount(); vertex++) {
+            int offset = vertex * FLOATS_PER_GEOMETRY;
+            shifted[offset] += x;
+            shifted[offset + 1] += y;
+            shifted[offset + 2] += z;
+        }
+        return withGeometry(shifted, (float[]) null, geometryRevision + 1L);
+    }
+
     public float[] vertices() {
         return vertices;
     }
