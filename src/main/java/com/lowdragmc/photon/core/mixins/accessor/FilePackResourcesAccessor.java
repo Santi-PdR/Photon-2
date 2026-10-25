@@ -6,6 +6,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(FilePackResources.class)
 public interface FilePackResourcesAccessor {
-    @Accessor
+    @Accessor("file")
     java.io.File photon$getFile();
 }
