@@ -31,6 +31,34 @@ jobs:
       - name: Build Forge mod
         run: bash ./gradlew --no-daemon build
 
+      - name: Smoke-test client startup
+        shell: bash
+        run: |
+          set +e
+          log_file="$RUNNER_TEMP/photon-client.log"
+          timeout --signal=INT --kill-after=15s 180s xvfb-run -a bash ./gradlew --no-daemon runClient > "$log_file" 2>&1 &
+          client_pid=$!
+          for _ in $(seq 1 180); do
+            if grep -Fq 'For help, type "help"' "$log_file"; then
+              echo "Minecraft reached its main menu."
+              kill -INT "$client_pid" 2>/dev/null
+              wait "$client_pid"
+              exit 0
+            fi
+            if ! kill -0 "$client_pid" 2>/dev/null; then
+              wait "$client_pid"
+              result=$?
+              cat "$log_file"
+              exit "$result"
+            fi
+            sleep 1
+          done
+          cat "$log_file"
+          kill -INT "$client_pid" 2>/dev/null
+          wait "$client_pid"
+          echo "Minecraft did not reach its main menu within 180 seconds." >&2
+          exit 1
+
       - name: Upload distributable
         uses: actions/upload-artifact@v4
         with:
