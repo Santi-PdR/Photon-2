@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.fx.timeline;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.IEffectExecutor;
 import com.lowdragmc.photon.client.gameobject.FXObject;
+import com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import org.joml.Vector3f;
@@ -74,6 +75,8 @@ public class TimelinePlayer {
     /** Editor preview: force non-positional audio so 3D/attenuated clips are still audible in the editor
      *  (the preview listener isn't at the clip's world position). Stays false in-world for real 3D. */
     private boolean editorPreview = false;
+    /** Last frame whose post-process clips were submitted by this timeline. */
+    private long postProcessFrame = Long.MIN_VALUE;
 
     public TimelinePlayer(FXRuntime runtime, Timeline timeline) {
         this.runtime = runtime;
@@ -164,11 +167,17 @@ public class TimelinePlayer {
      * gates it), so the pose stays put when stopped.
      */
     public void frame(float partialTicks) {
-        // post effects are per-render-frame requests (stop submitting = effect stops next frame);
-        // they keep applying in record mode — recording only freezes transform animation
-        applyPostProcess(lastEvalTime + partialTicks * frameRate);
         if (recording()) return; // keep the user's live edits to the recording target
         applyAnimations(lastEvalTime + partialTicks * frameRate);
+    }
+
+    /** Submit timeline post effects once per rendered frame, before the scene's particle passes. */
+    public void preparePostProcess(float partialTicks) {
+        if (stopped || effect == null || runtime.root instanceof FXObject root && root.getDelay() > 0) return;
+        long frame = PostFXTargetPool.currentFrame();
+        if (postProcessFrame == frame) return;
+        postProcessFrame = frame;
+        applyPostProcess(lastEvalTime + partialTicks * frameRate);
     }
 
     /** Submit every active post-process clip's effect (weighted by its fade envelope) to the
@@ -532,4 +541,5 @@ public class TimelinePlayer {
         return keys != null && keys.contains(key);
     }
 }
+
 
