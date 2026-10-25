@@ -112,9 +112,7 @@ sourceSets {
 configurations.irisAccessorsImplementation.extendsFrom(configurations.implementation)
 configurations.irisAccessorsCompileOnly.extendsFrom(configurations.compileOnly)
 
-tasks.named('jar') {
-    from sourceSets.irisAccessors.output
-}
+sourceSets.main.output.dir(sourceSets.irisAccessors.output)
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 sourceSets.main.java {
