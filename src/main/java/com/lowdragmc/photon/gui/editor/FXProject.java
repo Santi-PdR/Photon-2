@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.editor.resource.Resources;
 import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.lowdragmc.photon.client.fx.instance.InstanceIds;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.gui.editor.resource.PhotonShaderFunctionGraphResource;
@@ -114,21 +115,27 @@ public class FXProject implements IProject {
     @Override
     public void deserializeNBT(@NotNull HolderLookup.Provider provider, @NotNull CompoundTag nbt) {
         // apply data fix for cross-version
-        var version = Math.max(1, nbt.getCompound("meta").getInt("version_num"));
-        var fixedData = PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, nbt.getCompound("data"));
+        var metadata = nbt.getCompound("meta");
+        boolean hasVersion = metadata.contains("version_num", Tag.TAG_INT);
+        int version = hasVersion ? Math.max(1, metadata.getInt("version_num")) : -1;
+        var sourceData = nbt.getCompound("data");
+        var fixedData = hasVersion
+                ? PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, sourceData)
+                : sourceData;
+        var normalizedData = LDLibPersistenceCompat.normalize(fixedData);
         if (editor != null) {
             // an undo back to the moment the project opened restores the whole of it: when that is what it
             // already is, the objects the editor shows (and the history refers to) must stay the same ones.
             // What it was exported as since is no edit, so it is neither compared nor forgotten.
             var current = serializeProject(provider);
-            if (withRootParents(fixedData).getCompound("fx").equals(withRootParents(current).getCompound("fx"))) return;
+            if (withRootParents(normalizedData).getCompound("fx").equals(withRootParents(current).getCompound("fx"))) return;
             var exportedAs = new LinkedHashSet<>(knownAs);
-            deserializeProject(provider, fixedData);
+            deserializeProject(provider, normalizedData);
             knownAs.addAll(exportedAs);
             editor.showReloadedProject();
             return;
         }
-        deserializeProject(provider, fixedData);
+        deserializeProject(provider, normalizedData);
     }
 
     /**
