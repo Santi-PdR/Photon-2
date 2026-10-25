@@ -235,15 +235,15 @@ public class CollisionSetting implements IConfigurable, IPersistedSerializable {
             return new TransformRef();
         }
 
-        private ListTag stringsSerialize(List<String> values) {
+        public ListTag stringsSerialize(List<String> values) {
             return IdLists.serialize(values);
         }
 
-        private List<String> stringsDeserialize(ListTag tag) {
+        public List<String> stringsDeserialize(ListTag tag) {
             return IdLists.deserialize(tag);
         }
 
-        private ListTag refsSerialize(List<TransformRef> refs) {
+        public ListTag refsSerialize(List<TransformRef> refs) {
             var list = new ListTag();
             for (var ref : refs) {
                 list.add(StringTag.valueOf(ref.getTransformId() == null ? "" : ref.getTransformId().toString()));
@@ -251,7 +251,7 @@ public class CollisionSetting implements IConfigurable, IPersistedSerializable {
             return list;
         }
 
-        private List<TransformRef> refsDeserialize(ListTag tag) {
+        public List<TransformRef> refsDeserialize(ListTag tag) {
             var refs = new ArrayList<TransformRef>();
             for (Tag element : tag) {
                 var value = element.getAsString();
