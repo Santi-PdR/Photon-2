@@ -99,6 +99,7 @@ public class TimelinePlayer {
     /** Called from {@code FXRuntime.emit} after all objects are emitted; resets the clock. */
     public void begin(IEffectExecutor effect) {
         this.effect = effect;
+        this.postProcessFrame = Long.MIN_VALUE;
         this.executorAllowsEvents = effect.allowTimelineEvents();
         this.localTime = 0;
         this.duration = timeline.getDuration();
@@ -132,7 +133,7 @@ public class TimelinePlayer {
         evaluate(localTime);
         // Evaluate the exact end once when a tick crosses it. Otherwise rates above 1, or a
         // fractional duration, can finish the playback without ever applying its final state.
-        if (localTime <= duration && nextTime > duration) {
+        if (!isStartDelayed() && localTime <= duration && nextTime > duration) {
             evaluate(duration);
         }
         localTime = nextTime;
@@ -284,8 +285,12 @@ public class TimelinePlayer {
 
         applyAnimations(time);
         applySpeed(leaves, time);
-        dispatchSignals(leaves, time);
-        applyAudio(leaves, time);
+        if (isStartDelayed()) {
+            stopAllAudio();
+        } else {
+            dispatchSignals(leaves, time);
+            applyAudio(leaves, time);
+        }
         // an FX instance this evaluation activated starts its own timeline before anything under it ticks
         if (effect != null) {
             runtime.beginActiveInstances(effect);
@@ -346,6 +351,10 @@ public class TimelinePlayer {
                 }
             }
         }
+    }
+
+    private boolean isStartDelayed() {
+        return runtime.root instanceof FXObject root && root.getDelay() > 0;
     }
 
     /**
