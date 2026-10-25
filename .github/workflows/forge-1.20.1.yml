@@ -31,6 +31,14 @@ jobs:
       - name: Build Forge mod
         run: bash ./gradlew --no-daemon build
 
+      - name: Verify packaged Photon mixin config and refmap
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          unzip -p "$jar_file" META-INF/MANIFEST.MF | grep -Eq '^MixinConfigs: .*photon.mixins.json'
+          jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
+
       - name: Upload distributable
         uses: actions/upload-artifact@v4
         with:
@@ -66,9 +74,9 @@ jobs:
         run: |
           log_file="$RUNNER_TEMP/photon-client.log"
           set +e
-          timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
+          timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
-          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException' "$log_file"; then
+          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file"; then
             echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
             exit 0
           fi
