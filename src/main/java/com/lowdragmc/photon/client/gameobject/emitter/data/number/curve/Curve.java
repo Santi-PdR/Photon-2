@@ -69,11 +69,11 @@ public class Curve implements NumberFunction {
         this.curves = curves;
     }
 
-    private ListTag curvesSerialize(ECBCurves value) {
+    public ListTag curvesSerialize(ECBCurves value) {
         return value.serializeNBT(Platform.getFrozenRegistry());
     }
 
-    private ECBCurves curvesDeserialize(ListTag tag) {
+    public ECBCurves curvesDeserialize(ListTag tag) {
         var value = new ECBCurves();
         value.deserializeNBT(Platform.getFrozenRegistry(), tag);
         return value;
