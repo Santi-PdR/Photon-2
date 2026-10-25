@@ -1,6 +1,9 @@
 package com.lowdragmc.photon.client.gameobject.particle.renderer;
 
 import com.lowdragmc.lowdraglib2.utils.Vector3fHelper;
+import com.lowdragmc.photon.client.fx.IEffectExecutor;
+import com.lowdragmc.photon.client.fx.IWholeEffectTransformer;
+import com.lowdragmc.photon.client.fx.WholeEffectRenderSpace;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.VertexAnimation;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.VertexAnimationBake;
@@ -491,57 +494,43 @@ public class TileParticleRenderer {
     private StretchedFrame computeStretchedFrame(TileParticle particle, Vector3f worldPos,
                                                  double camX, double camY, double camZ,
                                                  Vector3f size, Vector3f spaceScale) {
-        Vector3f vel = particle.getRealVelocity();
-        float speed = vel.length();
-
-        Vector3f right = new Vector3f();
-        if (speed > 1e-5f) {
-            right.set(vel).div(speed);
-        } else {
-            right.set(1, 0, 0);
-        }
-
-        Vector3f dirToCam = new Vector3f((float) (camX - worldPos.x), (float) (camY - worldPos.y), (float) (camZ - worldPos.z));
-        if (dirToCam.lengthSquared() > 1e-5f) {
-            dirToCam.normalize();
-        } else {
-            dirToCam.set(0, 0, 1);
-        }
-
+        IEffectExecutor effect = particle.getEmitter().getEffectExecutor();
+        Vector3f velocity = WholeEffectRenderSpace.referenceDirection(particle, particle.getRealVelocity());
+        Vector3f referencePos = effect instanceof IWholeEffectTransformer whole
+                ? whole.removeWholeEffectPosition(new Vector3f(worldPos)) : worldPos;
+        float speed = velocity.length();
+        Vector3f right = speed > 1e-5f ? new Vector3f(velocity).div(speed) : new Vector3f(1, 0, 0);
+        Vector3f dirToCam = new Vector3f((float) (camX - referencePos.x), (float) (camY - referencePos.y), (float) (camZ - referencePos.z));
+        if (dirToCam.lengthSquared() > 1e-5f) dirToCam.normalize(); else dirToCam.set(0, 0, 1);
         Vector3f up = new Vector3f();
         dirToCam.cross(right, up);
-
         if (up.lengthSquared() < 1e-5f) {
-            if (Math.abs(right.y) > 0.99f) {
-                up.set(0, 0, 1).cross(right).normalize();
-            } else {
-                up.set(0, 1, 0).cross(right).normalize();
-            }
-        } else {
-            up.normalize();
-        }
-
+            if (Math.abs(right.y) > 0.99f) up.set(0, 0, 1).cross(right).normalize();
+            else up.set(0, 1, 0).cross(right).normalize();
+        } else up.normalize();
         Vector3f forward = new Vector3f();
         right.cross(up, forward).normalize();
-
-        Matrix3f mat = new Matrix3f(
-                right.x,   right.y,   right.z,
-                up.x,      up.y,      up.z,
-                forward.x, forward.y, forward.z
-        );
-        var quaternion = new Quaternionf().setFromNormalized(mat);
-
-        float stretch = renderer.getLengthScale() + speed * renderer.getVelocityScale();
-        float stretchedSizeX = size.x * stretch;
-
+        Matrix3f mat = new Matrix3f(right.x, right.y, right.z, up.x, up.y, up.z, forward.x, forward.y, forward.z);
+        Quaternionf frameRotation = new Quaternionf().setFromNormalized(mat);
+        float stretchedSizeX = size.x * (renderer.getLengthScale() + speed * renderer.getVelocityScale());
         float offsetAmount = (stretchedSizeX - size.x) * spaceScale.x;
-        return new StretchedFrame(quaternion, stretchedSizeX,
-                right.x * offsetAmount, right.y * offsetAmount, right.z * offsetAmount);
+        Vector3f offset = new Vector3f(right).mul(offsetAmount);
+        if (effect instanceof IWholeEffectTransformer whole) {
+            offset = whole.applyWholeEffectDirection(offset);
+            frameRotation = whole.applyWholeEffectRotation(frameRotation);
+        }
+        return new StretchedFrame(frameRotation, stretchedSizeX, offset.x, offset.y, offset.z);
     }
 
     private static Quaternionf computeBillboardQuaternion(TileParticle particle, ParticleRendererSetting.Mode renderMode,
                                                           Camera camera, float partialTicks, Vector3f rotation) {
         var quaternion = renderMode.quaternion.apply(particle, camera, partialTicks);
+        IEffectExecutor effect = particle.getEmitter().getEffectExecutor();
+        if (effect instanceof IWholeEffectTransformer whole) {
+            boolean keepCameraFacing = renderMode == ParticleRendererSetting.Mode.Billboard
+                    && particle.getRuntime().renderer.getFacingMode() == FacingMode.DEFAULT;
+            return whole.applyAnimatedBillboardRotation(quaternion, rotation, keepCameraFacing);
+        }
         if (!Vector3fHelper.isZero(rotation)) {
             quaternion = new Quaternionf(quaternion).mul(eulerRotation(rotation));
         }
@@ -594,8 +583,15 @@ public class TileParticleRenderer {
                 ? particle.getSpaceRotation()
                 : new Quaternionf(FacingOrientationHelper.compute(
                         facing, renderer.getFacingDirection(), particle, camera, partialTicks));
+        IEffectExecutor effect = particle.getEmitter().getEffectExecutor();
+        if (effect instanceof IWholeEffectTransformer whole) {
+            boolean spaceContainsWholeRotation = facing == FacingMode.DEFAULT
+                    && particle.getConfig().getSimulationSpace() != ParticleConfig.Space.World;
+            return whole.applyAnimatedModelRotation(outer, rotation, spaceContainsWholeRotation);
+        }
         return applyOuterRotation(particle, partialTicks, outer.mul(eulerRotation(rotation)));
     }
 }
+
 
 
