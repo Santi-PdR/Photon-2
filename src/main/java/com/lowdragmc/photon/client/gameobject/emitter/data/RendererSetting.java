@@ -169,12 +169,12 @@ public class RendererSetting {
         return new MaterialSetting();
     }
 
-    private ListTag materialSerialize(List<MaterialSetting> value) {
+    public ListTag materialSerialize(List<MaterialSetting> value) {
         return LDLibPersistenceCompat.encodePayloadList(value.stream()
                 .map(material -> material.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<MaterialSetting> materialDeserialize(ListTag tag) {
+    public List<MaterialSetting> materialDeserialize(ListTag tag) {
         var materials = new ArrayList<MaterialSetting>();
         for (CompoundTag materialTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var material = addDefaultMaterial();
