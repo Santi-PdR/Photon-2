@@ -22,6 +22,7 @@ import com.lowdragmc.photon.client.AutoCloseCleaner;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -378,41 +379,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     @Nullable
     public static ResourceLocation getShaderFromFile(File filePath) {
-        String fullPath = filePath.getPath().replace('\\', '/');
-
-        // find the "assets/" directory in the path
-        var assetsIndex = fullPath.indexOf("assets/");
-        if (assetsIndex == -1) {
-            return null;
-        }
-
-        var relativePath = fullPath.substring(assetsIndex + "assets/".length());
-
-        // find mod_id
-        var slashIndex = relativePath.indexOf('/');
-        if (slashIndex == -1) {
-            return null;
-        }
-
-        var modId = relativePath.substring(0, slashIndex);
-        var subPath = relativePath.substring(slashIndex + 1);
-
-        // find shader location
-        var shaderIndex = subPath.indexOf("shaders/core/");
-        if (shaderIndex == -1) {
-            return null;
-        }
-
-        var shaderPath = subPath.substring(shaderIndex + "shaders/core/".length());
-        if (!shaderPath.endsWith(".json")) {
-            return null;
-        }
-
-        var location = modId + ":" + shaderPath.substring(0, shaderPath.length() - 5); // remove ".json" suffix
-
-        if (LDLib2.isValidResourceLocation(location)) {
-            return new ResourceLocation(location);
-        }
-        return null;
+        return PhotonAssetPath.shaderLocationFromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
     }
 }
+

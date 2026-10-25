@@ -17,6 +17,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -187,21 +188,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     }
 
     public @Nullable ResourceLocation getTextureFromFile(File filePath) {
-        String fullPath = filePath.getPath().replace('\\', '/');
-        int assetsIndex = fullPath.indexOf("assets/");
-        if (assetsIndex == -1) {
-            return null;
-        } else {
-            String relativePath = fullPath.substring(assetsIndex + "assets/".length());
-            int slashIndex = relativePath.indexOf(47);
-            if (slashIndex == -1) {
-                return null;
-            } else {
-                String modId = relativePath.substring(0, slashIndex);
-                String subPath = relativePath.substring(slashIndex + 1);
-                String location = modId + ":" + subPath;
-                return LDLib2.isValidResourceLocation(location) ? new ResourceLocation(location) : null;
-            }
-        }
+        return PhotonAssetPath.fromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
     }
 }
+
