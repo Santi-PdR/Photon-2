@@ -498,28 +498,15 @@ public class TileParticleRenderer {
         Vector3f velocity = WholeEffectRenderSpace.referenceDirection(particle, particle.getRealVelocity());
         Vector3f referencePos = effect instanceof IWholeEffectTransformer whole
                 ? whole.removeWholeEffectPosition(new Vector3f(worldPos)) : worldPos;
-        float speed = velocity.length();
-        Vector3f right = speed > 1e-5f ? new Vector3f(velocity).div(speed) : new Vector3f(1, 0, 0);
-        Vector3f dirToCam = new Vector3f((float) (camX - referencePos.x), (float) (camY - referencePos.y), (float) (camZ - referencePos.z));
-        if (dirToCam.lengthSquared() > 1e-5f) dirToCam.normalize(); else dirToCam.set(0, 0, 1);
-        Vector3f up = new Vector3f();
-        dirToCam.cross(right, up);
-        if (up.lengthSquared() < 1e-5f) {
-            if (Math.abs(right.y) > 0.99f) up.set(0, 0, 1).cross(right).normalize();
-            else up.set(0, 1, 0).cross(right).normalize();
-        } else up.normalize();
-        Vector3f forward = new Vector3f();
-        right.cross(up, forward).normalize();
-        Matrix3f mat = new Matrix3f(right.x, right.y, right.z, up.x, up.y, up.z, forward.x, forward.y, forward.z);
-        Quaternionf frameRotation = new Quaternionf().setFromNormalized(mat);
-        float stretchedSizeX = size.x * (renderer.getLengthScale() + speed * renderer.getVelocityScale());
-        float offsetAmount = (stretchedSizeX - size.x) * spaceScale.x;
-        Vector3f offset = new Vector3f(right).mul(offsetAmount);
+        var frame = StretchedBillboardMath.compute(velocity, referencePos, camX, camY, camZ, size, spaceScale,
+                renderer.getLengthScale(), renderer.getVelocityScale());
+        Quaternionf frameRotation = frame.rotation();
+        Vector3f offset = new Vector3f(frame.offsetX(), frame.offsetY(), frame.offsetZ());
         if (effect instanceof IWholeEffectTransformer whole) {
             offset = whole.applyWholeEffectDirection(offset);
             frameRotation = whole.applyWholeEffectRotation(frameRotation);
         }
-        return new StretchedFrame(frameRotation, stretchedSizeX, offset.x, offset.y, offset.z);
+        return new StretchedFrame(frameRotation, frame.stretchedSizeX(), offset.x, offset.y, offset.z);
     }
 
     private static Quaternionf computeBillboardQuaternion(TileParticle particle, ParticleRendererSetting.Mode renderMode,
