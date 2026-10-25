@@ -51,7 +51,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
      * an edit drops both under the same key.
      */
     private final ConcurrentHashMap<Object, SkinnedModel> models = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Object, FileStamp> fileStamps = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Object, Set<FileStamp>> fileStamps = new ConcurrentHashMap<>();
     /** Entries built from other entries (a model combined with its animation files), by what they were built from. */
     private final ConcurrentHashMap<Object, Set<Object>> dependents = new ConcurrentHashMap<>();
     private int ticks;
@@ -86,7 +86,9 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
 
     /** Watch the disk file backing {@code key}; {@link #pollFileChanges()} invalidates the entry when it changes. */
     public void trackFile(Object key, File file) {
-        fileStamps.put(key, new FileStamp(file, file.lastModified()));
+        var stamps = fileStamps.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet());
+        stamps.removeIf(stamp -> stamp.file.equals(file));
+        stamps.add(new FileStamp(file, file.lastModified()));
     }
 
     /**
@@ -129,7 +131,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     /** Invalidate every entry whose tracked disk file changed (or vanished) since it was loaded. */
     public void pollFileChanges() {
         for (var entry : fileStamps.entrySet()) {
-            if (entry.getValue().file.lastModified() != entry.getValue().lastModified) {
+            if (entry.getValue().stream().anyMatch(stamp -> stamp.file.lastModified() != stamp.lastModified)) {
                 invalidate(entry.getKey());
             }
         }
