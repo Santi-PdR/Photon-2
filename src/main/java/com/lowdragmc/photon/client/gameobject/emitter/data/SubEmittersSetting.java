@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
@@ -26,9 +27,11 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveCon
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
@@ -131,14 +134,17 @@ public class SubEmittersSetting extends ToggleGroup {
         return emitter;
     }
 
-    private IntTag emittersSerialize(List<Emitter> bursts) {
-        return IntTag.valueOf(bursts.size());
+    private ListTag emittersSerialize(List<Emitter> emitters) {
+        return LDLibPersistenceCompat.encodePayloadList(emitters.stream()
+                .map(emitter -> emitter.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<Emitter> emittersDeserialize(IntTag tag) {
+    private List<Emitter> emittersDeserialize(ListTag tag) {
         var groups = new ArrayList<Emitter>();
-        for (int i = 0; i < tag.getAsInt(); i++) {
-            groups.add(new Emitter());
+        for (CompoundTag emitterTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
+            var emitter = new Emitter();
+            emitter.deserializeNBT(Platform.getFrozenRegistry(), emitterTag);
+            groups.add(emitter);
         }
         return groups;
     }
@@ -350,3 +356,4 @@ public class SubEmittersSetting extends ToggleGroup {
         }
     }
 }
+

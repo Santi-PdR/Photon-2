@@ -1,13 +1,16 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.number.curve;
 
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunctionConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.configurator.NumberFunctionConfigurator;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import net.minecraft.nbt.ListTag;
 
 import java.util.function.Supplier;
 
@@ -24,7 +27,7 @@ public class RandomCurve implements NumberFunction {
     @Persisted
     private float min, max;
     @Getter
-    @Persisted
+    @ReadOnlyManaged(serializeMethod = "curves0Serialize", deserializeMethod = "curves0Deserialize")
     private final ECBCurves curves0, curves1;
     @Setter
     @Getter
@@ -67,6 +70,16 @@ public class RandomCurve implements NumberFunction {
         this.curves1 = curves1;
     }
 
+    private ListTag curves0Serialize(ECBCurves value) {
+        return value.serializeNBT(Platform.getFrozenRegistry());
+    }
+
+    private ECBCurves curves0Deserialize(ListTag tag) {
+        var value = new ECBCurves();
+        value.deserializeNBT(Platform.getFrozenRegistry(), tag);
+        return value;
+    }
+
     public void loadConfig(NumberFunctionConfig config) {
         this.min = config.min();
         this.max = config.max();
@@ -99,3 +112,4 @@ public class RandomCurve implements NumberFunction {
         configurator.inlineContainer.addChildren(new RandomCurveConfigurator("", () -> this, curves -> configurator.updateValue(this), this, true));
     }
 }
+

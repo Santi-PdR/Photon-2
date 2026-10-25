@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
@@ -16,10 +17,13 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.RandomConstant
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.util.RandomSource;
@@ -181,14 +185,17 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         return new Burst();
     }
 
-    private IntTag burstsSerialize(List<Burst> bursts) {
-        return IntTag.valueOf(bursts.size());
+    private ListTag burstsSerialize(List<Burst> bursts) {
+        return LDLibPersistenceCompat.encodePayloadList(bursts.stream()
+                .map(burst -> burst.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<Burst> burstsDeserialize(IntTag tag) {
+    private List<Burst> burstsDeserialize(ListTag tag) {
         var groups = new ArrayList<Burst>();
-        for (int i = 0; i < tag.getAsInt(); i++) {
-            groups.add(addDefaultBurst());
+        for (CompoundTag burstTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
+            var burst = addDefaultBurst();
+            burst.deserializeNBT(Platform.getFrozenRegistry(), burstTag);
+            groups.add(burst);
         }
         return groups;
     }
@@ -213,3 +220,4 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         public float probability = 1;
     }
 }
+

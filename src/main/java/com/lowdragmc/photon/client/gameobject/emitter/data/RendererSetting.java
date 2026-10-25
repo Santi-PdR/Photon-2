@@ -1,21 +1,26 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
+import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.phys.AABB;
@@ -31,7 +36,7 @@ import java.util.function.Supplier;
 @Getter
 @Setter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class RendererSetting {
+public class RendererSetting implements IPersistedSerializable {
 
     public enum Layer {
         Opaque,
@@ -165,14 +170,17 @@ public class RendererSetting {
         return new MaterialSetting();
     }
 
-    private IntTag materialSerialize(List<MaterialSetting> value) {
-        return IntTag.valueOf(value.size());
+    private ListTag materialSerialize(List<MaterialSetting> value) {
+        return LDLibPersistenceCompat.encodePayloadList(value.stream()
+                .map(material -> material.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<MaterialSetting> materialDeserialize(IntTag size) {
+    private List<MaterialSetting> materialDeserialize(ListTag tag) {
         var materials = new ArrayList<MaterialSetting>();
-        for (int i = 0; i < size.getAsInt(); i++) {
-            materials.add(addDefaultMaterial());
+        for (CompoundTag materialTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
+            var material = addDefaultMaterial();
+            material.deserializeNBT(Platform.getFrozenRegistry(), materialTag);
+            materials.add(material);
         }
         return materials;
     }
@@ -283,3 +291,4 @@ public class RendererSetting {
     }
 
 }
+
