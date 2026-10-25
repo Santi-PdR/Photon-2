@@ -1,9 +1,13 @@
 package com.lowdragmc.photon.core.mixins;
 
 import com.lowdragmc.photon.client.light.DynamicLightRenderer;
+import com.lowdragmc.photon.client.fx.FXPostProcessPreparation;
 import com.lowdragmc.photon.client.fx.FXPreloader;
 import com.lowdragmc.photon.client.postfx.PhotonPostFX;
+import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.particle.ParticleEngine;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -34,6 +38,13 @@ public class GameRendererMixin {
     }
 
     @Inject(method = "renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V"))
+    private void photon$prepareTimelinePostEffects(float partialTick, long finishTimeNano, PoseStack poseStack, CallbackInfo ci) {
+        ParticleEngine engine = Minecraft.getInstance().particleEngine;
+        FXPostProcessPreparation.prepare(((ParticleEngineAccessor) engine).getParticles(), partialTick);
+    }
+
+    @Inject(method = "renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V", shift = At.Shift.AFTER))
     private void photon$afterLevelRender(float partialTick, long finishTimeNano, PoseStack poseStack, CallbackInfo ci) {
         DynamicLightRenderer.onLevelRendered();
@@ -46,3 +57,4 @@ public class GameRendererMixin {
         PhotonPostFX.onFrameEnd();
     }
 }
+
