@@ -69,6 +69,7 @@ public final class FXWarmup {
                 runtime.timelinePlayer.setAudioDispatch(false);
                 runtime.emit(new IEffectExecutor() {
                     @Override public Level getLevel() { return level; }
+                    @Override public boolean allowTimelineEvents() { return false; }
                     @Override public PostEffectStack postEffectSink() { return sink; }
                 });
                 manager.tickInternal();
@@ -112,4 +113,5 @@ public final class FXWarmup {
 
     public record Result(int ticks, int particles, long elapsedNanos) {}
 }
+
 

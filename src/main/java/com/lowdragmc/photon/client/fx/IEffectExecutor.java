@@ -22,6 +22,11 @@ public interface IEffectExecutor {
 
     Level getLevel();
 
+    /** Whether this execution may emit timeline signals and audio. */
+    default boolean allowTimelineEvents() {
+        return true;
+    }
+
     /**
      * update each FX objects during their duration, per tick. Execute low frequency logic here.
      * <br>
@@ -73,3 +78,4 @@ public interface IEffectExecutor {
         return com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.GLOBAL;
     }
 }
+

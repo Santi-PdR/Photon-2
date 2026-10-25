@@ -65,6 +65,7 @@ public class TimelinePlayer {
     private boolean recording = false;
     /** Whether signal tracks fire. Default true (in-world); the editor gates it to live playback only. */
     private boolean dispatchSignals = true;
+    private boolean executorAllowsEvents = true;
     /** Highest tick already dispatched signals for, so a forward window never re-fires (reset on begin). */
     private double lastSignalTick = -1;
     /** Per-audio-track currently-playing sound instance and the clip that spawned it. */
@@ -98,6 +99,7 @@ public class TimelinePlayer {
     /** Called from {@code FXRuntime.emit} after all objects are emitted; resets the clock. */
     public void begin(IEffectExecutor effect) {
         this.effect = effect;
+        this.executorAllowsEvents = effect.allowTimelineEvents();
         this.localTime = 0;
         this.duration = timeline.getDuration();
         this.stopped = false;
@@ -511,11 +513,11 @@ public class TimelinePlayer {
     }
 
     protected boolean signalDispatch() {
-        return dispatchSignals;
+        return executorAllowsEvents && dispatchSignals;
     }
 
     protected boolean audioDispatch() {
-        return audioEnabled;
+        return executorAllowsEvents && audioEnabled;
     }
 
     protected boolean editorPreview() {
@@ -541,5 +543,6 @@ public class TimelinePlayer {
         return keys != null && keys.contains(key);
     }
 }
+
 
 
