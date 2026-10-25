@@ -99,7 +99,7 @@ public class GltfModelSource implements IModelSource {
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
         try (var in = Minecraft.getInstance().getResourceManager().open(modelLocation)) {
-            return GltfMeshParser.parseModel(in, flipV);
+            return GltfMeshParser.parseModel(in, flipV, modelLocation);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
             Photon.LOGGER.warn("glTF model {} does not exist", modelLocation);
@@ -154,3 +154,4 @@ public class GltfModelSource implements IModelSource {
         return Objects.hash(modelLocation, flipV);
     }
 }
+

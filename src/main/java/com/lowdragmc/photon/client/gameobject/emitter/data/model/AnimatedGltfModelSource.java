@@ -527,7 +527,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(new PhotonMeshCache.GltfKey(location, flipV), location);
         try (var in = Minecraft.getInstance().getResourceManager().open(location)) {
-            return GltfMeshParser.parseModel(in, flipV);
+            return GltfMeshParser.parseModel(in, flipV, location);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
             Photon.LOGGER.warn("glTF {} does not exist", location);
@@ -606,4 +606,5 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
                 perParticlePhase, frames, phaseSource, interpolate);
     }
 }
+
 

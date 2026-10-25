@@ -13,6 +13,8 @@ import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
@@ -21,10 +23,13 @@ import org.joml.Vector3f;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
@@ -81,6 +86,10 @@ public final class GltfMeshParser {
         return parse(in.readAllBytes(), flipV);
     }
 
+    public static PhotonMesh parse(InputStream in, boolean flipV, ResourceLocation modelLocation) throws IOException {
+        return parseModel(in, flipV, modelLocation).mesh();
+    }
+
     /** Geometry only, for callers with no interest in how it might move. */
     static PhotonMesh parse(byte[] bytes, boolean flipV) throws IOException {
         return parseModel(bytes, flipV).mesh();
@@ -90,8 +99,22 @@ public final class GltfMeshParser {
         return parseModel(in.readAllBytes(), flipV);
     }
 
+    public static SkinnedModel parseModel(InputStream in, boolean flipV, ResourceLocation modelLocation) throws IOException {
+        return parseModel(in.readAllBytes(), flipV, uri -> openRelativeBuffer(modelLocation, uri));
+    }
+
     /** Package-visible for tests. */
     static SkinnedModel parseModel(byte[] bytes, boolean flipV) throws IOException {
+        return parseModel(bytes, flipV, null);
+    }
+
+    private static SkinnedModel parseModel(byte[] bytes, boolean flipV,
+                                           @Nullable ExternalBufferResolver externalBuffers) throws IOException {
+        return reader(bytes, flipV, externalBuffers).read();
+    }
+
+    private static Reader reader(byte[] bytes, boolean flipV,
+                                 @Nullable ExternalBufferResolver externalBuffers) throws IOException {
         var buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
         JsonObject root;
         byte[] glbBin = null;
@@ -102,7 +125,60 @@ public final class GltfMeshParser {
         } else {
             root = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
         }
-        return new Reader(root, glbBin, flipV).read();
+        return new Reader(root, glbBin, flipV, externalBuffers);
+    }
+
+    static ResourceLocation resolveRelativeBufferLocation(ResourceLocation model, String value) throws IOException {
+        URI uri;
+        try {
+            uri = new URI(value);
+        } catch (URISyntaxException e) {
+            throw new IOException("invalid external buffer URI '" + value + "'", e);
+        }
+        if (uri.isAbsolute() || uri.getAuthority() != null || uri.getQuery() != null || uri.getFragment() != null
+                || uri.getPath() == null || uri.getPath().isEmpty() || uri.getPath().startsWith("/")
+                || uri.getPath().contains("\\")) {
+            throw new IOException("external buffer URI must be a relative resource path: '" + value + "'");
+        }
+
+        var segments = new ArrayDeque<String>();
+        String modelPath = model.getPath();
+        int lastSlash = modelPath.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            for (String segment : modelPath.substring(0, lastSlash).split("/")) {
+                if (!segment.isEmpty()) segments.addLast(segment);
+            }
+        }
+        for (String segment : uri.getPath().split("/")) {
+            if (segment.isEmpty() || segment.equals(".")) continue;
+            if (segment.equals("..")) {
+                if (segments.isEmpty()) throw new IOException("external buffer URI escapes its resource namespace: '" + value + "'");
+                segments.removeLast();
+            } else {
+                segments.addLast(segment);
+            }
+        }
+        if (segments.isEmpty()) throw new IOException("external buffer URI resolves to an empty resource path: '" + value + "'");
+        String path = String.join("/", segments);
+        try {
+            return new ResourceLocation(model.getNamespace(), path);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("invalid external buffer resource path '" + path + "'", e);
+        }
+    }
+
+    private static byte[] openRelativeBuffer(ResourceLocation model, String value) throws IOException {
+        ResourceLocation buffer = resolveRelativeBufferLocation(model, value);
+        try (InputStream input = Minecraft.getInstance().getResourceManager().open(buffer)) {
+            return input.readAllBytes();
+        } catch (IOException e) {
+            throw new IOException("could not load external buffer '" + buffer + "' referenced by '" + model + "'", e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ExternalBufferResolver {
+        byte[] load(String uri) throws IOException;
     }
 
     private record GlbChunks(byte[] json, byte[] bin) {
@@ -152,6 +228,8 @@ public final class GltfMeshParser {
         private final JsonObject root;
         private final byte[] glbBin;
         private final boolean flipV;
+        @Nullable
+        private final ExternalBufferResolver externalBuffers;
         private final PhotonMesh.Builder builder = new PhotonMesh.Builder();
         private final List<byte[]> buffers = new ArrayList<>();
 
@@ -171,10 +249,11 @@ public final class GltfMeshParser {
         private final IntArrayList skinJoints = new IntArrayList();
         private final FloatArrayList skinWeights = new FloatArrayList();
 
-        Reader(JsonObject root, byte[] glbBin, boolean flipV) {
+        Reader(JsonObject root, byte[] glbBin, boolean flipV, @Nullable ExternalBufferResolver externalBuffers) {
             this.root = root;
             this.glbBin = glbBin;
             this.flipV = flipV;
+            this.externalBuffers = externalBuffers;
         }
 
         SkinnedModel read() throws IOException {
@@ -839,9 +918,12 @@ public final class GltfMeshParser {
                 }
                 String uri = buffer.get("uri").getAsString();
                 if (!uri.startsWith("data:")) {
-                    throw new IOException("buffer " + i + " points at the external file '" + uri
-                            + "'. Photon reads self-contained models — re-export as .glb, or as .gltf with"
-                            + " embedded buffers.");
+                    if (externalBuffers == null) {
+                        throw new IOException("buffer " + i + " points at external file '" + uri
+                                + "' but no model resource location was supplied");
+                    }
+                    buffers.add(externalBuffers.load(uri));
+                    continue;
                 }
                 int comma = uri.indexOf(',');
                 if (comma < 0 || uri.lastIndexOf("base64", comma) < 0) {
@@ -969,3 +1051,4 @@ public final class GltfMeshParser {
         }
     }
 }
+
