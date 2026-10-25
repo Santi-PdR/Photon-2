@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.particle.renderer;
 
+import com.lowdragmc.photon.client.fx.IEffectExecutor;
+import com.lowdragmc.photon.client.fx.IWholeEffectTransformer;
 import com.lowdragmc.photon.client.gameobject.emitter.beam.BeamConfig;
 import com.lowdragmc.photon.client.gameobject.particle.BeamParticle;
 import com.lowdragmc.photon.client.gameobject.particle.IParticle;
@@ -44,6 +46,11 @@ public class BeamParticleRenderer {
     private static BeamFrame sampleBeam(BeamParticle particle, Camera camera, float partialTicks) {
         var from = particle.getWorldPos();
         var end = particle.getRealEnd(camera, from);
+        IEffectExecutor effect = particle.getEmitter().getEffectExecutor();
+        if (effect instanceof IWholeEffectTransformer whole) {
+            from = whole.applyWholeEffectPosition(from);
+            end = whole.applyWholeEffectPosition(end);
+        }
 
         var offset = -particle.getRealEmit(partialTicks);
         var uvs = particle.getRealUVs(partialTicks);
@@ -168,5 +175,6 @@ public class BeamParticleRenderer {
         instanceBackend.dispose();
     }
 }
+
 
 
