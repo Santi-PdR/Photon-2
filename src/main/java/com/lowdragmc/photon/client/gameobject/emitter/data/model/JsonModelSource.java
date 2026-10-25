@@ -84,6 +84,29 @@ public class JsonModelSource implements IModelSource {
         return getObjLoaderReference() == null;
     }
 
+    /**
+     * OBJ model JSON files are parsed directly by Photon and do not need registration with Minecraft's
+     * model bakery. In particular, a NeoForge "neoforge:obj" loader is not registered by Forge.
+     */
+    public boolean isObjLoaderModel() {
+        try {
+            ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
+            Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+            if (nestedFile == null) return false;
+            try (BufferedReader reader = Files.newBufferedReader(nestedFile)) {
+                return isObjLoaderJson(JsonParser.parseReader(reader).getAsJsonObject());
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isObjLoaderJson(JsonObject json) {
+        String loader = json.has("loader") ? json.get("loader").getAsString() : "";
+        return (loader.equals("forge:obj") || loader.equals("neoforge:obj"))
+                && json.has("model") && json.get("model").isJsonPrimitive();
+    }
+
     @Override
     public IModelSource copy() {
         return new JsonModelSource(modelLocation);
@@ -157,9 +180,7 @@ public class JsonModelSource implements IModelSource {
                         ? resource.openAsReader()
                         : Files.newBufferedReader(nestedFile)) {
                     JsonObject json = JsonParser.parseReader((Reader) reader).getAsJsonObject();
-                    String loader = json.has("loader") ? json.get("loader").getAsString() : "";
-                    if ((loader.equals("forge:obj") || loader.equals("neoforge:obj"))
-                            && json.has("model") && json.get("model").isJsonPrimitive()) {
+                    if (isObjLoaderJson(json)) {
                         boolean flipV = json.has("flip_v") ? json.get("flip_v").getAsBoolean()
                                 : json.has("flipV") && json.get("flipV").getAsBoolean();
                         objLoaderReference = new ObjLoaderReference(
