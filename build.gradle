@@ -1,3 +1,12 @@
+buildscript {
+    repositories {
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    }
+    dependencies {
+        classpath 'org.spongepowered:mixingradle:0.7-SNAPSHOT'
+    }
+}
+
 plugins {
     id 'java-library'
     id 'eclipse'
@@ -5,6 +14,8 @@ plugins {
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
+
+apply plugin: 'org.spongepowered.mixin'
 
 version = mod_version
 group = mod_group_id
@@ -56,11 +67,18 @@ dependencies {
     runtimeOnly fg.deobf('local:ldlib1:1.0.52.a')
     implementation fg.deobf('local:kilagraph:20.1.0.15')
     jarJar(fg.deobf('local:kilagraph:20.1.0.15'))
+    // Generate the production refmap for the Forge mixin configs.
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     // Photon 1.20.1 shader integration links against the Iris API shipped by Oculus.
     // Compile-only: Oculus remains an optional client-side runtime dependency.
     compileOnly fg.deobf('maven.modrinth:GchcoXML:iQ1SwGc3')
     compileOnly 'org.projectlombok:lombok:1.18.36'
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
+}
+
+mixin {
+    add sourceSets.main, 'photon.refmap.json'
+    config 'photon.mixins.json'
 }
 
 jarJar.versionInformation {
