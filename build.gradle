@@ -97,5 +97,5 @@ tasks.withType(ProcessResources).configureEach {
     filesMatching('META-INF/mods.toml') { expand replaceProperties }
 }
 
-// Upstream tests target newer Minecraft APIs; the 1.20.1 port is validated with the Forge client run.
+// Upstream tests target newer Minecraft APIs; automated validation uses the Forge dedicated-server startup smoke test.
 sourceSets.test.java.setSrcDirs([])
