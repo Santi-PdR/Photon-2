@@ -237,8 +237,9 @@ public class MeshResource extends Resource<MeshData> {
 
     public void onAdditionalModel(Consumer<ModelResourceLocation> registry) {
         for (var meshData : getLoadedResourceMeshes()) {
-            // only json models go through the bakery; obj sources are parsed at runtime
-            if (meshData.getSource() instanceof JsonModelSource json) {
+            // OBJ-backed JSON sources are parsed directly by Photon, since Forge cannot bake
+            // NeoForge's "neoforge:obj" loader from LDLib2 asset folders.
+            if (meshData.getSource() instanceof JsonModelSource json && !json.isObjLoaderModel()) {
                 registry.accept(new ModelResourceLocation(json.getModelLocation(), "standalone"));
             }
         }
