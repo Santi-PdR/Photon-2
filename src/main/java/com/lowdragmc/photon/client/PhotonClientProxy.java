@@ -7,6 +7,7 @@ import com.lowdragmc.photon.client.fx.FXPreloader;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
 import com.lowdragmc.photon.gui.editor.resource.MeshResource;
+import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
@@ -33,6 +34,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         eventBus.addListener(this::registerModels);
         eventBus.addListener(this::registerReloadListeners);
         eventBus.addListener(this::addPackFinders);
+        eventBus.addListener(PhotonEditorKeyMappings::register);
     }
 
     /** Mount every .fxpack as a hidden, always-on, lowest-priority resource pack; see {@link FXPacks}. */
@@ -83,3 +85,4 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         MeshResource.INSTANCE.onAdditionalModel(event::register);
     }
 }
+
