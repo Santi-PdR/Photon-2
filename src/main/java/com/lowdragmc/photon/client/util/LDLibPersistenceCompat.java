@@ -11,13 +11,9 @@ import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /** Converts LDLib2 26.x persistence shapes to the Forge 1.20.1 reader format. */
 public final class LDLibPersistenceCompat {
-    private static final Set<String> VECTOR3F_FIELDS = Set.of(
-            "customDirection", "end", "gravity", "initialVelocity", "modelPivot");
-
     private LDLibPersistenceCompat() {
     }
 
@@ -66,8 +62,8 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (String key : compound.getAllKeys()) {
                 Tag child = compound.get(key);
-                if (isManagedListEnvelope(child) || isVector3fField(key, child)
-                        || isAdditionalDataStringSet(key, child) || containsCompatibilityData(child)) return true;
+                if (isManagedListEnvelope(child) || isAdditionalDataStringSet(key, child)
+                        || containsCompatibilityData(child)) return true;
             }
         } else if (tag instanceof ListTag list) {
             for (Tag child : list) if (containsCompatibilityData(child)) return true;
@@ -106,9 +102,7 @@ public final class LDLibPersistenceCompat {
         if (tag instanceof CompoundTag compound) {
             for (String key : new ArrayList<>(compound.getAllKeys())) {
                 Tag child = compound.get(key);
-                if (isVector3fField(key, child)) {
-                    child = toLegacyVector3f((ListTag) child);
-                } else if (isManagedListEnvelope(child)) {
+                if (isManagedListEnvelope(child)) {
                     ListTag payload = (ListTag) ((CompoundTag) child).get("payload");
                     child = isAdditionalDataStringSet(key, payload)
                             ? toLegacyStringArrayPayload(payload, stringPayloadType)
@@ -135,20 +129,6 @@ public final class LDLibPersistenceCompat {
 
     private static boolean isStringList(ListTag list) {
         return list.isEmpty() || list.getElementType() == Tag.TAG_STRING;
-    }
-
-    private static boolean isVector3fField(String key, Tag value) {
-        if (!VECTOR3F_FIELDS.contains(key) || !(value instanceof ListTag list) || list.size() != 3) return false;
-        int type = list.getElementType();
-        return type == Tag.TAG_FLOAT || type == Tag.TAG_DOUBLE || type == Tag.TAG_INT;
-    }
-
-    private static CompoundTag toLegacyVector3f(ListTag vector) {
-        CompoundTag result = new CompoundTag();
-        result.putFloat("x", vector.getFloat(0));
-        result.putFloat("y", vector.getFloat(1));
-        result.putFloat("z", vector.getFloat(2));
-        return result;
     }
 
     private static ListTag toLegacyArrayPayload(ListTag payload, byte payloadType) {
