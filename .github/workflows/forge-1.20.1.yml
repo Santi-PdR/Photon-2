@@ -38,6 +38,7 @@ jobs:
           test -n "$jar_file"
           unzip -p "$jar_file" META-INF/MANIFEST.MF | grep -Eq '^MixinConfigs: .*photon.mixins.json'
           jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
+          jar tf "$jar_file" | grep -Fxq 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.class'
 
       - name: Upload distributable
         uses: actions/upload-artifact@v4
