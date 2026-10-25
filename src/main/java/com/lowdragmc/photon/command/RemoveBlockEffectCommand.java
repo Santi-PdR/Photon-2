@@ -27,6 +27,7 @@ import net.minecraftforge.network.PacketDistributor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class RemoveBlockEffectCommand {
     public static final ResourceLocation ID = Photon.id("remove_block_effect_command");
@@ -93,20 +94,14 @@ public class RemoveBlockEffectCommand {
     @OnlyIn(Dist.CLIENT)
     private static class Client {
         public static void execute(RemoveBlockEffectCommand packet) {
-            var effects = BlockEffectExecutor.CACHE.get(packet.pos);
-            if (effects == null) return;
-            var iter = effects.iterator();
-            while (iter.hasNext()) {
-                var effect = iter.next();
-                if (packet.location == null || packet.location.equals(effect.getFx().getFxLocation())) {
-                    iter.remove();
-                    var runtime = effect.getRuntime();
-                    if (runtime != null && runtime.isAlive()) {
-                        runtime.destroy(packet.force);
-                    }
-                }
-            }
+            EffectRemoval.removeMatching(List.of(packet.pos), BlockEffectExecutor.CACHE,
+                    effect -> packet.location == null || packet.location.equals(effect.getFx().getFxLocation()),
+                    effect -> {
+                        var runtime = effect.getRuntime();
+                        if (runtime != null && runtime.isAlive()) runtime.destroy(packet.force);
+                    });
         }
     }
 
 }
+

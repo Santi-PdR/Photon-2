@@ -25,6 +25,7 @@ import net.minecraftforge.network.PacketDistributor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 
 public class RemoveEntityEffectCommand {
@@ -76,10 +77,7 @@ public class RemoveEntityEffectCommand {
     }
 
     public void decode(FriendlyByteBuf buf) {
-        ids = new int[buf.readVarInt()];
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = buf.readVarInt();
-        }
+        ids = EntityIdListCodec.read(buf, 2);
         force = buf.readBoolean();
         if (buf.readBoolean()) {
             location = buf.readResourceLocation();
@@ -101,29 +99,21 @@ public class RemoveEntityEffectCommand {
     @OnlyIn(Dist.CLIENT)
     private static class Client {
         public static void execute(RemoveEntityEffectCommand packet) {
+            var level = Minecraft.getInstance().level;
+            if (level == null) return;
+            var targets = new ArrayList<Entity>(packet.ids.length);
             for (var id : packet.ids) {
-                var level = Minecraft.getInstance().level;
-                var entity = level == null ? null : level.getEntity(id);
-                if (entity != null) {
-                    var effects = EntityEffectExecutor.CACHE.get(entity);
-                    if (effects == null) return;
-                    var iter = effects.iterator();
-                    while (iter.hasNext()) {
-                        var effect = iter.next();
-                        if (packet.location == null || packet.location.equals(effect.getFx().getFxLocation())) {
-                            iter.remove();
-                            var runtime = effect.getRuntime();
-                            if (runtime != null && runtime.isAlive()) {
-                                runtime.destroy(packet.force);
-                            }
-                        }
-                    }
-                    if (effects.isEmpty()) {
-                        EntityEffectExecutor.CACHE.remove(entity);
-                    }
-                }
+                var entity = level.getEntity(id);
+                if (entity != null) targets.add(entity);
             }
+            EffectRemoval.removeMatching(targets, EntityEffectExecutor.CACHE,
+                    effect -> packet.location == null || packet.location.equals(effect.getFx().getFxLocation()),
+                    effect -> {
+                        var runtime = effect.getRuntime();
+                        if (runtime != null && runtime.isAlive()) runtime.destroy(packet.force);
+                    });
         }
     }
 
 }
+
