@@ -69,7 +69,10 @@ public class PhotonClientProxy extends PhotonCommonProxy {
 
     @SubscribeEvent
     public void clientSetup(final FMLClientSetupEvent e) {
-        e.enqueueWork(() -> {\n            PhotonShaders.init();\n            PhotonFXProjectSmokeTest.runIfEnabled();\n        });
+        e.enqueueWork(() -> {
+            PhotonShaders.init();
+            PhotonFXProjectSmokeTest.runIfEnabled();
+        });
         // Touch the registry to trigger annotation scanning; classes annotated with @NodeAttribute
         // bound to ShaderGraph self-register (mirrors KilaGraph's own registry bootstrap).
         Photon.LOGGER.info("Photon shader graph nodes loaded: {}",
