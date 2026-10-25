@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import com.lowdragmc.lowdraglib2.configurator.ConfiguratorParser;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -26,6 +27,7 @@ import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.shaders.Uniform;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -46,6 +48,8 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
 import java.lang.ref.Cleaner;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -75,6 +79,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
      */
     @Getter
     private boolean litByDynamicLights;
+    private final Map<String, float[]> uniformOverrides = new HashMap<>();
 
     public CustomShaderMaterial() {
     }
@@ -107,6 +112,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (shaderHolder != null) {
             shaderData.put("shaderData", authoredShaderData(provider));
         }
+        if (!uniformOverrides.isEmpty()) {
+            shaderData.put("uniformOverrides", CustomShaderUniformNbt.write(uniformOverrides));
+        }
         return shaderData;
     }
 
@@ -118,12 +126,27 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     @Override
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
-        if (!(tag instanceof CompoundTag shaderData)) return;
+        uniformOverrides.clear();
+        if (tag instanceof CompoundTag materialData) {
+            if (materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
+                var legacyShaderData = materialData.getCompound("shaderData");
+                if (CustomShaderUniformNbt.isPhoton262LegacyShaderData(legacyShaderData)) {
+                    CustomShaderUniformNbt.readLegacyUniformsInto(uniformOverrides, legacyShaderData.get("uniforms"));
+                }
+            }
+            var savedOverrides = new HashMap<String, float[]>();
+            CustomShaderUniformNbt.readInto(savedOverrides, materialData.get("uniformOverrides"));
+            uniformOverrides.putAll(savedOverrides);
+        } else {
+            CustomShaderUniformNbt.readInto(uniformOverrides, tag);
+        }
         recompile();
-        if (shaderHolder != null) {
-            shaderHolder.deserializeNBT(provider, shaderData.getCompound("shaderData"));
+        if (shaderHolder != null && tag instanceof CompoundTag materialData
+                && materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
+            shaderHolder.deserializeNBT(provider, materialData.getCompound("shaderData"));
             attachDynamicSamplers(shaderHolder);
             attachDynamicUniforms(shaderHolder);
+            applyUniformOverrides(shaderHolder.baseInstance);
         }
     }
 
@@ -282,7 +305,32 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             releaseLeakedDefines(shaderLocation, defines);
         }
         if (litByDynamicLights) LitParticles.bind(shader, context, 1f);
+        applyUniformOverrides(shader);
         return shader;
+    }
+
+    private void applyUniformOverrides(ShaderInstance shader) {
+        if (!(shader instanceof LDShaderInstance ldShader)) return;
+        var uniforms = ldShader.getShaderInstanceAccessor().getUniformMap();
+        uniformOverrides.forEach((name, components) -> {
+            Uniform uniform = uniforms.get(name);
+            if (uniform == null) return;
+            float[] fitted = CustomShaderUniformValues.fitComponents(components, uniform.getCount());
+            if (fitted.length == 0) return;
+            int type = uniform.getType();
+            if (type >= Uniform.UT_INT1 && type <= Uniform.UT_INT4) {
+                int[] values = CustomShaderUniformValues.toIntegerComponents(fitted);
+                switch (values.length) {
+                    case 1 -> uniform.set(values[0]);
+                    case 2 -> uniform.set(values[0], values[1]);
+                    case 3 -> uniform.set(values[0], values[1], values[2]);
+                    case 4 -> uniform.set(values[0], values[1], values[2], values[3]);
+                    default -> Photon.LOGGER.warn("Ignoring unsupported integer shader uniform '{}' length {}", name, values.length);
+                }
+            } else {
+                uniform.set(fitted);
+            }
+        });
     }
 
     /**
