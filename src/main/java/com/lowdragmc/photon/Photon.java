@@ -2,17 +2,14 @@ package com.lowdragmc.photon;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
-import com.lowdragmc.photon.client.PhotonClientProxy;
-import com.lowdragmc.photon.client.PhotonConfigScreen;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.client.ConfigScreenHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,11 +25,7 @@ public class Photon {
         IEventBus eventBus = FMLJavaModLoadingContext.get().getModEventBus();
         Photon.init();
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            net.minecraftforge.fml.ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, PhotonConfig.CONFIG_SPEC);
-            net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(
-                    ConfigScreenHandler.ConfigScreenFactory.class,
-                    () -> new ConfigScreenHandler.ConfigScreenFactory((minecraft, parent) -> new PhotonConfigScreen(parent)));
-            new PhotonClientProxy(eventBus);
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> PhotonClientProxy.init(eventBus));
         } else {
             new PhotonCommonProxy(eventBus);
         }
@@ -54,5 +47,3 @@ public class Photon {
         return FMLEnvironment.dist == Dist.CLIENT && IrisCompat.isUsingShaderPack();
     }
 }
-
-
