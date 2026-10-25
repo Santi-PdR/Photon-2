@@ -185,12 +185,12 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         return new Burst();
     }
 
-    private ListTag burstsSerialize(List<Burst> bursts) {
+    public ListTag burstsSerialize(List<Burst> bursts) {
         return LDLibPersistenceCompat.encodePayloadList(bursts.stream()
                 .map(burst -> burst.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<Burst> burstsDeserialize(ListTag tag) {
+    public List<Burst> burstsDeserialize(ListTag tag) {
         var groups = new ArrayList<Burst>();
         for (CompoundTag burstTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var burst = addDefaultBurst();
