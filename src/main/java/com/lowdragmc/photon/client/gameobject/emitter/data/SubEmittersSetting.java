@@ -134,12 +134,12 @@ public class SubEmittersSetting extends ToggleGroup {
         return emitter;
     }
 
-    private ListTag emittersSerialize(List<Emitter> emitters) {
+    public ListTag emittersSerialize(List<Emitter> emitters) {
         return LDLibPersistenceCompat.encodePayloadList(emitters.stream()
                 .map(emitter -> emitter.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    private List<Emitter> emittersDeserialize(ListTag tag) {
+    public List<Emitter> emittersDeserialize(ListTag tag) {
         var groups = new ArrayList<Emitter>();
         for (CompoundTag emitterTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var emitter = new Emitter();
@@ -255,11 +255,11 @@ public class SubEmittersSetting extends ToggleGroup {
             return IdLists.blockEntry(getter, setter);
         }
 
-        private ListTag stringsSerialize(List<String> values) {
+        public ListTag stringsSerialize(List<String> values) {
             return IdLists.serialize(values);
         }
 
-        private List<String> stringsDeserialize(ListTag tag) {
+        public List<String> stringsDeserialize(ListTag tag) {
             return IdLists.deserialize(tag);
         }
 
