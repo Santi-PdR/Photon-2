@@ -57,6 +57,8 @@ public class TimelinePlayer {
     private boolean stopped = false;
     /** Time of the most recent {@link #evaluate}, so {@link #frame} can interpolate within the tick. */
     private double lastEvalTime = 0;
+    /** Playback-time delta for the current game tick, used to interpolate frames at the same rate. */
+    private float frameRate = 1f;
     /** When recording (editor only), the per-frame re-apply is frozen so gizmo/inspector edits to the
      *  target persist between ticks instead of being stomped by the sampled pose. */
     private boolean recording = false;
@@ -120,8 +122,15 @@ public class TimelinePlayer {
      * evaluated before {@link #isFinished()} turns true.
      */
     public void tick(float rate) {
+        frameRate = Float.isFinite(rate) ? Math.max(0f, rate) : 1f;
+        double nextTime = localTime + frameRate;
         evaluate(localTime);
-        localTime += Math.max(0f, rate);
+        // Evaluate the exact end once when a tick crosses it. Otherwise rates above 1, or a
+        // fractional duration, can finish the playback without ever applying its final state.
+        if (localTime <= duration && nextTime > duration) {
+            evaluate(duration);
+        }
+        localTime = nextTime;
     }
 
     /**
@@ -157,9 +166,9 @@ public class TimelinePlayer {
     public void frame(float partialTicks) {
         // post effects are per-render-frame requests (stop submitting = effect stops next frame);
         // they keep applying in record mode — recording only freezes transform animation
-        applyPostProcess(lastEvalTime + partialTicks);
+        applyPostProcess(lastEvalTime + partialTicks * frameRate);
         if (recording()) return; // keep the user's live edits to the recording target
-        applyAnimations(lastEvalTime + partialTicks);
+        applyAnimations(lastEvalTime + partialTicks * frameRate);
     }
 
     /** Submit every active post-process clip's effect (weighted by its fade envelope) to the
@@ -523,3 +532,4 @@ public class TimelinePlayer {
         return keys != null && keys.contains(key);
     }
 }
+
