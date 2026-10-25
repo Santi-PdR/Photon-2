@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType;
 import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
 import net.minecraft.client.Minecraft;
 import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
@@ -26,7 +27,8 @@ public final class PhotonFXProjectSmokeTest {
             if (!(Minecraft.getInstance().particleEngine instanceof ParticleEngineAccessor)) {
                 throw new IllegalStateException("Photon ParticleEngine accessor mixin was not applied");
             }
-            Photon.LOGGER.info("[mixin-smoke] ParticleEngine accessor is applied");
+            ParticleQueueRenderType.OPAQUE_QUEUE.hasQueuedParticles();
+            Photon.LOGGER.info("[mixin-smoke] ParticleEngine accessor path is callable");
 
             var project = new FXProject();
             var emitter = new ParticleEmitter();
