@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client;
 
 import com.lowdragmc.lowdraglib2.client.scene.ParticleManager;
 import com.lowdragmc.photon.client.fx.ParticleTickHost;
+import com.lowdragmc.photon.client.fx.FXPostProcessPreparation;
 import com.lowdragmc.photon.client.light.DynamicLightRenderer;
 import com.lowdragmc.photon.client.postfx.runtime.PostFXCamera;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
@@ -154,6 +155,7 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
                     com.lowdragmc.lowdraglib2.editor.resource.BuiltinResourceProvider.TYPE.createFullPath("show_mask"),
                     java.util.Map.of(), 1f);
         }
+        FXPostProcessPreparation.prepare(particlesByRenderType(), isPlaying ? pPartialTicks : 0.0f);
         RenderSystem.setShaderGameTime(getRealTime(), isPlaying ? pPartialTicks : 0);
         // The scene's own camera for post-effect world reconstruction (the game camera would be wrong here).
         // LDLib2's ParticleManager multiplies pMatrixStack onto the model-view stack around the draws, so
@@ -283,3 +285,4 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
         return generation;
     }
 }
+
