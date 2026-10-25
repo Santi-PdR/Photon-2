@@ -15,7 +15,6 @@ import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
-import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
@@ -114,24 +113,55 @@ public class FXEditor extends Editor {
         runtime = null;
     }
 
-    /**
-     * The FX editor's shortcuts: the gizmo tools on Unity's Q/W/E/R with X toggling space, and the
-     * transport on Space with comma/period stepping frames.
-     *
-     * <p>Being bare keys is what makes the {@code when} clauses load-bearing — not while typing (a
-     * bare W must not retype itself into a name field) and, for the gizmo, not while flying, since
-     * the scene's fly controls poll those very keys while the right button is held.</p>
-     */
     private void onEditorKeyDown(UIEvent event) {
-        var key = event.keyCode;
-        if (key == GLFW.GLFW_KEY_SPACE && runtime != null) timelineView.togglePlay();
-        else if (key == GLFW.GLFW_KEY_Q) sceneView.sceneEditor.getTransformGizmo().setMode(TransformGizmo.Mode.NONE);
-        else if (key == GLFW.GLFW_KEY_W) sceneView.sceneEditor.getTransformGizmo().setMode(TransformGizmo.Mode.TRANSLATE);
-        else if (key == GLFW.GLFW_KEY_E) sceneView.sceneEditor.getTransformGizmo().setMode(TransformGizmo.Mode.ROTATE);
-        else if (key == GLFW.GLFW_KEY_R && (event.modifiers & GLFW.GLFW_MOD_CONTROL) != 0) reloadEffect();
-        else if (key == GLFW.GLFW_KEY_Z) {
+        if (PhotonEditorKeyMappings.isTyping(event)) return;
+        var gizmo = sceneView.sceneEditor.getTransformGizmo();
+        if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.PLAY_PAUSE, event.keyCode, event.scanCode)
+                || PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.STOP, event.keyCode, event.scanCode)) {
+            if (runtime == null) return;
+            if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.STOP, event.keyCode, event.scanCode)) {
+                timelineView.stop();
+            } else {
+                timelineView.togglePlay();
+            }
+            event.stopPropagation();
+        } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.STEP_BACK, event.keyCode, event.scanCode)
+                || PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.STEP_FORWARD, event.keyCode, event.scanCode)) {
+            if (runtime == null) return;
+            timelineView.stepFrames(PhotonEditorKeyMappings.matches(
+                    PhotonEditorKeyMappings.STEP_BACK, event.keyCode, event.scanCode) ? -1 : 1);
+            event.stopPropagation();
+        } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.RELOAD_EFFECT, event.keyCode, event.scanCode)) {
+            if (runtime == null) return;
+            reloadEffect();
+            event.stopPropagation();
+        } else {
+            if (sceneView.sceneEditor.isCameraMoving()) return;
+            if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.GIZMO_NONE, event.keyCode, event.scanCode)) {
+                gizmo.setMode(TransformGizmo.Mode.NONE);
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.GIZMO_TRANSLATE, event.keyCode, event.scanCode)) {
+                gizmo.setMode(TransformGizmo.Mode.TRANSLATE);
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.GIZMO_ROTATE, event.keyCode, event.scanCode)) {
+                gizmo.setMode(TransformGizmo.Mode.ROTATE);
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.GIZMO_SCALE, event.keyCode, event.scanCode)) {
+                gizmo.setMode(TransformGizmo.Mode.SCALE);
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.GIZMO_SPACE, event.keyCode, event.scanCode)) {
+                gizmo.setSpace(gizmo.getSpace() == TransformGizmo.Space.LOCAL
+                        ? TransformGizmo.Space.GLOBAL : TransformGizmo.Space.LOCAL);
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.CYCLE_DRAW_MODE, event.keyCode, event.scanCode)) {
             var modes = SceneView.DrawMode.values();
             sceneView.setDrawMode(modes[(sceneView.getDrawMode().ordinal() + 1) % modes.length]);
-        } else if (key == GLFW.GLFW_KEY_B) sceneView.setBloomEnabled(!sceneView.isBloomEnabled());
+                event.stopPropagation();
+            } else if (PhotonEditorKeyMappings.matches(PhotonEditorKeyMappings.TOGGLE_BLOOM, event.keyCode, event.scanCode)) {
+                sceneView.setBloomEnabled(!sceneView.isBloomEnabled());
+                event.stopPropagation();
+            }
+        }
     }
 }
+
