@@ -3,6 +3,7 @@ package com.lowdragmc.photon;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.client.PhotonClientProxy;
+import com.lowdragmc.photon.client.PhotonConfigScreen;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -30,7 +31,7 @@ public class Photon {
             net.minecraftforge.fml.ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, PhotonConfig.CONFIG_SPEC);
             net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(
                     ConfigScreenHandler.ConfigScreenFactory.class,
-                    () -> new ConfigScreenHandler.ConfigScreenFactory((minecraft, parent) -> parent));
+                    () -> new ConfigScreenHandler.ConfigScreenFactory((minecraft, parent) -> new PhotonConfigScreen(parent)));
             new PhotonClientProxy(eventBus);
         } else {
             new PhotonCommonProxy(eventBus);
@@ -53,4 +54,5 @@ public class Photon {
         return FMLEnvironment.dist == Dist.CLIENT && IrisCompat.isUsingShaderPack();
     }
 }
+
 
