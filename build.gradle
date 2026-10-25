@@ -79,6 +79,8 @@ dependencies {
 mixin {
     add sourceSets.main, 'photon.refmap.json'
     config 'photon.mixins.json'
+    // Optional Iris APIs vary across Oculus releases; verify those targets at runtime.
+    disableTargetValidator = true
 }
 
 jarJar.versionInformation {
