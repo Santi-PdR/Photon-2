@@ -1,6 +1,8 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
+import net.minecraft.client.Minecraft;
 import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.gui.editor.FXProject;
@@ -21,6 +23,11 @@ public final class PhotonFXProjectSmokeTest {
 
         Path file = null;
         try {
+            if (!(Minecraft.getInstance().particleEngine instanceof ParticleEngineAccessor)) {
+                throw new IllegalStateException("Photon ParticleEngine accessor mixin was not applied");
+            }
+            Photon.LOGGER.info("[mixin-smoke] ParticleEngine accessor is applied");
+
             var project = new FXProject();
             var emitter = new ParticleEmitter();
             emitter.config.emission.getBursts().add(new EmissionSetting.Burst());
