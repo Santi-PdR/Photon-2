@@ -2,6 +2,7 @@ package com.lowdragmc.photon;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.photon.client.PhotonClientProxy;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
