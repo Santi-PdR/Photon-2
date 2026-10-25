@@ -70,11 +70,11 @@ public class RandomCurve implements NumberFunction {
         this.curves1 = curves1;
     }
 
-    private ListTag curves0Serialize(ECBCurves value) {
+    public ListTag curves0Serialize(ECBCurves value) {
         return value.serializeNBT(Platform.getFrozenRegistry());
     }
 
-    private ECBCurves curves0Deserialize(ListTag tag) {
+    public ECBCurves curves0Deserialize(ListTag tag) {
         var value = new ECBCurves();
         value.deserializeNBT(Platform.getFrozenRegistry(), tag);
         return value;
