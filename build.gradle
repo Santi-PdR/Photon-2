@@ -26,6 +26,10 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+            // LDLib2's packaged refmap uses SRG names; remap dependency mixins into
+            // ForgeGradle's MCP-named development client before applying them.
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', file('build/createSrgToMcp/output.srg').absolutePath
             mods {
                 photon { source sourceSets.main }
             }

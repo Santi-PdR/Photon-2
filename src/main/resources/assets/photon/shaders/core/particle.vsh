@@ -23,7 +23,7 @@ void main() {
     photonViewPos = viewPos.xyz;
     photonBaseColor = data.Color.rgb;
 
-    vertexDistance = fog_distance(data.Position, FogShape);
+    vertexDistance = fog_distance(ModelViewMat, data.Position, FogShape);
     texCoord0 = data.UV;
     vertexColor = data.Color * texelFetch(Sampler2, data.LightUV / 16, 0);
 }

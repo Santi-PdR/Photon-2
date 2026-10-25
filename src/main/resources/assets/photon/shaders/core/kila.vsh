@@ -172,7 +172,7 @@ void main() {
     kilaRelPos = position;
 #endif
 
-    vertexDistance = fog_distance(position, FogShape);
+    vertexDistance = fog_distance(ModelViewMat, position, FogShape);
     texCoord0 = data.UV;
     vertexColor = data.Color;
     lightColor = texelFetch(Sampler2, data.LightUV / 16, 0);

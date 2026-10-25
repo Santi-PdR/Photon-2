@@ -7,10 +7,10 @@ import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModContainer;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.client.ConfigScreenHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +23,8 @@ public class Photon {
     public static final String NAME = "Photon";
     public static final Logger LOGGER = LoggerFactory.getLogger(NAME);
 
-    public Photon(IEventBus eventBus, ModContainer modContainer) {
+    public Photon() {
+        IEventBus eventBus = FMLJavaModLoadingContext.get().getModEventBus();
         Photon.init();
         if (FMLEnvironment.dist == Dist.CLIENT) {
             net.minecraftforge.fml.ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, PhotonConfig.CONFIG_SPEC);
