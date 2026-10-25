@@ -28,6 +28,25 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 jarJar.enable()
 
+// This accessor targets private Oculus implementation fields that are intentionally absent from
+// some supported compile-time Oculus APIs. Compile it without the Mixin AP; its config is gated
+// behind runtime Iris detection, while the main Photon mixins still receive the production refmap.
+sourceSets {
+    irisAccessors {
+        java.srcDir 'src/main/java'
+        java.include 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.java'
+        compileClasspath += configurations.compileClasspath
+    }
+    main {
+        java.exclude 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.java'
+        compileClasspath += irisAccessors.output
+    }
+}
+configurations.irisAccessorsImplementation.extendsFrom(configurations.implementation)
+configurations.irisAccessorsCompileOnly.extendsFrom(configurations.compileOnly)
+
+sourceSets.main.output.dir(sourceSets.irisAccessors.output)
+
 minecraft {
     mappings channel: 'official', version: '1.20.1'
     copyIdeResources = true
@@ -97,25 +116,6 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.compilerArgs += ['-Xmaxerrs', '500']
 }
-
-// This accessor targets private Oculus implementation fields that are intentionally absent from
-// some supported compile-time Oculus APIs. Compile it without the Mixin AP; its config is gated
-// behind runtime Iris detection, while the main Photon mixins still receive the production refmap.
-sourceSets {
-    irisAccessors {
-        java.srcDir 'src/main/java'
-        java.include 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.java'
-        compileClasspath += configurations.compileClasspath
-    }
-    main {
-        java.exclude 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.java'
-        compileClasspath += irisAccessors.output
-    }
-}
-configurations.irisAccessorsImplementation.extendsFrom(configurations.implementation)
-configurations.irisAccessorsCompileOnly.extendsFrom(configurations.compileOnly)
-
-sourceSets.main.output.dir(sourceSets.irisAccessors.output)
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 sourceSets.main.java {
