@@ -2,7 +2,6 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.client.model.ModelFactory;
-import com.lowdragmc.lowdraglib2.client.renderer.impl.IModelRenderer;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -11,6 +10,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -116,16 +116,10 @@ public class JsonModelSource implements IModelSource {
             var mui = e.currentElement.getModularUI();
             if (mui == null) return;
             Dialog.showFileDialog("ldlib.gui.editor.tips.select_model", LDLib2.getAssetsDir(), true, node -> {
-                if (!node.getKey().isFile() || node.getKey().getName().toLowerCase().endsWith(".json".toLowerCase())) {
-                    if (node.getKey().isFile()) {
-                        return IModelRenderer.getModelFromFile(node.getKey()) != null;
-                    }
-                    return true; // allow directories
-                }
-                return false;
+                return !node.getKey().isFile() || node.getKey().getName().toLowerCase().endsWith(".json");
             }, r -> {
                 if (r != null && r.isFile()) {
-                    var newModel = IModelRenderer.getModelFromFile(r);
+                    var newModel = getModelLocationFromFile(r);
                     if (newModel == null) return;
                     if (newModel.equals(modelLocation)) return;
                     setModelLocation(newModel);
@@ -144,6 +138,11 @@ public class JsonModelSource implements IModelSource {
         father.addConfigurators(buttonConfigurator, reloadButton);
     }
 
+    @Nullable
+    private static ResourceLocation getModelLocationFromFile(java.io.File file) {
+        return PhotonAssetPath.modelLocationFromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
+    }
+
     @Override
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
@@ -155,3 +154,4 @@ public class JsonModelSource implements IModelSource {
         return Objects.hashCode(modelLocation);
     }
 }
+

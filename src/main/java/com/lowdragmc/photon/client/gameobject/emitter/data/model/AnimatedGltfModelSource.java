@@ -86,7 +86,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @ConfigList(configuratorMethod = "createAnimationFileConfigurator",
             addDefaultMethod = "addDefaultAnimationFile")
     @Configurable(name = "AnimatedGltfModelSource.animationFiles",
-            tips = "photon.model_source.animated_gltf_model.animationFiles.tips")
+            tips = "photon.model_source.animated_gltf_model.animationFiles.tips", persisted = false)
     private List<ResourceLocation> animationFiles = new ArrayList<>();
 
     /**
@@ -489,24 +489,13 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
     @Override
     public Tag serializeAdditionalNBT(HolderLookup.@NotNull Provider provider) {
         if (animationFiles.isEmpty()) return IModelSource.super.serializeAdditionalNBT(provider);
-        var tag = new CompoundTag();
-        var list = new ListTag();
-        for (var file : animationFiles) {
-            list.add(StringTag.valueOf(file.toString()));
-        }
-        tag.put("animationFiles", list);
-        return tag;
+        return AnimationFileListNbt.write(animationFiles);
     }
 
     @Override
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
         animationFiles.clear();
-        if (!(tag instanceof CompoundTag compound)) return;
-        for (var element : compound.getList("animationFiles", Tag.TAG_STRING)) {
-            if (LDLib2.isValidResourceLocation(element.getAsString())) {
-                animationFiles.add(new ResourceLocation(element.getAsString()));
-            }
-        }
+        animationFiles.addAll(AnimationFileListNbt.read(tag));
     }
 
     /** A new row starts on the model's own file: inert (see {@link #combine}) rather than a path that
@@ -617,3 +606,4 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
                 perParticlePhase, frames, phaseSource, interpolate);
     }
 }
+
