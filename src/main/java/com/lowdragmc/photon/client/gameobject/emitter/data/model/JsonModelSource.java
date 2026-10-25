@@ -92,8 +92,13 @@ public class JsonModelSource implements IModelSource {
         try {
             ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
             Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
-            if (nestedFile == null) return false;
-            try (BufferedReader reader = Files.newBufferedReader(nestedFile)) {
+            Resource resource = nestedFile == null
+                    ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
+                    : null;
+            if (nestedFile == null && resource == null) return false;
+            try (BufferedReader reader = nestedFile == null
+                    ? new BufferedReader(resource.openAsReader())
+                    : Files.newBufferedReader(nestedFile)) {
                 return isObjLoaderJson(JsonParser.parseReader(reader).getAsJsonObject());
             }
         } catch (Exception ignored) {
