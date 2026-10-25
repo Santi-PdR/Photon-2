@@ -6,7 +6,6 @@ import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
-import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
@@ -36,7 +35,7 @@ import java.util.function.Supplier;
 @Getter
 @Setter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public class RendererSetting implements IPersistedSerializable {
+public class RendererSetting {
 
     public enum Layer {
         Opaque,
