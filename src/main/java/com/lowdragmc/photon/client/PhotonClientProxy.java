@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client;
 
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonCommonProxy;
+import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.fx.FXHelper;
 import com.lowdragmc.photon.client.fx.FXPreloader;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
