@@ -61,6 +61,10 @@ final class PhotonModelBaker implements ModelBaker {
     }
 
     private UnbakedModel resolveModel(ResourceLocation location, int depth) {
+        if (resolving.contains(location)) {
+            Photon.LOGGER.warn("Cyclic JSON model parent chain at {}", location);
+            return ModelFactory.getUnBakedModel(ModelBakery.MISSING_MODEL_LOCATION);
+        }
         UnbakedModel cached = models.get(location);
         if (cached != null) return cached;
         if (location.equals(ResourceLocation.withDefaultNamespace("builtin/generated"))) {

@@ -60,7 +60,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     private PhotonMeshCache() {
     }
 
-    /** Changes whenever a resource reload invalidates cached model source metadata. */
+    /** Changes whenever cached source data or a resource reload invalidates model source metadata. */
     public long generation() {
         return generation;
     }
@@ -104,6 +104,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     }
 
     public void invalidate(Object key) {
+        generation++;
         cache.remove(key);
         models.remove(key);
         fileStamps.remove(key);
