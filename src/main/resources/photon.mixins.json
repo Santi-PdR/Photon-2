@@ -3,6 +3,7 @@
   "minVersion": "0.8",
   "package": "com.lowdragmc.photon.core.mixins",
   "compatibilityLevel": "JAVA_17",
+  "refmap": "photon.refmap.json",
   "plugin": "com.lowdragmc.photon.core.mixins.PhotonMixinPlugin",
   "client": [
     "ClientLevelMixin",
