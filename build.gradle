@@ -1,0 +1,97 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = 'photon-forge-1.20.1'
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+jarJar.enable()
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                photon { source sourceSets.main }
+            }
+        }
+        client {}
+        server { args '--nogui' }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.firstdark.dev/snapshots' }
+    maven { url = 'https://api.modrinth.com/maven' }
+    flatDir { dirs 'libs' }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // Compile against the matching Forge 1.20.1 dependencies recovered from the
+    // previous 2.2.2.3 port. The local artifacts are also used in Jar-in-Jar.
+    implementation fg.deobf('local:ldlib2:2.2.39.a')
+    jarJar(fg.deobf('local:ldlib2:2.2.39.a'))
+    compileOnly fg.deobf('local:ldlib1:1.0.52.a')
+    runtimeOnly fg.deobf('local:ldlib1:1.0.52.a')
+    implementation fg.deobf('local:kilagraph:20.1.0.15')
+    jarJar(fg.deobf('local:kilagraph:20.1.0.15'))
+    // Photon 1.20.1 shader integration links against the Iris API shipped by Oculus.
+    // Compile-only: Oculus remains an optional client-side runtime dependency.
+    compileOnly fg.deobf('maven.modrinth:GchcoXML:iQ1SwGc3')
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+}
+
+jarJar.versionInformation {
+    ranged(dependency { it.group == 'local' && it.name == 'ldlib2' }, '[2.2.39.a,2.2.40)')
+    pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a+forge.1.20.1')
+    ranged(dependency { it.group == 'local' && it.name == 'kilagraph' }, '[20.1.0.15,20.1.0.16)')
+    pin(dependency { it.group == 'local' && it.name == 'kilagraph' }, '20.1.0.15')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xmaxerrs', '500']
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+sourceSets.main.java {
+    // The upstream interactive test harness is a developer tool and depends on newer LDLib2 APIs.
+    exclude 'com/lowdragmc/photon/uitest/**'
+    exclude 'com/lowdragmc/photon/test/**'
+}
+
+tasks.withType(ProcessResources).configureEach {
+    def replaceProperties = [
+            mod_id: mod_id,
+            version: project.version,
+            mod_name: mod_name,
+            mod_description: mod_description,
+            mod_license: mod_license,
+            mod_authors: mod_authors,
+            mod_url: 'https://github.com/Santi-PdR/Photon-2',
+            minecraft_version: minecraft_version
+    ]
+    inputs.properties replaceProperties
+    filesMatching('META-INF/mods.toml') { expand replaceProperties }
+}
+
+// Upstream tests target newer Minecraft APIs; the 1.20.1 port is validated with the Forge client run.
+sourceSets.test.java.setSrcDirs([])
