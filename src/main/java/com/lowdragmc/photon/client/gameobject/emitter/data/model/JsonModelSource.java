@@ -1,7 +1,8 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.lowdragmc.lowdraglib2.LDLib2;
-import com.lowdragmc.lowdraglib2.client.model.ModelFactory;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -16,9 +17,11 @@ import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.BlockModelRotation;
-import net.minecraft.client.resources.model.Material;
+import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.util.RandomSource;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -27,6 +30,10 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.io.BufferedReader;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Objects;
 
 /**
@@ -42,6 +49,9 @@ public class JsonModelSource implements IModelSource {
     @Getter
     @Configurable(name = "MeshData.modelLocation")
     private ResourceLocation modelLocation = ResourceLocation.withDefaultNamespace("block/stone");
+    private volatile ObjLoaderReference objLoaderReference;
+    private volatile boolean objLoaderChecked;
+    private volatile long objLoaderGeneration = Long.MIN_VALUE;
 
     public JsonModelSource() {
     }
@@ -64,11 +74,14 @@ public class JsonModelSource implements IModelSource {
     @Override
     public void invalidate() {
         PhotonMeshCache.INSTANCE.invalidate(new PhotonMeshCache.JsonKey(modelLocation));
+        objLoaderReference = null;
+        objLoaderChecked = false;
+        objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
     }
 
     @Override
     public boolean hasAtlasUV() {
-        return true;
+        return getObjLoaderReference() == null;
     }
 
     @Override
@@ -82,16 +95,21 @@ public class JsonModelSource implements IModelSource {
         if (Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) {
             return null;
         }
+        ObjLoaderReference objReference = getObjLoaderReference();
+        if (objReference != null) {
+            ResourceLocation objFile = ModelBakery.MODEL_LISTER.idToFile(objReference.location());
+            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objFile.getPath());
+            if (nestedObj != null) {
+                PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
+            }
+            ObjModelSource objSource = new ObjModelSource(objReference.location());
+            objSource.setFlipV(objReference.flipV());
+            return objSource.getMesh().translated(-0.5f, -0.5f, -0.5f);
+        }
         var random = RandomSource.create();
-        var bakedModel = ModelFactory.getUnBakedModel(modelLocation).bake(
-                ModelFactory.getModelBaker(),
-                Material::sprite,
-                BlockModelRotation.X0_Y0, modelLocation);
+        BakedModel bakedModel = PhotonModelBaker.bake(modelLocation);
         if (bakedModel == null) {
-            bakedModel = ModelFactory.getUnBakedModel(ResourceLocation.withDefaultNamespace("block/stone")).bake(
-                    ModelFactory.getModelBaker(),
-                    Material::sprite,
-                    BlockModelRotation.X0_Y0, ResourceLocation.withDefaultNamespace("block/stone"));
+            return null;
         }
         var quads = new ArrayList<Pair<BakedQuad, Float>>();
         for (var side : TileParticle.MODEL_SIDES) {
@@ -105,6 +123,59 @@ public class JsonModelSource implements IModelSource {
             }
         }
         return PhotonMesh.fromBakedQuads(quads);
+    }
+
+    @Nullable
+    private ObjLoaderReference getObjLoaderReference() {
+        long generation = PhotonMeshCache.INSTANCE.generation();
+        if (objLoaderGeneration != generation) {
+            synchronized (this) {
+                if (objLoaderGeneration != generation) {
+                    objLoaderReference = null;
+                    objLoaderChecked = false;
+                    objLoaderGeneration = generation;
+                }
+            }
+        }
+        if (objLoaderChecked || Minecraft.getInstance().getOverlay() instanceof LoadingOverlay) {
+            return objLoaderReference;
+        }
+        synchronized (this) {
+            if (objLoaderChecked) return objLoaderReference;
+            try {
+                ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
+                Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+                if (nestedFile != null) {
+                    PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedFile.toFile());
+                }
+                Resource resource = nestedFile == null
+                        ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
+                        : null;
+                if (resource == null && nestedFile == null) return null;
+
+                try (BufferedReader reader = nestedFile == null
+                        ? resource.openAsReader()
+                        : Files.newBufferedReader(nestedFile)) {
+                    JsonObject json = JsonParser.parseReader((Reader) reader).getAsJsonObject();
+                    String loader = json.has("loader") ? json.get("loader").getAsString() : "";
+                    if ((loader.equals("forge:obj") || loader.equals("neoforge:obj"))
+                            && json.has("model") && json.get("model").isJsonPrimitive()) {
+                        boolean flipV = json.has("flip_v") ? json.get("flip_v").getAsBoolean()
+                                : json.has("flipV") && json.get("flipV").getAsBoolean();
+                        objLoaderReference = new ObjLoaderReference(
+                                new ResourceLocation(json.get("model").getAsString()), flipV);
+                    }
+                    objLoaderChecked = true;
+                    objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
+                }
+            } catch (Exception exception) {
+                objLoaderChecked = true;
+                objLoaderGeneration = PhotonMeshCache.INSTANCE.generation();
+                com.lowdragmc.photon.Photon.LOGGER.warn(
+                        "Failed to resolve OBJ model loader for {}", modelLocation, exception);
+            }
+        }
+        return objLoaderReference;
     }
 
     @Override
@@ -141,6 +212,9 @@ public class JsonModelSource implements IModelSource {
     @Nullable
     private static ResourceLocation getModelLocationFromFile(java.io.File file) {
         return PhotonAssetPath.modelLocationFromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
+    }
+
+    private record ObjLoaderReference(ResourceLocation location, boolean flipV) {
     }
 
     @Override

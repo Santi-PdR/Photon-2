@@ -55,8 +55,14 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     /** Entries built from other entries (a model combined with its animation files), by what they were built from. */
     private final ConcurrentHashMap<Object, Set<Object>> dependents = new ConcurrentHashMap<>();
     private int ticks;
+    private volatile long generation;
 
     private PhotonMeshCache() {
+    }
+
+    /** Changes whenever a resource reload invalidates cached model source metadata. */
+    public long generation() {
+        return generation;
     }
 
     /**
@@ -129,6 +135,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     }
 
     public void clear() {
+        generation++;
         cache.clear();
         models.clear();
         fileStamps.clear();

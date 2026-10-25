@@ -114,6 +114,17 @@ public final class PhotonMesh {
         return new PhotonMesh(this, geometry, tangents, revision);
     }
 
+    /** Return a centered-space copy offset without changing this mesh's UVs or topology. */
+    public PhotonMesh translated(float x, float y, float z) {
+        float[] translated = geometry.clone();
+        for (int i = 0; i < translated.length; i += FLOATS_PER_GEOMETRY) {
+            translated[i] += x;
+            translated[i + 1] += y;
+            translated[i + 2] += z;
+        }
+        return withGeometry(translated, null, geometryRevision + 1);
+    }
+
     /** Compare by identity for "still the same model", as opposed to "still the same pose". */
     public PhotonMesh topology() {
         return topology;
