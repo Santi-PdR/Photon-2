@@ -1862,5 +1862,19 @@
   "photon.fx_instance.replace": "Replace...",
   "photon.fx_instance.refresh": "Follow the Updated Source",
   "photon.fx_instance.enable": "Enable",
-  "photon.fx_instance.disable": "Disable"
+  "photon.fx_instance.disable": "Disable",
+  "keymap.category.photon.scene": "Photon Scene",
+  "keymap.category.photon.playback": "Photon Playback",
+  "keymap.photon.scene.gizmo_none": "Gizmo: None",
+  "keymap.photon.scene.gizmo_translate": "Gizmo: Translate",
+  "keymap.photon.scene.gizmo_rotate": "Gizmo: Rotate",
+  "keymap.photon.scene.gizmo_scale": "Gizmo: Scale",
+  "keymap.photon.scene.gizmo_space": "Toggle Gizmo Space",
+  "keymap.photon.scene.cycle_draw_mode": "Cycle Scene Draw Mode",
+  "keymap.photon.scene.toggle_bloom": "Toggle Preview Bloom",
+  "keymap.photon.playback.play_pause": "Play / Pause FX Timeline",
+  "keymap.photon.playback.stop": "Stop FX Timeline",
+  "keymap.photon.playback.step_back": "Step FX Timeline Back",
+  "keymap.photon.playback.step_forward": "Step FX Timeline Forward",
+  "keymap.photon.playback.reload_effect": "Reload FX Project"
 }
