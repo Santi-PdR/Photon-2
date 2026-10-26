@@ -68,12 +68,12 @@ public final class PhotonFXProjectSmokeTest {
 
             // Recreate the managed-list envelope written by Photon 26.2 projects. The
             // fixture is generated in memory so user projects never leave the runner.
-            var encodedProject = NbtIo.readCompressed(file.toFile());
+            var encodedProject = NbtIo.read(file.toFile());
             int convertedLists = wrapLegacyManagedLists(encodedProject);
             if (convertedLists == 0) {
                 throw new IllegalStateException("Synthetic project did not contain a serialized burst list");
             }
-            NbtIo.writeCompressed(encodedProject, file.toFile());
+            NbtIo.write(encodedProject, file.toFile());
 
             var loaded = FXProject.TYPE.loadProjectFromFile(file.toFile());
             if (!(loaded instanceof FXProject loadedProject)
