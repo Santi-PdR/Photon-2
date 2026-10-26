@@ -76,7 +76,7 @@ jobs:
       - name: Install virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0
+          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil
 
       - name: Smoke-test Forge client startup without a physical display
         shell: bash
@@ -95,6 +95,22 @@ jobs:
           exit 1
 
 
+      - name: Verify the editor actually displays the particle
+        shell: bash
+        run: |
+          /usr/bin/python3 - <<'PY'
+          from glob import glob
+          from PIL import Image, ImageChops
+          images = sorted(glob('run/screenshots/*.png'))
+          if len(images) != 2:
+              raise SystemExit(f'Expected two editor screenshots; found {len(images)}')
+          active, expired = [Image.open(path).convert('RGB').crop((300, 180, 1010, 550)) for path in images]
+          changed = sum(1 for pixel in ImageChops.difference(active, expired).getdata() if pixel != (0, 0, 0))
+          print(f'Editor scene pixels changed by the live particle: {changed}')
+          if changed < 10:
+              raise SystemExit('Particle was alive but did not visibly change the editor scene')
+          PY
+
       - name: Upload client smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,5 +121,4 @@ jobs:
             run/screenshots/*.png
           if-no-files-found: ignore
           retention-days: 14
-
 
