@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType;
 import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
@@ -69,10 +70,26 @@ public final class PhotonFXProjectSmokeTest {
             // Recreate the managed-list envelope written by Photon 26.2 projects. The
             // fixture is generated in memory so user projects never leave the runner.
             var encodedProject = NbtIo.read(file.toFile());
-            int convertedLists = wrapLegacyManagedLists(encodedProject);
-            if (convertedLists == 0) {
-                throw new IllegalStateException("Synthetic project did not contain a serialized burst list");
+            var fxObjects = encodedProject.getCompound("data").getCompound("fx")
+                    .getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND);
+            if (fxObjects.isEmpty()) {
+                throw new IllegalStateException("Synthetic project did not contain its particle emitter");
             }
+            var emitterData = fxObjects.getCompound(0).getCompound("data");
+            if (!emitterData.contains("config", Tag.TAG_COMPOUND)) {
+                throw new IllegalStateException("Synthetic particle emitter did not serialize its config compound");
+            }
+            var emitterConfig = emitterData.getCompound("config");
+            if (!emitterConfig.contains("emission", Tag.TAG_COMPOUND)) {
+                throw new IllegalStateException("Synthetic particle emitter did not serialize its emission compound");
+            }
+            var emission = emitterConfig.getCompound("emission");
+            var payload = new ListTag();
+            payload.add(burst.serializeNBT(Platform.getFrozenRegistry()));
+            var envelope = new CompoundTag();
+            envelope.putInt("uid", 0);
+            envelope.put("payload", payload);
+            emission.put("bursts", envelope);
             NbtIo.write(encodedProject, file.toFile());
 
             var loaded = FXProject.TYPE.loadProjectFromFile(file.toFile());
@@ -109,34 +126,5 @@ public final class PhotonFXProjectSmokeTest {
         }
     }
 
-    private static int wrapLegacyManagedLists(Tag tag) {
-        int converted = 0;
-        if (tag instanceof CompoundTag compound) {
-            for (String key : compound.getAllKeys().toArray(String[]::new)) {
-                Tag child = compound.get(key);
-                if ("bursts".equals(key) && child instanceof ListTag list && !list.isEmpty()) {
-                    ListTag payload = new ListTag();
-                    for (Tag entry : list) {
-                        if (entry instanceof CompoundTag encoded
-                                && encoded.contains("t", Tag.TAG_BYTE) && encoded.contains("p")) {
-                            payload.add(encoded.get("p").copy());
-                        } else {
-                            payload.add(entry.copy());
-                        }
-                    }
-                    CompoundTag envelope = new CompoundTag();
-                    envelope.putInt("uid", 0);
-                    envelope.put("payload", payload);
-                    compound.put(key, envelope);
-                    converted++;
-                } else {
-                    converted += wrapLegacyManagedLists(child);
-                }
-            }
-        } else if (tag instanceof ListTag list) {
-            for (Tag child : list) converted += wrapLegacyManagedLists(child);
-        }
-        return converted;
-    }
 }
 
