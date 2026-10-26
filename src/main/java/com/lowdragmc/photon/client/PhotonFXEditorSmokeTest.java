@@ -115,6 +115,17 @@ public final class PhotonFXEditorSmokeTest {
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
         verifyNestedMeshLoad();
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var original = new CustomShaderMaterial();
+        original.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());
+        var saved = com.lowdragmc.lowdraglib2.utils.PersistedParser.serializeNBT(original, provider);
+        if (!saved.contains("curveTexture", Tag.TAG_LIST)) throw new IllegalStateException("Curve sampler did not serialize as a list");
+        var restored = new CustomShaderMaterial();
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(saved, restored, provider);
+        if (restored.curveTexture.serializeNBT(provider).size() != 1 || restored.curveTexture.getCurveTexture() == null)
+            throw new IllegalStateException("Saved shader curve was not restored and uploaded");
+        restored.curveTexture.close();
+        Photon.LOGGER.info("[shader-curve-smoke] restored and uploaded a saved shader curve");
         var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));
         fogMaterial.recompile();
         if (fogMaterial.isCompiledError()) throw new IllegalStateException(fogMaterial.getCompiledErrorMessage());
@@ -229,6 +240,5 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
-
 
 

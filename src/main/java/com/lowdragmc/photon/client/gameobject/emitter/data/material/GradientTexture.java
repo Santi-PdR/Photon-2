@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
+import com.lowdragmc.lowdraglib2.syncdata.IProviderAwareNBTSerializable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
@@ -22,7 +23,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public class GradientTexture implements AutoCloseable, IConfigurable {
+public class GradientTexture implements AutoCloseable, IConfigurable, IProviderAwareNBTSerializable<ListTag> {
     private final int width;
     private final int height;
     @Configurable(name = "gradients", canCollapse = false, collapse = false)
