@@ -35,7 +35,7 @@ public final class PhotonFXProjectSmokeTest {
             Photon.LOGGER.info("[mixin-smoke] ParticleEngine accessor path is callable");
 
             var objLocation = new ResourceLocation("photon", "block/photon_obj_smoke");
-            var modelFile = net.minecraft.client.renderer.block.model.ModelBakery.MODEL_LISTER.idToFile(objLocation);
+            var modelFile = net.minecraft.client.resources.model.ModelBakery.MODEL_LISTER.idToFile(objLocation);
             objModelJson = LDLib2.getAssetsDir().toPath()
                     .resolve("photon").resolve("assets").resolve("photon")
                     .resolve(modelFile.getPath());
