@@ -101,6 +101,9 @@ public final class PhotonFXEditorSmokeTest {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed {} live particles ({} queued objects)", live, queued);
+            } else if (ticks == 110) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
                 finished = true;
                 editor.closeCurrentProject(false, null);
                 minecraft.setScreen(previousScreen);
@@ -150,6 +153,7 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.setLooping(false);
         emitter.config.setStartLifetime(NumberFunction.constant(70));
         emitter.config.setStartSpeed(NumberFunction.constant(0));
+        emitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(4, 4, 4));
         emitter.config.emission.setEmissionRate(NumberFunction.constant(0));
         emitter.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
         emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
@@ -197,6 +201,8 @@ public final class PhotonFXEditorSmokeTest {
         editor = new FXEditor();
         minecraft.setScreen(new ModularUIScreen(new ModularUI(UI.of(editor)), Component.literal("Photon CI editor")));
         editor.loadProject(loaded, projectFile.toFile());
+        editor.sceneView.fxObjectInfoView.setDisplay(false);
+        editor.sceneView.fxObjectAnimationView.setDisplay(false);
         if (editor.getCurrentProject() != loaded || editor.runtime == null || editor.runtime.objects.size() < 2) {
             throw new IllegalStateException("Editor did not initialize the loaded project runtime");
         }
