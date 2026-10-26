@@ -705,6 +705,12 @@ public class RenderPassPipeline {
         }
 
         SceneBlit.writeBack(outputTarget, mainTarget);
+        if (PhotonParticleManager.getRenderingManager() != null) {
+            // Editor scenes can be transparent. Their framebuffer alpha must include the FX,
+            // otherwise the later UI composite discards particles over empty background. Bloom
+            // forces alpha to one, so recover coverage from the unprocessed draw target.
+            SceneBlit.writeAlphaToBound(DRAW_TARGET.getColorTextureId());
+        }
 
         // restore the UI clip state the scene render suspended (the box outlives the disabled test)
         if (uiScissorBox != null) {

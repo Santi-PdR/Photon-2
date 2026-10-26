@@ -43,6 +43,25 @@ public final class SceneBlit {
         writeBackToBound(from.getColorTextureId());
     }
 
+    /** Restore scene coverage from the unprocessed image after RGB post-processing. */
+    public static void writeAlphaToBound(int colorTexture) {
+        RenderSystem.assertOnRenderThread();
+        var shader = LDLibShaders.getBlitShader();
+        shader.setSampler("DiffuseSampler", colorTexture);
+        shader.apply();
+        GlStateManager._disableBlend();
+        GlStateManager._colorMask(false, false, false, true);
+        GlStateManager._disableDepthTest();
+        GlStateManager._depthMask(false);
+        drawFullscreenQuad();
+        shader.clear();
+        GlStateManager._depthMask(true);
+        GlStateManager._colorMask(true, true, true, true);
+        GlStateManager._enableDepthTest();
+        GlStateManager._enableBlend();
+        RenderSystem.defaultBlendFunc();
+    }
+
     /**
      * Same, into whatever framebuffer the caller already bound — Iris keeps its own framebuffers and
      * binds them itself, so the binding is left untouched here.
