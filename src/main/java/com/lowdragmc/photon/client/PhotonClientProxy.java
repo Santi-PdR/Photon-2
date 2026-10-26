@@ -16,6 +16,10 @@ import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.client.ConfigScreenHandler;
 import net.minecraftforge.client.event.ModelEvent;
+import net.minecraftforge.client.model.obj.ObjLoader;
+import net.minecraftforge.client.model.geometry.IGeometryLoader;
+import java.lang.reflect.Field;
+import java.util.Map;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.event.AddPackFindersEvent;
@@ -43,6 +47,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         eventBus.addListener(this::clientSetup);
         eventBus.addListener(this::shaderRegistry);
         eventBus.addListener(this::registerModels);
+        eventBus.addListener(this::registerGeometryLoaders);
         eventBus.addListener(this::registerReloadListeners);
         eventBus.addListener(this::addPackFinders);
         eventBus.addListener(PhotonEditorKeyMappings::register);
@@ -77,6 +82,26 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // bound to ShaderGraph self-register (mirrors KilaGraph's own registry bootstrap).
         Photon.LOGGER.info("Photon shader graph nodes loaded: {}",
                 com.lowdragmc.photon.client.shadergraph.ShaderGraph.NODE_REGISTRY.getNodeClasses().size());
+    }
+
+    @SubscribeEvent
+    public void registerGeometryLoaders(ModelEvent.RegisterGeometryLoaders event) {
+        // Photon and LDLib2 ship NeoForge-authored OBJ model JSONs. Forge's equivalent
+        // loader is ObjLoader.INSTANCE, so expose it under NeoForge's resource key too.
+        try {
+            Field loadersField = ModelEvent.RegisterGeometryLoaders.class.getDeclaredField("loaders");
+            if (!loadersField.trySetAccessible()) {
+                throw new IllegalStateException("Forge geometry-loader registry is not accessible");
+            }
+            @SuppressWarnings("unchecked")
+            Map<ResourceLocation, IGeometryLoader<?>> loaders =
+                    (Map<ResourceLocation, IGeometryLoader<?>>) loadersField.get(event);
+            ResourceLocation neoForgeObj = new ResourceLocation("neoforge", "obj");
+            loaders.put(neoForgeObj, ObjLoader.INSTANCE);
+            Photon.LOGGER.info("[obj-loader-compat] registered {} using Forge's OBJ loader", neoForgeObj);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not register NeoForge OBJ loader compatibility", exception);
+        }
     }
 
     @SubscribeEvent

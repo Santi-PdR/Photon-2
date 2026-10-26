@@ -9,7 +9,6 @@
     "ClientLevelMixin",
     "GameRendererMixin",
     "MinecraftMixin",
-    "NeoForgeObjLoaderCompatMixin",
     "ParticleEngineMixin",
     "ShaderInstanceMixin",
     "LDLibPayloadRegistryMixin",
