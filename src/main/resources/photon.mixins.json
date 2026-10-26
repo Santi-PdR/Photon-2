@@ -9,6 +9,7 @@
     "ClientLevelMixin",
     "GameRendererMixin",
     "MinecraftMixin",
+    "NeoForgeObjLoaderCompatMixin",
     "ParticleEngineMixin",
     "ShaderInstanceMixin",
     "LDLibPayloadRegistryMixin",
@@ -21,8 +22,7 @@
     "iris.FallbackShaderAccessor",
     "iris.IrisRenderingPipelineAccessor"
   ],
-  "mixins": [
-  ],
+  "mixins": [],
   "injectors": {
     "defaultRequire": 1
   }
