@@ -10,7 +10,6 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache
 import com.lowdragmc.photon.gui.editor.resource.MeshResource;
 import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -44,6 +43,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
 
     public PhotonClientProxy(IEventBus eventBus) {
         super(eventBus);
+        PhotonFXEditorSmokeTest.prepareModelFixtureIfEnabled();
         eventBus.addListener(this::clientSetup);
         eventBus.addListener(this::shaderRegistry);
         eventBus.addListener(this::registerModels);
@@ -120,7 +120,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                     entry.getKey().getPath()
                             .replace("models/", "")
                             .replace(".json", ""));
-            event.register(new ModelResourceLocation(modelLocation, "standalone"));
+            event.register(modelLocation);
         }
         MeshResource.INSTANCE.onAdditionalModel(event::register);
     }

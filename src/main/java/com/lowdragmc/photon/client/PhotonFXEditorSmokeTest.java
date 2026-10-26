@@ -1,6 +1,10 @@
 package com.lowdragmc.photon.client;
 
+import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
+import net.minecraft.client.renderer.block.model.BlockModel;
+import net.minecraft.resources.ResourceLocation;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 import com.lowdragmc.lowdraglib2.gui.ui.UI;
 import com.lowdragmc.photon.Photon;
@@ -38,6 +42,21 @@ public final class PhotonFXEditorSmokeTest {
 
     private PhotonFXEditorSmokeTest() {}
 
+    public static void prepareModelFixtureIfEnabled() {
+        if (!Boolean.getBoolean("photon.fxprojSmokeTest")) return;
+        try {
+            Path modelDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("models").resolve("ci");
+            Files.createDirectories(modelDir);
+            Files.writeString(modelDir.resolve("obj_smoke.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"photon:models/ci/obj_smoke.obj\",\"textures\":{\"particle\":\"minecraft:block/stone\"}}");
+            Files.writeString(modelDir.resolve("obj_smoke.obj"),
+                    "mtllib obj_smoke.mtl\no smoke\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl stone\nf 1/1/1 2/2/1 3/3/1\n");
+            Files.writeString(modelDir.resolve("obj_smoke.mtl"), "newmtl stone\nKd 1 1 1\nmap_Kd minecraft:block/stone\n");
+        } catch (Exception failure) {
+            throw new IllegalStateException("Could not prepare OBJ model smoke fixture", failure);
+        }
+    }
+
     public static void registerIfEnabled() {
         if (Boolean.getBoolean("photon.fxprojSmokeTest")) {
             MinecraftForge.EVENT_BUS.addListener(PhotonFXEditorSmokeTest::onClientTick);
@@ -72,6 +91,17 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        var location = new ResourceLocation("photon", "ci/obj_smoke");
+        var resource = minecraft.getResourceManager().getResource(new ResourceLocation("photon", "models/ci/obj_smoke.json")).orElseThrow();
+        try (var reader = resource.openAsReader()) {
+            // This invokes Forge's ExtendedBlockModelDeserializer, not just Photon's loader detection.
+            BlockModel.fromStream(reader);
+        }
+        var mesh = new JsonModelSource(location).getMesh();
+        if (mesh == null || mesh.vertexCount() < 3) {
+            throw new IllegalStateException("NeoForge OBJ resource did not produce a Photon mesh");
+        }
+        Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
         emitter.config.renderer.getMaterials().add(new MaterialSetting());

@@ -25,7 +25,6 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.model.ResourceMeshSou
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -235,12 +234,12 @@ public class MeshResource extends Resource<MeshData> {
         return container;
     }
 
-    public void onAdditionalModel(Consumer<ModelResourceLocation> registry) {
+    public void onAdditionalModel(Consumer<ResourceLocation> registry) {
         for (var meshData : getLoadedResourceMeshes()) {
             // OBJ-backed JSON sources are parsed directly by Photon, since Forge cannot bake
             // NeoForge's "neoforge:obj" loader from LDLib2 asset folders.
             if (meshData.getSource() instanceof JsonModelSource json && !json.isObjLoaderModel()) {
-                registry.accept(new ModelResourceLocation(json.getModelLocation(), "standalone"));
+                registry.accept(json.getModelLocation());
             }
         }
     }
