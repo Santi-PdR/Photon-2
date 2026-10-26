@@ -40,7 +40,17 @@ import java.util.UUID;
  */
 public class FXProject implements IProject {
     public static int VERSION = 5;
-    public static final ProjectType TYPE = ProjectType.of(PhotonIcons.PHOTON_PROJECT, "fx_project", ".fxproj", FXProject::new);
+    public static final ProjectType TYPE = new ProjectType(PhotonIcons.PHOTON_PROJECT, "fx_project", ".fxproj", FXProject::new) {
+        @Override
+        public IProject loadProjectFromFile(java.io.File file) throws Exception {
+            try {
+                return super.loadProjectFromFile(file);
+            } catch (Exception failure) {
+                com.lowdragmc.photon.Photon.LOGGER.error("Failed to read Photon FX project {}", file.getAbsolutePath(), failure);
+                throw failure;
+            }
+        }
+    };
 
     @Getter
     private final Resources resources;

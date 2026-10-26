@@ -73,9 +73,14 @@ public class FXEditor extends Editor {
     @Override
     protected void loadNewProject(IProject project, @Nullable File projectFile) {
         if (project instanceof FXProject fxProject) {
-            super.loadNewProject(project, projectFile);
-            fxProject.setEditor(this);
-            showProject(fxProject);
+            try {
+                super.loadNewProject(project, projectFile);
+                fxProject.setEditor(this);
+                showProject(fxProject);
+            } catch (RuntimeException failure) {
+                com.lowdragmc.photon.Photon.LOGGER.error("Failed to initialize Photon FX project {}", projectFile, failure);
+                throw failure;
+            }
         }
     }
 

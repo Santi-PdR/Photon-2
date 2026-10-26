@@ -33,6 +33,7 @@ import lombok.Setter;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
@@ -139,7 +140,15 @@ public class SubEmittersSetting extends ToggleGroup {
                 .map(emitter -> emitter.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    public List<Emitter> emittersDeserialize(ListTag tag) {
+    public List<Emitter> emittersDeserialize(Tag uid) {
+        if (uid instanceof IntTag count) {
+            var values = new ArrayList<Emitter>();
+            for (int i = 0; i < count.getAsInt(); i++) values.add(new Emitter());
+            return values;
+        }
+        if (!(uid instanceof ListTag tag)) {
+            throw new IllegalArgumentException("Unsupported managed SubEmittersSetting list UID: " + uid.getClass().getSimpleName());
+        }
         var groups = new ArrayList<Emitter>();
         for (CompoundTag emitterTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var emitter = new Emitter();

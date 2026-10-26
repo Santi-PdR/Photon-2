@@ -20,6 +20,7 @@ import lombok.Setter;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.phys.AABB;
@@ -174,7 +175,15 @@ public class RendererSetting {
                 .map(material -> material.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    public List<MaterialSetting> materialDeserialize(ListTag tag) {
+    public List<MaterialSetting> materialDeserialize(Tag uid) {
+        if (uid instanceof IntTag count) {
+            var values = new ArrayList<MaterialSetting>();
+            for (int i = 0; i < count.getAsInt(); i++) values.add(addDefaultMaterial());
+            return values;
+        }
+        if (!(uid instanceof ListTag tag)) {
+            throw new IllegalArgumentException("Unsupported managed RendererSetting list UID: " + uid.getClass().getSimpleName());
+        }
         var materials = new ArrayList<MaterialSetting>();
         for (CompoundTag materialTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var material = addDefaultMaterial();

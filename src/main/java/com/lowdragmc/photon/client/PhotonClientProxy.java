@@ -77,6 +77,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         e.enqueueWork(() -> {
             PhotonShaders.init();
             PhotonFXProjectSmokeTest.runIfEnabled();
+            PhotonFXEditorSmokeTest.registerIfEnabled();
         });
         // Touch the registry to trigger annotation scanning; classes annotated with @NodeAttribute
         // bound to ShaderGraph self-register (mirrors KilaGraph's own registry bootstrap).
