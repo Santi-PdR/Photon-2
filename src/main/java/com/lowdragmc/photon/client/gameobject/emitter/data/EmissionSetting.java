@@ -24,6 +24,7 @@ import lombok.Setter;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.util.RandomSource;
@@ -190,23 +191,22 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
                 .map(burst -> burst.serializeNBT(Platform.getFrozenRegistry())).toList());
     }
 
-    public List<Burst> burstsDeserialize(ListTag tag) {
-        var groups = new ArrayList<Burst>();
-        for (CompoundTag burstTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
-            var burst = addDefaultBurst();
-            burst.deserializeNBT(Platform.getFrozenRegistry(), burstTag);
-            groups.add(burst);
+    /** LDLib2's managed-list UID is either Photon 26.x's integer ID or our legacy array payload. */
+    public List<Burst> burstsDeserialize(Tag uid) {
+        if (uid instanceof IntTag) {
+            // The managed collection accessor restores its serialized elements from the envelope payload.
+            return new ArrayList<>();
         }
-        return groups;
-    }
-
-    /** LDLib2 passes the complete managed-list envelope to the persisted deserializer. */
-    public List<Burst> burstsDeserialize(CompoundTag envelope) {
-        if (!envelope.contains("uid", net.minecraft.nbt.Tag.TAG_INT)
-                || !envelope.contains("payload", net.minecraft.nbt.Tag.TAG_LIST)) {
-            throw new IllegalArgumentException("Invalid managed burst-list envelope");
+        if (uid instanceof ListTag legacyPayload) {
+            var groups = new ArrayList<Burst>();
+            for (CompoundTag burstTag : LDLibPersistenceCompat.decodePayloadList(legacyPayload)) {
+                var burst = addDefaultBurst();
+                burst.deserializeNBT(Platform.getFrozenRegistry(), burstTag);
+                groups.add(burst);
+            }
+            return groups;
         }
-        return burstsDeserialize(envelope.getList("payload", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        throw new IllegalArgumentException("Unsupported managed burst-list UID: " + uid.getClass().getSimpleName());
     }
 
     public static class Burst implements IConfigurable, IPersistedSerializable{
