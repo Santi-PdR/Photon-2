@@ -16,7 +16,6 @@ import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.client.ConfigScreenHandler;
 import net.minecraftforge.client.event.ModelEvent;
-import net.minecraftforge.client.model.obj.ObjLoader;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterShadersEvent;
 import net.minecraftforge.event.AddPackFindersEvent;
@@ -44,7 +43,6 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         eventBus.addListener(this::clientSetup);
         eventBus.addListener(this::shaderRegistry);
         eventBus.addListener(this::registerModels);
-        eventBus.addListener(this::registerGeometryLoaders);
         eventBus.addListener(this::registerReloadListeners);
         eventBus.addListener(this::addPackFinders);
         eventBus.addListener(PhotonEditorKeyMappings::register);
@@ -84,15 +82,6 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     @SubscribeEvent
     public void shaderRegistry(RegisterShadersEvent event) {
         PhotonShaders.registerShaders(event);
-    }
-
-    /**
-     * LDLib2 2.2.39 resources still use NeoForge's OBJ loader id. Preserve those resources
-     * on Forge by mapping the NeoForge id to Forge's equivalent loader.
-     */
-    @SubscribeEvent
-    public void registerGeometryLoaders(ModelEvent.RegisterGeometryLoaders event) {
-        event.register("neoforge:obj", ObjLoader.INSTANCE);
     }
 
     @SubscribeEvent
