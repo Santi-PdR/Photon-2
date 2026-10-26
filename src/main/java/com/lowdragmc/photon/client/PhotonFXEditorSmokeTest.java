@@ -103,7 +103,10 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed {} live particles ({} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
-                        message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
+                        message -> {
+                            Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString());
+                            minecraft.execute(minecraft::stop);
+                        });
                 finished = true;
                 editor.closeCurrentProject(false, null);
                 minecraft.setScreen(previousScreen);

@@ -18,6 +18,9 @@ public final class PhotonShaderUtils {
         }
         shader.safeGetUniform("ModelViewMat").set(RenderSystem.getModelViewMatrix());
         shader.safeGetUniform("ProjMat").set(RenderSystem.getProjectionMatrix());
+        shader.safeGetUniform("IViewRotMat").set(RenderSystem.getInverseViewRotationMatrix());
+        shader.safeGetUniform("TextureMat").set(RenderSystem.getTextureMatrix());
+        shader.safeGetUniform("GlintAlpha").set(RenderSystem.getShaderGlintAlpha());
         var color = RenderSystem.getShaderColor();
         shader.safeGetUniform("ColorModulator").set(color[0], color[1], color[2], color[3]);
         shader.safeGetUniform("FogStart").set(RenderSystem.getShaderFogStart());
@@ -29,5 +32,6 @@ public final class PhotonShaderUtils {
                 (float) Minecraft.getInstance().getWindow().getWidth(),
                 (float) Minecraft.getInstance().getWindow().getHeight());
         shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
+        RenderSystem.setupShaderLights(shader);
     }
 }

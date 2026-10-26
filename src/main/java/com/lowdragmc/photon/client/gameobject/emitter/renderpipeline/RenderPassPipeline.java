@@ -441,10 +441,16 @@ public class RenderPassPipeline {
             var particleQueue = entry.getValue();
             if (!particleQueue.isEmpty()) {
                 renderPass.prepareStatus(this);
+                byte[] smokeBefore = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged ? smokeReadViewport() : null;
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeRenderLogged = true;
-                    com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-render-smoke] pipeline drew={} particles={} pass={}", drewSomething, particleQueue.size(), renderPass.getClass().getSimpleName());
+                    var smokeAfter = smokeReadViewport();
+                    int changed = 0;
+                    for (int i = 0; i < smokeAfter.length; i += 4) {
+                        if (smokeBefore[i] != smokeAfter[i] || smokeBefore[i+1] != smokeAfter[i+1] || smokeBefore[i+2] != smokeAfter[i+2]) changed++;
+                    }
+                    com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-render-smoke] pipeline drew={} particles={} pass={} changedPixels={}", drewSomething, particleQueue.size(), renderPass.getClass().getSimpleName(), changed);
                 }
                 renderPass.releaseStatus(this);
                 if (drewSomething) {
@@ -454,6 +460,15 @@ public class RenderPassPipeline {
                 }
             }
         }
+    }
+
+    private static byte[] smokeReadViewport() {
+        int width = GlStateManager.Viewport.width(), height = GlStateManager.Viewport.height();
+        var data = org.lwjgl.BufferUtils.createByteBuffer(width * height * 4);
+        GL11.glReadPixels(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(), width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+        byte[] result = new byte[data.remaining()];
+        data.get(result);
+        return result;
     }
 
     /**
