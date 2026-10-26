@@ -12,7 +12,7 @@ import net.minecraft.nbt.Tag;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Converts LDLib2 26.x persistence shapes to the Forge 1.20.1 reader format. */
+/** Handles persistence payloads shared by Photon and the Forge 1.20.1 LDLib readers. */
 public final class LDLibPersistenceCompat {
     private LDLibPersistenceCompat() {
     }
@@ -40,13 +40,6 @@ public final class LDLibPersistenceCompat {
     public static CompoundTag normalize(CompoundTag root) {
         if (!containsCompatibilityData(root)) return root;
 
-        byte nbtPayloadType = -1;
-        if (containsManagedListEnvelope(root)) {
-            nbtPayloadType = TypedPayloadRegistries.getId(NbtTagPayload.class);
-            if (nbtPayloadType < 0) {
-                throw new IllegalStateException("LDLib NBT payload type is not registered before Photon project load");
-            }
-        }
         byte stringPayloadType = -1;
         if (containsAdditionalDataStringSet(root)) {
             stringPayloadType = TypedPayloadRegistries.getId(StringPayload.class);
@@ -54,7 +47,7 @@ public final class LDLibPersistenceCompat {
                 throw new IllegalStateException("LDLib string payload type is not registered before Photon project load");
             }
         }
-        normalizeTag(root, nbtPayloadType, stringPayloadType);
+        normalizeTag(root, stringPayloadType);
         return root;
     }
 
@@ -67,18 +60,6 @@ public final class LDLibPersistenceCompat {
             }
         } else if (tag instanceof ListTag list) {
             for (Tag child : list) if (containsCompatibilityData(child)) return true;
-        }
-        return false;
-    }
-
-    private static boolean containsManagedListEnvelope(Tag tag) {
-        if (tag instanceof CompoundTag compound) {
-            for (String key : compound.getAllKeys()) {
-                Tag child = compound.get(key);
-                if (isManagedListEnvelope(child) || containsManagedListEnvelope(child)) return true;
-            }
-        } else if (tag instanceof ListTag list) {
-            for (Tag child : list) if (containsManagedListEnvelope(child)) return true;
         }
         return false;
     }
@@ -98,22 +79,20 @@ public final class LDLibPersistenceCompat {
         return false;
     }
 
-    private static Tag normalizeTag(Tag tag, byte nbtPayloadType, byte stringPayloadType) {
+    private static Tag normalizeTag(Tag tag, byte stringPayloadType) {
         if (tag instanceof CompoundTag compound) {
             for (String key : new ArrayList<>(compound.getAllKeys())) {
                 Tag child = compound.get(key);
-                if (isManagedListEnvelope(child)) {
-                    ListTag payload = (ListTag) ((CompoundTag) child).get("payload");
-                    child = isAdditionalDataStringSet(key, payload)
-                            ? toLegacyStringArrayPayload(payload, stringPayloadType)
-                            : !isStringList(payload) ? toLegacyArrayPayload(payload, nbtPayloadType) : payload.copy();
-                } else if (isAdditionalDataStringSet(key, child)) {
+                if (isAdditionalDataStringSet(key, child)) {
                     child = toLegacyStringArrayPayload((ListTag) child, stringPayloadType);
                 }
-                compound.put(key, normalizeTag(child, nbtPayloadType, stringPayloadType));
+                // LDLib2 reads its managed-list UID and payload as one value. Unwrapping
+                // this compound here loses the UID and makes ReadOnlyManagedRef fail before
+                // the field's deserializeMethod (Photon's Burst deserializer) can run.
+                compound.put(key, normalizeTag(child, stringPayloadType));
             }
         } else if (tag instanceof ListTag list) {
-            for (int i = 0; i < list.size(); i++) list.set(i, normalizeTag(list.get(i), nbtPayloadType, stringPayloadType));
+            for (int i = 0; i < list.size(); i++) list.set(i, normalizeTag(list.get(i), stringPayloadType));
         }
         return tag;
     }
@@ -129,22 +108,6 @@ public final class LDLibPersistenceCompat {
 
     private static boolean isStringList(ListTag list) {
         return list.isEmpty() || list.getElementType() == Tag.TAG_STRING;
-    }
-
-    private static ListTag toLegacyArrayPayload(ListTag payload, byte payloadType) {
-        ListTag result = new ListTag();
-        for (Tag entry : payload) {
-            if (entry instanceof CompoundTag compound && compound.contains("t", Tag.TAG_BYTE)
-                    && !compound.contains("p")) {
-                result.add(entry.copy());
-                continue;
-            }
-            CompoundTag wrapped = new CompoundTag();
-            wrapped.putByte("t", payloadType);
-            wrapped.put("p", entry.copy());
-            result.add(wrapped);
-        }
-        return result;
     }
 
     private static ListTag toLegacyStringArrayPayload(ListTag payload, byte payloadType) {
@@ -163,3 +126,4 @@ public final class LDLibPersistenceCompat {
         return result;
     }
 }
+

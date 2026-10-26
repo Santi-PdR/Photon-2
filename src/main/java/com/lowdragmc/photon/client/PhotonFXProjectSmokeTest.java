@@ -1,7 +1,6 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
-import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType;
 import com.lowdragmc.photon.core.mixins.accessor.ParticleEngineAccessor;
@@ -84,8 +83,7 @@ public final class PhotonFXProjectSmokeTest {
                 throw new IllegalStateException("Synthetic particle emitter did not serialize its emission compound");
             }
             var emission = emitterConfig.getCompound("emission");
-            var payload = new ListTag();
-            payload.add(burst.serializeNBT(Platform.getFrozenRegistry()));
+            var payload = emitter.config.emission.burstsSerialize(java.util.List.of(burst));
             var envelope = new CompoundTag();
             envelope.putInt("uid", 0);
             envelope.put("payload", payload);
