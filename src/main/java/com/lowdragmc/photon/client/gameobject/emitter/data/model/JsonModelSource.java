@@ -130,8 +130,7 @@ public class JsonModelSource implements IModelSource {
             if (nestedObj != null) {
                 PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
             }
-            ObjModelSource objSource = new ObjModelSource(objReference.location());
-            objSource.setFlipV(objReference.flipV());
+            ObjModelSource objSource = new ObjModelSource(objReference.location(), objReference.flipV());
             return objSource.getMesh().translated(-0.5f, -0.5f, -0.5f);
         }
         var random = RandomSource.create();
@@ -254,4 +253,5 @@ public class JsonModelSource implements IModelSource {
         return Objects.hashCode(modelLocation);
     }
 }
+
 

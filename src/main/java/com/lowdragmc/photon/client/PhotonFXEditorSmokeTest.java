@@ -3,6 +3,11 @@ package com.lowdragmc.photon.client;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import net.minecraft.client.renderer.block.model.BlockModel;
 import net.minecraft.resources.ResourceLocation;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
@@ -52,6 +57,18 @@ public final class PhotonFXEditorSmokeTest {
             Files.writeString(modelDir.resolve("obj_smoke.obj"),
                     "mtllib obj_smoke.mtl\no smoke\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl stone\nf 1/1/1 2/2/1 3/3/1\n");
             Files.writeString(modelDir.resolve("obj_smoke.mtl"), "newmtl stone\nKd 1 1 1\nmap_Kd minecraft:block/stone\n");
+            Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
+            Files.createDirectories(shaderDir);
+            try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
+                 var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                String source = new String(vertex.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("fog_distance(ModelViewMat, data.Position, FogShape)", "fog_distance(data.Position, FogShape)");
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/fog_smoke");
+                Files.writeString(shaderDir.resolve("fog_smoke.vsh"), source);
+                Files.writeString(shaderDir.resolve("fog_smoke.json"), json.toString());
+            }
         } catch (Exception failure) {
             throw new IllegalStateException("Could not prepare OBJ model smoke fixture", failure);
         }
@@ -91,6 +108,15 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        verifyNestedMeshLoad();
+        var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));
+        fogMaterial.recompile();
+        if (fogMaterial.isCompiledError()) throw new IllegalStateException(fogMaterial.getCompiledErrorMessage());
+        if (!(fogMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE) instanceof LDShaderInstance variant)
+                || !variant.defines.contains("PARTICLE_MODEL_INSTANCE")) {
+            throw new IllegalStateException("Two-argument fog shader failed its instanced variant");
+        }
+        Photon.LOGGER.info("[shader-compat-smoke] compiled two-argument fog shader and instanced variant");
         var location = new ResourceLocation("photon", "ci/obj_smoke");
         var resource = minecraft.getResourceManager().getResource(new ResourceLocation("photon", "models/ci/obj_smoke.json")).orElseThrow();
         try (var reader = resource.openAsReader()) {
@@ -104,7 +130,8 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
-        emitter.config.renderer.getMaterials().add(new MaterialSetting());
+        emitter.config.renderer.getMaterials().clear();
+        emitter.config.renderer.getMaterials().add(new MaterialSetting(fogMaterial));
         var burst = new EmissionSetting.Burst();
         burst.time = 0;
         burst.cycles = 2;
@@ -163,5 +190,27 @@ public final class PhotonFXEditorSmokeTest {
             for (Tag child : list) replaceManagedListUids(child);
         }
     }
+
+    private record CollidingKey(String name) {
+        @Override public int hashCode() { return 0; }
+    }
+
+    private static void verifyNestedMeshLoad() {
+        var cache = PhotonMeshCache.INSTANCE;
+        var parent = new CollidingKey("ci-parent");
+        var child = new CollidingKey("ci-child");
+        try {
+            var loaded = cache.get(parent, ignored -> {
+                cache.invalidate(child);
+                return cache.get(child, alsoIgnored -> PhotonMesh.EMPTY);
+            });
+            if (loaded != PhotonMesh.EMPTY) throw new IllegalStateException("Nested mesh load changed its result");
+            Photon.LOGGER.info("[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded");
+        } finally {
+            cache.invalidate(parent);
+            cache.invalidate(child);
+        }
+    }
 }
+
 

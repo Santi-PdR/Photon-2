@@ -21,8 +21,8 @@ import java.util.function.Function;
  * resource reload (registered as a reload listener in {@code PhotonClientProxy}), by explicit
  * {@link #invalidate}, or via {@link #pollFileChanges()} for entries backed by an editable disk
  * file. Consumers detect invalidation by instance identity, so a fresh load must produce a fresh
- * {@link PhotonMesh}. Thread-safe: loads run per-key-atomic under {@code computeIfAbsent}
- * (the parallel particle sim and the render thread both call {@link #get}).
+ * {@link PhotonMesh}. Loaders run outside map callbacks because a JSON model may load another
+ * cached OBJ or invalidate a dependency. Concurrent callers publish one shared result atomically.
  */
 @OnlyIn(Dist.CLIENT)
 public final class PhotonMeshCache implements ResourceManagerReloadListener {
@@ -71,8 +71,12 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
      * call retries.
      */
     public PhotonMesh get(Object key, Function<Object, @Nullable PhotonMesh> loader) {
-        var mesh = cache.computeIfAbsent(key, loader);
-        return mesh == null ? PhotonMesh.EMPTY : mesh;
+        var cached = cache.get(key);
+        if (cached != null) return cached;
+        var mesh = loader.apply(key);
+        if (mesh == null) return PhotonMesh.EMPTY;
+        var shared = cache.putIfAbsent(key, mesh);
+        return shared == null ? mesh : shared;
     }
 
     /**
@@ -80,8 +84,12 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
      * contract as {@link #get}.
      */
     public SkinnedModel getModel(Object key, Function<Object, @Nullable SkinnedModel> loader) {
-        var model = models.computeIfAbsent(key, loader);
-        return model == null ? SkinnedModel.EMPTY : model;
+        var cached = models.get(key);
+        if (cached != null) return cached;
+        var model = loader.apply(key);
+        if (model == null) return SkinnedModel.EMPTY;
+        var shared = models.putIfAbsent(key, model);
+        return shared == null ? model : shared;
     }
 
     /** Watch the disk file backing {@code key}; {@link #pollFileChanges()} invalidates the entry when it changes. */
@@ -151,3 +159,4 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
         clear();
     }
 }
+

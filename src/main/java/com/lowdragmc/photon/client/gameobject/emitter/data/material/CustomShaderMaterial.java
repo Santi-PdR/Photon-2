@@ -189,7 +189,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         LDShaderHolder shaderHolder;
         releaseLeakedDefines(shaderLocation, Set.of());
         try {
-            shaderHolder = LDShaderHolder.create(shaderLocation, DefaultVertexFormat.BLOCK);
+            shaderHolder = LDShaderHolder.create(
+                    com.lowdragmc.photon.client.fx.compat.ForgeShaderCompat.wrap(Minecraft.getInstance().getResourceManager()),
+                    shaderLocation, DefaultVertexFormat.BLOCK);
         } finally {
             releaseLeakedDefines(shaderLocation, Set.of());
         }
@@ -430,4 +432,5 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         return PhotonAssetPath.shaderLocationFromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
     }
 }
+
 

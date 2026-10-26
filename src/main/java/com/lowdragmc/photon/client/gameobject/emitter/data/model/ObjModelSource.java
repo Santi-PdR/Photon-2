@@ -45,6 +45,11 @@ public class ObjModelSource implements IModelSource {
         this.modelLocation = modelLocation;
     }
 
+    public ObjModelSource(ResourceLocation modelLocation, boolean flipV) {
+        this.modelLocation = modelLocation;
+        this.flipV = flipV;
+    }
+
     @ConfigSetter(field = "modelLocation")
     public void setModelLocation(ResourceLocation modelLocation) {
         invalidate(); // drop the old key's entry before it changes
@@ -53,6 +58,7 @@ public class ObjModelSource implements IModelSource {
 
     @ConfigSetter(field = "flipV")
     public void setFlipV(boolean flipV) {
+        if (this.flipV == flipV) return;
         invalidate();
         this.flipV = flipV;
     }
@@ -136,3 +142,4 @@ public class ObjModelSource implements IModelSource {
         return Objects.hash(modelLocation, flipV);
     }
 }
+
