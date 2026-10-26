@@ -33,6 +33,7 @@ import java.util.*;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 public class RenderPassPipeline {
+    private static boolean smokeRenderLogged;
     @Nullable
     private static RenderPassPipeline collecting;
 
@@ -441,6 +442,10 @@ public class RenderPassPipeline {
             if (!particleQueue.isEmpty()) {
                 renderPass.prepareStatus(this);
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
+                    smokeRenderLogged = true;
+                    com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-render-smoke] pipeline drew={} particles={} pass={}", drewSomething, particleQueue.size(), renderPass.getClass().getSimpleName());
+                }
                 renderPass.releaseStatus(this);
                 if (drewSomething) {
                     // only a pass that wrote pixels can change what a later scene-sampling

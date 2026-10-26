@@ -150,6 +150,7 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
+        emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));
         emitter.config.setLooping(false);
         emitter.config.setStartLifetime(NumberFunction.constant(70));
         emitter.config.setStartSpeed(NumberFunction.constant(0));
@@ -159,7 +160,10 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
         emitter.config.renderer.setUseGPUInstance(true);
         emitter.config.renderer.getMaterials().clear();
-        emitter.config.renderer.getMaterials().add(new MaterialSetting(fogMaterial));
+        var visibleMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        visibleMaterial.setCull(false);
+        visibleMaterial.setDepthTest(false);
+        emitter.config.renderer.getMaterials().add(visibleMaterial);
         var burst = new EmissionSetting.Burst();
         burst.time = 0;
         burst.cycles = 1;
