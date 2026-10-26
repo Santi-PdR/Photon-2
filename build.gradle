@@ -67,7 +67,11 @@ minecraft {
                 }
             }
         }
-        client {}
+        client {
+            if (Boolean.getBoolean('photon.fxprojSmokeTest')) {
+                args '--quickPlaySingleplayer', 'PhotonCI'
+            }
+        }
         server { args '--nogui' }
     }
 }
@@ -141,3 +145,4 @@ tasks.withType(ProcessResources).configureEach {
 
 // Upstream tests target newer Minecraft APIs; automated validation uses the Forge dedicated-server startup smoke test.
 sourceSets.test.java.setSrcDirs([])
+

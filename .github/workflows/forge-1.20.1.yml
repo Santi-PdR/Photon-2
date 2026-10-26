@@ -65,6 +65,14 @@ jobs:
           echo "Forge server exited with status $result before reaching the ready state." >&2
           exit 1
 
+      - name: Prepare a world for the editor smoke test
+        shell: bash
+        run: |
+          test -s run/world/level.dat
+          mkdir -p run/saves
+          cp -a run/world run/saves/PhotonCI
+          rm -f run/saves/PhotonCI/session.lock
+
       - name: Install virtual display and software OpenGL
         run: |
           sudo apt-get update
@@ -97,4 +105,5 @@ jobs:
             run/screenshots/*.png
           if-no-files-found: ignore
           retention-days: 14
+
 

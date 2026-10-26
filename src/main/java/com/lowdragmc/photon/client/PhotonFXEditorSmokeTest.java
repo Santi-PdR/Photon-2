@@ -16,7 +16,10 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.SubEmittersSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
+import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import com.lowdragmc.photon.gui.editor.FXProject;
 import net.minecraft.client.Minecraft;
@@ -83,7 +86,7 @@ public final class PhotonFXEditorSmokeTest {
     private static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END || finished) return;
         var minecraft = Minecraft.getInstance();
-        if (minecraft.getOverlay() != null || minecraft.screen == null) return;
+        if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
         try {
             if (!started) {
                 started = true;
@@ -92,9 +95,12 @@ public final class PhotonFXEditorSmokeTest {
                 int queued = editor.sceneView.particleManager.particlesByRenderType().values().stream()
                         .mapToInt(Collection::size).sum();
                 if (queued == 0) throw new IllegalStateException("Editor preview did not queue any particles");
+                int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
+                if (live != 1) throw new IllegalStateException("The zero-time burst should have one live particle, got " + live);
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
-                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed {} queued particles", queued);
+                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed {} live particles ({} queued objects)", live, queued);
                 finished = true;
                 editor.closeCurrentProject(false, null);
                 minecraft.setScreen(previousScreen);
@@ -130,11 +136,19 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
+        emitter.config.setLooping(false);
+        emitter.config.setStartLifetime(NumberFunction.constant(70));
+        emitter.config.setStartSpeed(NumberFunction.constant(0));
+        emitter.config.emission.setEmissionRate(NumberFunction.constant(0));
+        emitter.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
+        emitter.config.renderer.setUseGPUInstance(true);
         emitter.config.renderer.getMaterials().clear();
         emitter.config.renderer.getMaterials().add(new MaterialSetting(fogMaterial));
         var burst = new EmissionSetting.Burst();
         burst.time = 0;
-        burst.cycles = 2;
+        burst.cycles = 1;
+        burst.setCount(NumberFunction.constant(1));
         burst.interval = 4;
         emitter.config.emission.getBursts().add(burst);
         emitter.config.subEmitters.setEnable(true);
@@ -150,6 +164,9 @@ public final class PhotonFXEditorSmokeTest {
                 .getList("payload", Tag.TAG_COMPOUND).size() != 1) {
             throw new IllegalStateException("The enabled sub-emitter fixture was not written: " + fixtureConfig.getCompound("subEmitters"));
         }
+        var legacyModel = new CompoundTag();
+        legacyModel.putString("modelLocation", "photon:ci/obj_smoke");
+        fixtureConfig.getCompound("renderer").put("model", legacyModel);
         encoded.getCompound("meta").putInt("version_num", 3);
         encoded.getCompound("meta").putString("version", "3.0");
         replaceManagedListUids(encoded);
@@ -161,7 +178,7 @@ public final class PhotonFXEditorSmokeTest {
                 || restored.config.renderer.getMaterials().size() != 1
                 || restored.config.emission.getBursts().size() != 1
                 || restored.config.subEmitters.getEmitters().size() != 1
-                || restored.config.emission.getBursts().get(0).cycles != 2) {
+                || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
 
@@ -212,5 +229,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
