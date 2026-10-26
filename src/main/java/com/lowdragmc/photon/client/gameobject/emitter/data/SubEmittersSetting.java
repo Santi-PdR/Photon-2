@@ -135,9 +135,8 @@ public class SubEmittersSetting extends ToggleGroup {
         return emitter;
     }
 
-    public ListTag emittersSerialize(List<Emitter> emitters) {
-        return LDLibPersistenceCompat.encodePayloadList(emitters.stream()
-                .map(emitter -> emitter.serializeNBT(Platform.getFrozenRegistry())).toList());
+    public IntTag emittersSerialize(List<Emitter> emitters) {
+        return IntTag.valueOf(emitters.size());
     }
 
     public List<Emitter> emittersDeserialize(Tag uid) {
@@ -365,4 +364,5 @@ public class SubEmittersSetting extends ToggleGroup {
         }
     }
 }
+
 

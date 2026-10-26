@@ -170,9 +170,8 @@ public class RendererSetting {
         return new MaterialSetting();
     }
 
-    public ListTag materialSerialize(List<MaterialSetting> value) {
-        return LDLibPersistenceCompat.encodePayloadList(value.stream()
-                .map(material -> material.serializeNBT(Platform.getFrozenRegistry())).toList());
+    public IntTag materialSerialize(List<MaterialSetting> value) {
+        return IntTag.valueOf(value.size());
     }
 
     public List<MaterialSetting> materialDeserialize(Tag uid) {
@@ -299,4 +298,5 @@ public class RendererSetting {
     }
 
 }
+
 

@@ -110,12 +110,19 @@ public final class PhotonFXEditorSmokeTest {
         burst.cycles = 2;
         burst.interval = 4;
         emitter.config.emission.getBursts().add(burst);
+        emitter.config.subEmitters.setEnable(true);
         emitter.config.subEmitters.getEmitters().add(new SubEmittersSetting.Emitter());
         source.getFx().getFxData().objects().add(emitter);
 
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
         var encoded = NbtIo.read(projectFile.toFile());
+        var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");
+        if (fixtureConfig.getCompound("subEmitters").getCompound("emitters")
+                .getList("payload", Tag.TAG_COMPOUND).size() != 1) {
+            throw new IllegalStateException("The enabled sub-emitter fixture was not written: " + fixtureConfig.getCompound("subEmitters"));
+        }
         encoded.getCompound("meta").putInt("version_num", 3);
         encoded.getCompound("meta").putString("version", "3.0");
         replaceManagedListUids(encoded);
@@ -128,7 +135,7 @@ public final class PhotonFXEditorSmokeTest {
                 || restored.config.emission.getBursts().size() != 1
                 || restored.config.subEmitters.getEmitters().size() != 1
                 || restored.config.emission.getBursts().get(0).cycles != 2) {
-            throw new IllegalStateException("v3 materials, bursts or sub-emitters were not restored");
+            throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
 
         previousScreen = minecraft.screen;
@@ -157,3 +164,4 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
