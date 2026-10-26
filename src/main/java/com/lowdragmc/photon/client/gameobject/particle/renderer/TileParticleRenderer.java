@@ -39,6 +39,7 @@ import java.util.Collection;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public class TileParticleRenderer {
+    private static boolean smokeInstanceLogged;
     private final ParticleConfig config;
     /** The renderer runtime this pass draws with (slot-or-config per field): the config's default runtime
      *  for the shared pass, or a per-emitter overriding runtime for an override pass. Custom GPU data
@@ -385,6 +386,12 @@ public class TileParticleRenderer {
             var size = particle.getRealSize(partialTicks);
             var scale = particle.getSpaceScale();
             var light = particle.getRealLight(partialTicks);
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeInstanceLogged) {
+                smokeInstanceLogged = true;
+                var clip = new Vector4f(x, y, z, 1f).mul(com.mojang.blaze3d.systems.RenderSystem.getModelViewMatrix())
+                        .mul(com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
+                com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-render-position] cameraRelative=({}, {}, {}) clip={} size={} scale={} color={} light={} mode={}", x, y, z, clip, size, scale, color, light, renderMode);
+            }
 
             if (renderMode == ParticleRendererSetting.Mode.Model) {
                 var quaternion = computeModelQuaternion(particle, rotation, camera, partialTicks);
