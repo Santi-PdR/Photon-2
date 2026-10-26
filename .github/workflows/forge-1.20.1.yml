@@ -77,10 +77,11 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
-          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-model-smoke] detected NeoForge OBJ JSON without model bakery registration' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
+          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-model-smoke] detected NeoForge OBJ JSON without model bakery registration' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
             echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
             exit 0
           fi
           cat "$log_file"
           echo "Forge client exited with status $result before Photon and Minecraft reached the ready state." >&2
           exit 1
+

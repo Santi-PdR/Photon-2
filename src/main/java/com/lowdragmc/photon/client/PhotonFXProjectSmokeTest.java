@@ -10,6 +10,10 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
 import com.lowdragmc.photon.gui.editor.FXProject;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -49,13 +53,41 @@ public final class PhotonFXProjectSmokeTest {
 
             var project = new FXProject();
             var emitter = new ParticleEmitter();
-            emitter.config.emission.getBursts().add(new EmissionSetting.Burst());
+            var burst = new EmissionSetting.Burst();
+            burst.time = 23;
+            burst.interval = 3;
+            burst.cycles = 4;
+            burst.probability = 0.75f;
+            emitter.config.emission.getBursts().add(burst);
             project.getFx().getFxData().objects().add(emitter);
 
             file = Files.createTempFile("photon-fxproj-smoke-", ".fxproj");
             FXProject.TYPE.saveProjectToFile(project, file.toFile());
             FXProject.TYPE.loadProjectFromFile(file.toFile());
             Photon.LOGGER.info("[fxproj-smoke] loaded synthetic .fxproj with burst");
+
+            // Recreate the managed-list envelope written by Photon 26.2 projects. The
+            // fixture is generated in memory so user projects never leave the runner.
+            var encodedProject = NbtIo.readCompressed(file.toFile());
+            int convertedLists = wrapLegacyManagedLists(encodedProject);
+            if (convertedLists == 0) {
+                throw new IllegalStateException("Synthetic project did not contain a serialized burst list");
+            }
+            NbtIo.writeCompressed(encodedProject, file.toFile());
+
+            var loaded = FXProject.TYPE.loadProjectFromFile(file.toFile());
+            if (!(loaded instanceof FXProject loadedProject)
+                    || loadedProject.getFx().getFxData().objects().isEmpty()
+                    || !(loadedProject.getFx().getFxData().objects().get(0) instanceof ParticleEmitter loadedEmitter)) {
+                throw new IllegalStateException("Legacy .fxproj did not restore its particle emitter");
+            }
+            var loadedBursts = loadedEmitter.config.emission.getBursts();
+            if (loadedBursts.size() != 1 || loadedBursts.get(0).time != 23
+                    || loadedBursts.get(0).interval != 3 || loadedBursts.get(0).cycles != 4
+                    || Float.compare(loadedBursts.get(0).probability, 0.75f) != 0) {
+                throw new IllegalStateException("Legacy .fxproj burst fields were not restored correctly");
+            }
+            Photon.LOGGER.info("[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields");
         } catch (Throwable failure) {
             Photon.LOGGER.error("[fxproj-smoke] failed to load synthetic .fxproj", failure);
             throw new IllegalStateException("Photon FX project persistence smoke test failed", failure);
@@ -76,4 +108,35 @@ public final class PhotonFXProjectSmokeTest {
             }
         }
     }
+
+    private static int wrapLegacyManagedLists(Tag tag) {
+        int converted = 0;
+        if (tag instanceof CompoundTag compound) {
+            for (String key : compound.getAllKeys().toArray(String[]::new)) {
+                Tag child = compound.get(key);
+                if ("bursts".equals(key) && child instanceof ListTag list && !list.isEmpty()) {
+                    ListTag payload = new ListTag();
+                    for (Tag entry : list) {
+                        if (entry instanceof CompoundTag encoded
+                                && encoded.contains("t", Tag.TAG_BYTE) && encoded.contains("p")) {
+                            payload.add(encoded.get("p").copy());
+                        } else {
+                            payload.add(entry.copy());
+                        }
+                    }
+                    CompoundTag envelope = new CompoundTag();
+                    envelope.putInt("uid", 0);
+                    envelope.put("payload", payload);
+                    compound.put(key, envelope);
+                    converted++;
+                } else {
+                    converted += wrapLegacyManagedLists(child);
+                }
+            }
+        } else if (tag instanceof ListTag list) {
+            for (Tag child : list) converted += wrapLegacyManagedLists(child);
+        }
+        return converted;
+    }
 }
+
