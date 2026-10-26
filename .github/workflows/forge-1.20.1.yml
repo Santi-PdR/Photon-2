@@ -61,7 +61,7 @@ jobs:
             echo "Forge server reached the ready state."
             exit 0
           fi
-          cat "$log_file"
+          grep -n -E -C 3 'ERROR|FATAL|Exception|Caused by:|fxproj|smoke|Game crashed|BUILD FAILED|Failed to (load|recompile)' "$log_file" | tail -n 240 || true
           echo "Forge server exited with status $result before reaching the ready state." >&2
           exit 1
 
