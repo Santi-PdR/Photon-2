@@ -200,6 +200,15 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         return groups;
     }
 
+    /** LDLib2 passes the complete managed-list envelope to the persisted deserializer. */
+    public List<Burst> burstsDeserialize(CompoundTag envelope) {
+        if (!envelope.contains("uid", net.minecraft.nbt.Tag.TAG_INT)
+                || !envelope.contains("payload", net.minecraft.nbt.Tag.TAG_LIST)) {
+            throw new IllegalArgumentException("Invalid managed burst-list envelope");
+        }
+        return burstsDeserialize(envelope.getList("payload", net.minecraft.nbt.Tag.TAG_COMPOUND));
+    }
+
     public static class Burst implements IConfigurable, IPersistedSerializable{
         @Configurable(name = "Burst.time", tips = "photon.emitter.config.emission.bursts.time")
         @ConfigNumber(range = {0, Integer.MAX_VALUE}, wheel = 1)
@@ -220,4 +229,5 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
         public float probability = 1;
     }
 }
+
 
