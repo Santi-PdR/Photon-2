@@ -22,6 +22,8 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
+import com.lowdragmc.photon.client.gameobject.particle.TrailParticle;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import com.lowdragmc.photon.gui.editor.FXProject;
 import net.minecraft.client.Minecraft;
@@ -51,6 +53,7 @@ public final class PhotonFXEditorSmokeTest {
     private static FXEditor editor;
     private static Screen previousScreen;
     private static Path projectFile;
+    private static TrailEmitter smokeTrail;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -92,6 +95,8 @@ public final class PhotonFXEditorSmokeTest {
                     out float particleT;
                     void main() {
                         ParticleData data = getParticleData();
+                        data.UV = aUV;
+                        data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
                         particleT = T;
                         gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
                     }
@@ -135,19 +140,31 @@ public final class PhotonFXEditorSmokeTest {
         var minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
         try {
+            if (started && smokeTrail != null) {
+                ticks++;
+                float x = -2.5f + ticks * 0.12f;
+                float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
+                smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
+            }
             if (!started) {
                 started = true;
                 openLegacyProject(minecraft);
-            } else if (++ticks == 30) {
+            } else if (ticks == 30) {
                 int queued = editor.sceneView.particleManager.particlesByRenderType().values().stream()
                         .mapToInt(Collection::size).sum();
                 if (queued == 0) throw new IllegalStateException("Editor preview did not queue any particles");
+                var trailParticle = trailParticle(smokeTrail);
+                if (smokeTrail.getParticleAmount() != 1 || trailParticle.getTails().size() < 3) {
+                    throw new IllegalStateException("Moving GPU trail did not accumulate renderable segments: alive="
+                            + smokeTrail.getParticleAmount() + ", segments=" + trailParticle.getTails().size());
+                }
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
                 if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
-                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, and CPU-billboard particles ({} live, {} queued objects)", live, queued);
+                Photon.LOGGER.info("[trail-render-smoke] moving GPU trail accumulated {} live segments", trailParticle.getTails().size());
+                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
@@ -292,6 +309,20 @@ public final class PhotonFXEditorSmokeTest {
         billboard.config.emission.getBursts().add(billboardBurst);
         source.getFx().getFxData().objects().add(billboard);
 
+        var trail = new TrailEmitter();
+        trail.config.setDuration(150);
+        trail.config.setLooping(false);
+        trail.config.setTime(150);
+        trail.config.setMinVertexDistance(0.02f);
+        trail.config.renderer.setUseGPUInstance(true);
+        trail.config.renderer.getMaterials().clear();
+        var trailMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        trailMaterial.setCull(false);
+        trailMaterial.setDepthTest(false);
+        trail.config.renderer.getMaterials().add(trailMaterial);
+        trail.transform().localPosition(new org.joml.Vector3f(-2.5f, 2, 0));
+        source.getFx().getFxData().objects().add(trail);
+
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
         var encoded = NbtIo.read(projectFile.toFile());
@@ -320,7 +351,7 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 3
+        if (loaded.getFx().getFxData().objects().size() != 4
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
                 || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
                 || restored.config.renderer.getMaterials().size() != 1
@@ -329,6 +360,7 @@ public final class PhotonFXEditorSmokeTest {
                 || restoredTornado.config.renderer.getMaterials().size() != 1
                 || restoredTornado.config.emission.getBursts().size() != 1
                 || !(loaded.getFx().getFxData().objects().get(2) instanceof ParticleEmitter)
+                || !(loaded.getFx().getFxData().objects().get(3) instanceof TrailEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
@@ -362,7 +394,7 @@ public final class PhotonFXEditorSmokeTest {
             }
             throw new IllegalStateException("Tornado-style OBJ, T channel, custom shader, or curve sampler did not survive v3 project loading");
         }
-        Photon.LOGGER.info("[tornado-render-smoke] loaded LDLib2 OBJ with location-9 T data, GPU shader variant, and SamplerCurve");
+        Photon.LOGGER.info("[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes, location-9 T data, GPU shader variant, and SamplerCurve");
 
         previousScreen = minecraft.screen;
         editor = new FXEditor();
@@ -373,7 +405,16 @@ public final class PhotonFXEditorSmokeTest {
         if (editor.getCurrentProject() != loaded || editor.runtime == null || editor.runtime.objects.size() < 2) {
             throw new IllegalStateException("Editor did not initialize the loaded project runtime");
         }
+        smokeTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                .map(TrailEmitter.class::cast).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the moving trail"));
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
+    }
+
+    private static TrailParticle trailParticle(TrailEmitter emitter) throws ReflectiveOperationException {
+        Field field = TrailEmitter.class.getDeclaredField("trailParticle");
+        field.setAccessible(true);
+        return (TrailParticle) field.get(emitter);
     }
 
     @SuppressWarnings("unchecked")
@@ -429,6 +470,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 

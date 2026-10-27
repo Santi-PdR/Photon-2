@@ -31,11 +31,19 @@ uniform samplerBuffer PhotonCustomData;
 layout(location = 0) in vec3 aPos;     // geometry stream
 // attribute stream: xy = uv, z = per-face shade brightness. Brightness rides here rather than taking a
 // location of its own for the reason above — 4..8 and 9+ are not ours to shift.
+// Preserve Photon 26.2's mesh shader ABI. Without tangents UV and brightness are separate
+// attributes; tangent variants use UV.z for brightness because location 3 carries the tangent.
+#ifdef PHOTON_TANGENT
 layout(location = 1) in vec3 aUV;
+#else
+layout(location = 1) in vec2 aUV;
+#endif
 layout(location = 2) in vec3 aNormal;  // geometry stream
 #ifdef PHOTON_TANGENT
 // The emitter's "Tangent" renderer setting is ON, so the tangent stream is uploaded and bound.
 layout(location = 3) in vec4 aTangent; // xyz = tangent (dP/du), w = handedness
+#else
+layout(location = 3) in float aBrightness;
 #endif
 
 #ifdef PHOTON_VAT
@@ -324,7 +332,11 @@ ParticleData getParticleData() {
     data.LightUV = ivec2(iLight & 0xFFFF, (iLight >> 16) & 0xFFFF);
     // object space: the mesh's own centered model-space vertex + normal
     data.ObjectPosition = photonPos;
+#ifdef PHOTON_TANGENT
     data.Color = vec4(iColor.rgb * aUV.z, iColor.a);
+#else
+    data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
+#endif
     data.Normal = normalize(rotMat * photonNormal);
     data.ObjectNormal = photonNormal;
 #ifdef PHOTON_TANGENT
@@ -626,3 +638,4 @@ vec4 photon_custom_data(int i) {
 #else
 vec4 photon_custom_data(int i) { return vec4(0.0); }
 #endif
+

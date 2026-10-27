@@ -162,9 +162,8 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
 
     /**
      * MIRRORED FROM particle.glsl's PARTICLE_MODEL_INSTANCE block: loc 0 = position and loc 2 = normal
-     * from the geometry buffer, loc 1 = {@code (u, v, shade)} from the attribute buffer, loc 3 = the
-     * tangent. Shade rides in the attribute vec3's z because 4..8 are per-instance and 9+ are the
-     * channels a hand-written shader declares.
+     * from the geometry buffer, loc 1 = UVs from the attribute buffer, and loc 3 = either the legacy
+     * shade brightness or the tangent. Keep the channels beginning at loc 9 unchanged.
      *
      * <p>⚠️ The model pivot is applied per instance, not baked, so these buffers hold nothing but the
      * mesh — which is what lets a provider replace the geometry one.</p>
@@ -228,7 +227,8 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         resource.attributeVbo = glGenBuffers();
         glBindBuffer(GL_ARRAY_BUFFER, resource.attributeVbo);
         glBufferData(GL_ARRAY_BUFFER, attributeBuffer, GL_STATIC_DRAW);
-        glVertexAttribPointer(1, 3, GL_FLOAT, false, PhotonMesh.FLOATS_PER_ATTRIBUTE * Float.BYTES, 0);
+        glVertexAttribPointer(1, wantsTangent ? 3 : 2, GL_FLOAT, false,
+                PhotonMesh.FLOATS_PER_ATTRIBUTE * Float.BYTES, 0);
         glEnableVertexAttribArray(1);
 
         // ⚠️ when off, location 3 must be left DISABLED rather than pointing at a deleted buffer:
@@ -239,6 +239,11 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
             glBindBuffer(GL_ARRAY_BUFFER, resource.tangentVbo);
             glBufferData(GL_ARRAY_BUFFER, mesh.tangents(), GL_STATIC_DRAW);
             glVertexAttribPointer(3, 4, GL_FLOAT, false, PhotonMesh.FLOATS_PER_TANGENT * Float.BYTES, 0);
+            glEnableVertexAttribArray(3);
+        } else {
+            glBindBuffer(GL_ARRAY_BUFFER, resource.attributeVbo);
+            glVertexAttribPointer(3, 1, GL_FLOAT, false, PhotonMesh.FLOATS_PER_ATTRIBUTE * Float.BYTES,
+                    2L * Float.BYTES);
             glEnableVertexAttribArray(3);
         }
 
@@ -326,3 +331,4 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         config.additionalGPUDataSetting.layoutAttribs(offset, stride);
     }
 }
+
