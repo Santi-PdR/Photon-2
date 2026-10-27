@@ -1,15 +1,12 @@
 package com.lowdragmc.photon.client.util;
 
-import com.lowdragmc.lowdraglib.syncdata.TypedPayloadRegistries;
 import com.lowdragmc.lowdraglib.syncdata.payload.ArrayPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
-import com.lowdragmc.lowdraglib.syncdata.payload.StringPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** Handles persistence payloads shared by Photon and the Forge 1.20.1 LDLib readers. */
@@ -37,93 +34,6 @@ public final class LDLibPersistenceCompat {
         return entries;
     }
 
-    public static CompoundTag normalize(CompoundTag root) {
-        if (!containsCompatibilityData(root)) return root;
-
-        byte stringPayloadType = -1;
-        if (containsAdditionalDataStringSet(root)) {
-            stringPayloadType = TypedPayloadRegistries.getId(StringPayload.class);
-            if (stringPayloadType < 0) {
-                throw new IllegalStateException("LDLib string payload type is not registered before Photon project load");
-            }
-        }
-        normalizeTag(root, stringPayloadType);
-        return root;
-    }
-
-    private static boolean containsCompatibilityData(Tag tag) {
-        if (tag instanceof CompoundTag compound) {
-            for (String key : compound.getAllKeys()) {
-                Tag child = compound.get(key);
-                if (isManagedListEnvelope(child) || isAdditionalDataStringSet(key, child)
-                        || containsCompatibilityData(child)) return true;
-            }
-        } else if (tag instanceof ListTag list) {
-            for (Tag child : list) if (containsCompatibilityData(child)) return true;
-        }
-        return false;
-    }
-
-    private static boolean containsAdditionalDataStringSet(Tag tag) {
-        if (tag instanceof CompoundTag compound) {
-            for (String key : compound.getAllKeys()) {
-                Tag child = compound.get(key);
-                if (isAdditionalDataStringSet(key, child)) return true;
-                if (isManagedListEnvelope(child)
-                        && isAdditionalDataStringSet(key, ((CompoundTag) child).get("payload"))) return true;
-                if (containsAdditionalDataStringSet(child)) return true;
-            }
-        } else if (tag instanceof ListTag list) {
-            for (Tag child : list) if (containsAdditionalDataStringSet(child)) return true;
-        }
-        return false;
-    }
-
-    private static Tag normalizeTag(Tag tag, byte stringPayloadType) {
-        if (tag instanceof CompoundTag compound) {
-            for (String key : new ArrayList<>(compound.getAllKeys())) {
-                Tag child = compound.get(key);
-                if (isAdditionalDataStringSet(key, child)) {
-                    child = toLegacyStringArrayPayload((ListTag) child, stringPayloadType);
-                }
-                // LDLib2 reads its managed-list UID and payload as one value. Unwrapping
-                // this compound here loses the UID and makes ReadOnlyManagedRef fail before
-                // the field's deserializeMethod (Photon's Burst deserializer) can run.
-                compound.put(key, normalizeTag(child, stringPayloadType));
-            }
-        } else if (tag instanceof ListTag list) {
-            for (int i = 0; i < list.size(); i++) list.set(i, normalizeTag(list.get(i), stringPayloadType));
-        }
-        return tag;
-    }
-
-    private static boolean isAdditionalDataStringSet(String key, Tag value) {
-        return "additionalData".equals(key) && value instanceof ListTag list && isStringList(list);
-    }
-
-    private static boolean isManagedListEnvelope(Tag tag) {
-        return tag instanceof CompoundTag compound && compound.size() == 2
-                && compound.contains("uid", Tag.TAG_INT) && compound.contains("payload", Tag.TAG_LIST);
-    }
-
-    private static boolean isStringList(ListTag list) {
-        return list.isEmpty() || list.getElementType() == Tag.TAG_STRING;
-    }
-
-    private static ListTag toLegacyStringArrayPayload(ListTag payload, byte payloadType) {
-        ListTag result = new ListTag();
-        for (Tag entry : payload) {
-            if (entry instanceof CompoundTag compound && compound.contains("t", Tag.TAG_BYTE)
-                    && !compound.contains("p")) {
-                result.add(entry.copy());
-                continue;
-            }
-            CompoundTag wrapped = new CompoundTag();
-            wrapped.putByte("t", payloadType);
-            wrapped.put("p", entry.copy());
-            result.add(wrapped);
-        }
-        return result;
-    }
 }
+
 
