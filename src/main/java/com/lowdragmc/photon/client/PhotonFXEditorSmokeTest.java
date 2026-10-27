@@ -97,10 +97,10 @@ public final class PhotonFXEditorSmokeTest {
                 if (queued == 0) throw new IllegalStateException("Editor preview did not queue any particles");
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
-                if (live != 1) throw new IllegalStateException("The zero-time burst should have one live particle, got " + live);
+                if (live != 2) throw new IllegalStateException("Expected live GPU-model and CPU-billboard particles, got " + live);
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
-                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed {} live particles ({} queued objects)", live, queued);
+                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed GPU-model and CPU-billboard particles ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
@@ -176,6 +176,28 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.subEmitters.setEnable(true);
         emitter.config.subEmitters.getEmitters().add(new SubEmittersSetting.Emitter());
         source.getFx().getFxData().objects().add(emitter);
+
+        var billboard = new ParticleEmitter();
+        billboard.transform().localPosition(new org.joml.Vector3f(-2, 2, 0));
+        billboard.config.setLooping(false);
+        billboard.config.setStartLifetime(NumberFunction.constant(70));
+        billboard.config.setStartSpeed(NumberFunction.constant(0));
+        billboard.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0.8f, 0.8f, 0.8f));
+        billboard.config.emission.setEmissionRate(NumberFunction.constant(0));
+        billboard.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Billboard);
+        billboard.config.renderer.setUseGPUInstance(false);
+        billboard.config.renderer.getMaterials().clear();
+        var billboardMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        billboardMaterial.setCull(false);
+        billboardMaterial.setDepthTest(false);
+        billboard.config.renderer.getMaterials().add(billboardMaterial);
+        var billboardBurst = new EmissionSetting.Burst();
+        billboardBurst.time = 0;
+        billboardBurst.cycles = 1;
+        billboardBurst.setCount(NumberFunction.constant(1));
+        billboardBurst.interval = 4;
+        billboard.config.emission.getBursts().add(billboardBurst);
+        source.getFx().getFxData().objects().add(billboard);
 
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
