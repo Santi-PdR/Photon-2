@@ -297,6 +297,10 @@ public final class PhotonFXEditorSmokeTest {
         var encoded = NbtIo.read(projectFile.toFile());
         var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");
+        var tornadoFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getCompound("config");
+        Photon.LOGGER.info("[tornado-render-smoke] saved GPU channel setting before migration: {}",
+                tornadoFixtureConfig.getCompound("additionalGPUDataSetting"));
         if (fixtureConfig.getCompound("subEmitters").getCompound("emitters")
                 .getList("payload", Tag.TAG_COMPOUND).size() != 1) {
             throw new IllegalStateException("The enabled sub-emitter fixture was not written: " + fixtureConfig.getCompound("subEmitters"));
