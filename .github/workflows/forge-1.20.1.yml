@@ -46,7 +46,7 @@ jobs:
           name: photon-forge-1.20.1
           path: build/libs/*-all.jar
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
       - name: Smoke-test dedicated Forge server startup
         shell: bash
@@ -85,7 +85,7 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
-          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-loader-compat] registered neoforge:obj using Forge' "$log_file" && grep -Fq '[obj-model-smoke] parsed neoforge:obj through Forge and built' "$log_file" && grep -Fq '[fxproj-editor-smoke] opened v3 managed-list project and previewed' "$log_file" && grep -Fq '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes' "$log_file" && grep -Fq '[shader-compat-smoke] compiled two-argument fog shader and instanced variant' "$log_file" && grep -Fq '[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
+          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-loader-compat] registered neoforge:obj using Forge' "$log_file" && grep -Fq '[obj-model-smoke] parsed neoforge:obj through Forge and built' "$log_file" && grep -Fq '[fxproj-editor-smoke] opened v3 managed-list project and previewed' "$log_file" && grep -Fq '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes' "$log_file" && grep -Fq '[screen-size-smoke] custom GPU model shader rendered using viewport-sized ScreenSize' "$log_file" && grep -Fq '[shader-compat-smoke] compiled two-argument fog shader and instanced variant' "$log_file" && grep -Fq '[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
             grep -E '\[.*smoke\]|\[obj-loader-compat\]' "$log_file" || true
             echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
             exit 0

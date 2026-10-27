@@ -258,6 +258,15 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 uniform.set(RenderSystem.getModelViewMatrix().invert(new Matrix4f()));
             });
         }
+        if (uniformNames.contains("ScreenSize")) {
+            shaderHolder.addDynamicUniform("ScreenSize", uniform -> {
+                // Custom shader materials bypass Minecraft's normal shader setup. Keep screen-space
+                // effects (for example Photon shield shaders sampling scene depth) in sync with the
+                // active render target instead of leaving the manifest's [1, 1] default in place.
+                uniform.set((float) GlStateManager.Viewport.width(),
+                        (float) GlStateManager.Viewport.height());
+            });
+        }
         if (uniformNames.contains("U_ViewPort")) {
             shaderHolder.addDynamicUniform("U_ViewPort", uniform -> {
                 uniform.set(new Vector4f(

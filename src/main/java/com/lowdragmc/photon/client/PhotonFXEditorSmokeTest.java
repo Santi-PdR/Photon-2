@@ -111,6 +111,7 @@ public final class PhotonFXEditorSmokeTest {
                     #version 330 core
                     #moj_import <photon:particle_utils.glsl>
                     uniform sampler2D SamplerCurve;
+                    uniform vec2 ScreenSize;
                     in float particleT;
                     in vec2 tornadoUv;
                     in vec4 tornadoColor;
@@ -118,7 +119,9 @@ public final class PhotonFXEditorSmokeTest {
                     void main() {
                         float value = getCurveValue(SamplerCurve, 0, clamp(particleT, 0.0, 1.0));
                         float uvPattern = 0.75 + 0.25 * fract(tornadoUv.x + tornadoUv.y);
+                        float viewportAspect = ScreenSize.x / max(ScreenSize.y, 1.0);
                         vec3 curveColor = vec3(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8);
+                        curveColor.r *= clamp(viewportAspect, 0.1, 1.0);
                         fragColor = vec4(curveColor * tornadoColor.rgb * uvPattern, tornadoColor.a);
                     }
                     """);
@@ -132,6 +135,17 @@ public final class PhotonFXEditorSmokeTest {
                 curveSampler.addProperty("name", "SamplerCurve");
                 samplers.add(curveSampler);
                 json.add("samplers", samplers);
+                var uniforms = json.has("uniforms") ? json.getAsJsonArray("uniforms") : new com.google.gson.JsonArray();
+                var screenSize = new com.google.gson.JsonObject();
+                screenSize.addProperty("name", "ScreenSize");
+                screenSize.addProperty("type", "float");
+                screenSize.addProperty("count", 2);
+                var defaults = new com.google.gson.JsonArray();
+                defaults.add(1.0);
+                defaults.add(1.0);
+                screenSize.add("values", defaults);
+                uniforms.add(screenSize);
+                json.add("uniforms", uniforms);
                 Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
             }
             Files.writeString(shaderDir.resolve("trail_smoke.fsh"), """
@@ -191,6 +205,7 @@ public final class PhotonFXEditorSmokeTest {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
                 Photon.LOGGER.info("[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail with {} live segments", trailParticle.getTails().size());
+                Photon.LOGGER.info("[screen-size-smoke] custom GPU model shader rendered using viewport-sized ScreenSize");
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
