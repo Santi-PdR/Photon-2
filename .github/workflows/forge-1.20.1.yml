@@ -119,6 +119,10 @@ jobs:
         shell: bash
         run: grep -Fq '[external-trail-material-smoke] loaded the legacy file-backed trail material' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require the legacy trail width curve
+        shell: bash
+        run: grep -Fq '[legacy-trail-curve-smoke] restored a nonzero width from the legacy curve' "$RUNNER_TEMP/photon-client.log"
+
       - name: Verify the editor actually displays the particle
         shell: bash
         run: |

@@ -551,6 +551,23 @@ public final class PhotonFXEditorSmokeTest {
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");
         var tornadoFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getCompound("config");
+        var trailFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(4).getCompound("data").getCompound("config");
+        var widthCurve = new CompoundTag();
+        var widthData = new CompoundTag();
+        var widthSegments = new ListTag();
+        widthSegments.add(floatList(0f, 0f, 0.1f, 0f, 0.72f, 1f, 1f, 1f));
+        widthData.put("curves", widthSegments);
+        widthData.putFloat("min", 0f);
+        widthData.putFloat("max", Float.MAX_VALUE);
+        widthData.putFloat("lower", 0f);
+        widthData.putFloat("upper", 0.2f);
+        widthData.putBoolean("lockControlPoint", true);
+        widthData.putString("xAxis", "trail position");
+        widthData.putString("yAxis", "width");
+        widthCurve.putString("type", "curve");
+        widthCurve.put("data", widthData);
+        trailFixtureConfig.put("widthOverTrail", widthCurve);
         Photon.LOGGER.info("[tornado-render-smoke] saved GPU channel setting before migration: {}",
                 tornadoFixtureConfig.getCompound("additionalGPUDataSetting"));
         if (fixtureConfig.getCompound("subEmitters").getCompound("emitters")
@@ -592,6 +609,11 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
         }
         var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(4);
+        var restoredWidth = restoredCpuTrail.config.getWidthOverTrail().get(0.8f, () -> 0.5f).floatValue();
+        if (!Float.isFinite(restoredWidth) || restoredWidth <= 0.01f) {
+            throw new IllegalStateException("Legacy trail width curve did not restore: " + restoredWidth);
+        }
+        Photon.LOGGER.info("[legacy-trail-curve-smoke] restored a nonzero width from the legacy curve: {}", restoredWidth);
         var externalMaterial = restoredCpuTrail.config.renderer.getMaterials().get(0).getMaterial();
         if (!(externalMaterial instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
                 || !(reference.getRawMaterial() instanceof CustomShaderMaterial restoredCpuShader)) {
