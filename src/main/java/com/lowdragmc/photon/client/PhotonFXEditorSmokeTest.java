@@ -134,6 +134,23 @@ public final class PhotonFXEditorSmokeTest {
                 json.add("samplers", samplers);
                 Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
             }
+            Files.writeString(shaderDir.resolve("trail_smoke.fsh"), """
+                    #version 330 core
+                    in float vertexDistance;
+                    in vec2 texCoord0;
+                    in vec4 vertexColor;
+                    out vec4 fragColor;
+                    void main() {
+                        float sweep = 0.8 + 0.2 * sin((texCoord0.x + texCoord0.y) * 6.2831853);
+                        fragColor = vec4(vertexColor.rgb * vec3(0.65, 0.9, 1.0) * sweep, vertexColor.a);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("fragment", "photon:ci/trail_smoke");
+                Files.writeString(shaderDir.resolve("trail_smoke.json"), json.toString());
+            }
         } catch (Exception failure) {
             throw new IllegalStateException("Could not prepare OBJ model and tornado-shader smoke fixtures", failure);
         }
@@ -173,7 +190,7 @@ public final class PhotonFXEditorSmokeTest {
                 if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
-                Photon.LOGGER.info("[trail-render-smoke] moving GPU trail accumulated {} live segments", trailParticle.getTails().size());
+                Photon.LOGGER.info("[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail with {} live segments", trailParticle.getTails().size());
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
@@ -326,7 +343,14 @@ public final class PhotonFXEditorSmokeTest {
         trail.config.setMinVertexDistance(0.02f);
         trail.config.renderer.setUseGPUInstance(true);
         trail.config.renderer.getMaterials().clear();
-        var trailMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        var trailShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_smoke"));
+        trailShader.recompile();
+        if (trailShader.isCompiledError()) throw new IllegalStateException(trailShader.getCompiledErrorMessage());
+        if (!(trailShader.getShader(MaterialContext.TRAIL_INSTANCE) instanceof LDShaderInstance trailVariant)
+                || !trailVariant.defines.contains("TRAIL_INSTANCE")) {
+            throw new IllegalStateException("Arrow-trail custom shader failed its GPU trail variant");
+        }
+        var trailMaterial = new MaterialSetting(trailShader);
         trailMaterial.setCull(false);
         trailMaterial.setDepthTest(false);
         trail.config.renderer.getMaterials().add(trailMaterial);

@@ -97,7 +97,7 @@ jobs:
 
       - name: Require a moving GPU trail smoke result
         shell: bash
-        run: grep -Fq '[trail-render-smoke] moving GPU trail accumulated' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail' "$RUNNER_TEMP/photon-client.log"
 
       - name: Verify the editor actually displays the particle
         shell: bash
