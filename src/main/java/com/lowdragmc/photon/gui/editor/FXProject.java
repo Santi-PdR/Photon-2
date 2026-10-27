@@ -7,7 +7,6 @@ import com.lowdragmc.lowdraglib2.editor.resource.Resources;
 import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
-import com.lowdragmc.photon.client.util.LDLibPersistenceCompat;
 import com.lowdragmc.photon.client.fx.instance.InstanceIds;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.gui.editor.resource.PhotonShaderFunctionGraphResource;
@@ -132,7 +131,9 @@ public class FXProject implements IProject {
         var fixedData = hasVersion
                 ? PhotonFXProjectDataFixer.INSTANCE.applyFixes(version, VERSION, sourceData)
                 : sourceData;
-        var normalizedData = LDLibPersistenceCompat.normalize(fixedData);
+        // Keep current LDLib2 Set<String> fields in their native string-list shape. Rewriting
+        // them as LDLib1 typed payloads makes the v3→v5 fixer drop enabled GPU shader channels.
+        var normalizedData = fixedData;
         if (editor != null) {
             // an undo back to the moment the project opened restores the whole of it: when that is what it
             // already is, the objects the editor shows (and the history refers to) must stay the same ones.
@@ -171,3 +172,4 @@ public class FXProject implements IProject {
         return copy;
     }
 }
+
