@@ -5,8 +5,8 @@ import com.lowdragmc.lowdraglib.syncdata.payload.ITypedPayload;
 import com.lowdragmc.lowdraglib.syncdata.payload.NbtTagPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Handles persistence payloads shared by Photon and the Forge 1.20.1 LDLib readers. */
