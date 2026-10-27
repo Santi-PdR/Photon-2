@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial;
@@ -209,7 +210,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("The enabled sub-emitter fixture was not written: " + fixtureConfig.getCompound("subEmitters"));
         }
         var legacyModel = new CompoundTag();
-        legacyModel.putString("modelLocation", "photon:ci/obj_smoke");
+        legacyModel.putString("modelLocation", "photon:block/sphere");
         fixtureConfig.getCompound("renderer").put("model", legacyModel);
         encoded.getCompound("meta").putInt("version_num", 3);
         encoded.getCompound("meta").putString("version", "3.0");
@@ -226,6 +227,13 @@ public final class PhotonFXEditorSmokeTest {
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
+        if (!(restored.config.renderer.getModelSource() instanceof ObjModelSource sphere)
+                || !sphere.getModelLocation().equals(new ResourceLocation("photon", "models/sphere.obj"))
+                || sphere.getMesh().vertexCount() < 3) {
+            throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
+        }
+        Photon.LOGGER.info("[legacy-model-alias-smoke] photon:block/sphere resolved to bundled OBJ with {} vertices",
+                sphere.getMesh().vertexCount());
 
         previousScreen = minecraft.screen;
         editor = new FXEditor();
@@ -276,5 +284,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 

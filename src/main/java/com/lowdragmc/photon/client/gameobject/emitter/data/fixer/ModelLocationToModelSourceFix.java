@@ -5,6 +5,8 @@ import com.mojang.datafixers.TypeRewriteRule;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
 
+import java.util.Set;
+
 import static com.mojang.datafixers.DSL.remainderFinder;
 
 /**
@@ -18,6 +20,9 @@ import static com.mojang.datafixers.DSL.remainderFinder;
  * </ul>
  */
 public final class ModelLocationToModelSourceFix extends DataFix {
+    private static final Set<String> PHOTON_PRIMITIVE_MODELS = Set.of(
+            "sphere", "cube", "cylinder", "capsule", "plane", "quad");
+
     public ModelLocationToModelSourceFix(Schema outputSchema) {
         super(outputSchema, true);
     }
@@ -49,7 +54,7 @@ public final class ModelLocationToModelSourceFix extends DataFix {
             result = result.update("shape", shape -> shape.update("shape", inner -> inner.update("data",
                     shapeData -> shapeData.update("meshData", meshData -> meshData
                             .remove("modelLocation")
-                            .set("source", jsonModelSource(meshData, meshLocationOpt.get()))))));
+                            .set("source", modelSource(meshData, meshLocationOpt.get()))))));
         }
 
         // model render mode site: the new payload is a MeshData compound {source: <wrapper>}
@@ -57,7 +62,7 @@ public final class ModelLocationToModelSourceFix extends DataFix {
         if (rendererLocationOpt.isPresent()) {
             result = result.update("renderer", renderer ->
                     renderer.set("model", renderer.emptyMap()
-                            .set("source", jsonModelSource(renderer, rendererLocationOpt.get()))));
+                            .set("source", modelSource(renderer, rendererLocationOpt.get()))));
         }
 
         // trails nest another config (defensive recursion, matching the existing fixers)
@@ -67,10 +72,22 @@ public final class ModelLocationToModelSourceFix extends DataFix {
         return result;
     }
 
-    /** {@code {type: "json_model", data: {modelLocation: <loc>}}} — the IModelSource dispatch wrapper. */
-    private static Dynamic<?> jsonModelSource(Dynamic<?> ops, String modelLocation) {
+    /** Keep Photon 26.2's shipped primitive aliases working after its model-source redesign. */
+    private static Dynamic<?> modelSource(Dynamic<?> ops, String modelLocation) {
+        String prefix = "photon:block/";
+        if (modelLocation.startsWith(prefix)) {
+            String primitive = modelLocation.substring(prefix.length());
+            if (PHOTON_PRIMITIVE_MODELS.contains(primitive)) {
+                return ops.emptyMap()
+                        .set("type", ops.createString("obj_model"))
+                        .set("data", ops.emptyMap().set("modelLocation",
+                                ops.createString("photon:models/" + primitive + ".obj")));
+            }
+        }
         return ops.emptyMap()
                 .set("type", ops.createString("json_model"))
                 .set("data", ops.emptyMap().set("modelLocation", ops.createString(modelLocation)));
     }
+
 }
+
