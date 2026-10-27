@@ -333,18 +333,18 @@ public final class PhotonFXEditorSmokeTest {
                 .filter(channel -> channel.id().equals("addition_gpu_data.t"))
                 .findFirst().orElseThrow().bit();
         var restoredModel = restoredTornado.config.renderer.getModelSource();
-        var restoredMaterial = restoredTornado.config.renderer.getMaterials().get(0).getMaterial();
+        var restoredTornadoMaterial = restoredTornado.config.renderer.getMaterials().get(0).getMaterial();
         boolean objLoaded = restoredModel instanceof JsonModelSource obj && obj.getMesh() != null && obj.getMesh().vertexCount() >= 3;
         boolean tChannelEnabled = restoredTornado.config.additionalGPUDataSetting.isEnable()
                 && (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) != 0;
-        boolean shaderLoaded = restoredMaterial instanceof CustomShaderMaterial shader
+        boolean shaderLoaded = restoredTornadoMaterial instanceof CustomShaderMaterial shader
                 && !shader.isCompiledError() && shader.curveTexture.getCurveTexture() != null;
         if (!objLoaded || !tChannelEnabled || !shaderLoaded) {
             Photon.LOGGER.error("[tornado-render-smoke] reload diagnostics: model={} objLoaded={} tEnabled={} tMask={} tBit={} material={} shaderLoaded={}",
                     restoredModel, objLoaded, restoredTornado.config.additionalGPUDataSetting.isEnable(),
                     restoredTornado.config.additionalGPUDataSetting.userMask(), tChannel,
-                    restoredMaterial.getClass().getName(), shaderLoaded);
-            if (restoredMaterial instanceof CustomShaderMaterial shader) {
+                    restoredTornadoMaterial.getClass().getName(), shaderLoaded);
+            if (restoredTornadoMaterial instanceof CustomShaderMaterial shader) {
                 Photon.LOGGER.error("[tornado-render-smoke] shader diagnostics: error={} curveTexture={}",
                         shader.getCompiledErrorMessage(), shader.curveTexture.getCurveTexture());
             }
