@@ -93,6 +93,8 @@ public final class PhotonFXEditorSmokeTest {
                     uniform mat4 ModelViewMat;
                     uniform mat4 ProjMat;
                     out float particleT;
+                    out vec2 tornadoUv;
+                    out vec4 tornadoColor;
                     void main() {
                         ParticleData data = getParticleData();
 #ifdef PARTICLE_MODEL_INSTANCE
@@ -100,6 +102,8 @@ public final class PhotonFXEditorSmokeTest {
                         data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
 #endif
                         particleT = T;
+                        tornadoUv = data.UV;
+                        tornadoColor = data.Color;
                         gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
                     }
                     """);
@@ -108,10 +112,14 @@ public final class PhotonFXEditorSmokeTest {
                     #moj_import <photon:particle_utils.glsl>
                     uniform sampler2D SamplerCurve;
                     in float particleT;
+                    in vec2 tornadoUv;
+                    in vec4 tornadoColor;
                     out vec4 fragColor;
                     void main() {
                         float value = getCurveValue(SamplerCurve, 0, clamp(particleT, 0.0, 1.0));
-                        fragColor = vec4(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8, 1.0);
+                        float uvPattern = 0.75 + 0.25 * fract(tornadoUv.x + tornadoUv.y);
+                        vec3 curveColor = vec3(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8);
+                        fragColor = vec4(curveColor * tornadoColor.rgb * uvPattern, tornadoColor.a);
                     }
                     """);
             try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
