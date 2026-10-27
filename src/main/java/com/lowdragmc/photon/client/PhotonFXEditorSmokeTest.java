@@ -312,6 +312,12 @@ public final class PhotonFXEditorSmokeTest {
         encoded.getCompound("meta").putString("version", "3.0");
         replaceManagedListUids(encoded);
         NbtIo.write(encoded, projectFile.toFile());
+        var fixedData = com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer.INSTANCE
+                .applyFixes(3, FXProject.VERSION, encoded.getCompound("data"));
+        var fixedTornadoSetting = fixedData.getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data")
+                .getCompound("config").getCompound("additionalGPUDataSetting");
+        Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
         if (loaded.getFx().getFxData().objects().size() != 3
@@ -336,6 +342,8 @@ public final class PhotonFXEditorSmokeTest {
         long tChannel = PhotonGpuChannels.CHANNELS.stream()
                 .filter(channel -> channel.id().equals("addition_gpu_data.t"))
                 .findFirst().orElseThrow().bit();
+        Photon.LOGGER.info("[tornado-render-smoke] loaded enabled channel ids: {}",
+                enabledChannelIds(restoredTornado));
         var restoredModel = restoredTornado.config.renderer.getModelSource();
         var restoredTornadoMaterial = restoredTornado.config.renderer.getMaterials().get(0).getMaterial();
         boolean objLoaded = restoredModel instanceof JsonModelSource obj && obj.getMesh() != null && obj.getMesh().vertexCount() >= 3;
@@ -375,6 +383,13 @@ public final class PhotonFXEditorSmokeTest {
         Field field = setting.getClass().getDeclaredField("additionalData");
         field.setAccessible(true);
         ((Set<String>) field.get(setting)).add("addition_gpu_data.t");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> enabledChannelIds(ParticleEmitter emitter) throws ReflectiveOperationException {
+        Field field = emitter.config.additionalGPUDataSetting.getClass().getDeclaredField("additionalData");
+        field.setAccessible(true);
+        return Set.copyOf((Set<String>) field.get(emitter.config.additionalGPUDataSetting));
     }
 
     private static void replaceManagedListUids(Tag value) {
