@@ -115,6 +115,10 @@ jobs:
         shell: bash
         run: grep -Fq '[tangent-abi-smoke] compiled original vec2 UV and vec4 normal tangent inputs' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require the external legacy trail material
+        shell: bash
+        run: grep -Fq '[external-trail-material-smoke] loaded the legacy file-backed trail material' "$RUNNER_TEMP/photon-client.log"
+
       - name: Verify the editor actually displays the particle
         shell: bash
         run: |

@@ -521,7 +521,23 @@ public final class PhotonFXEditorSmokeTest {
         cpuShader.deserializeAdditionalNBT(savedCpuData, provider);
         assertLegacyHdr(cpuShader, 0.4f, 4.0f);
         Photon.LOGGER.info("[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload");
-        var cpuMaterial = new MaterialSetting(cpuShader);
+        // Match the sample FXP's external LDLib material wrapper and legacy shaderData layout.
+        var materialFile = LDLib2.getAssetsDir().toPath().resolve("ldlib2/resources/global/ci_tail.material.nbt");
+        Files.createDirectories(materialFile.getParent());
+        var oldMaterialData = new CompoundTag();
+        oldMaterialData.putString("shaderLocation", "photon:ci/trail_cpu_smoke");
+        oldMaterialData.put("_additional", cpuData.copy());
+        var oldMaterial = new CompoundTag();
+        oldMaterial.putString("type", "custom_shader");
+        oldMaterial.put("data", oldMaterialData);
+        var resourceFile = new CompoundTag();
+        resourceFile.putString("type", "material");
+        resourceFile.put("data", oldMaterial);
+        NbtIo.write(resourceFile, materialFile.toFile());
+        var resourceReference = new com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial(
+                new com.lowdragmc.lowdraglib2.editor.resource.FilePath(
+                        new File("./ldlib2/assets/ldlib2/resources/global/ci_tail.material.nbt")));
+        var cpuMaterial = new MaterialSetting(resourceReference);
         cpuMaterial.setCull(false);
         cpuMaterial.setDepthTest(false);
         cpuTrail.config.renderer.getMaterials().add(cpuMaterial);
@@ -575,6 +591,14 @@ public final class PhotonFXEditorSmokeTest {
                 || sphere.getMesh().vertexCount() < 3) {
             throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
         }
+        var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(4);
+        var externalMaterial = restoredCpuTrail.config.renderer.getMaterials().get(0).getMaterial();
+        if (!(externalMaterial instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                || !(reference.getRawMaterial() instanceof CustomShaderMaterial restoredCpuShader)) {
+            throw new IllegalStateException("Legacy trail did not resolve its external custom shader material");
+        }
+        assertLegacyHdr(restoredCpuShader, 0.8f, 3.0f);
+        Photon.LOGGER.info("[external-trail-material-smoke] loaded the legacy file-backed trail material");
         Photon.LOGGER.info("[legacy-model-alias-smoke] photon:block/sphere resolved to bundled OBJ with {} vertices",
                 sphere.getMesh().vertexCount());
         long tChannel = PhotonGpuChannels.CHANNELS.stream()
