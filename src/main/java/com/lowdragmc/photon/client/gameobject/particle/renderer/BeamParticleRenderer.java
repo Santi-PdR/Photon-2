@@ -101,10 +101,10 @@ public class BeamParticleRenderer {
         var p3 = new Vector3f(end).add(n).sub(cameraPos);
         var p4 = new Vector3f(end).add(n.mul(-1)).sub(cameraPos);
 
-        pBuffer.vertex(p1.x, p1.y, p1.z).uv(u0, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-        pBuffer.vertex(p0.x, p0.y, p0.z).uv(u0, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-        pBuffer.vertex(p4.x, p4.y, p4.z).uv(u1, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-        pBuffer.vertex(p3.x, p3.y, p3.z).uv(u1, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+        pBuffer.vertex(p1.x, p1.y, p1.z).color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+        pBuffer.vertex(p0.x, p0.y, p0.z).color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+        pBuffer.vertex(p4.x, p4.y, p4.z).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+        pBuffer.vertex(p3.x, p3.y, p3.z).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
     }
 
     // ---------------------------------------------------------------------

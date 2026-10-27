@@ -73,10 +73,10 @@ public abstract class ShaderInstanceMaterial implements IMaterial {
             var mat = graphics.pose().last().pose();
             var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(Tesselator.getInstance(),VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
 
-            buffer.vertex(mat, x, y + height, 0).uv(imageU, imageV + imageHeight).color(255, 255, 255, 255).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x + width, y + height, 0).uv(imageU + imageWidth, imageV + imageHeight).color(255, 255, 255, 255).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x + width, y, 0).uv(imageU + imageWidth, imageV).color(255, 255, 255, 255).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x, y, 0).uv(imageU, imageV).color(255, 255, 255, 255).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(mat, x, y + height, 0).color(255, 255, 255, 255).uv(imageU, imageV + imageHeight).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(mat, x + width, y + height, 0).color(255, 255, 255, 255).uv(imageU + imageWidth, imageV + imageHeight).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(mat, x + width, y, 0).color(255, 255, 255, 255).uv(imageU + imageWidth, imageV).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+            buffer.vertex(mat, x, y, 0).color(255, 255, 255, 255).uv(imageU, imageV).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
 
             RenderSystem.setShader(() -> shader);
             BufferUploader.drawWithShader(buffer.end());

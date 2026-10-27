@@ -416,8 +416,8 @@ public class AraTrailParticleRenderer {
 
         // Add vertex to buffer
         buffer.vertex(pos.x, pos.y, pos.z)
-                .uv(uv.x, uv.y)
                 .color(color.x, color.y, color.z, color.w)
+                .uv(uv.x, uv.y)
                 .uv2(LightTexture.FULL_BRIGHT)
                 .normal(normal.x, normal.y, normal.z).endVertex();
     }
