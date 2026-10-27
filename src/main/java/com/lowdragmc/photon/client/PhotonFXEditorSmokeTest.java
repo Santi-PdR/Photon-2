@@ -17,6 +17,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.data.SubEmittersSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
@@ -36,9 +37,11 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Set;
 
 /** Exercises the editor load and preview path only in the opt-in remote client smoke run. */
 public final class PhotonFXEditorSmokeTest {
@@ -61,6 +64,13 @@ public final class PhotonFXEditorSmokeTest {
             Files.writeString(modelDir.resolve("obj_smoke.obj"),
                     "mtllib obj_smoke.mtl\no smoke\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl stone\nf 1/1/1 2/2/1 3/3/1\n");
             Files.writeString(modelDir.resolve("obj_smoke.mtl"), "newmtl stone\nKd 1 1 1\nmap_Kd minecraft:block/stone\n");
+            Path ldlibModelDir = LDLib2.getAssetsDir().toPath().resolve("ldlib2").resolve("models");
+            Files.createDirectories(ldlibModelDir.resolve("block"));
+            Files.createDirectories(ldlibModelDir.resolve("obj"));
+            Files.writeString(ldlibModelDir.resolve("block").resolve("ci_obj_smoke.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_obj_smoke.obj\",\"textures\":{}}");
+            Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_obj_smoke.obj"),
+                    "o smoke\nv -0.5 -0.5 0\nv 0.5 -0.5 0\nv 0 0.5 0\nvt 0 0\nvt 1 0\nvt 0.5 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
             Files.createDirectories(shaderDir);
             try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
@@ -73,8 +83,44 @@ public final class PhotonFXEditorSmokeTest {
                 Files.writeString(shaderDir.resolve("fog_smoke.vsh"), source);
                 Files.writeString(shaderDir.resolve("fog_smoke.json"), json.toString());
             }
+            Files.writeString(shaderDir.resolve("tornado_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    layout(location = 9) in float T;
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+                    out float particleT;
+                    void main() {
+                        ParticleData data = getParticleData();
+                        particleT = T;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
+                    }
+                    """);
+            Files.writeString(shaderDir.resolve("tornado_smoke.fsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle_utils.glsl>
+                    uniform sampler2D SamplerCurve;
+                    in float particleT;
+                    out vec4 fragColor;
+                    void main() {
+                        float value = getCurveValue(SamplerCurve, 0, clamp(particleT, 0.0, 1.0));
+                        fragColor = vec4(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8, 1.0);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/tornado_smoke");
+                json.addProperty("fragment", "photon:ci/tornado_smoke");
+                var samplers = new com.google.gson.JsonArray();
+                var curveSampler = new com.google.gson.JsonObject();
+                curveSampler.addProperty("name", "SamplerCurve");
+                samplers.add(curveSampler);
+                json.add("samplers", samplers);
+                Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
+            }
         } catch (Exception failure) {
-            throw new IllegalStateException("Could not prepare OBJ model smoke fixture", failure);
+            throw new IllegalStateException("Could not prepare OBJ model and tornado-shader smoke fixtures", failure);
         }
     }
 
@@ -98,10 +144,10 @@ public final class PhotonFXEditorSmokeTest {
                 if (queued == 0) throw new IllegalStateException("Editor preview did not queue any particles");
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
-                if (live != 2) throw new IllegalStateException("Expected live GPU-model and CPU-billboard particles, got " + live);
+                if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
-                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed GPU-model and CPU-billboard particles ({} live, {} queued objects)", live, queued);
+                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, and CPU-billboard particles ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
@@ -152,6 +198,17 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("NeoForge OBJ resource did not produce a Photon mesh");
         }
         Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
+        var externalLocation = new ResourceLocation("ldlib2", "block/ci_obj_smoke");
+        var externalResource = minecraft.getResourceManager()
+                .getResource(new ResourceLocation("ldlib2", "models/block/ci_obj_smoke.json")).orElseThrow();
+        try (var reader = externalResource.openAsReader()) {
+            BlockModel.fromStream(reader);
+        }
+        var externalMesh = new JsonModelSource(externalLocation).getMesh();
+        if (externalMesh == null || externalMesh.vertexCount() < 3) {
+            throw new IllegalStateException("LDLib2-namespace NeoForge OBJ did not produce a Photon mesh");
+        }
+        Photon.LOGGER.info("[external-obj-model-smoke] loaded ldlib2:block/ci_obj_smoke with {} vertices", externalMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
         emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));
@@ -177,6 +234,41 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.subEmitters.setEnable(true);
         emitter.config.subEmitters.getEmitters().add(new SubEmittersSetting.Emitter());
         source.getFx().getFxData().objects().add(emitter);
+
+        var tornadoModel = new ParticleEmitter();
+        tornadoModel.transform().localPosition(new org.joml.Vector3f(2.5f, 2, 0));
+        tornadoModel.config.setLooping(false);
+        tornadoModel.config.setStartLifetime(NumberFunction.constant(70));
+        tornadoModel.config.setStartSpeed(NumberFunction.constant(0));
+        tornadoModel.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(4, 4, 4));
+        tornadoModel.config.emission.setEmissionRate(NumberFunction.constant(0));
+        tornadoModel.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        tornadoModel.config.renderer.setModel(new MeshData(new JsonModelSource(externalLocation)));
+        tornadoModel.config.renderer.setUseGPUInstance(true);
+        tornadoModel.config.renderer.getMaterials().clear();
+        var tornadoShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+        tornadoShader.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());
+        tornadoShader.recompile();
+        if (tornadoShader.isCompiledError()) throw new IllegalStateException(tornadoShader.getCompiledErrorMessage());
+        if (!(tornadoShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE) instanceof LDShaderInstance tornadoVariant)
+                || !tornadoVariant.defines.contains("PARTICLE_MODEL_INSTANCE")) {
+            throw new IllegalStateException("Tornado-style custom shader failed its GPU model variant");
+        }
+        if (tornadoShader.curveTexture.getCurveTexture() == null) {
+            throw new IllegalStateException("Tornado-style shader curve sampler did not upload");
+        }
+        var tornadoMaterial = new MaterialSetting(tornadoShader);
+        tornadoMaterial.setCull(false);
+        tornadoMaterial.setDepthTest(false);
+        tornadoModel.config.renderer.getMaterials().add(tornadoMaterial);
+        enableLegacyTChannel(tornadoModel);
+        var tornadoBurst = new EmissionSetting.Burst();
+        tornadoBurst.time = 0;
+        tornadoBurst.cycles = 1;
+        tornadoBurst.setCount(NumberFunction.constant(1));
+        tornadoBurst.interval = 4;
+        tornadoModel.config.emission.getBursts().add(tornadoBurst);
+        source.getFx().getFxData().objects().add(tornadoModel);
 
         var billboard = new ParticleEmitter();
         billboard.transform().localPosition(new org.joml.Vector3f(-2, 2, 0));
@@ -218,12 +310,15 @@ public final class PhotonFXEditorSmokeTest {
         NbtIo.write(encoded, projectFile.toFile());
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 2
+        if (loaded.getFx().getFxData().objects().size() != 3
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
+                || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
                 || restored.config.renderer.getMaterials().size() != 1
                 || restored.config.emission.getBursts().size() != 1
                 || restored.config.subEmitters.getEmitters().size() != 1
-                || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter)
+                || restoredTornado.config.renderer.getMaterials().size() != 1
+                || restoredTornado.config.emission.getBursts().size() != 1
+                || !(loaded.getFx().getFxData().objects().get(2) instanceof ParticleEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
@@ -234,6 +329,18 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[legacy-model-alias-smoke] photon:block/sphere resolved to bundled OBJ with {} vertices",
                 sphere.getMesh().vertexCount());
+        long tChannel = PhotonGpuChannels.CHANNELS.stream()
+                .filter(channel -> channel.id().equals("addition_gpu_data.t"))
+                .findFirst().orElseThrow().bit();
+        if (!(restoredTornado.config.renderer.getModelSource() instanceof JsonModelSource tornadoObj)
+                || tornadoObj.getMesh() == null || tornadoObj.getMesh().vertexCount() < 3
+                || !restoredTornado.config.additionalGPUDataSetting.isEnable()
+                || (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) == 0
+                || !(restoredTornado.config.renderer.getMaterials().get(0).getMaterial() instanceof CustomShaderMaterial restoredTornadoShader)
+                || restoredTornadoShader.isCompiledError() || restoredTornadoShader.curveTexture.getCurveTexture() == null) {
+            throw new IllegalStateException("Tornado-style OBJ, T channel, custom shader, or curve sampler did not survive v3 project loading");
+        }
+        Photon.LOGGER.info("[tornado-render-smoke] loaded LDLib2 OBJ with location-9 T data, GPU shader variant, and SamplerCurve");
 
         previousScreen = minecraft.screen;
         editor = new FXEditor();
@@ -245,6 +352,15 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Editor did not initialize the loaded project runtime");
         }
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void enableLegacyTChannel(ParticleEmitter emitter) throws ReflectiveOperationException {
+        var setting = emitter.config.additionalGPUDataSetting;
+        setting.setEnable(true);
+        Field field = setting.getClass().getDeclaredField("additionalData");
+        field.setAccessible(true);
+        ((Set<String>) field.get(setting)).add("addition_gpu_data.t");
     }
 
     private static void replaceManagedListUids(Tag value) {
