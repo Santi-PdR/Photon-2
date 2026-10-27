@@ -217,11 +217,12 @@ public final class PhotonFXEditorSmokeTest {
         NbtIo.write(encoded, projectFile.toFile());
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 1
+        if (loaded.getFx().getFxData().objects().size() != 2
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
                 || restored.config.renderer.getMaterials().size() != 1
                 || restored.config.emission.getBursts().size() != 1
                 || restored.config.subEmitters.getEmitters().size() != 1
+                || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
