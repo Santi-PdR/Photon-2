@@ -143,7 +143,21 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         recompile();
         if (shaderHolder != null && tag instanceof CompoundTag materialData
                 && materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
-            shaderHolder.deserializeNBT(provider, materialData.getCompound("shaderData"));
+            var shaderData = materialData.getCompound("shaderData");
+            shaderHolder.deserializeNBT(provider, shaderData);
+            // Older LDLib material files contain a sampler map, but lack the later HDR metadata.
+            // LDShaderHolder can restore uniforms present in the base program itself. A uniform
+            // used only by an instanced variant is absent there, so keep its authored value until
+            // that variant is compiled. Do not shadow editable uniforms that the holder restored.
+            if (shaderData.contains("samplers", Tag.TAG_COMPOUND)
+                    && !shaderData.contains("hdrVersion") && !shaderData.contains("hdrUniforms")) {
+                var legacyValues = new HashMap<String, float[]>();
+                CustomShaderUniformNbt.readLegacyUniformsInto(legacyValues, shaderData.get("uniforms"));
+                var baseUniforms = shaderHolder.baseInstance.getShaderInstanceAccessor().getUniformMap();
+                legacyValues.forEach((name, values) -> {
+                    if (!baseUniforms.containsKey(name)) uniformOverrides.putIfAbsent(name, values);
+                });
+            }
             attachDynamicSamplers(shaderHolder);
             attachDynamicUniforms(shaderHolder);
             applyUniformOverrides(shaderHolder.baseInstance);

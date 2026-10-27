@@ -99,6 +99,10 @@ jobs:
         shell: bash
         run: grep -Fq '[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require legacy variant uniform restoration
+        shell: bash
+        run: grep -Fq '[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers' "$RUNNER_TEMP/photon-client.log"
+
       - name: Verify the editor actually displays the particle
         shell: bash
         run: |

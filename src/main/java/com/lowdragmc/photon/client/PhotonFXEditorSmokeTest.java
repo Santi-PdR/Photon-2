@@ -30,6 +30,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.FloatTag;
 import net.minecraft.nbt.IntTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
@@ -92,6 +93,9 @@ public final class PhotonFXEditorSmokeTest {
                     layout(location = 9) in float T;
                     uniform mat4 ModelViewMat;
                     uniform mat4 ProjMat;
+#ifdef PARTICLE_MODEL_INSTANCE
+                    uniform float LegacyVariantOnly;
+#endif
                     out float particleT;
                     out vec2 tornadoUv;
                     out vec4 tornadoColor;
@@ -105,6 +109,9 @@ public final class PhotonFXEditorSmokeTest {
                         tornadoUv = data.UV;
                         tornadoColor = data.Color;
                         gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
+#ifdef PARTICLE_MODEL_INSTANCE
+                        gl_Position.x += LegacyVariantOnly * 0.01;
+#endif
                     }
                     """);
             Files.writeString(shaderDir.resolve("tornado_smoke.fsh"), """
@@ -145,6 +152,14 @@ public final class PhotonFXEditorSmokeTest {
                 defaults.add(1.0);
                 screenSize.add("values", defaults);
                 uniforms.add(screenSize);
+                var legacyVariant = new com.google.gson.JsonObject();
+                legacyVariant.addProperty("name", "LegacyVariantOnly");
+                legacyVariant.addProperty("type", "float");
+                legacyVariant.addProperty("count", 1);
+                var legacyDefaults = new com.google.gson.JsonArray();
+                legacyDefaults.add(0.0);
+                legacyVariant.add("values", legacyDefaults);
+                uniforms.add(legacyVariant);
                 json.add("uniforms", uniforms);
                 Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
             }
@@ -228,6 +243,26 @@ public final class PhotonFXEditorSmokeTest {
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
         verifyNestedMeshLoad();
         var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var legacyMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+        var legacyData = new CompoundTag();
+        var holderData = new CompoundTag();
+        var legacyUniforms = new CompoundTag();
+        var variantValue = new ListTag();
+        variantValue.add(FloatTag.valueOf(0.37f));
+        legacyUniforms.put("LegacyVariantOnly", variantValue);
+        holderData.put("uniforms", legacyUniforms);
+        holderData.put("samplers", new CompoundTag());
+        legacyData.put("shaderData", holderData);
+        legacyMaterial.deserializeAdditionalNBT(legacyData, provider);
+        if (legacyMaterial.getShader(MaterialContext.NORMAL).getUniform("LegacyVariantOnly") != null) {
+            throw new IllegalStateException("Legacy variant-only uniform unexpectedly exists in the base shader");
+        }
+        var legacyVariant = legacyMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE);
+        var restoredVariantUniform = legacyVariant.getUniform("LegacyVariantOnly");
+        if (restoredVariantUniform == null || Math.abs(restoredVariantUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f) {
+            throw new IllegalStateException("Legacy material with samplers lost its variant-only uniform");
+        }
+        Photon.LOGGER.info("[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers");
         var original = new CustomShaderMaterial();
         original.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());
         var saved = com.lowdragmc.lowdraglib2.utils.PersistedParser.serializeNBT(original, provider);
