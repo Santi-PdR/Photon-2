@@ -386,10 +386,10 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static Set<String> enabledChannelIds(ParticleEmitter emitter) throws ReflectiveOperationException {
+    private static Object enabledChannelIds(ParticleEmitter emitter) throws ReflectiveOperationException {
         Field field = emitter.config.additionalGPUDataSetting.getClass().getDeclaredField("additionalData");
         field.setAccessible(true);
-        return Set.copyOf((Set<String>) field.get(emitter.config.additionalGPUDataSetting));
+        return field.get(emitter.config.additionalGPUDataSetting);
     }
 
     private static void replaceManagedListUids(Tag value) {
