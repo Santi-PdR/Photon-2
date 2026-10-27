@@ -182,7 +182,7 @@ public final class PhotonFXEditorSmokeTest {
                 Files.writeString(shaderDir.resolve("trail_smoke.json"), json.toString());
             }
             Files.writeString(shaderDir.resolve("trail_cpu_smoke.fsh"), """
-                    #version 330 core
+                    #version 150
                     uniform sampler2D TailTexture;
                     uniform vec4 colorHDR1;
                     uniform vec4 colorHDR2;
