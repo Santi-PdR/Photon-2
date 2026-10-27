@@ -1,0 +1,26 @@
+name: Verify Photon candidate
+
+on:
+  push:
+    branches:
+      - backup/photon-forge-run177
+    paths:
+      - .github/workflows/verify-candidate-run205.yml
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the tested candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: photon-forge-1.20.1
+          run-id: 40569065039
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: Print candidate SHA-256
+        run: sha256sum candidate/*-all.jar
