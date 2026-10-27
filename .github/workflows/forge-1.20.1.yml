@@ -103,6 +103,14 @@ jobs:
         shell: bash
         run: grep -Fq '[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require a textured CPU trail to draw
+        shell: bash
+        run: grep -Fq '[cpu-trail-render-smoke] textured CPU trail changed' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require legacy HDR values to survive editing and reload
+        shell: bash
+        run: grep -Fq '[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload' "$RUNNER_TEMP/photon-client.log"
+
       - name: Verify the editor actually displays the particle
         shell: bash
         run: |

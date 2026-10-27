@@ -34,6 +34,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraftforge.api.distmarker.Dist;
@@ -80,6 +82,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Getter
     private boolean litByDynamicLights;
     private final Map<String, float[]> uniformOverrides = new HashMap<>();
+    private final Set<String> warnedFallbackVariants = new java.util.HashSet<>();
+    private final Set<String> legacyHdrUniforms = new java.util.HashSet<>();
 
     public CustomShaderMaterial() {
     }
@@ -89,6 +93,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     }
 
     public void setShader(ResourceLocation shaderLocation) {
+        if (!Objects.equals(this.shaderLocation, shaderLocation)) legacyHdrUniforms.clear();
         this.shaderLocation = shaderLocation;
         recompile();
     }
@@ -115,6 +120,11 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (!uniformOverrides.isEmpty()) {
             shaderData.put("uniformOverrides", CustomShaderUniformNbt.write(uniformOverrides));
         }
+        if (!legacyHdrUniforms.isEmpty()) {
+            var names = new ListTag();
+            legacyHdrUniforms.stream().sorted().forEach(name -> names.add(StringTag.valueOf(name)));
+            shaderData.put("legacyHdrUniforms", names);
+        }
         return shaderData;
     }
 
@@ -127,7 +137,10 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Override
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
         uniformOverrides.clear();
+        legacyHdrUniforms.clear();
         if (tag instanceof CompoundTag materialData) {
+            var names = materialData.getList("legacyHdrUniforms", Tag.TAG_STRING);
+            for (int i = 0; i < names.size(); i++) legacyHdrUniforms.add(names.getString(i));
             if (materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
                 var legacyShaderData = materialData.getCompound("shaderData");
                 if (CustomShaderUniformNbt.isPhoton262LegacyShaderData(legacyShaderData)) {
@@ -155,11 +168,16 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 CustomShaderUniformNbt.readLegacyUniformsInto(legacyValues, shaderData.get("uniforms"));
                 var baseUniforms = shaderHolder.baseInstance.getShaderInstanceAccessor().getUniformMap();
                 legacyValues.forEach((name, values) -> {
-                    if (!baseUniforms.containsKey(name)) uniformOverrides.putIfAbsent(name, values);
+                    if (!baseUniforms.containsKey(name)) {
+                        uniformOverrides.putIfAbsent(name, values);
+                    } else if (values.length == 4 && shaderHolder.isHDRUniform(name)) {
+                        legacyHdrUniforms.add(name);
+                    }
                 });
             }
             attachDynamicSamplers(shaderHolder);
             attachDynamicUniforms(shaderHolder);
+            applyLegacyHdrUniforms(shaderHolder.baseInstance);
             applyUniformOverrides(shaderHolder.baseInstance);
         }
     }
@@ -171,6 +189,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public void recompile() {
         compiledErrorMessage = "";
         litByDynamicLights = false;
+        warnedFallbackVariants.clear();
 
         if (shaderCleanable != null) {
             shaderCleanable.clean();
@@ -328,10 +347,27 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             releaseLeakedDefines(shaderLocation, defines);
             shader = shaderHolder.getShaderInstance(defines);
             releaseLeakedDefines(shaderLocation, defines);
+            if (!shader.defines.containsAll(defines) && warnedFallbackVariants.add(context.getVariantKey())) {
+                Photon.LOGGER.error("Shader {} could not create variant {}; LDLib returned its base program, so this effect may not render correctly",
+                        shaderLocation, defines);
+            }
         }
         if (litByDynamicLights) LitParticles.bind(shader, context, 1f);
+        applyLegacyHdrUniforms(shader);
         applyUniformOverrides(shader);
         return shader;
+    }
+
+    /** Legacy Photon shaders use vec4(rgb, intensity), while LDLib's newer HDR editor uploads rgb*intensity,1. */
+    private void applyLegacyHdrUniforms(ShaderInstance shader) {
+        if (shaderHolder == null) return;
+        for (var name : legacyHdrUniforms) {
+            var uniform = shader.getUniform(name);
+            if (uniform == null || uniform.getCount() != 4
+                    || shaderHolder.baseInstance.getUniform(name) == null) continue;
+            var color = shaderHolder.getHDRUniform(name);
+            uniform.set(color.getR(), color.getG(), color.getB(), color.getIntensity());
+        }
     }
 
     private void applyUniformOverrides(ShaderInstance shader) {

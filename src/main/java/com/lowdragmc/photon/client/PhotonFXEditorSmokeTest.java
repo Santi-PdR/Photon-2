@@ -55,6 +55,7 @@ public final class PhotonFXEditorSmokeTest {
     private static Screen previousScreen;
     private static Path projectFile;
     private static TrailEmitter smokeTrail;
+    private static TrailEmitter smokeCpuTrail;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -180,6 +181,38 @@ public final class PhotonFXEditorSmokeTest {
                 json.addProperty("fragment", "photon:ci/trail_smoke");
                 Files.writeString(shaderDir.resolve("trail_smoke.json"), json.toString());
             }
+            Files.writeString(shaderDir.resolve("trail_cpu_smoke.fsh"), """
+                    #version 330 core
+                    uniform sampler2D TailTexture;
+                    uniform vec4 colorHDR1;
+                    uniform vec4 colorHDR2;
+                    in vec2 texCoord0;
+                    out vec4 fragColor;
+                    void main() {
+                        vec3 sampleColor = texture(TailTexture, texCoord0).rgb;
+                        vec4 color = mix(colorHDR1, colorHDR2, texCoord0.x);
+                        fragColor = vec4(sampleColor * color.rgb * color.a, 1.0);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("fragment", "photon:ci/trail_cpu_smoke");
+                var tailSampler = new com.google.gson.JsonObject();
+                tailSampler.addProperty("name", "TailTexture");
+                json.getAsJsonArray("samplers").add(tailSampler);
+                for (var name : java.util.List.of("colorHDR1", "colorHDR2")) {
+                    var colorUniform = new com.google.gson.JsonObject();
+                    colorUniform.addProperty("name", name);
+                    colorUniform.addProperty("type", "float");
+                    colorUniform.addProperty("count", 4);
+                    var defaults = new com.google.gson.JsonArray();
+                    for (int i = 0; i < 4; i++) defaults.add(1.0);
+                    colorUniform.add("values", defaults);
+                    json.getAsJsonArray("uniforms").add(colorUniform);
+                }
+                Files.writeString(shaderDir.resolve("trail_cpu_smoke.json"), json.toString());
+            }
         } catch (Exception failure) {
             throw new IllegalStateException("Could not prepare OBJ model and tornado-shader smoke fixtures", failure);
         }
@@ -201,6 +234,7 @@ public final class PhotonFXEditorSmokeTest {
                 float x = -2.5f + ticks * 0.12f;
                 float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
                 smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
+                smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
             }
             if (!started) {
                 started = true;
@@ -213,6 +247,10 @@ public final class PhotonFXEditorSmokeTest {
                 if (smokeTrail.getParticleAmount() != 1 || trailParticle.getTails().size() < 3) {
                     throw new IllegalStateException("Moving GPU trail did not accumulate renderable segments: alive="
                             + smokeTrail.getParticleAmount() + ", segments=" + trailParticle.getTails().size());
+                }
+                var cpuTrailParticle = trailParticle(smokeCpuTrail);
+                if (smokeCpuTrail.getParticleAmount() != 1 || cpuTrailParticle.getTails().size() < 3) {
+                    throw new IllegalStateException("Moving CPU trail did not accumulate renderable segments");
                 }
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
@@ -407,6 +445,53 @@ public final class PhotonFXEditorSmokeTest {
         trail.transform().localPosition(new org.joml.Vector3f(-2.5f, 2, 0));
         source.getFx().getFxData().objects().add(trail);
 
+        // Old arrow_trail projects omit the GPU toggle and restore a texture sampler from shaderData.
+        var cpuTrail = new TrailEmitter();
+        cpuTrail.config.setDuration(150);
+        cpuTrail.config.setLooping(false);
+        cpuTrail.config.setTime(150);
+        cpuTrail.config.setMinVertexDistance(0.02f);
+        cpuTrail.config.setWidthOverTrail(NumberFunction.constant(0.4f));
+        cpuTrail.config.renderer.setUseGPUInstance(false);
+        cpuTrail.config.renderer.getMaterials().clear();
+        var cpuShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_cpu_smoke"));
+        var cpuData = new CompoundTag();
+        var cpuShaderData = new CompoundTag();
+        var samplers = new CompoundTag();
+        var tailTexture = new CompoundTag();
+        tailTexture.putString("type", "texture");
+        tailTexture.putString("resource", "minecraft:textures/block/stone.png");
+        samplers.put("TailTexture", tailTexture);
+        cpuShaderData.put("samplers", samplers);
+        var cpuUniforms = new CompoundTag();
+        cpuUniforms.put("colorHDR1", floatList(0.8f, 0.4f, 0.2f, 3.0f));
+        cpuUniforms.put("colorHDR2", floatList(0.2f, 0.6f, 0.9f, 2.0f));
+        cpuShaderData.put("uniforms", cpuUniforms);
+        cpuData.put("shaderData", cpuShaderData);
+        cpuShader.deserializeAdditionalNBT(cpuData, provider);
+        if (cpuShader.isCompiledError()) throw new IllegalStateException(cpuShader.getCompiledErrorMessage());
+        assertLegacyHdr(cpuShader, 0.8f, 3.0f);
+        Field holderField = CustomShaderMaterial.class.getDeclaredField("shaderHolder");
+        holderField.setAccessible(true);
+        var holder = (com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder) holderField.get(cpuShader);
+        holder.setHDRUniform("colorHDR1", new com.lowdragmc.lowdraglib2.math.HDRColor(0.4f, 0.3f, 0.2f, 1.0f, 4.0f));
+        assertLegacyHdr(cpuShader, 0.4f, 4.0f);
+        var savedCpuData = (CompoundTag) cpuShader.serializeAdditionalNBT(provider);
+        if (!savedCpuData.getCompound("shaderData").getCompound("samplers").getCompound("TailTexture")
+                .getString("resource").equals("minecraft:textures/block/stone.png")) {
+            throw new IllegalStateException("Legacy trail sampler was lost when saving the material");
+        }
+        cpuShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_cpu_smoke"));
+        cpuShader.deserializeAdditionalNBT(savedCpuData, provider);
+        assertLegacyHdr(cpuShader, 0.4f, 4.0f);
+        Photon.LOGGER.info("[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload");
+        var cpuMaterial = new MaterialSetting(cpuShader);
+        cpuMaterial.setCull(false);
+        cpuMaterial.setDepthTest(false);
+        cpuTrail.config.renderer.getMaterials().add(cpuMaterial);
+        cpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f, 2, 0));
+        source.getFx().getFxData().objects().add(cpuTrail);
+
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
         var encoded = NbtIo.read(projectFile.toFile());
@@ -435,7 +520,7 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 4
+        if (loaded.getFx().getFxData().objects().size() != 5
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
                 || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
                 || restored.config.renderer.getMaterials().size() != 1
@@ -445,6 +530,7 @@ public final class PhotonFXEditorSmokeTest {
                 || restoredTornado.config.emission.getBursts().size() != 1
                 || !(loaded.getFx().getFxData().objects().get(2) instanceof ParticleEmitter)
                 || !(loaded.getFx().getFxData().objects().get(3) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(4) instanceof TrailEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
@@ -490,8 +576,11 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Editor did not initialize the loaded project runtime");
         }
         smokeTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
-                .map(TrailEmitter.class::cast).findFirst()
+                .map(TrailEmitter.class::cast).filter(t -> t.config.renderer.isUseGPUInstance()).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the moving trail"));
+        smokeCpuTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                .map(TrailEmitter.class::cast).filter(t -> !t.config.renderer.isUseGPUInstance()).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the CPU trail"));
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
     }
 
@@ -499,6 +588,20 @@ public final class PhotonFXEditorSmokeTest {
         Field field = TrailEmitter.class.getDeclaredField("trailParticle");
         field.setAccessible(true);
         return (TrailParticle) field.get(emitter);
+    }
+
+    private static ListTag floatList(float... values) {
+        var list = new ListTag();
+        for (float value : values) list.add(FloatTag.valueOf(value));
+        return list;
+    }
+
+    private static void assertLegacyHdr(CustomShaderMaterial material, float red, float intensity) {
+        var uniform = material.getShader(MaterialContext.NORMAL).getUniform("colorHDR1");
+        if (uniform == null || Math.abs(uniform.getFloatBuffer().get(0) - red) > 0.0001f
+                || Math.abs(uniform.getFloatBuffer().get(3) - intensity) > 0.0001f) {
+            throw new IllegalStateException("Legacy HDR uniform was changed to premultiplied form");
+        }
     }
 
     @SuppressWarnings("unchecked")

@@ -34,6 +34,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
+    private static boolean smokeCpuTrailLogged;
     private static boolean smokeWritebackLogged;
     private static byte[] smokeBeforeFrame;
     private static int smokeX, smokeY, smokeWidth, smokeHeight;
@@ -444,6 +445,11 @@ public class RenderPassPipeline {
             var particleQueue = entry.getValue();
             if (!particleQueue.isEmpty()) {
                 renderPass.prepareStatus(this);
+                boolean inspectCpuTrail = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeCpuTrailLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
+                        p instanceof com.lowdragmc.photon.client.gameobject.particle.TrailParticle trail
+                                && !trail.getRuntime().renderer.isUseGPUInstance() && trail.getTails().size() >= 3);
+                var cpuTrailBefore = inspectCpuTrail ? smokeReadCurrentViewport() : null;
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeX = GlStateManager.Viewport.x();
                     smokeY = GlStateManager.Viewport.y();
@@ -452,6 +458,18 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (cpuTrailBefore != null) {
+                    var cpuTrailAfter = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < cpuTrailAfter.length; i += 4) {
+                        if (cpuTrailBefore[i] != cpuTrailAfter[i] || cpuTrailBefore[i + 1] != cpuTrailAfter[i + 1]
+                                || cpuTrailBefore[i + 2] != cpuTrailAfter[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeCpuTrailLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[cpu-trail-render-smoke] textured CPU trail changed {} pixels", changed);
+                    }
+                }
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeRenderLogged = true;
                     var smokeAfter = smokeReadViewport();
@@ -475,6 +493,16 @@ public class RenderPassPipeline {
         int width = smokeWidth, height = smokeHeight;
         var data = org.lwjgl.BufferUtils.createByteBuffer(width * height * 4);
         GL11.glReadPixels(smokeX, smokeY, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+        byte[] result = new byte[data.remaining()];
+        data.get(result);
+        return result;
+    }
+
+    private static byte[] smokeReadCurrentViewport() {
+        int width = GlStateManager.Viewport.width(), height = GlStateManager.Viewport.height();
+        var data = org.lwjgl.BufferUtils.createByteBuffer(width * height * 4);
+        GL11.glReadPixels(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(), width, height,
+                GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
         byte[] result = new byte[data.remaining()];
         data.get(result);
         return result;
