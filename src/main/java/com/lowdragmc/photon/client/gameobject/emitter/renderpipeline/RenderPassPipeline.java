@@ -34,6 +34,9 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
+    private static boolean smokeWritebackLogged;
+    private static byte[] smokeBeforeFrame;
+    private static int smokeX, smokeY, smokeWidth, smokeHeight;
     @Nullable
     private static RenderPassPipeline collecting;
 
@@ -441,14 +444,20 @@ public class RenderPassPipeline {
             var particleQueue = entry.getValue();
             if (!particleQueue.isEmpty()) {
                 renderPass.prepareStatus(this);
-                byte[] smokeBefore = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged ? smokeReadViewport() : null;
+                if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
+                    smokeX = GlStateManager.Viewport.x();
+                    smokeY = GlStateManager.Viewport.y();
+                    smokeWidth = GlStateManager.Viewport.width();
+                    smokeHeight = GlStateManager.Viewport.height();
+                    smokeBeforeFrame = smokeReadViewport();
+                }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeRenderLogged = true;
                     var smokeAfter = smokeReadViewport();
                     int changed = 0;
                     for (int i = 0; i < smokeAfter.length; i += 4) {
-                        if (smokeBefore[i] != smokeAfter[i] || smokeBefore[i+1] != smokeAfter[i+1] || smokeBefore[i+2] != smokeAfter[i+2]) changed++;
+                        if (smokeBeforeFrame[i] != smokeAfter[i] || smokeBeforeFrame[i+1] != smokeAfter[i+1] || smokeBeforeFrame[i+2] != smokeAfter[i+2]) changed++;
                     }
                     com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-render-smoke] pipeline drew={} particles={} pass={} changedPixels={}", drewSomething, particleQueue.size(), renderPass.getClass().getSimpleName(), changed);
                 }
@@ -463,9 +472,9 @@ public class RenderPassPipeline {
     }
 
     private static byte[] smokeReadViewport() {
-        int width = GlStateManager.Viewport.width(), height = GlStateManager.Viewport.height();
+        int width = smokeWidth, height = smokeHeight;
         var data = org.lwjgl.BufferUtils.createByteBuffer(width * height * 4);
-        GL11.glReadPixels(GlStateManager.Viewport.x(), GlStateManager.Viewport.y(), width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+        GL11.glReadPixels(smokeX, smokeY, width, height, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
         byte[] result = new byte[data.remaining()];
         data.get(result);
         return result;
@@ -710,6 +719,16 @@ public class RenderPassPipeline {
             // otherwise the later UI composite discards particles over empty background. Bloom
             // forces alpha to one, so recover coverage from the unprocessed draw target.
             SceneBlit.writeAlphaToBound(DRAW_TARGET.getColorTextureId());
+        }
+        if (Boolean.getBoolean("photon.fxprojSmokeTest") && smokeBeforeFrame != null && !smokeWritebackLogged) {
+            var after = smokeReadViewport();
+            int rgb = 0, alpha = 0;
+            for (int i = 0; i < after.length; i += 4) {
+                if (smokeBeforeFrame[i] != after[i] || smokeBeforeFrame[i+1] != after[i+1] || smokeBeforeFrame[i+2] != after[i+2]) rgb++;
+                if (smokeBeforeFrame[i+3] != after[i+3]) alpha++;
+            }
+            smokeWritebackLogged = true;
+            com.lowdragmc.photon.Photon.LOGGER.info("[fxproj-writeback-smoke] changedRgb={} changedAlpha={} target={} viewport=({}, {}, {}, {})", rgb, alpha, mainTarget.frameBufferId, smokeX, smokeY, smokeWidth, smokeHeight);
         }
 
         // restore the UI clip state the scene render suspended (the box outlives the disabled test)
