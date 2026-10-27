@@ -199,10 +199,10 @@ public class NoiseSetting extends ToggleGroup {
                     if (remap.isEnable()) {
                         value = (remap.remapCurve.get(value, () -> 0f).floatValue() + 1) / 2;
                     }
-                    buffer.vertex(mat,x + i + 1, y, 0).color(value, value, value, 1);
-                    buffer.vertex(mat, x + i, y, 0).color(value, value, value, 1);
-                    buffer.vertex(mat, x + i, y + height, 0).color(value, value, value, 1);
-                    buffer.vertex(mat, x + i + 1, y + height, 0).color(value, value, value, 1);
+                    buffer.vertex(mat,x + i + 1, y, 0).color(value, value, value, 1).endVertex();
+                    buffer.vertex(mat, x + i, y, 0).color(value, value, value, 1).endVertex();
+                    buffer.vertex(mat, x + i, y + height, 0).color(value, value, value, 1).endVertex();
+                    buffer.vertex(mat, x + i + 1, y + height, 0).color(value, value, value, 1).endVertex();
                 } else {
                     for (int j = 0; j < height; j++) {
                         float value;
@@ -216,10 +216,10 @@ public class NoiseSetting extends ToggleGroup {
                             value = (remap.remapCurve.get(value, () -> 0f).floatValue() + 1) / 2;
                         }
 
-                        buffer.vertex(mat,x + i + 1, y + j, 0).color(value, value, value, 1);
-                        buffer.vertex(mat, x + i, y + j, 0).color(value, value, value, 1);
-                        buffer.vertex(mat, x + i, y + j + 1, 0).color(value, value, value, 1);
-                        buffer.vertex(mat, x + i + 1, y + j + 1, 0).color(value, value, value, 1);
+                        buffer.vertex(mat,x + i + 1, y + j, 0).color(value, value, value, 1).endVertex();
+                        buffer.vertex(mat, x + i, y + j, 0).color(value, value, value, 1).endVertex();
+                        buffer.vertex(mat, x + i, y + j + 1, 0).color(value, value, value, 1).endVertex();
+                        buffer.vertex(mat, x + i + 1, y + j + 1, 0).color(value, value, value, 1).endVertex();
 
                     }
                 }

@@ -419,7 +419,7 @@ public class AraTrailParticleRenderer {
                 .uv(uv.x, uv.y)
                 .color(color.x, color.y, color.z, color.w)
                 .uv2(LightTexture.FULL_BRIGHT)
-                .normal(normal.x, normal.y, normal.z);
+                .normal(normal.x, normal.y, normal.z).endVertex();
     }
 
     /**

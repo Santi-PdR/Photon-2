@@ -161,10 +161,10 @@ public class PostFXPreviewTool extends UIElement implements IGraphTool {
         RenderSystem.disableCull();
         Matrix4f matrix = guiContext.graphics.pose().last().pose();
         var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(Tesselator.getInstance(),VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        buffer.vertex(matrix, drawX, drawY + drawHeight, 0).uv(0f, 0f);
-        buffer.vertex(matrix, drawX + drawWidth, drawY + drawHeight, 0).uv(1f, 0f);
-        buffer.vertex(matrix, drawX + drawWidth, drawY, 0).uv(1f, 1f);
-        buffer.vertex(matrix, drawX, drawY, 0).uv(0f, 1f);
+        buffer.vertex(matrix, drawX, drawY + drawHeight, 0).uv(0f, 0f).endVertex();
+        buffer.vertex(matrix, drawX + drawWidth, drawY + drawHeight, 0).uv(1f, 0f).endVertex();
+        buffer.vertex(matrix, drawX + drawWidth, drawY, 0).uv(1f, 1f).endVertex();
+        buffer.vertex(matrix, drawX, drawY, 0).uv(0f, 1f).endVertex();
         BufferUploader.drawWithShader(buffer.end());
         RenderSystem.enableCull();
     }

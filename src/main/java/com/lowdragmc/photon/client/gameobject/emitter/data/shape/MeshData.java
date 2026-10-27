@@ -303,8 +303,8 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
             f2 /= f3;
 
             // +0.5: mesh space is centered, the preview block spans 0..1 (origin sits at block center)
-            buffer.vertex(mat, a.x + 0.5f, a.y + 0.5f, a.z + 0.5f).color(255, 255, 255, 255).normal(poseStack.last().normal(), f, f1, f2);
-            buffer.vertex(mat, b.x + 0.5f, b.y + 0.5f, b.z + 0.5f).color(255, 255, 255, 255).normal(poseStack.last().normal(), f, f1, f2);
+            buffer.vertex(mat, a.x + 0.5f, a.y + 0.5f, a.z + 0.5f).color(255, 255, 255, 255).normal(poseStack.last().normal(), f, f1, f2).endVertex();
+            buffer.vertex(mat, b.x + 0.5f, b.y + 0.5f, b.z + 0.5f).color(255, 255, 255, 255).normal(poseStack.last().normal(), f, f1, f2).endVertex();
         }
 
         BufferUploader.drawWithShader(buffer.end());

@@ -61,15 +61,15 @@ public class RandomCurveGraph extends AbstractCurveGraph<Pair<ECBCurves, ECBCurv
             var p2 = toScreen(new Vector2f(x1, value.getB().getCurveY(x1)), x, y, width, height);
             var p3 = toScreen(new Vector2f(x0, value.getB().getCurveY(x0)), x, y, width, height);
 
-            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_WHITE.color);
+            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
 
-            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_WHITE.color);
-            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_WHITE.color);
+            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
+            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_WHITE.color).endVertex();
         }
     }
 }

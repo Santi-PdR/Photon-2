@@ -234,10 +234,10 @@ public class TileParticleRenderer {
             var u1 = uvs.z();
             var v1 = uvs.w();
 
-            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).uv(u1, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z);
-            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).uv(u1, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z);
-            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z()).uv(u0, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z);
-            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z()).uv(u0, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z);
+            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).uv(u1, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).uv(u1, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z()).uv(u0, v0).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z()).uv(u0, v1).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
         }
     }
 
@@ -321,6 +321,7 @@ public class TileParticleRenderer {
         buffer.uv(u, v);
         buffer.uv2(light);
         buffer.normal(normal.x, normal.y, normal.z);
+        buffer.endVertex();
     }
 
     // ---------------------------------------------------------------------

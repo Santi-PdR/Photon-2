@@ -65,10 +65,10 @@ public final class KilaSlotPreview implements IGuiTexture {
 
         var pose = graphics.pose().last().pose();
         var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(Tesselator.getInstance(),VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        buffer.vertex(pose, x, y + height, 0).uv(0, 1);
-        buffer.vertex(pose, x + width, y + height, 0).uv(1, 1);
-        buffer.vertex(pose, x + width, y, 0).uv(1, 0);
-        buffer.vertex(pose, x, y, 0).uv(0, 0);
+        buffer.vertex(pose, x, y + height, 0).uv(0, 1).endVertex();
+        buffer.vertex(pose, x + width, y + height, 0).uv(1, 1).endVertex();
+        buffer.vertex(pose, x + width, y, 0).uv(1, 0).endVertex();
+        buffer.vertex(pose, x, y, 0).uv(0, 0).endVertex();
         RenderSystem.setShader(() -> shader);
         BufferUploader.drawWithShader(buffer.end());
     }

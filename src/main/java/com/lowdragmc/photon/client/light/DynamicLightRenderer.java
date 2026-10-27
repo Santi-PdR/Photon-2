@@ -972,7 +972,7 @@ public final class DynamicLightRenderer {
                 {x1, y0, z0, x1, y1, z0, x1, y1, z1, x1, y0, z1}};
         for (var f : faces) {
             for (int i = 0; i < 12; i += 3) {
-                consumer.vertex(pose, f[i], f[i + 1], f[i + 2]).color(r, g, b, 1f);
+                consumer.vertex(pose, f[i], f[i + 1], f[i + 2]).color(r, g, b, 1f).endVertex();
             }
         }
     }

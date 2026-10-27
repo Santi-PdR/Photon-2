@@ -185,7 +185,7 @@ public class TrailParticleRenderer {
     }
 
     private static void pushVertex(VertexConsumer buffer, int light, Vector3f pos, Vector3f normal, float r, float g, float b, float a, float u, float v) {
-        buffer.vertex(pos.x, pos.y, pos.z).uv(u, v).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z);
+        buffer.vertex(pos.x, pos.y, pos.z).uv(u, v).color(r, g, b, a).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
     }
 
     // ---------------------------------------------------------------------

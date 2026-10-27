@@ -61,10 +61,10 @@ public class GradientColorTexture extends TransformTexture {
             float g1 = ((c1 >>  8) & 0xFF) / 255f;
             float b1 = ( c1        & 0xFF) / 255f;
 
-            buf.vertex(mat, x1, y , 0).color(r1, g1, b1, a1);
-            buf.vertex(mat, x0, y , 0).color(r0, g0, b0, a0);
-            buf.vertex(mat, x0, y2, 0).color(r0, g0, b0, a0);
-            buf.vertex(mat, x1, y2, 0).color(r1, g1, b1, a1);
+            buf.vertex(mat, x1, y , 0).color(r1, g1, b1, a1).endVertex();
+            buf.vertex(mat, x0, y , 0).color(r0, g0, b0, a0).endVertex();
+            buf.vertex(mat, x0, y2, 0).color(r0, g0, b0, a0).endVertex();
+            buf.vertex(mat, x1, y2, 0).color(r1, g1, b1, a1).endVertex();
         }
     }
 }

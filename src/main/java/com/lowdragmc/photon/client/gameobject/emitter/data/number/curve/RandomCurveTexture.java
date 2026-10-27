@@ -56,15 +56,15 @@ public class RandomCurveTexture extends TransformTexture {
             var p2 = getPointPosition.apply(new Vector2f(x1, curves1.getCurveY(x1)));
             var p3 = getPointPosition.apply(new Vector2f(x0, curves1.getCurveY(x0)));
 
-            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_RED.color);
+            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
 
-            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_RED.color);
-            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_RED.color);
+            buffer.vertex(matrix, p3.x, p3.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p2.x, p2.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p1.x, p1.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
+            buffer.vertex(matrix, p0.x, p0.y, 0.0f).color(ColorPattern.T_RED.color).endVertex();
         }
 
         // render lines
