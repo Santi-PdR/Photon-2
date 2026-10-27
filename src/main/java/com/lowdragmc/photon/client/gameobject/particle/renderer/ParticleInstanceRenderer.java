@@ -331,4 +331,3 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         config.additionalGPUDataSetting.layoutAttribs(offset, stride);
     }
 }
-

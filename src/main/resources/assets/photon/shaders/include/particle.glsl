@@ -638,4 +638,3 @@ vec4 photon_custom_data(int i) {
 #else
 vec4 photon_custom_data(int i) { return vec4(0.0); }
 #endif
-
