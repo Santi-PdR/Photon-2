@@ -598,6 +598,11 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Legacy trail did not resolve its external custom shader material");
         }
         assertLegacyHdr(restoredCpuShader, 0.8f, 3.0f);
+        var restoredExternalData = (CompoundTag) restoredCpuShader.serializeAdditionalNBT(provider);
+        if (!restoredExternalData.getCompound("shaderData").getCompound("samplers").getCompound("TailTexture")
+                .getString("resource").equals("minecraft:textures/block/stone.png")) {
+            throw new IllegalStateException("External legacy trail material lost its texture sampler");
+        }
         Photon.LOGGER.info("[external-trail-material-smoke] loaded the legacy file-backed trail material");
         Photon.LOGGER.info("[legacy-model-alias-smoke] photon:block/sphere resolved to bundled OBJ with {} vertices",
                 sphere.getMesh().vertexCount());
