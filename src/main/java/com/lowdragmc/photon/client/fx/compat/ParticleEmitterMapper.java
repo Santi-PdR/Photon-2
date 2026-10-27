@@ -52,8 +52,15 @@ public class ParticleEmitterMapper implements Mapper{
         newConfigTag.put("trails", mapTrailsTag(configTag.getCompound("trails")));
         newConfigTag.put("subEmitters", mapSubEmittersTag(configTag.getCompound("subEmitters")));
         newConfigTag.put("lifetimeByEmitterSpeed", mapLTByEmitterSpeed(configTag.getCompound("lifetimeByEmitterSpeed")));
-        newConfigTag.put("additionalGPUDataSetting", new CompoundTag());
-        newConfigTag.getCompound("additionalGPUDataSetting").putByte("_enable", (byte)0);
+        // Older FX files predate this setting, but newer v3 projects already persist the user's
+        // selected GPU channels here. Preserve it through the compatibility mapping instead of
+        // silently clearing custom shader inputs such as addition_gpu_data.t.
+        if (configTag.contains("additionalGPUDataSetting", Tag.TAG_COMPOUND)) {
+            newConfigTag.put("additionalGPUDataSetting", configTag.getCompound("additionalGPUDataSetting").copy());
+        } else {
+            newConfigTag.put("additionalGPUDataSetting", new CompoundTag());
+            newConfigTag.getCompound("additionalGPUDataSetting").putByte("_enable", (byte) 0);
+        }
         newConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
         newConfigTag.put("uvAnimation", MapperUtils.mapUVTag(configTag.getCompound("uvAnimation")));
         newConfigTag.put("lights", MapperUtils.mapLightTag(configTag.getCompound("lights")));
@@ -360,3 +367,4 @@ public class ParticleEmitterMapper implements Mapper{
 
 
 }
+
