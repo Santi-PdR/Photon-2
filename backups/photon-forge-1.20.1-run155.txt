@@ -1,0 +1,12 @@
+# Photon Forge 1.20.1 binary backup
+
+- JAR: photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar
+- SHA-256: 3157688AF68B58BF369B4F90C41849BBEC580F91AB9CDCC77F3FB952537E31EE
+- Size: 13,450,945 bytes
+- Build commit: 9be43ef056085593636c096445471cee1ab84612
+- GitHub Actions run: 40427683465 (run #155, Forge 1.20.1 build, success)
+- Workflow artifact ID: 12700039126 (photon-forge-1.20.1)
+- Artifact SHA-256: 10328628b91e9de452b6c54a57a62b75178370e6ac13a2a5999856cbdbff139a
+- GitHub artifact expiration: 2026-11-10T00:41:42Z
+
+The exact JAR is retained in the linked GitHub Actions artifact. This file records its identity and provenance; it is not a copy of the JAR bytes.
