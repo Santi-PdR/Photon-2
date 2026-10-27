@@ -332,12 +332,22 @@ public final class PhotonFXEditorSmokeTest {
         long tChannel = PhotonGpuChannels.CHANNELS.stream()
                 .filter(channel -> channel.id().equals("addition_gpu_data.t"))
                 .findFirst().orElseThrow().bit();
-        if (!(restoredTornado.config.renderer.getModelSource() instanceof JsonModelSource tornadoObj)
-                || tornadoObj.getMesh() == null || tornadoObj.getMesh().vertexCount() < 3
-                || !restoredTornado.config.additionalGPUDataSetting.isEnable()
-                || (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) == 0
-                || !(restoredTornado.config.renderer.getMaterials().get(0).getMaterial() instanceof CustomShaderMaterial restoredTornadoShader)
-                || restoredTornadoShader.isCompiledError() || restoredTornadoShader.curveTexture.getCurveTexture() == null) {
+        var restoredModel = restoredTornado.config.renderer.getModelSource();
+        var restoredMaterial = restoredTornado.config.renderer.getMaterials().get(0).getMaterial();
+        boolean objLoaded = restoredModel instanceof JsonModelSource obj && obj.getMesh() != null && obj.getMesh().vertexCount() >= 3;
+        boolean tChannelEnabled = restoredTornado.config.additionalGPUDataSetting.isEnable()
+                && (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) != 0;
+        boolean shaderLoaded = restoredMaterial instanceof CustomShaderMaterial shader
+                && !shader.isCompiledError() && shader.curveTexture.getCurveTexture() != null;
+        if (!objLoaded || !tChannelEnabled || !shaderLoaded) {
+            Photon.LOGGER.error("[tornado-render-smoke] reload diagnostics: model={} objLoaded={} tEnabled={} tMask={} tBit={} material={} shaderLoaded={}",
+                    restoredModel, objLoaded, restoredTornado.config.additionalGPUDataSetting.isEnable(),
+                    restoredTornado.config.additionalGPUDataSetting.userMask(), tChannel,
+                    restoredMaterial.getClass().getName(), shaderLoaded);
+            if (restoredMaterial instanceof CustomShaderMaterial shader) {
+                Photon.LOGGER.error("[tornado-render-smoke] shader diagnostics: error={} curveTexture={}",
+                        shader.getCompiledErrorMessage(), shader.curveTexture.getCurveTexture());
+            }
             throw new IllegalStateException("Tornado-style OBJ, T channel, custom shader, or curve sampler did not survive v3 project loading");
         }
         Photon.LOGGER.info("[tornado-render-smoke] loaded LDLib2 OBJ with location-9 T data, GPU shader variant, and SamplerCurve");
