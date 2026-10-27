@@ -31,14 +31,18 @@ uniform samplerBuffer PhotonCustomData;
 layout(location = 0) in vec3 aPos;     // geometry stream
 // attribute stream: xy = uv, z = per-face shade brightness. Brightness rides here rather than taking a
 // location of its own for the reason above — 4..8 and 9+ are not ours to shift.
-// Preserve Photon 26.2's mesh shader ABI. Without tangents UV and brightness are separate
-// attributes; tangent variants use UV.z for brightness because location 3 carries the tangent.
+// Preserve Photon 26.2's shader inputs while packing brightness alongside UV in the GL buffer.
+// The tangent variant exposes a vec2 aUV and a vec4 aNormal (normal.xyz, brightness), just like
+// the original. The expressions assemble that interface without adding another attribute slot.
 #ifdef PHOTON_TANGENT
-layout(location = 1) in vec3 aUV;
+layout(location = 1) in vec3 photonPackedUV;
+layout(location = 2) in vec3 photonNormalAttrib;
+#define aUV (photonPackedUV.xy)
+#define aNormal (vec4(photonNormalAttrib, photonPackedUV.z))
 #else
 layout(location = 1) in vec2 aUV;
-#endif
 layout(location = 2) in vec3 aNormal;  // geometry stream
+#endif
 #ifdef PHOTON_TANGENT
 // The emitter's "Tangent" renderer setting is ON, so the tangent stream is uploaded and bound.
 layout(location = 3) in vec4 aTangent; // xyz = tangent (dP/du), w = handedness
@@ -322,7 +326,7 @@ ParticleData getParticleData() {
     }
 #else
     vec3 photonPos = aPos;
-    vec3 photonNormal = aNormal;
+    vec3 photonNormal = aNormal.xyz;
 #endif
     // aPos is already in centered model space (PhotonMesh convention); the model pivot is folded into
     // iPos on the CPU (TileParticleRenderer.uploadInstances), so the mesh buffer holds only the mesh
@@ -333,7 +337,7 @@ ParticleData getParticleData() {
     // object space: the mesh's own centered model-space vertex + normal
     data.ObjectPosition = photonPos;
 #ifdef PHOTON_TANGENT
-    data.Color = vec4(iColor.rgb * aUV.z, iColor.a);
+    data.Color = vec4(iColor.rgb * aNormal.w, iColor.a);
 #else
     data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
 #endif

@@ -111,6 +111,10 @@ jobs:
         shell: bash
         run: grep -Fq '[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require the original tangent shader inputs
+        shell: bash
+        run: grep -Fq '[tangent-abi-smoke] compiled original vec2 UV and vec4 normal tangent inputs' "$RUNNER_TEMP/photon-client.log"
+
       - name: Verify the editor actually displays the particle
         shell: bash
         run: |

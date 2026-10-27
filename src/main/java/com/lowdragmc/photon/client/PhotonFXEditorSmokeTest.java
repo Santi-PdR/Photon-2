@@ -213,6 +213,34 @@ public final class PhotonFXEditorSmokeTest {
                 }
                 Files.writeString(shaderDir.resolve("trail_cpu_smoke.json"), json.toString());
             }
+            Files.writeString(shaderDir.resolve("tangent_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+                    out float vertexDistance;
+                    out vec2 texCoord0;
+                    out vec4 vertexColor;
+                    void main() {
+                        ParticleData data = getParticleData();
+#if defined(PARTICLE_MODEL_INSTANCE) && defined(PHOTON_TANGENT)
+                        data.UV = aUV;
+                        data.Normal = aNormal.xyz;
+                        data.Color.rgb *= aNormal.w;
+                        data.Position += aTangent.xyz * 0.001;
+#endif
+                        vertexDistance = 0.0;
+                        texCoord0 = data.UV;
+                        vertexColor = data.Color;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/tangent_smoke");
+                Files.writeString(shaderDir.resolve("tangent_smoke.json"), json.toString());
+            }
         } catch (Exception failure) {
             throw new IllegalStateException("Could not prepare OBJ model and tornado-shader smoke fixtures", failure);
         }
@@ -319,6 +347,14 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Two-argument fog shader failed its instanced variant");
         }
         Photon.LOGGER.info("[shader-compat-smoke] compiled two-argument fog shader and instanced variant");
+        var tangentMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tangent_smoke"));
+        tangentMaterial.recompile();
+        if (tangentMaterial.isCompiledError()
+                || !(tangentMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE_TANGENT) instanceof LDShaderInstance tangentVariant)
+                || !tangentVariant.defines.containsAll(Set.of("PARTICLE_MODEL_INSTANCE", "PHOTON_TANGENT"))) {
+            throw new IllegalStateException("Photon 26.2 tangent shader inputs are incompatible");
+        }
+        Photon.LOGGER.info("[tangent-abi-smoke] compiled original vec2 UV and vec4 normal tangent inputs");
         var location = new ResourceLocation("photon", "ci/obj_smoke");
         var resource = minecraft.getResourceManager().getResource(new ResourceLocation("photon", "models/ci/obj_smoke.json")).orElseThrow();
         try (var reader = resource.openAsReader()) {
