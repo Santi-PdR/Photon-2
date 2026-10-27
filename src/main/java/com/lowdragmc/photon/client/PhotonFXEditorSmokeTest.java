@@ -95,8 +95,10 @@ public final class PhotonFXEditorSmokeTest {
                     out float particleT;
                     void main() {
                         ParticleData data = getParticleData();
+#ifdef PARTICLE_MODEL_INSTANCE
                         data.UV = aUV;
                         data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
+#endif
                         particleT = T;
                         gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
                     }
