@@ -377,6 +377,20 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(legacyCurve.getCurves().getCurveY(1f) - 0.9f) > 0.0001f)
             throw new IllegalStateException("Legacy multi-segment shader curve was not restored");
         Photon.LOGGER.info("[legacy-multisegment-curve-smoke] restored both legacy shader curve segments");
+        var legacyGradientData = new CompoundTag();
+        legacyGradientData.put("a", floatList(0f, 1f, 1f, 0f));
+        legacyGradientData.put("rgb", floatList(0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f));
+        var legacyGradientTag = new CompoundTag();
+        legacyGradientTag.put("gradientColor", legacyGradientData);
+        var legacyGradient = new com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Gradient();
+        legacyGradient.deserializeNBT(provider, legacyGradientTag);
+        var stops = legacyGradient.getGradientColor();
+        if (stops.getAP().size() != 2 || stops.getRgbP().size() != 2 ||
+                Math.abs(stops.getAP().get(1).y) > 0.0001f ||
+                Math.abs(stops.getRgbP().get(0).y - 1f) > 0.0001f ||
+                Math.abs(stops.getRgbP().get(1).w - 1f) > 0.0001f)
+            throw new IllegalStateException("Legacy gradient stops were not restored");
+        Photon.LOGGER.info("[legacy-gradient-smoke] restored legacy alpha and color stops");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
