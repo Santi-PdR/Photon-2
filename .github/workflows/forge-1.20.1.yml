@@ -106,6 +106,7 @@ jobs:
           grep -Fq '[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-tornado-depth-smoke] restored authored depth and culling state' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require a moving GPU trail smoke result
         shell: bash

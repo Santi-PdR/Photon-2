@@ -460,6 +460,12 @@ public final class PhotonFXEditorSmokeTest {
         if (collidingPasses.size() != 2)
             throw new IllegalStateException("Render-pass tree dropped a pass with a colliding hash");
         Photon.LOGGER.info("[render-pass-order-smoke] preserved colliding render passes and extreme layers");
+        String legacyQuad = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n";
+        var quadMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
+                new java.io.ByteArrayInputStream(legacyQuad.getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
+        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{3, 0, 1, 1, 2, 3}))
+            throw new IllegalStateException("OBJ quad triangulation diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
+        Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),

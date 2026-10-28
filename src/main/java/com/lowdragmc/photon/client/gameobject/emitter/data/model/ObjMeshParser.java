@@ -101,12 +101,8 @@ public final class ObjMeshParser {
             builder.triangle(v[0], v[1], v[2]);
             return;
         }
-        // ⚠️ convex only: Builder.quad splits on the a-c diagonal, which for a reflex corner at a
-        // or c lies outside the polygon
-        if (n == 4 && isConvex(p, polyN)) {
-            builder.quad(v[0], v[1], v[2], v[3]);
-            return;
-        }
+        // Use the original OBJ triangulation for quads too. A different diagonal
+        // changes the visible surface for non-planar quads (including curved FX meshes).
         int[] order = earClip(p, polyN);
         if (order == null) { // degenerate / self-intersecting — fall back to a simple fan
             for (int i = 1; i + 1 < n; i++) builder.triangle(v[0], v[i], v[i + 1]);
@@ -132,25 +128,6 @@ public final class ObjMeshParser {
         int index = builder.vertex(p[0], p[1], p[2], uv[0], uv[1], n[0], n[1], n[2], 1f);
         welded.put(key, index);
         return index;
-    }
-
-    /** Whether the polygon turns the same way at every corner, measured against its plane normal. */
-    private static boolean isConvex(float[][] p, float[] normal) {
-        int n = p.length;
-        int sign = 0;
-        for (int i = 0; i < n; i++) {
-            float[] prev = p[(i + n - 1) % n], cur = p[i], next = p[(i + 1) % n];
-            float ax = cur[0] - prev[0], ay = cur[1] - prev[1], az = cur[2] - prev[2];
-            float bx = next[0] - cur[0], by = next[1] - cur[1], bz = next[2] - cur[2];
-            float turn = (ay * bz - az * by) * normal[0]
-                    + (az * bx - ax * bz) * normal[1]
-                    + (ax * by - ay * bx) * normal[2];
-            if (Math.abs(turn) < 1.0e-9f) continue;
-            int s = turn < 0f ? -1 : 1;
-            if (sign == 0) sign = s;
-            else if (sign != s) return false;
-        }
-        return true;
     }
 
     // ---- ear clipping (3D polygon projected onto its best-fit plane) -------------------------
