@@ -407,6 +407,17 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(stops.getRgbP().get(1).w - 1f) > 0.0001f)
             throw new IllegalStateException("Legacy gradient stops were not restored");
         Photon.LOGGER.info("[legacy-gradient-smoke] restored legacy alpha and color stops");
+        // The legacy tornado stores its custom shader's T attribute in this list.
+        var gpuDataTag = new CompoundTag();
+        gpuDataTag.putBoolean("_enable", true);
+        var gpuChannels = new ListTag();
+        gpuChannels.add(net.minecraft.nbt.StringTag.valueOf("addition_gpu_data.t"));
+        gpuDataTag.put("additionalData", gpuChannels);
+        var gpuSetting = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig().additionalGPUDataSetting;
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(gpuDataTag, gpuSetting, provider);
+        if (!gpuSetting.isEnable() || !gpuSetting.hasAttribs() || gpuSetting.attribFloats() != 1)
+            throw new IllegalStateException("Legacy tornado particle T attribute did not load from NBT");
+        Photon.LOGGER.info("[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
