@@ -49,7 +49,7 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
     }
 
     public void removeGradient(GradientColor gradient) {
-        this.gradients.remove(gradient);
+        if (this.gradients.remove(gradient)) markAsDirty();
     }
 
     public DynamicTexture getGradientTexture() {

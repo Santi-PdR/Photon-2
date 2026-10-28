@@ -362,6 +362,27 @@ public final class PhotonFXEditorSmokeTest {
         if (Math.abs(randomLoaded.get(0.5f, () -> 0f) - 0.2f) > 0.0001f ||
                 Math.abs(randomLoaded.get(0.5f, () -> 1f) - 0.8f) > 0.0001f)
             throw new IllegalStateException("Random shader curves changed on reload: " + randomSaved);
+        var firstCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        var secondCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        secondCurve.getCurves().getSegments().get(0).p0.y = 0.9f;
+        var curveRemoval = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        curveRemoval.addCurve(firstCurve);
+        curveRemoval.addCurve(secondCurve);
+        int curveBefore = curveRemoval.getCurveTexture().getPixels().getPixelRGBA(0, 0);
+        curveRemoval.removeCurve(firstCurve);
+        int curveAfter = curveRemoval.getCurveTexture().getPixels().getPixelRGBA(0, 0);
+        curveRemoval.close();
+        if (curveBefore == curveAfter) throw new IllegalStateException("Removing a curve did not refresh its texture");
+        var firstGradient = new com.lowdragmc.lowdraglib2.math.GradientColor(0xffff0000);
+        var secondGradient = new com.lowdragmc.lowdraglib2.math.GradientColor(0xff0000ff);
+        var gradientRemoval = new com.lowdragmc.photon.client.gameobject.emitter.data.material.GradientTexture(8, 2);
+        gradientRemoval.addGradient(firstGradient);
+        gradientRemoval.addGradient(secondGradient);
+        int gradientBefore = gradientRemoval.getGradientTexture().getPixels().getPixelRGBA(0, 0);
+        gradientRemoval.removeGradient(firstGradient);
+        int gradientAfter = gradientRemoval.getGradientTexture().getPixels().getPixelRGBA(0, 0);
+        gradientRemoval.close();
+        if (gradientBefore == gradientAfter) throw new IllegalStateException("Removing a gradient did not refresh its texture");
         restoredMaterial.curveTexture.close();
         Photon.LOGGER.info("[shader-curve-smoke] restored and uploaded a saved shader curve");
         var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));
