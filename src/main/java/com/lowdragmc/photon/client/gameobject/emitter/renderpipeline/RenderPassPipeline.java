@@ -129,15 +129,18 @@ public class RenderPassPipeline {
 
     public static Comparator<PhotonFXRenderPass> makeRenderPassComparator() {
         return (passOne, passTwo) -> {
-            var comparedResult = passOne.layerOrder() - passTwo.layerOrder();
-            if (comparedResult == 0) {
-                if (passOne.equals(passTwo)) {
-                    return 0;
-                }
-                return Integer.compare(passOne.hashCode(), passTwo.hashCode());
-            }
-            return comparedResult;
+            if (passOne.equals(passTwo)) return 0;
+            return compareRenderPassOrder(passOne.layerOrder(), passOne.hashCode(), passOne.comparatorId,
+                    passTwo.layerOrder(), passTwo.hashCode(), passTwo.comparatorId);
         };
+    }
+
+    public static int compareRenderPassOrder(int firstLayer, int firstHash, long firstId,
+                                             int secondLayer, int secondHash, long secondId) {
+        int compared = Integer.compare(firstLayer, secondLayer);
+        if (compared != 0) return compared;
+        compared = Integer.compare(firstHash, secondHash);
+        return compared != 0 ? compared : Long.compare(firstId, secondId);
     }
 
     public RenderPassPipeline() {

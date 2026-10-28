@@ -30,6 +30,8 @@ import java.util.Objects;
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
 public abstract class PhotonFXRenderPass {
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_COMPARATOR_ID = new java.util.concurrent.atomic.AtomicLong();
+    final long comparatorId = NEXT_COMPARATOR_ID.getAndIncrement();
     public final static CustomShaderMaterial INVERSE = new CustomShaderMaterial(Photon.id("inverse"));
     protected static final MaterialSetting WIREFRAME_MATERIAL = new MaterialSetting();
     /** The mask value (0..1) of the pass currently drawing in the mask sub-pass — staged into the

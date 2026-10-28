@@ -436,6 +436,15 @@ public final class PhotonFXEditorSmokeTest {
         if (!legacySlot.isEffectiveCull() || !legacySlot.isEffectiveDepthTest() || !legacySlot.isEffectiveDepthMask())
             throw new IllegalStateException("Legacy tornado material depth or culling state was not restored");
         Photon.LOGGER.info("[legacy-tornado-depth-smoke] restored authored depth and culling state");
+        int collisionOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(0, 42, 1, 0, 42, 2);
+        int reverseOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(0, 42, 2, 0, 42, 1);
+        int extremeLayerOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(Integer.MIN_VALUE, 0, 1, Integer.MAX_VALUE, 0, 2);
+        if (collisionOrder >= 0 || reverseOrder <= 0 || extremeLayerOrder >= 0)
+            throw new IllegalStateException("Distinct render passes with colliding hashes were merged or misordered");
+        Photon.LOGGER.info("[render-pass-order-smoke] preserved colliding render passes and extreme layers");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
