@@ -427,6 +427,15 @@ public final class PhotonFXEditorSmokeTest {
         if (!gpuSetting.isEnable() || !gpuSetting.hasAttribs() || gpuSetting.attribFloats() != 1)
             throw new IllegalStateException("Legacy tornado particle T attribute did not load from NBT");
         Photon.LOGGER.info("[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT");
+        var legacyRenderState = new CompoundTag();
+        legacyRenderState.putBoolean("cull", true);
+        legacyRenderState.putBoolean("depthTest", true);
+        legacyRenderState.putBoolean("depthMask", true);
+        var legacySlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(legacyRenderState, legacySlot, provider);
+        if (!legacySlot.isEffectiveCull() || !legacySlot.isEffectiveDepthTest() || !legacySlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy tornado material depth or culling state was not restored");
+        Photon.LOGGER.info("[legacy-tornado-depth-smoke] restored authored depth and culling state");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
