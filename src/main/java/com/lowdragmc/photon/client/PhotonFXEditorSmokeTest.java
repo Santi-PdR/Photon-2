@@ -444,6 +444,21 @@ public final class PhotonFXEditorSmokeTest {
                 .compareRenderPassOrder(Integer.MIN_VALUE, 0, 1, Integer.MAX_VALUE, 0, 2);
         if (collisionOrder >= 0 || reverseOrder <= 0 || extremeLayerOrder >= 0)
             throw new IllegalStateException("Distinct render passes with colliding hashes were merged or misordered");
+        class CollisionPass extends com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass {
+            CollisionPass() { super(null, null, null); }
+            @Override public int layerOrder() { return 0; }
+            @Override public int hashCode() { return 42; }
+            @Override public boolean equals(Object other) { return this == other; }
+            @Override protected void renderQueue(com.mojang.blaze3d.vertex.VertexConsumer buffer,
+                    Collection<com.lowdragmc.photon.client.gameobject.particle.IParticle> particles,
+                    net.minecraft.client.Camera camera, float partialTicks) {}
+        }
+        var collidingPasses = new java.util.TreeMap<com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass, String>(
+                com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.makeRenderPassComparator());
+        collidingPasses.put(new CollisionPass(), "first");
+        collidingPasses.put(new CollisionPass(), "second");
+        if (collidingPasses.size() != 2)
+            throw new IllegalStateException("Render-pass tree dropped a pass with a colliding hash");
         Photon.LOGGER.info("[render-pass-order-smoke] preserved colliding render passes and extreme layers");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
