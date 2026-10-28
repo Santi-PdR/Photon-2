@@ -141,6 +141,15 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
 
     @Override
     public void render(PoseStack pMatrixStack, Camera pActiveRenderInfo, float pPartialTicks, Predicate<ParticleRenderType> renderTypeFilter) {
+        var previousDrawMode = drawMode;
+        var previousBloomEnabled = sceneBloomEnabled;
+        var previousRenderingManager = renderingManager;
+        var previousEditorScene = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.isEditorSceneRendering();
+        float previousShaderTicks = RenderSystem.getShaderGameTime() * 24000.0f;
+        boolean previousScissor = org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+        int[] previousScissorBox = new int[4];
+        org.lwjgl.opengl.GL11.glGetIntegerv(org.lwjgl.opengl.GL11.GL_SCISSOR_BOX, previousScissorBox);
+        try {
         drawMode = options.getDrawMode();
         sceneBloomEnabled = options.isBloomEnabled();
         renderingManager = this;
@@ -179,18 +188,20 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
             sceneLit = false;
             DynamicLightRenderer.endScene();
         }
-        GlStateManager._enableScissorTest();
         lastFrameTimes[frameIndex] = System.nanoTime() - startTime;
         frameIndex = (frameIndex + 1) % lastFrameTimes.length;
-
-        // roll back to previous game time
-        if (Minecraft.getInstance().level != null) {
-            RenderSystem.setShaderGameTime(Minecraft.getInstance().level.getGameTime(), pPartialTicks);
+        } finally {
+            if (previousScissor) GlStateManager._enableScissorTest();
+            else GlStateManager._disableScissorTest();
+            GlStateManager._scissorBox(previousScissorBox[0], previousScissorBox[1],
+                    previousScissorBox[2], previousScissorBox[3]);
+            long wholeTicks = (long) previousShaderTicks;
+            RenderSystem.setShaderGameTime(wholeTicks, previousShaderTicks - wholeTicks);
+            drawMode = previousDrawMode;
+            sceneBloomEnabled = previousBloomEnabled;
+            renderingManager = previousRenderingManager;
+            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(previousEditorScene);
         }
-        drawMode = null;
-        sceneBloomEnabled = true;
-        renderingManager = null;
-        com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(false);
     }
 
     /**
