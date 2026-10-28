@@ -95,6 +95,10 @@ jobs:
           exit 1
 
 
+      - name: Require editor render state restoration
+        shell: bash
+        run: grep -Fq '[editor-state-smoke] restored scissor and shader time after rendering' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require a moving GPU trail smoke result
         shell: bash
         run: grep -Fq '[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail' "$RUNNER_TEMP/photon-client.log"

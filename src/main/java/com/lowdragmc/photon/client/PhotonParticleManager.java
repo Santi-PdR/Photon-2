@@ -28,6 +28,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 
 @OnlyIn(Dist.CLIENT)
 public class PhotonParticleManager extends ParticleManager implements ParticleTickHost {
+    private static boolean previewStateSmokeLogged;
     /** The per-frame render switches; {@link FXSceneOptions#DEFAULT} for an embedded preview. */
     public final FXSceneOptions options;
     /**
@@ -201,6 +202,16 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
             sceneBloomEnabled = previousBloomEnabled;
             renderingManager = previousRenderingManager;
             com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(previousEditorScene);
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !previewStateSmokeLogged) {
+                int[] restoredBox = new int[4];
+                org.lwjgl.opengl.GL11.glGetIntegerv(org.lwjgl.opengl.GL11.GL_SCISSOR_BOX, restoredBox);
+                if (org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST) != previousScissor ||
+                        !java.util.Arrays.equals(previousScissorBox, restoredBox) ||
+                        Math.abs(RenderSystem.getShaderGameTime() * 24000.0f - previousShaderTicks) > 0.01f)
+                    throw new IllegalStateException("Editor preview did not restore the previous render state");
+                previewStateSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[editor-state-smoke] restored scissor and shader time after rendering");
+            }
         }
     }
 
