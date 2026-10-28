@@ -392,6 +392,15 @@ public final class PhotonFXEditorSmokeTest {
                 1920, 1080, 440, 180, 1080, 720);
         if (!unaffected.equals(new org.joml.Matrix4f()))
             throw new IllegalStateException("Viewport-aware custom shader projection was modified");
+        var perspectiveInverse = new org.joml.Matrix4f().perspective(1.1f, 1.5f, 0.1f, 100f).invert();
+        var originalInverse = new org.joml.Matrix4f(perspectiveInverse);
+        CustomShaderMaterial.adjustLegacyScreenProjection(perspectiveInverse, new ResourceLocation("photon", "shield"),
+                1920, 1080, 440, 180, 1080, 720);
+        var actualView = perspectiveInverse.transform(new org.joml.Vector4f(710f / 1920f * 2f - 1f,
+                720f / 1080f * 2f - 1f, 0.6f, 1f));
+        var expectedView = originalInverse.transform(new org.joml.Vector4f(-0.5f, 0.5f, 0.6f, 1f));
+        if (actualView.distance(expectedView) > 0.0001f)
+            throw new IllegalStateException("Legacy shield depth reconstruction changed perspective: " + actualView);
         Photon.LOGGER.info("[legacy-viewport-projection-smoke] reconstructed viewport center and preserved custom shader");
         var legacyGradientData = new CompoundTag();
         legacyGradientData.put("a", floatList(0f, 1f, 1f, 0f));
