@@ -364,6 +364,19 @@ public final class PhotonFXEditorSmokeTest {
         if (Math.abs(loadedCurve.getCurves().getCurveY(0f) - 0.15f) > 0.0001f ||
                 Math.abs(loadedCurve.getCurves().getCurveY(1f) - 0.85f) > 0.0001f)
             throw new IllegalStateException("Shader curve values changed on reload");
+        // A legacy shader curve can contain multiple raw Bezier segments, as in the tornado material.
+        var legacySegments = new ListTag();
+        legacySegments.add(floatList(0f, 0.3f, 0.1f, 0.3f, 0.4f, 0.4f, 0.5f, 0.4f));
+        legacySegments.add(floatList(0.5f, 0.4f, 0.6f, 0.4f, 0.9f, 0.9f, 1f, 0.9f));
+        var legacyCurveTag = new CompoundTag();
+        legacyCurveTag.put("curves", legacySegments);
+        var legacyCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        legacyCurve.deserializeNBT(provider, legacyCurveTag);
+        if (legacyCurve.getCurves().getSegments().size() != 2 ||
+                Math.abs(legacyCurve.getCurves().getCurveY(0f) - 0.3f) > 0.0001f ||
+                Math.abs(legacyCurve.getCurves().getCurveY(1f) - 0.9f) > 0.0001f)
+            throw new IllegalStateException("Legacy multi-segment shader curve was not restored");
+        Photon.LOGGER.info("[legacy-multisegment-curve-smoke] restored both legacy shader curve segments");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
