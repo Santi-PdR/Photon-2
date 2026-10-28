@@ -330,13 +330,19 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers");
         var original = new CustomShaderMaterial();
-        original.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());
+        var authoredCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve(
+                0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.15f, 0.1f, 0.15f, 0.9f, 0.85f, 1, 0.85f));
+        original.curveTexture.addCurve(authoredCurve);
         var saved = com.lowdragmc.lowdraglib2.utils.PersistedParser.serializeNBT(original, provider);
         if (!saved.contains("curveTexture", Tag.TAG_LIST)) throw new IllegalStateException("Curve sampler did not serialize as a list");
         var restoredMaterial = new CustomShaderMaterial();
         com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(saved, restoredMaterial, provider);
         if (restoredMaterial.curveTexture.serializeNBT(provider).size() != 1 || restoredMaterial.curveTexture.getCurveTexture() == null)
             throw new IllegalStateException("Saved shader curve was not restored and uploaded");
+        var restoredCurves = restoredMaterial.curveTexture.serializeNBT(provider);
+        if (!saved.getList("curveTexture", Tag.TAG_COMPOUND).equals(restoredCurves))
+            throw new IllegalStateException("Shader curve control points changed on reload: " + restoredCurves);
         restoredMaterial.curveTexture.close();
         Photon.LOGGER.info("[shader-curve-smoke] restored and uploaded a saved shader curve");
         var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));
