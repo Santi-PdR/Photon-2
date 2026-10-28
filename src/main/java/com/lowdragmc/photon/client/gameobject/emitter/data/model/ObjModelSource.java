@@ -94,7 +94,10 @@ public class ObjModelSource implements IModelSource {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
-        try (var in = Minecraft.getInstance().getResourceManager().open(modelLocation)) {
+        var nested = LDLibModelAssets.findNested(modelLocation, modelLocation.getPath());
+        if (nested != null) PhotonMeshCache.INSTANCE.trackFile(key(), nested.toFile());
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested)
+                : Minecraft.getInstance().getResourceManager().open(modelLocation)) {
             return ObjMeshParser.parse(in, flipV);
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load OBJ model {}", modelLocation, e);

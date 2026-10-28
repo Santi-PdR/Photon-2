@@ -125,8 +125,7 @@ public class JsonModelSource implements IModelSource {
         }
         ObjLoaderReference objReference = getObjLoaderReference();
         if (objReference != null) {
-            ResourceLocation objFile = ModelBakery.MODEL_LISTER.idToFile(objReference.location());
-            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objFile.getPath());
+            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objReference.location().getPath());
             if (nestedObj != null) {
                 PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
             }

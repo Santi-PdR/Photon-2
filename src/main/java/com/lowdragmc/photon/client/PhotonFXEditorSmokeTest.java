@@ -76,6 +76,13 @@ public final class PhotonFXEditorSmokeTest {
                     "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_obj_smoke.obj\",\"textures\":{}}");
             Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_obj_smoke.obj"),
                     "o smoke\nv -0.5 -0.5 0\nv 0.5 -0.5 0\nv 0 0.5 0\nvt 0 0\nvt 1 0\nvt 0.5 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            Path nestedModelDir = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models");
+            Files.createDirectories(nestedModelDir.resolve("block"));
+            Files.createDirectories(nestedModelDir.resolve("obj"));
+            Files.writeString(nestedModelDir.resolve("block/ci_nested_obj.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_nested_obj.obj\",\"textures\":{}}");
+            Files.writeString(nestedModelDir.resolve("obj/ci_nested_obj.obj"),
+                    "v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
             Files.createDirectories(shaderDir);
             try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
@@ -423,6 +430,10 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("LDLib2-namespace NeoForge OBJ did not produce a Photon mesh");
         }
         Photon.LOGGER.info("[external-obj-model-smoke] loaded ldlib2:block/ci_obj_smoke with {} vertices", externalMesh.vertexCount());
+        var nestedMesh = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_nested_obj")).getMesh();
+        if (nestedMesh == null || nestedMesh.vertexCount() < 3)
+            throw new IllegalStateException("Nested LDLib2 OBJ did not produce a Photon mesh");
+        Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
         emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));
