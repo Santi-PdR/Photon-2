@@ -430,9 +430,17 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("LDLib2-namespace NeoForge OBJ did not produce a Photon mesh");
         }
         Photon.LOGGER.info("[external-obj-model-smoke] loaded ldlib2:block/ci_obj_smoke with {} vertices", externalMesh.vertexCount());
-        var nestedMesh = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_nested_obj")).getMesh();
+        var nestedSource = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_nested_obj"));
+        var nestedMesh = nestedSource.getMesh();
         if (nestedMesh == null || nestedMesh.vertexCount() < 3)
             throw new IllegalStateException("Nested LDLib2 OBJ did not produce a Photon mesh");
+        var nestedObj = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models/obj/ci_nested_obj.obj");
+        Files.writeString(nestedObj, "v 0 0 0\nv 2 0 0\nv 0 2 0\nv 2 2 0\nf 1 2 3\nf 2 4 3\n");
+        Files.setLastModifiedTime(nestedObj, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5000));
+        com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache.INSTANCE.pollFileChanges();
+        var reloadedNestedMesh = nestedSource.getMesh();
+        if (reloadedNestedMesh == nestedMesh || reloadedNestedMesh.vertexCount() <= nestedMesh.vertexCount())
+            throw new IllegalStateException("Editing a nested OBJ did not invalidate its JSON model");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
