@@ -377,6 +377,22 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(legacyCurve.getCurves().getCurveY(1f) - 0.9f) > 0.0001f)
             throw new IllegalStateException("Legacy multi-segment shader curve was not restored");
         Photon.LOGGER.info("[legacy-multisegment-curve-smoke] restored both legacy shader curve segments");
+        // The sampled scene depth is addressed in framebuffer coordinates, but
+        // the editor projection belongs to its smaller, offset viewport.
+        var corrected = new org.joml.Matrix4f();
+        CustomShaderMaterial.adjustLegacyScreenProjection(corrected, new ResourceLocation("ldlib2", "scan"),
+                1920, 1080, 440, 180, 1080, 720);
+        var center = corrected.transform(new org.joml.Vector4f(980f / 1920f * 2f - 1f,
+                540f / 1080f * 2f - 1f, 0.4f, 1f));
+        if (Math.abs(center.x) > 0.0001f || Math.abs(center.y) > 0.0001f ||
+                Math.abs(center.z - 0.4f) > 0.0001f || Math.abs(center.w - 1f) > 0.0001f)
+            throw new IllegalStateException("Legacy scan depth reconstruction used framebuffer NDC: " + center);
+        var unaffected = new org.joml.Matrix4f();
+        CustomShaderMaterial.adjustLegacyScreenProjection(unaffected, new ResourceLocation("example", "custom"),
+                1920, 1080, 440, 180, 1080, 720);
+        if (!unaffected.equals(new org.joml.Matrix4f()))
+            throw new IllegalStateException("Viewport-aware custom shader projection was modified");
+        Photon.LOGGER.info("[legacy-viewport-projection-smoke] reconstructed viewport center and preserved custom shader");
         var legacyGradientData = new CompoundTag();
         legacyGradientData.put("a", floatList(0f, 1f, 1f, 0f));
         legacyGradientData.put("rgb", floatList(0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f));

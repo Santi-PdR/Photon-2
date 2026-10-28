@@ -283,7 +283,15 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         }
         if (uniformNames.contains("U_InverseProjectionMatrix")) {
             shaderHolder.addDynamicUniform("U_InverseProjectionMatrix", uniform -> {
-                uniform.set(RenderSystem.getProjectionMatrix().invert(new Matrix4f()));
+                var inverse = RenderSystem.getProjectionMatrix().invert(new Matrix4f());
+                var pipeline = RenderPassPipeline.getCurrent();
+                if (pipeline != null) {
+                    adjustLegacyScreenProjection(inverse, shaderLocation,
+                            pipeline.framebufferWidth(), pipeline.framebufferHeight(),
+                            GlStateManager.Viewport.x(), GlStateManager.Viewport.y(),
+                            GlStateManager.Viewport.width(), GlStateManager.Viewport.height());
+                }
+                uniform.set(inverse);
             });
         }
         if (uniformNames.contains("U_InverseViewMatrix")) {
@@ -312,6 +320,20 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 ));
             });
         }
+    }
+
+    /** The original scan and shield templates derive NDC from full-frame scene UVs. */
+    public static void adjustLegacyScreenProjection(Matrix4f inverse, ResourceLocation shader,
+                                                     int frameWidth, int frameHeight,
+                                                     int x, int y, int width, int height) {
+        if (!(shader.equals(new ResourceLocation("ldlib2", "scan")) ||
+                shader.equals(new ResourceLocation("photon", "shield"))) ||
+                frameWidth <= 0 || frameHeight <= 0 || width <= 0 || height <= 0) return;
+        float sx = (float) frameWidth / width;
+        float sy = (float) frameHeight / height;
+        float tx = ((float) frameWidth - 2f * x) / width - 1f;
+        float ty = ((float) frameHeight - 2f * y) / height - 1f;
+        inverse.translate(tx, ty, 0f).scale(sx, sy, 1f);
     }
 
     @Override
