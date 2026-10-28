@@ -336,6 +336,9 @@ public final class PhotonFXEditorSmokeTest {
         original.curveTexture.addCurve(authoredCurve);
         var saved = com.lowdragmc.lowdraglib2.utils.PersistedParser.serializeNBT(original, provider);
         if (!saved.contains("curveTexture", Tag.TAG_LIST)) throw new IllegalStateException("Curve sampler did not serialize as a list");
+        var savedSegments = saved.getList("curveTexture", Tag.TAG_COMPOUND).getCompound(0).getList("curves", Tag.TAG_LIST);
+        if (savedSegments.size() != 1 || !savedSegments.get(0).equals(floatList(0f, 0.15f, 0.1f, 0.15f, 0.9f, 0.85f, 1f, 0.85f)))
+            throw new IllegalStateException("Shader curve did not preserve its authored control points: " + savedSegments);
         var restoredMaterial = new CustomShaderMaterial();
         com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(saved, restoredMaterial, provider);
         if (restoredMaterial.curveTexture.serializeNBT(provider).size() != 1 || restoredMaterial.curveTexture.getCurveTexture() == null)
