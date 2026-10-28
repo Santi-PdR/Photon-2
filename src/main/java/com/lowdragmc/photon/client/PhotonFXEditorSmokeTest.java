@@ -346,6 +346,22 @@ public final class PhotonFXEditorSmokeTest {
         var restoredCurves = restoredMaterial.curveTexture.serializeNBT(provider);
         if (!saved.getList("curveTexture", Tag.TAG_COMPOUND).equals(restoredCurves))
             throw new IllegalStateException("Shader curve control points changed on reload: " + restoredCurves);
+        var loadedCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        loadedCurve.deserializeNBT(provider, restoredCurves.getCompound(0));
+        if (Math.abs(loadedCurve.getCurves().getCurveY(0f) - 0.15f) > 0.0001f ||
+                Math.abs(loadedCurve.getCurves().getCurveY(1f) - 0.85f) > 0.0001f)
+            throw new IllegalStateException("Shader curve values changed on reload");
+        var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
+                0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
+                new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.8f, 0.1f, 0.8f, 0.9f, 0.8f, 1, 0.8f));
+        var randomSaved = randomCurve.serializeNBT(provider);
+        var randomLoaded = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve();
+        randomLoaded.deserializeNBT(provider, randomSaved);
+        if (Math.abs(randomLoaded.get(0.5f, () -> 0f) - 0.2f) > 0.0001f ||
+                Math.abs(randomLoaded.get(0.5f, () -> 1f) - 0.8f) > 0.0001f)
+            throw new IllegalStateException("Random shader curves changed on reload: " + randomSaved);
         restoredMaterial.curveTexture.close();
         Photon.LOGGER.info("[shader-curve-smoke] restored and uploaded a saved shader curve");
         var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));

@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.number.curve;
 
 import com.lowdragmc.lowdraglib2.math.curve.ExplicitCubicBezierCurve2;
+import com.lowdragmc.lowdraglib2.syncdata.IProviderAwareNBTSerializable;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import net.minecraft.core.HolderLookup;
@@ -18,7 +19,7 @@ import java.util.List;
  * @implNote ECBCurves
  */
 @EqualsAndHashCode
-public class ECBCurves  {
+public class ECBCurves implements IProviderAwareNBTSerializable<ListTag> {
     @Getter
     private final List<ExplicitCubicBezierCurve2> segments = new ArrayList<>();
 

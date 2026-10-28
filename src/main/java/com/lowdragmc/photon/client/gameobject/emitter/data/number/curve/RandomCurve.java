@@ -3,7 +3,6 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.number.curve;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
-import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunctionConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.configurator.NumberFunctionConfigurator;
@@ -27,7 +26,7 @@ public class RandomCurve implements NumberFunction {
     @Persisted
     private float min, max;
     @Getter
-    @ReadOnlyManaged(serializeMethod = "curves0Serialize", deserializeMethod = "curves0Deserialize")
+    @Persisted(subPersisted = true)
     private final ECBCurves curves0, curves1;
     @Setter
     @Getter
