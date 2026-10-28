@@ -293,11 +293,15 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         }
         if (uniformNames.contains("ScreenSize")) {
             shaderHolder.addDynamicUniform("ScreenSize", uniform -> {
-                // Custom shader materials bypass Minecraft's normal shader setup. Keep screen-space
-                // effects (for example Photon shield shaders sampling scene depth) in sync with the
-                // active render target instead of leaving the manifest's [1, 1] default in place.
-                uniform.set((float) GlStateManager.Viewport.width(),
-                        (float) GlStateManager.Viewport.height());
+                // gl_FragCoord is absolute in the framebuffer even for an offset editor viewport.
+                // Scene samplers copy the full draw target, so normalization must use its size.
+                var pipeline = RenderPassPipeline.getCurrent();
+                if (pipeline != null) {
+                    uniform.set((float) pipeline.framebufferWidth(), (float) pipeline.framebufferHeight());
+                } else {
+                    var target = Minecraft.getInstance().getMainRenderTarget();
+                    uniform.set((float) target.width, (float) target.height);
+                }
             });
         }
         if (uniformNames.contains("U_ViewPort")) {

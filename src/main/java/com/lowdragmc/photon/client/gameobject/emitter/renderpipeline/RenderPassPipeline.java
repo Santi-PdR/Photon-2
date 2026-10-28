@@ -948,6 +948,10 @@ public class RenderPassPipeline {
     /** What a scene-sampling material (soft particles, refraction, distortion) reads. */
     public record SceneSamplers(int colorTexture, int depthTexture) {}
 
+    /** Full backing texture dimensions; gl_FragCoord is in framebuffer coordinates, not viewport-local coordinates. */
+    public int framebufferWidth() { return DRAW_TARGET.width; }
+    public int framebufferHeight() { return DRAW_TARGET.height; }
+
     /**
      * Scene colour and depth for the materials drawing in this build.
      *

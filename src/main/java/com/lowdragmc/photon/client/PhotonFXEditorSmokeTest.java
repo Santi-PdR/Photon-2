@@ -56,6 +56,7 @@ public final class PhotonFXEditorSmokeTest {
     private static Path projectFile;
     private static TrailEmitter smokeTrail;
     private static TrailEmitter smokeCpuTrail;
+    private static CustomShaderMaterial smokeScreenShader;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -290,10 +291,15 @@ public final class PhotonFXEditorSmokeTest {
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
                 if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
+                var screenUniform = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE).getUniform("ScreenSize");
+                var target = minecraft.getMainRenderTarget();
+                if (screenUniform == null || screenUniform.getFloatBuffer().get(0) != target.width ||
+                        screenUniform.getFloatBuffer().get(1) != target.height)
+                    throw new IllegalStateException("ScreenSize did not match the scene framebuffer");
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
                 Photon.LOGGER.info("[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail with {} live segments", trailParticle.getTails().size());
-                Photon.LOGGER.info("[screen-size-smoke] custom GPU model shader rendered using viewport-sized ScreenSize");
+                Photon.LOGGER.info("[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize");
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
@@ -705,6 +711,7 @@ public final class PhotonFXEditorSmokeTest {
                 && (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) != 0;
         boolean shaderLoaded = restoredTornadoMaterial instanceof CustomShaderMaterial shader
                 && !shader.isCompiledError() && shader.curveTexture.getCurveTexture() != null;
+        if (restoredTornadoMaterial instanceof CustomShaderMaterial shader) smokeScreenShader = shader;
         if (!objLoaded || !tChannelEnabled || !shaderLoaded) {
             Photon.LOGGER.error("[tornado-render-smoke] reload diagnostics: model={} objLoaded={} tEnabled={} tMask={} tBit={} material={} shaderLoaded={}",
                     restoredModel, objLoaded, restoredTornado.config.additionalGPUDataSetting.isEnable(),
