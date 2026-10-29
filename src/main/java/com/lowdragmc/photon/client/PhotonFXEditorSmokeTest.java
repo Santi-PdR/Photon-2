@@ -525,6 +525,14 @@ public final class PhotonFXEditorSmokeTest {
                 idBoundaryMesh.indices()[64 * 3] != 256)
             throw new IllegalStateException("OBJ GPU vertex IDs crossed the shield shader boundary incorrectly");
         Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
+        if (!com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Billboard, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.DEFAULT)
+                || com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Billboard, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.LOOKAT_Y)
+                || com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Horizontal, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.DEFAULT))
+            throw new IllegalStateException("Legacy billboard UV orientation was not preserved");
+        Photon.LOGGER.info("[legacy-billboard-uv-smoke] restored the default camera-facing UV flip");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
                 0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),

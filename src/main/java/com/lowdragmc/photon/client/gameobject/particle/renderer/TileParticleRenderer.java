@@ -233,6 +233,11 @@ public class TileParticleRenderer {
             var v0 = uvs.y();
             var u1 = uvs.z();
             var v1 = uvs.w();
+            if (flipBillboardU(renderMode, particle.getRuntime().renderer.getFacingMode())) {
+                float swap = u0;
+                u0 = u1;
+                u1 = swap;
+            }
 
             buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
             buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
@@ -445,8 +450,10 @@ public class TileParticleRenderer {
                 buffer.put(quaternion.x).put(quaternion.y).put(quaternion.z).put(quaternion.w);
                 // color vec4
                 buffer.put(color.x).put(color.y).put(color.z).put(color.w);
-                // uv vec4 (flip v)
-                buffer.put(uvs.x).put(uvs.w).put(uvs.z).put(uvs.y);
+                // The original reverses U only for default camera-facing billboards.
+                boolean flipU = flipBillboardU(renderMode, particle.getRuntime().renderer.getFacingMode());
+                buffer.put(flipU ? uvs.z : uvs.x).put(uvs.w)
+                        .put(flipU ? uvs.x : uvs.z).put(uvs.y);
                 // light int
                 buffer.put(Float.intBitsToFloat(light));
             }
@@ -515,6 +522,10 @@ public class TileParticleRenderer {
             frameRotation = whole.applyWholeEffectRotation(frameRotation);
         }
         return new StretchedFrame(frameRotation, frame.stretchedSizeX(), offset.x, offset.y, offset.z);
+    }
+
+    public static boolean flipBillboardU(ParticleRendererSetting.Mode mode, FacingMode facing) {
+        return mode == ParticleRendererSetting.Mode.Billboard && facing == FacingMode.DEFAULT;
     }
 
     private static Quaternionf computeBillboardQuaternion(TileParticle particle, ParticleRendererSetting.Mode renderMode,
