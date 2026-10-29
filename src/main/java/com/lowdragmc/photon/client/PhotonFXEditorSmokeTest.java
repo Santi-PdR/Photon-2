@@ -744,7 +744,7 @@ public final class PhotonFXEditorSmokeTest {
         var tornadoFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getCompound("config");
         var trailFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
-                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(4).getCompound("data").getCompound("config");
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(5).getCompound("data").getCompound("config");
         var widthCurve = new CompoundTag();
         var widthData = new CompoundTag();
         var widthSegments = new ListTag();
@@ -781,7 +781,7 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 5
+        if (loaded.getFx().getFxData().objects().size() != 6
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
                 || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
                 || restored.config.renderer.getMaterials().size() != 1
@@ -790,8 +790,9 @@ public final class PhotonFXEditorSmokeTest {
                 || restoredTornado.config.renderer.getMaterials().size() != 1
                 || restoredTornado.config.emission.getBursts().size() != 1
                 || !(loaded.getFx().getFxData().objects().get(2) instanceof ParticleEmitter)
-                || !(loaded.getFx().getFxData().objects().get(3) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(3) instanceof com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter)
                 || !(loaded.getFx().getFxData().objects().get(4) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(5) instanceof TrailEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
@@ -800,7 +801,7 @@ public final class PhotonFXEditorSmokeTest {
                 || sphere.getMesh().vertexCount() < 3) {
             throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
         }
-        var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(4);
+        var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(5);
         var restoredWidth = restoredCpuTrail.config.getWidthOverTrail().get(0.8f, () -> 0.5f).floatValue();
         if (!Float.isFinite(restoredWidth) || restoredWidth <= 0.01f) {
             throw new IllegalStateException("Legacy trail width curve did not restore: " + restoredWidth);
