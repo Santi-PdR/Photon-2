@@ -35,6 +35,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
     private static boolean smokeCpuTrailLogged;
+    private static boolean smokeAraPixelsLogged;
     private static boolean smokeWritebackLogged;
     private static byte[] smokeBeforeFrame;
     private static int smokeX, smokeY, smokeWidth, smokeHeight;
@@ -453,6 +454,11 @@ public class RenderPassPipeline {
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.TrailParticle trail
                                 && !trail.getRuntime().renderer.isUseGPUInstance() && trail.getTails().size() >= 3);
                 var cpuTrailBefore = inspectCpuTrail ? smokeReadCurrentViewport() : null;
+                boolean inspectAra = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeAraPixelsLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
+                        p instanceof com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle trail
+                                && trail.getPoints().size() >= 3);
+                var araBefore = inspectAra ? smokeReadCurrentViewport() : null;
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeX = GlStateManager.Viewport.x();
                     smokeY = GlStateManager.Viewport.y();
@@ -461,6 +467,18 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (inspectAra && araBefore != null) {
+                    var araAfter = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < araAfter.length; i += 4) {
+                        if (araBefore[i] != araAfter[i] || araBefore[i + 1] != araAfter[i + 1]
+                                || araBefore[i + 2] != araAfter[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeAraPixelsLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[ara-trail-pixels-smoke] AraTrail changed {} pixels", changed);
+                    }
+                }
                 if (cpuTrailBefore != null) {
                     var cpuTrailAfter = smokeReadCurrentViewport();
                     int changed = 0;
