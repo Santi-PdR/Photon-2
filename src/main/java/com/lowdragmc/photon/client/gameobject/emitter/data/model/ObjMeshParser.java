@@ -7,9 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * A tiny standalone Wavefront <b>.obj</b> parser — vertex positions, UVs and normals, everything
@@ -33,24 +31,13 @@ public final class ObjMeshParser {
         return parseText(new String(in.readAllBytes(), StandardCharsets.UTF_8), flipV);
     }
 
-    /**
-     * One welded vertex; the {@code v/vt/vn} triplet is OBJ's own indexing, so this needs no tolerance.
-     *
-     * <p>⚠️ {@code normal} is the resolved normal's identity, not the {@code vn} index: a corner with no
-     * {@code vn} takes its face's polygon normal, so those carry {@code -(face + 2)}.</p>
-     */
-    private record VertexKey(int position, int uv, int normal) {
-    }
-
     /** Parse OBJ text into an indexed triangle mesh. Package-visible for tests. */
     static PhotonMesh parseText(String text, boolean flipV) {
         List<float[]> positions = new ArrayList<>();
         List<float[]> uvs = new ArrayList<>();
         List<float[]> normals = new ArrayList<>();
         List<int[]> faceVerts = new ArrayList<>(); // reused per face: {posIdx, uvIdx, nrmIdx} (0-based, -1 = none)
-        Map<VertexKey, Integer> welded = new HashMap<>();
         var builder = new PhotonMesh.Builder();
-        int face = 0;
 
         for (String raw : text.split("\\r?\\n")) {
             String line = raw.trim();
@@ -70,7 +57,7 @@ public final class ObjMeshParser {
                         int[] ref = ref(tok[i], positions.size(), uvs.size(), normals.size());
                         if (ref != null) faceVerts.add(ref);
                     }
-                    triangulate(faceVerts, positions, uvs, normals, flipV, builder, welded, face++);
+                    triangulate(faceVerts, positions, uvs, normals, flipV, builder);
                 }
                 default -> {
                     // ignore o/g/s/usemtl/mtllib/l/p/etc.
@@ -82,8 +69,7 @@ public final class ObjMeshParser {
 
     /** Triangulate one (already-resolved) face via ear-clipping; fan fallback if it fails. */
     private static void triangulate(List<int[]> face, List<float[]> positions, List<float[]> uvs,
-                                    List<float[]> normals, boolean flipV, PhotonMesh.Builder builder,
-                                    Map<VertexKey, Integer> welded, int faceIndex) {
+                                    List<float[]> normals, boolean flipV, PhotonMesh.Builder builder) {
         int n = face.size();
         if (n < 3) return;
         float[][] p = new float[n][];
@@ -92,42 +78,37 @@ public final class ObjMeshParser {
             if (p[i] == null) return; // invalid face — skip whole face
         }
         float[] polyN = polygonNormal(p);
-        // before any triangulation: the polygon normal has to exist before a vn-less corner is keyed
-        int[] v = new int[n];
-        for (int i = 0; i < n; i++) {
-            v[i] = weld(builder, welded, face.get(i), p[i], uvs, normals, flipV, polyN, faceIndex);
-        }
         if (n == 3) {
-            builder.triangle(v[0], v[1], v[2]);
+            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, 0, 1, 2);
             return;
         }
         // Use the original OBJ triangulation for quads too. A different diagonal
         // changes the visible surface for non-planar quads (including curved FX meshes).
         int[] order = earClip(p, polyN);
         if (order == null) { // degenerate / self-intersecting — fall back to a simple fan
-            for (int i = 1; i + 1 < n; i++) builder.triangle(v[0], v[i], v[i + 1]);
+            for (int i = 1; i + 1 < n; i++) emitTriangle(builder, face, p, uvs, normals, flipV, polyN, 0, i, i + 1);
             return;
         }
         for (int i = 0; i + 2 < order.length; i += 3) {
-            builder.triangle(v[order[i]], v[order[i + 1]], v[order[i + 2]]);
+            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, order[i], order[i + 1], order[i + 2]);
         }
     }
 
-    /** The welded index of one face corner, adding the vertex on first sight. */
-    private static int weld(PhotonMesh.Builder builder, Map<VertexKey, Integer> welded, int[] corner,
-                            float[] p, List<float[]> uvs, List<float[]> normals, boolean flipV,
-                            float[] polyN, int faceIndex) {
-        int vn = corner[2];
-        var key = new VertexKey(corner[0], corner[1], vn >= 0 && vn < normals.size() ? vn : -(faceIndex + 2));
-        var existing = welded.get(key);
-        if (existing != null) {
-            return existing;
+    /** Preserve the original per-triangle vertex order used by shaders reading gl_VertexID. */
+    private static void emitTriangle(PhotonMesh.Builder builder, List<int[]> face, float[][] positions,
+                                     List<float[]> uvs, List<float[]> normals, boolean flipV,
+                                     float[] polyN, int a, int b, int c) {
+        int[] vertices = new int[3];
+        int[] corners = {a, b, c};
+        for (int i = 0; i < corners.length; i++) {
+            int corner = corners[i];
+            int[] ref = face.get(corner);
+            float[] p = positions[corner];
+            float[] uv = uvOf(ref[1], uvs, flipV);
+            float[] normal = normal(normals, ref[2], polyN);
+            vertices[i] = builder.vertex(p[0], p[1], p[2], uv[0], uv[1], normal[0], normal[1], normal[2], 1f);
         }
-        float[] uv = uvOf(corner[1], uvs, flipV);
-        float[] n = normal(normals, vn, polyN);
-        int index = builder.vertex(p[0], p[1], p[2], uv[0], uv[1], n[0], n[1], n[2], 1f);
-        welded.put(key, index);
-        return index;
+        builder.triangle(vertices[0], vertices[1], vertices[2]);
     }
 
     // ---- ear clipping (3D polygon projected onto its best-fit plane) -------------------------

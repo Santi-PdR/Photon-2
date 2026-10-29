@@ -493,8 +493,16 @@ public final class PhotonFXEditorSmokeTest {
         String legacyQuad = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n";
         var quadMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
                 new java.io.ByteArrayInputStream(legacyQuad.getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
-        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{3, 0, 1, 1, 2, 3}))
-            throw new IllegalStateException("OBJ quad triangulation diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
+        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{0, 1, 2, 3, 4, 5}) ||
+                quadMesh.vertexCount() != 6)
+            throw new IllegalStateException("OBJ triangle vertex IDs diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
+        float[] quadGeometry = quadMesh.geometry();
+        float[] expectedXY = {0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1};
+        for (int i = 0; i < 6; i++) {
+            if (Math.abs(quadGeometry[i * 6] - expectedXY[i * 2]) > 0.0001f ||
+                    Math.abs(quadGeometry[i * 6 + 1] - expectedXY[i * 2 + 1]) > 0.0001f)
+                throw new IllegalStateException("OBJ quad diagonal or vertex order diverged at vertex " + i);
+        }
         Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
