@@ -384,6 +384,11 @@ public class AraTrailParticleRenderer {
             return;
         }
 
+        if (Boolean.getBoolean("photon.fxprojSmokeTest") && !araMeshSmokeLogged) {
+            araMeshSmokeLogged = true;
+            com.lowdragmc.photon.Photon.LOGGER.info("[ara-trail-mesh-smoke] generated {} vertices and {} triangle indices", vertices.size(), tris.size());
+        }
+
         var renderMatrix = particle.getWorldToTrail().invert(new Matrix4f()).translateLocal(cam.getPosition().toVector3f().negate());
 
         for (int i = 0; i < tris.size(); i += 3) {
@@ -397,6 +402,8 @@ public class AraTrailParticleRenderer {
             renderVertex(buffer, renderMatrix, i2);
         }
     }
+
+    private static boolean araMeshSmokeLogged;
 
     private void renderVertex(VertexConsumer buffer, Matrix4f renderMatrix, int vertexIndex) {
         if (vertexIndex >= vertices.size()) return;

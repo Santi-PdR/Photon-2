@@ -114,7 +114,9 @@ jobs:
 
       - name: Require a moving AraTrail smoke result
         shell: bash
-        run: grep -Fq '[ara-trail-points-smoke] moving AraTrail accumulated' "$RUNNER_TEMP/photon-client.log"
+        run: |
+          grep -Fq '[ara-trail-points-smoke] moving AraTrail accumulated' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[ara-trail-mesh-smoke] generated' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require legacy variant uniform restoration
         shell: bash
