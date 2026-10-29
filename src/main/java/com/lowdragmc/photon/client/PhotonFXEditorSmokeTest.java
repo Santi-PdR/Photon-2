@@ -496,6 +496,8 @@ public final class PhotonFXEditorSmokeTest {
         if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{0, 1, 2, 3, 4, 5}) ||
                 quadMesh.vertexCount() != 6)
             throw new IllegalStateException("OBJ triangle vertex IDs diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
+        if (!java.util.Arrays.equals(quadMesh.samplingIds(), new int[]{0, 1, 2, 2, 3, 0}))
+            throw new IllegalStateException("OBJ render vertices lost their shared sampling identity");
         float[] quadGeometry = quadMesh.geometry();
         float[] expectedXY = {0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1};
         for (int i = 0; i < 6; i++) {
