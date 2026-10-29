@@ -299,7 +299,7 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[ara-trail-points-smoke] moving AraTrail accumulated {} points", araParticle.getPoints().size());
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
-                if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
+                if (live != 4) throw new IllegalStateException("Expected legacy model, two tornado-style GPU model particles, and a CPU-billboard particle, got " + live);
                 var screenUniform = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE).getUniform("ScreenSize");
                 var target = minecraft.getMainRenderTarget();
                 if (screenUniform == null || screenUniform.getFloatBuffer().get(0) != target.width ||
@@ -681,7 +681,7 @@ public final class PhotonFXEditorSmokeTest {
         var tornadoBurst = new EmissionSetting.Burst();
         tornadoBurst.time = 0;
         tornadoBurst.cycles = 1;
-        tornadoBurst.setCount(NumberFunction.constant(1));
+        tornadoBurst.setCount(NumberFunction.constant(2));
         tornadoBurst.interval = 4;
         tornadoModel.config.emission.getBursts().add(tornadoBurst);
         source.getFx().getFxData().objects().add(tornadoModel);

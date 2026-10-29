@@ -441,9 +441,9 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
                 glDrawElementsInstanced(GL_TRIANGLES, run.indexCount(), GL_UNSIGNED_INT,
                         (long) run.firstIndex() * Integer.BYTES, 1);
             }
-            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged) {
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged && count >= 2 && plan.runs().size() >= 2) {
                 sortingSmokeLogged = true;
-                com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-smoke] drew {} sorted triangles in {} runs", plan.indices().length / 3, plan.runs().size());
+                com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-smoke] drew {} sorted triangles from {} instances in {} runs", plan.indices().length / 3, count, plan.runs().size());
             }
         } finally {
             instanceAttributeBase = 0;
