@@ -105,6 +105,7 @@ jobs:
           grep -Fq '[legacy-viewport-projection-smoke] reconstructed viewport center and preserved custom shader' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-tornado-depth-smoke] restored authored depth and culling state' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-scan-depth-smoke] restored disabled scan depth settings' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
 

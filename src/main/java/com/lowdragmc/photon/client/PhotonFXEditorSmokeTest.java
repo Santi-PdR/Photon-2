@@ -447,6 +447,15 @@ public final class PhotonFXEditorSmokeTest {
         if (!legacySlot.isEffectiveCull() || !legacySlot.isEffectiveDepthTest() || !legacySlot.isEffectiveDepthMask())
             throw new IllegalStateException("Legacy tornado material depth or culling state was not restored");
         Photon.LOGGER.info("[legacy-tornado-depth-smoke] restored authored depth and culling state");
+        var scanRenderState = new CompoundTag();
+        scanRenderState.putBoolean("depthTest", false);
+        scanRenderState.putBoolean("depthMask", false);
+        var scanSlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        scanSlot.setDepthTest(true).setDepthMask(true);
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(scanRenderState, scanSlot, provider);
+        if (scanSlot.isEffectiveDepthTest() || scanSlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy scan material depth settings were not restored");
+        Photon.LOGGER.info("[legacy-scan-depth-smoke] restored disabled scan depth settings");
         int collisionOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
                 .compareRenderPassOrder(0, 42, 1, 0, 42, 2);
         int reverseOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
