@@ -67,9 +67,9 @@ public class TileParticleRenderer {
         }
         ModelPass model = null;
         if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model) {
-            notifyDynamicMesh();
             model = modelPass();
         }
+        boolean renderedModel = false;
         var records = activeRecords;
         if (records != null) {
             records.setVertsPerParticle(model == null ? 4 : 4 * primitiveCount(model.mesh()));
@@ -77,11 +77,13 @@ public class TileParticleRenderer {
         for (var particle : particles) {
             if (particle instanceof TileParticle tileParticle && tileParticle.getDelay() <= 0) {
                 renderParticle(buffer, tileParticle, camera, partialTicks, model);
+                renderedModel |= model != null;
                 if (records != null) {
                     records.write(tileParticle, partialTicks);
                 }
             }
         }
+        if (renderedModel && model.animation() == null) notifyDynamicMesh();
     }
 
     /** Collect per-particle records during the next {@link #renderQueue}, for a {@code PHOTON_CPU_DATA} draw. */
@@ -368,9 +370,6 @@ public class TileParticleRenderer {
                 instanceBackend.updateGeometry(); // same model, new pose
             }
         }
-        if (renderMode == ParticleRendererSetting.Mode.Model) {
-            notifyDynamicMesh();
-        }
         var buffer = instanceBackend.beginUpload(particles.size());
         if (buffer == null) return false;
         var setting = config.additionalGPUDataSetting;
@@ -483,6 +482,9 @@ public class TileParticleRenderer {
 
     public void drawInstanced(ShaderInstance shader) {
         instanceBackend.drawWithShader(shader);
+        if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model && !usesVertexAnimation()) {
+            notifyDynamicMesh();
+        }
     }
 
     /**
