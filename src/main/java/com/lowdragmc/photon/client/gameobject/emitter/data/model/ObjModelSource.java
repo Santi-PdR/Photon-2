@@ -96,9 +96,9 @@ public class ObjModelSource implements IModelSource {
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
         var nested = LDLibModelAssets.findNested(modelLocation, modelLocation.getPath());
         if (nested != null) PhotonMeshCache.INSTANCE.trackFile(key(), nested.toFile());
-        var resource = Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null);
-        try (var in = resource != null ? resource.open()
-                : nested != null ? java.nio.file.Files.newInputStream(nested)
+        var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null) : null;
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested)
+                : resource != null ? resource.open()
                 : Minecraft.getInstance().getResourceManager().open(modelLocation)) {
             return ObjMeshParser.parse(in, flipV);
         } catch (Exception e) {

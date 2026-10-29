@@ -78,6 +78,9 @@ public final class PhotonFXEditorSmokeTest {
                     "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_obj_smoke.obj\",\"textures\":{}}");
             Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_obj_smoke.obj"),
                     "o smoke\nv -0.5 -0.5 0\nv 0.5 -0.5 0\nv 0 0.5 0\nvt 0 0\nvt 1 0\nvt 0.5 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            // The direct resource-pack file deliberately conflicts with the nested asset.
+            Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_nested_obj.obj"),
+                    "v 7 0 0\nv 8 0 0\nv 7 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
             Path nestedModelDir = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models");
             Files.createDirectories(nestedModelDir.resolve("block"));
             Files.createDirectories(nestedModelDir.resolve("obj"));
@@ -642,6 +645,12 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[external-obj-model-smoke] loaded ldlib2:block/ci_obj_smoke with {} vertices", externalMesh.vertexCount());
         var nestedSource = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_nested_obj"));
+        var shadowedResource = minecraft.getResourceManager().getResource(
+                new ResourceLocation("ldlib2", "models/obj/ci_nested_obj.obj")).orElseThrow();
+        try (var reader = shadowedResource.openAsReader()) {
+            if (!reader.readLine().equals("v 7 0 0"))
+                throw new IllegalStateException("Conflicting resource-pack OBJ fixture is unavailable");
+        }
         var nestedMesh = nestedSource.getMesh();
         if (nestedMesh == null || nestedMesh.vertexCount() < 3)
             throw new IllegalStateException("Nested LDLib2 OBJ did not produce a Photon mesh");
