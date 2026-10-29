@@ -110,6 +110,7 @@ jobs:
           grep -Fq '[legacy-shield-state-smoke] restored two-sided shield depth settings' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-obj-json-smoke] preserved centered model position and flipped V' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[model-pivot-smoke] custom model shader received nonzero runtime pivot' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-smoke] drew' "$RUNNER_TEMP/photon-client.log"

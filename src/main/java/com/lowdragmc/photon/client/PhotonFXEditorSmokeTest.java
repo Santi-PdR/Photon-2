@@ -82,7 +82,7 @@ public final class PhotonFXEditorSmokeTest {
             Files.createDirectories(nestedModelDir.resolve("block"));
             Files.createDirectories(nestedModelDir.resolve("obj"));
             Files.writeString(nestedModelDir.resolve("block/ci_nested_obj.json"),
-                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_nested_obj.obj\",\"textures\":{}}");
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_nested_obj.obj\",\"textures\":{},\"flip_v\":true}");
             Files.writeString(nestedModelDir.resolve("obj/ci_nested_obj.obj"),
                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
@@ -645,6 +645,14 @@ public final class PhotonFXEditorSmokeTest {
         var nestedMesh = nestedSource.getMesh();
         if (nestedMesh == null || nestedMesh.vertexCount() < 3)
             throw new IllegalStateException("Nested LDLib2 OBJ did not produce a Photon mesh");
+        float[] nestedGeometry = nestedMesh.geometry();
+        float[] nestedAttributes = nestedMesh.attributes();
+        if (Math.abs(nestedGeometry[0] + 0.5f) > 0.0001f ||
+                Math.abs(nestedGeometry[1] + 0.5f) > 0.0001f ||
+                Math.abs(nestedGeometry[2] + 0.5f) > 0.0001f ||
+                Math.abs(nestedAttributes[1] - 1f) > 0.0001f)
+            throw new IllegalStateException("Nested OBJ JSON lost its model-space offset or flip_v setting");
+        Photon.LOGGER.info("[legacy-obj-json-smoke] preserved centered model position and flipped V");
         var nestedObj = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models/obj/ci_nested_obj.obj");
         Files.writeString(nestedObj, "v 0 0 0\nv 2 0 0\nv 0 2 0\nv 2 2 0\nf 1 2 3\nf 2 4 3\n");
         Files.setLastModifiedTime(nestedObj, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5000));
