@@ -438,7 +438,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
                 if (baseLocation >= 0) glUniform1i(baseLocation, run.instance());
                 instanceAttributeBase = Math.multiplyExact(run.instance(), instanceDataSize * Float.BYTES);
                 defineInstanceAttributes(instanceDataSize * Float.BYTES);
-                glDrawElementsInstanced(GL_TRIANGLES, run.indexCount(), GL_UNSIGNED_INT,
+                org.lwjgl.opengl.GL31.glDrawElementsInstanced(GL_TRIANGLES, run.indexCount(), GL_UNSIGNED_INT,
                         (long) run.firstIndex() * Integer.BYTES, 1);
             }
             if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged && count >= 2 && plan.runs().size() >= 2) {
