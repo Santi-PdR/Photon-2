@@ -28,5 +28,11 @@ public final class ModelTriangleOrderRegression {
         var changed = workspace.build(centers, triangles, null, instances, 10, 2, new Vector3f(), new Matrix4f(), null);
         if (workspace.indexRevision() == revision || changed.runs().get(0).instance() != 0)
             throw new IllegalStateException("Moving an instance did not reorder triangles");
+        float[] vertices = {-0.3f, -0.3f, -1, 0.3f, -0.3f, -1, 0, 0.3f, -1,
+                -0.9f, -0.9f, -3, 0.9f, -0.9f, -3, 0, 0.9f, -3};
+        var projected = new ModelTriangleOrder.Workspace().build(centers, triangles, vertices, instances, 10, 1,
+                new Vector3f(), new Matrix4f(), new Matrix4f().perspective((float) Math.toRadians(90), 1, 0.1f, 100));
+        if (!Arrays.equals(projected.indices(), new int[]{3, 4, 5, 0, 1, 2}))
+            throw new IllegalStateException("Incorrect projected overlapping triangle order");
     }
 }
