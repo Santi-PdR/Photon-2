@@ -51,6 +51,7 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
     @Nullable
     private volatile PhotonMesh derivedFrom = null;
     private final List<Vector3f> vertices = new ArrayList<>();
+    private int[] samplingFirst = new int[0];
     private final List<Edge> edges = new ArrayList<>();
     private final List<Triangle> triangles = new ArrayList<>();
     @Getter
@@ -123,7 +124,7 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
     private void refreshPositions(PhotonMesh mesh) {
         var geometry = mesh.geometry();
         for (int vertex = 0; vertex < vertices.size(); vertex++) {
-            int off = PhotonMesh.geometryOffset(vertex);
+            int off = PhotonMesh.geometryOffset(samplingFirst[vertex]);
             vertices.get(vertex).set(geometry[off], geometry[off + 1], geometry[off + 2]);
         }
     }
@@ -137,17 +138,31 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
         double sumArea = 0;
         var geometry = mesh.geometry();
         var indices = mesh.indices();
-        // one Vector3f per vertex, shared by every edge and triangle referencing it
-        var points = new Vector3f[mesh.vertexCount()];
-        for (int v = 0; v < points.length; v++) {
-            int off = PhotonMesh.geometryOffset(v);
-            points[v] = new Vector3f(geometry[off], geometry[off + 1], geometry[off + 2]);
-            this.vertices.add(points[v]);
+        // OBJ render vertices can be duplicated for gl_VertexID while sampling still
+        // follows its source v/vt/vn topology, as in the original implementation.
+        var sampleIds = mesh.samplingIds();
+        int sampleCount = mesh.vertexCount();
+        if (sampleIds.length == mesh.vertexCount() && sampleIds.length > 0) {
+            sampleCount = 1 + java.util.Arrays.stream(sampleIds).max().orElse(-1);
         }
+        samplingFirst = new int[sampleCount];
+        java.util.Arrays.fill(samplingFirst, -1);
+        var points = new Vector3f[sampleCount];
+        for (int v = 0; v < mesh.vertexCount(); v++) {
+            int sample = sampleIds.length == mesh.vertexCount() ? sampleIds[v] : v;
+            if (points[sample] != null) continue;
+            int off = PhotonMesh.geometryOffset(v);
+            points[sample] = new Vector3f(geometry[off], geometry[off + 1], geometry[off + 2]);
+            samplingFirst[sample] = v;
+        }
+        java.util.Collections.addAll(this.vertices, points);
         var seen = new LongOpenHashSet();
         for (int i = 0; i + 2 < indices.length; i += 3) {
             int a = indices[i], b = indices[i + 1], c = indices[i + 2];
-            if (a >= points.length || b >= points.length || c >= points.length) continue;
+            if (a < 0 || b < 0 || c < 0 || a >= mesh.vertexCount() || b >= mesh.vertexCount() || c >= mesh.vertexCount()) continue;
+            if (sampleIds.length == mesh.vertexCount()) {
+                a = sampleIds[a]; b = sampleIds[b]; c = sampleIds[c];
+            }
             sumLength += addEdgeOnce(seen, points, a, b);
             sumLength += addEdgeOnce(seen, points, b, c);
             sumLength += addEdgeOnce(seen, points, c, a);

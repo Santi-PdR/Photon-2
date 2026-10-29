@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A tiny standalone Wavefront <b>.obj</b> parser — vertex positions, UVs and normals, everything
@@ -23,6 +25,7 @@ import java.util.List;
  */
 @OnlyIn(Dist.CLIENT)
 public final class ObjMeshParser {
+    private record SamplingKey(int position, int uv, int normal) {}
 
     private ObjMeshParser() {
     }
@@ -38,6 +41,7 @@ public final class ObjMeshParser {
         List<float[]> normals = new ArrayList<>();
         List<int[]> faceVerts = new ArrayList<>(); // reused per face: {posIdx, uvIdx, nrmIdx} (0-based, -1 = none)
         var builder = new PhotonMesh.Builder();
+        Map<SamplingKey, Integer> sampling = new HashMap<>();
 
         for (String raw : text.split("\\r?\\n")) {
             String line = raw.trim();
@@ -57,7 +61,7 @@ public final class ObjMeshParser {
                         int[] ref = ref(tok[i], positions.size(), uvs.size(), normals.size());
                         if (ref != null) faceVerts.add(ref);
                     }
-                    triangulate(faceVerts, positions, uvs, normals, flipV, builder);
+                    triangulate(faceVerts, positions, uvs, normals, flipV, builder, sampling);
                 }
                 default -> {
                     // ignore o/g/s/usemtl/mtllib/l/p/etc.
@@ -69,7 +73,8 @@ public final class ObjMeshParser {
 
     /** Triangulate one (already-resolved) face via ear-clipping; fan fallback if it fails. */
     private static void triangulate(List<int[]> face, List<float[]> positions, List<float[]> uvs,
-                                    List<float[]> normals, boolean flipV, PhotonMesh.Builder builder) {
+                                    List<float[]> normals, boolean flipV, PhotonMesh.Builder builder,
+                                    Map<SamplingKey, Integer> sampling) {
         int n = face.size();
         if (n < 3) return;
         float[][] p = new float[n][];
@@ -79,25 +84,25 @@ public final class ObjMeshParser {
         }
         float[] polyN = polygonNormal(p);
         if (n == 3) {
-            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, 0, 1, 2);
+            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, sampling, 0, 1, 2);
             return;
         }
         // Use the original OBJ triangulation for quads too. A different diagonal
         // changes the visible surface for non-planar quads (including curved FX meshes).
         int[] order = earClip(p, polyN);
         if (order == null) { // degenerate / self-intersecting — fall back to a simple fan
-            for (int i = 1; i + 1 < n; i++) emitTriangle(builder, face, p, uvs, normals, flipV, polyN, 0, i, i + 1);
+            for (int i = 1; i + 1 < n; i++) emitTriangle(builder, face, p, uvs, normals, flipV, polyN, sampling, 0, i, i + 1);
             return;
         }
         for (int i = 0; i + 2 < order.length; i += 3) {
-            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, order[i], order[i + 1], order[i + 2]);
+            emitTriangle(builder, face, p, uvs, normals, flipV, polyN, sampling, order[i], order[i + 1], order[i + 2]);
         }
     }
 
     /** Preserve the original per-triangle vertex order used by shaders reading gl_VertexID. */
     private static void emitTriangle(PhotonMesh.Builder builder, List<int[]> face, float[][] positions,
                                      List<float[]> uvs, List<float[]> normals, boolean flipV,
-                                     float[] polyN, int a, int b, int c) {
+                                     float[] polyN, Map<SamplingKey, Integer> sampling, int a, int b, int c) {
         int[] vertices = new int[3];
         int[] corners = {a, b, c};
         for (int i = 0; i < corners.length; i++) {
@@ -107,6 +112,8 @@ public final class ObjMeshParser {
             float[] uv = uvOf(ref[1], uvs, flipV);
             float[] normal = normal(normals, ref[2], polyN);
             vertices[i] = builder.vertex(p[0], p[1], p[2], uv[0], uv[1], normal[0], normal[1], normal[2], 1f);
+            var key = new SamplingKey(ref[0], ref[1], ref[2]);
+            builder.samplingId(sampling.computeIfAbsent(key, ignored -> sampling.size()));
         }
         builder.triangle(vertices[0], vertices[1], vertices[2]);
     }

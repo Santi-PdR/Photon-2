@@ -23,8 +23,8 @@ import java.util.function.Supplier;
  * buffers the same way.</p>
  *
  * <p>Vertices are welded by whatever the source format already knows: glTF keeps the file's own
- * indices (the numbering its {@code JOINTS_0}/{@code WEIGHTS_0} use), OBJ welds by the
- * {@code v/vt/vn} triplet, baked JSON welds nothing.</p>
+ * indices (the numbering its {@code JOINTS_0}/{@code WEIGHTS_0} use). OBJ preserves triangle
+ * corners for shader vertex IDs and carries a separate {@code v/vt/vn} sampling topology.</p>
  *
  * <p>⚠️ {@link #quadPaired(int)} exists because the CPU draw path draws into a QUADS-mode buffer: it
  * emits {@code a,b,c,c} for a triangle, and would emit two of those for an authored quad.</p>
@@ -44,7 +44,7 @@ public final class PhotonMesh {
     public static final int FLOATS_PER_SPRITE = 4;
 
     public static final PhotonMesh EMPTY = new PhotonMesh(new float[0], new float[0], new float[0],
-            new int[0], new boolean[0], new float[0]);
+            new int[0], new boolean[0], new float[0], new int[0]);
 
     /** vertexCount * {@link #FLOATS_PER_GEOMETRY}. */
     private final float[] geometry;
@@ -54,6 +54,8 @@ public final class PhotonMesh {
     private final float[] spriteBounds;
     /** triangleCount * 3 vertex indices. */
     private final int[] indices;
+    /** Optional mapping from each rendered vertex to its source sampling vertex. */
+    private final int[] samplingIds;
     /** triangleCount: this triangle and the next are the two halves of one authored quad. */
     private final boolean[] quadPaired;
     /** The source's own (glTF's {@code TANGENT}) or derived from the UVs on first {@link #tangents()}. */
@@ -69,11 +71,12 @@ public final class PhotonMesh {
     private final long geometryRevision;
 
     private PhotonMesh(float[] geometry, float[] attributes, float[] spriteBounds, int[] indices,
-                       boolean[] quadPaired, @Nullable float[] suppliedTangents) {
+                       boolean[] quadPaired, @Nullable float[] suppliedTangents, int[] samplingIds) {
         this.geometry = geometry;
         this.attributes = attributes;
         this.spriteBounds = spriteBounds;
         this.indices = indices;
+        this.samplingIds = samplingIds;
         this.quadPaired = quadPaired;
         this.tangents = suppliedTangents;
         this.deformedTangents = null;
@@ -88,6 +91,7 @@ public final class PhotonMesh {
         this.attributes = topology.attributes;
         this.spriteBounds = topology.spriteBounds;
         this.indices = topology.indices;
+        this.samplingIds = topology.samplingIds;
         this.quadPaired = topology.quadPaired;
         this.deformedTangents = tangents;
         this.topology = topology.topology;
@@ -162,6 +166,10 @@ public final class PhotonMesh {
 
     public int[] indices() {
         return indices;
+    }
+
+    public int[] samplingIds() {
+        return samplingIds;
     }
 
     /** Whether this triangle and the next are one authored quad; read only by the CPU draw path. */
@@ -254,6 +262,10 @@ public final class PhotonMesh {
         private final FloatArrayList spriteBounds = new FloatArrayList();
         private final FloatArrayList tangents = new FloatArrayList();
         private final IntArrayList indices = new IntArrayList();
+        private final IntArrayList samplingIds = new IntArrayList();
+
+        /** Called once after each source vertex when a separate sampling topology is supplied. */
+        public void samplingId(int id) { samplingIds.add(id); }
         private final BooleanArrayList quadPaired = new BooleanArrayList();
         /** Vertices of the face added last, for {@link #sprite}/{@link #tangent} to reach back at. */
         private int lastFaceStart = -1;
@@ -389,7 +401,8 @@ public final class PhotonMesh {
             var supplied = taggedTangents == vertexCount ? tangents.toFloatArray() : null;
             return new PhotonMesh(geometry.toFloatArray(), attributes.toFloatArray(),
                     anySprite ? spriteBounds.toFloatArray() : new float[0],
-                    indices.toIntArray(), quadPaired.toBooleanArray(), supplied);
+                    indices.toIntArray(), quadPaired.toBooleanArray(), supplied,
+                    samplingIds.size() == vertexCount ? samplingIds.toIntArray() : new int[0]);
         }
 
         /**

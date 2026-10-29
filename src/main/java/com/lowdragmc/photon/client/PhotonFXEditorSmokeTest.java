@@ -587,6 +587,11 @@ public final class PhotonFXEditorSmokeTest {
         var reloadedNestedMesh = nestedSource.getMesh();
         if (reloadedNestedMesh == nestedMesh || reloadedNestedMesh.vertexCount() <= nestedMesh.vertexCount())
             throw new IllegalStateException("Editing a nested OBJ did not invalidate its JSON model");
+        var samplingMesh = new MeshData(nestedSource);
+        if (samplingMesh.getVertices().size() != 4 || samplingMesh.getEdges().size() != 5 ||
+                samplingMesh.getTriangles().size() != 2 || reloadedNestedMesh.vertexCount() != 6)
+            throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
+        Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved six render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
