@@ -109,7 +109,7 @@ jobs:
           grep -Fq '[legacy-shield-state-smoke] restored two-sided shield depth settings' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
-          grep -Fq '[obj-sampling-topology-smoke] preserved six render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require a moving GPU trail smoke result
         shell: bash

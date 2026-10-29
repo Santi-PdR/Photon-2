@@ -493,16 +493,17 @@ public final class PhotonFXEditorSmokeTest {
         String legacyQuad = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n";
         var quadMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
                 new java.io.ByteArrayInputStream(legacyQuad.getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
-        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{0, 1, 2, 3, 4, 5}) ||
-                quadMesh.vertexCount() != 6)
+        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{0, 1, 2, 4, 5, 6}) ||
+                quadMesh.vertexCount() != 8)
             throw new IllegalStateException("OBJ triangle vertex IDs diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
-        if (!java.util.Arrays.equals(quadMesh.samplingIds(), new int[]{0, 1, 2, 2, 3, 0}))
+        if (!java.util.Arrays.equals(quadMesh.samplingIds(), new int[]{0, 1, 2, 2, 2, 3, 0, 0}))
             throw new IllegalStateException("OBJ render vertices lost their shared sampling identity");
         float[] quadGeometry = quadMesh.geometry();
         float[] expectedXY = {0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1};
         for (int i = 0; i < 6; i++) {
-            if (Math.abs(quadGeometry[i * 6] - expectedXY[i * 2]) > 0.0001f ||
-                    Math.abs(quadGeometry[i * 6 + 1] - expectedXY[i * 2 + 1]) > 0.0001f)
+            int vertex = quadMesh.indices()[i];
+            if (Math.abs(quadGeometry[vertex * 6] - expectedXY[i * 2]) > 0.0001f ||
+                    Math.abs(quadGeometry[vertex * 6 + 1] - expectedXY[i * 2 + 1]) > 0.0001f)
                 throw new IllegalStateException("OBJ quad diagonal or vertex order diverged at vertex " + i);
         }
         Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
@@ -591,9 +592,9 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Editing a nested OBJ did not invalidate its JSON model");
         var samplingMesh = new MeshData(nestedSource);
         if (samplingMesh.getVertices().size() != 4 || samplingMesh.getEdges().size() != 5 ||
-                samplingMesh.getTriangles().size() != 2 || reloadedNestedMesh.vertexCount() != 6)
+                samplingMesh.getTriangles().size() != 2 || reloadedNestedMesh.vertexCount() != 8)
             throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
-        Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved six render vertices and four sampling vertices");
+        Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();

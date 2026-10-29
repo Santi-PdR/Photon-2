@@ -116,6 +116,15 @@ public final class ObjMeshParser {
             builder.samplingId(sampling.computeIfAbsent(key, ignored -> sampling.size()));
         }
         builder.triangle(vertices[0], vertices[1], vertices[2]);
+        // The original stores every triangle in a four-corner quad, repeating c.
+        // Preserve that unused fourth vertex so the next triangle's GPU vertex
+        // IDs match shaders that read gl_VertexID; sampling still shares c.
+        int[] ref = face.get(c);
+        float[] p = positions[c];
+        float[] uv = uvOf(ref[1], uvs, flipV);
+        float[] normal = normal(normals, ref[2], polyN);
+        builder.vertex(p[0], p[1], p[2], uv[0], uv[1], normal[0], normal[1], normal[2], 1f);
+        builder.samplingId(sampling.get(new SamplingKey(ref[0], ref[1], ref[2])));
     }
 
     // ---- ear clipping (3D polygon projected onto its best-fit plane) -------------------------
