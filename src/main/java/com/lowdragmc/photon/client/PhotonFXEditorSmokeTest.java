@@ -124,7 +124,7 @@ public final class PhotonFXEditorSmokeTest {
                         tornadoColor = data.Color;
                         gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
 #ifdef PARTICLE_MODEL_INSTANCE
-                        gl_Position.x += LegacyVariantOnly * 0.01;
+                        gl_Position.x += (LegacyVariantOnly + float(PhotonInstanceBase)) * 0.01;
 #endif
                     }
                     """);

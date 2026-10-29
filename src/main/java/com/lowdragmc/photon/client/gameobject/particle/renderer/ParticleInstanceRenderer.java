@@ -418,6 +418,8 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         int baseLocation = glGetUniformLocation(shader.getId(), "PhotonInstanceBase");
         int oldBase = baseLocation < 0 ? 0 : glGetUniformi(shader.getId(), baseLocation);
         int oldArrayBuffer = glGetInteger(GL_ARRAY_BUFFER_BINDING);
+        boolean inspectBase = Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged && count >= 2;
+        boolean sawLaterInstance = false;
         try {
             if (resource().sortedModelEbo == -1) {
                 resource().sortedModelEbo = glGenBuffers();
@@ -436,12 +438,17 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
             glBindBuffer(GL_ARRAY_BUFFER, resource().instanceVbo);
             for (var run : plan.runs()) {
                 if (baseLocation >= 0) glUniform1i(baseLocation, run.instance());
+                if (inspectBase && run.instance() > 0) {
+                    if (baseLocation < 0 || glGetUniformi(shader.getId(), baseLocation) != run.instance())
+                        throw new IllegalStateException("Sorted GPU draw lost its particle record base");
+                    sawLaterInstance = true;
+                }
                 instanceAttributeBase = Math.multiplyExact(run.instance(), instanceDataSize * Float.BYTES);
                 defineInstanceAttributes(instanceDataSize * Float.BYTES);
                 org.lwjgl.opengl.GL31.glDrawElementsInstanced(GL_TRIANGLES, run.indexCount(), GL_UNSIGNED_INT,
                         (long) run.firstIndex() * Integer.BYTES, 1);
             }
-            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged && count >= 2 && plan.runs().size() >= 2) {
+            if (inspectBase && sawLaterInstance && plan.runs().size() >= 2) {
                 sortingSmokeLogged = true;
                 com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-smoke] drew {} sorted triangles from {} instances in {} runs", plan.indices().length / 3, count, plan.runs().size());
             }
