@@ -338,6 +338,24 @@ public final class PhotonFXEditorSmokeTest {
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
         com.lowdragmc.photon.client.gameobject.particle.renderer.ModelTriangleOrderRegression.verify();
+        var callbacks = new int[1];
+        var dynamic = new com.lowdragmc.photon.client.gameobject.emitter.data.model.IDynamicMesh() {
+            private final PhotonMesh mesh = new PhotonMesh.Builder().triangle(
+                    new float[]{0, 0, 0, 0, 0, 0, 0, 1},
+                    new float[]{1, 0, 0, 1, 0, 0, 0, 1},
+                    new float[]{0, 1, 0, 0, 1, 0, 0, 1}).build();
+            @Override public PhotonMesh topology() { return mesh; }
+            @Override public long revision() { return 1; }
+            @Override public void onDrawn() { callbacks[0]++; }
+        };
+        var dynamicConfig = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig();
+        dynamicConfig.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        dynamicConfig.renderer.setModel(new MeshData(new com.lowdragmc.photon.client.gameobject.emitter.data.model.DynamicMeshSource(dynamic)));
+        var dynamicRenderer = new com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer(
+                dynamicConfig, dynamicConfig.renderer.createRuntime());
+        dynamicRenderer.renderQueue(null, java.util.List.of(), null, 0);
+        if (callbacks[0] != 0) throw new IllegalStateException("Empty model queue notified a dynamic provider as drawn");
+        Photon.LOGGER.info("[dynamic-empty-draw-smoke] no provider callback for an empty model queue");
         verifyNestedMeshLoad();
         var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
         var legacyMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
