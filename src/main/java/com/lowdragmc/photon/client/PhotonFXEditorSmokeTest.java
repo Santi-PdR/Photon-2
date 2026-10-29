@@ -456,6 +456,16 @@ public final class PhotonFXEditorSmokeTest {
         if (scanSlot.isEffectiveDepthTest() || scanSlot.isEffectiveDepthMask())
             throw new IllegalStateException("Legacy scan material depth settings were not restored");
         Photon.LOGGER.info("[legacy-scan-depth-smoke] restored disabled scan depth settings");
+        var shieldRenderState = new CompoundTag();
+        shieldRenderState.putBoolean("cull", false);
+        shieldRenderState.putBoolean("depthTest", true);
+        shieldRenderState.putBoolean("depthMask", false);
+        var shieldSlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        shieldSlot.setCull(true).setDepthTest(false).setDepthMask(true);
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(shieldRenderState, shieldSlot, provider);
+        if (shieldSlot.isEffectiveCull() || !shieldSlot.isEffectiveDepthTest() || shieldSlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy shield material face and depth settings were not restored");
+        Photon.LOGGER.info("[legacy-shield-state-smoke] restored two-sided shield depth settings");
         int collisionOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
                 .compareRenderPassOrder(0, 42, 1, 0, 42, 2);
         int reverseOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
