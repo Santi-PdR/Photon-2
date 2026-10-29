@@ -423,9 +423,12 @@ public final class PhotonFXEditorSmokeTest {
         gpuChannels.add(net.minecraft.nbt.StringTag.valueOf("addition_gpu_data.t"));
         gpuDataTag.put("additionalData", gpuChannels);
         var gpuSetting = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig().additionalGPUDataSetting;
-        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(gpuDataTag, gpuSetting, provider);
+        // Toggle groups restore _enable in their deserializeNBT override before
+        // delegating their fields to PersistedParser, as the project loader does.
+        gpuSetting.deserializeNBT(provider, gpuDataTag);
         if (!gpuSetting.isEnable() || !gpuSetting.hasAttribs() || gpuSetting.attribFloats() != 1)
-            throw new IllegalStateException("Legacy tornado particle T attribute did not load from NBT");
+            throw new IllegalStateException("Legacy tornado particle T attribute did not load from NBT: enabled="
+                    + gpuSetting.isEnable() + ", mask=" + gpuSetting.userMask() + ", floats=" + gpuSetting.attribFloats());
         Photon.LOGGER.info("[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT");
         var legacyRenderState = new CompoundTag();
         legacyRenderState.putBoolean("cull", true);
