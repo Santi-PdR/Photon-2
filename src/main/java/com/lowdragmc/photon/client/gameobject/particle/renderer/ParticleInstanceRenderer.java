@@ -3,12 +3,18 @@ package com.lowdragmc.photon.client.gameobject.particle.renderer;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.IDynamicMesh;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.VertexAnimation;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import net.minecraft.client.renderer.ShaderInstance;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig;
 import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.BufferUtils;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 
 import static org.lwjgl.opengl.GL30.*;
 
@@ -48,6 +54,20 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
      *  before this was tracked animating either did nothing. */
     private boolean builtShade;
     private boolean builtUseBlockUV;
+    private int instanceAttributeBase;
+    private ModelTriangleOrder.Workspace sortingWorkspace;
+    private FloatBuffer sortingTransforms;
+    private IntBuffer sortedIndexBuffer;
+    private final Matrix4f sortingView = new Matrix4f();
+    private final Matrix4f sortingProjection = new Matrix4f();
+    private float[] sortingPositions = new float[0];
+    private float[] sortingCenters = new float[0];
+    private int[] sortingTriangles = new int[0];
+    private PhotonMesh sortingMesh;
+    private long sortingRevision = Long.MIN_VALUE;
+    private long uploadedSortingRevision = Long.MIN_VALUE;
+    private boolean sortingPending;
+    private static boolean sortingSmokeLogged;
 
     public ParticleInstanceRenderer(ParticleConfig config, ParticleRendererSetting.Runtime renderer) {
         this.config = config;
@@ -315,7 +335,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
     @Override
     protected void defineInstanceAttributes(int stride) {
         int attribIndex;
-        int offset = 0;
+        int offset = instanceAttributeBase;
 
         if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model) {
             attribIndex = 4;
@@ -336,5 +356,115 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         }
 
         config.additionalGPUDataSetting.layoutAttribs(offset, stride);
+    }
+
+    @Override
+    void endUpload(FloatBuffer buffer, int count) {
+        super.endUpload(buffer, count);
+        sortingPending = builtModelMode && count > 0 && renderer.getVertexSortingMode() != RendererSetting.SortMode.NONE;
+        if (!sortingPending) return;
+        int required = Math.multiplyExact(count, 10);
+        if (sortingTransforms == null || sortingTransforms.capacity() < required) {
+            sortingTransforms = FloatBuffer.allocate(required);
+        }
+        for (int instance = 0; instance < count; instance++) {
+            for (int field = 0; field < 10; field++) {
+                sortingTransforms.put(instance * 10 + field, buffer.get(instance * instanceDataSize + field));
+            }
+        }
+        sortingView.set(RenderSystem.getModelViewMatrix());
+        sortingProjection.set(RenderSystem.getProjectionMatrix());
+    }
+
+    /** Build positions and centers from the indexed geometry used by the GL buffer. */
+    private void refreshSortingMesh(PhotonMesh mesh) {
+        if (sortingMesh == mesh && sortingRevision == mesh.geometryRevision()) return;
+        float[] geometry = mesh.geometry();
+        int[] indices = mesh.indices();
+        sortingPositions = new float[mesh.vertexCount() * 3];
+        for (int v = 0; v < mesh.vertexCount(); v++) {
+            System.arraycopy(geometry, v * PhotonMesh.FLOATS_PER_GEOMETRY, sortingPositions, v * 3, 3);
+        }
+        var centers = new it.unimi.dsi.fastutil.floats.FloatArrayList();
+        var triangles = new it.unimi.dsi.fastutil.ints.IntArrayList();
+        for (int i = 0; i + 2 < indices.length; i += 3) {
+            int a = indices[i] * 3, b = indices[i + 1] * 3, c = indices[i + 2] * 3;
+            float ux = sortingPositions[b] - sortingPositions[a], uy = sortingPositions[b + 1] - sortingPositions[a + 1], uz = sortingPositions[b + 2] - sortingPositions[a + 2];
+            float vx = sortingPositions[c] - sortingPositions[a], vy = sortingPositions[c + 1] - sortingPositions[a + 1], vz = sortingPositions[c + 2] - sortingPositions[a + 2];
+            if (uy * vz - uz * vy == 0 && uz * vx - ux * vz == 0 && ux * vy - uy * vx == 0) continue;
+            for (int axis = 0; axis < 3; axis++) centers.add((sortingPositions[a + axis] + sortingPositions[b + axis] + sortingPositions[c + axis]) / 3f);
+            triangles.add(indices[i]); triangles.add(indices[i + 1]); triangles.add(indices[i + 2]);
+        }
+        sortingCenters = centers.toFloatArray();
+        sortingTriangles = triangles.toIntArray();
+        sortingMesh = mesh;
+        sortingRevision = mesh.geometryRevision();
+    }
+
+    @Override
+    protected void drawGeometry(ShaderInstance shader, int count) {
+        var pipeline = RenderPassPipeline.getCurrent();
+        if (!sortingPending || !glIsEnabled(GL_BLEND) ||
+                (pipeline != null && (pipeline.isMaskSubPass() || pipeline.isWireframeSubPass()))) {
+            super.drawGeometry(shader, count);
+            return;
+        }
+        refreshSortingMesh(renderer.getModelSource().getMesh());
+        if (sortingTriangles.length == 0) return;
+        if (sortingWorkspace == null) sortingWorkspace = new ModelTriangleOrder.Workspace();
+        // Positions already include the rotated/scaled pivot in the uploaded instance position.
+        var plan = sortingWorkspace.build(sortingCenters, sortingTriangles, sortingPositions,
+                sortingTransforms, 10, count, new Vector3f(), sortingView, sortingProjection);
+        int baseLocation = glGetUniformLocation(shader.getId(), "PhotonInstanceBase");
+        int oldBase = baseLocation < 0 ? 0 : glGetUniformi(shader.getId(), baseLocation);
+        int oldArrayBuffer = glGetInteger(GL_ARRAY_BUFFER_BINDING);
+        try {
+            if (resource().sortedModelEbo == -1) {
+                resource().sortedModelEbo = glGenBuffers();
+                uploadedSortingRevision = Long.MIN_VALUE;
+            }
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resource().sortedModelEbo);
+            if (uploadedSortingRevision != sortingWorkspace.indexRevision()) {
+                int size = plan.indices().length;
+                if (sortedIndexBuffer == null || sortedIndexBuffer.capacity() < size)
+                    sortedIndexBuffer = BufferUtils.createIntBuffer(size);
+                sortedIndexBuffer.clear().put(plan.indices()).flip();
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sortedIndexBuffer, GL_STREAM_DRAW);
+                uploadedSortingRevision = sortingWorkspace.indexRevision();
+            }
+            // Repoint all divisor attributes for GL 3.2/3.3 as well as newer drivers.
+            glBindBuffer(GL_ARRAY_BUFFER, resource().instanceVbo);
+            for (var run : plan.runs()) {
+                if (baseLocation >= 0) glUniform1i(baseLocation, run.instance());
+                instanceAttributeBase = Math.multiplyExact(run.instance(), instanceDataSize * Float.BYTES);
+                defineInstanceAttributes(instanceDataSize * Float.BYTES);
+                glDrawElementsInstanced(GL_TRIANGLES, run.indexCount(), GL_UNSIGNED_INT,
+                        (long) run.firstIndex() * Integer.BYTES, 1);
+            }
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged) {
+                sortingSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-smoke] drew {} sorted triangles in {} runs", plan.indices().length / 3, plan.runs().size());
+            }
+        } finally {
+            instanceAttributeBase = 0;
+            glBindBuffer(GL_ARRAY_BUFFER, resource().instanceVbo);
+            defineInstanceAttributes(instanceDataSize * Float.BYTES);
+            glBindBuffer(GL_ARRAY_BUFFER, oldArrayBuffer);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, resource().modelEbo);
+            if (baseLocation >= 0) glUniform1i(baseLocation, oldBase);
+        }
+    }
+
+    @Override
+    public void dispose() {
+        sortingWorkspace = null;
+        sortingTransforms = null;
+        sortedIndexBuffer = null;
+        sortingMesh = null;
+        sortingRevision = Long.MIN_VALUE;
+        uploadedSortingRevision = Long.MIN_VALUE;
+        instanceAttributeBase = 0;
+        sortingPending = false;
+        super.dispose();
     }
 }

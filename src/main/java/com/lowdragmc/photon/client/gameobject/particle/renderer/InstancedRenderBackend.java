@@ -29,6 +29,8 @@ abstract class InstancedRenderBackend {
         protected int vao = -1;
         protected int modelVbo = -1;
         protected int modelEbo = -1;
+        /** Optional reordered indices for translucent model instances. */
+        protected int sortedModelEbo = -1;
         // extra static streams, used only by backends whose base mesh is split into more than one
         // buffer (the model path: geometry / attributes / tangents — see ParticleInstanceRenderer)
         protected int attributeVbo = -1;
@@ -67,6 +69,10 @@ abstract class InstancedRenderBackend {
             if (modelEbo != -1) {
                 glDeleteBuffers(modelEbo);
                 modelEbo = -1;
+            }
+            if (sortedModelEbo != -1) {
+                glDeleteBuffers(sortedModelEbo);
+                sortedModelEbo = -1;
             }
 
             staticCreated = false;
@@ -626,7 +632,11 @@ abstract class InstancedRenderBackend {
         }
 
         // draw instance
-        glDrawElementsInstanced(GL_TRIANGLES, modelEboSize, GL_UNSIGNED_INT, 0, instanceCount);
+        drawGeometry(shader, instanceCount);
+    }
+
+    protected void drawGeometry(ShaderInstance shader, int count) {
+        glDrawElementsInstanced(GL_TRIANGLES, modelEboSize, GL_UNSIGNED_INT, 0, count);
     }
 
     // per-shader memo of each buffer sampler's uniform location (the per-draw glGetUniformLocation

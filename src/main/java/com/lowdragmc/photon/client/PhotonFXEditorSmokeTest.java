@@ -337,6 +337,7 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        com.lowdragmc.photon.client.gameobject.particle.renderer.ModelTriangleOrderRegression.verify();
         verifyNestedMeshLoad();
         var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
         var legacyMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
@@ -659,6 +660,7 @@ public final class PhotonFXEditorSmokeTest {
         tornadoModel.config.renderer.setModel(new MeshData(new JsonModelSource(externalLocation)));
         tornadoModel.config.renderer.setUseGPUInstance(true);
         tornadoModel.config.renderer.setModelPivot(new org.joml.Vector3f(0.125f, 0.25f, 0));
+        tornadoModel.config.renderer.setVertexSortingMode(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
         tornadoModel.config.renderer.getMaterials().clear();
         var tornadoShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
         tornadoShader.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());

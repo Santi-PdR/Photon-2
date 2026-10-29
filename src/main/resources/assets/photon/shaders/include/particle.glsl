@@ -30,6 +30,9 @@ uniform samplerBuffer PhotonCustomData;
 // additional-data attributes a hand-written shader declares are numbered against.
 layout(location = 0) in vec3 photonModelRawPosition; // geometry stream
 uniform vec3 PhotonModelPivot;
+// A sorted draw may submit a single run from a later instance. gl_InstanceID
+// starts at zero for every draw, even with an OpenGL base-instance draw.
+uniform int PhotonInstanceBase;
 // Photon 26.2 exposes the pivoted model position to custom shaders. The Forge
 // geometry stream stays unmodified so external dynamic buffers remain usable.
 #define aPos (photonModelRawPosition + PhotonModelPivot)
@@ -191,7 +194,11 @@ uniform int PhotonVertsPerParticle;
 #ifdef PHOTON_CPU_DATA
 #define PHOTON_RECORD_INDEX (gl_VertexID / max(PhotonVertsPerParticle, 1))
 #else
+#ifdef PARTICLE_MODEL_INSTANCE
+#define PHOTON_RECORD_INDEX (gl_InstanceID + PhotonInstanceBase)
+#else
 #define PHOTON_RECORD_INDEX gl_InstanceID
+#endif
 #endif
 
 /**
@@ -309,7 +316,7 @@ ParticleData getParticleData() {
     // was baked against
     // ⚠️ fetched inline rather than through photon_data_random()/photon_data_t(), which are declared
     // further down this file than getParticleData — slot 0 xy, LOCKSTEP with those accessors
-    vec4 photonVatData = texelFetch(PhotonData, gl_InstanceID * PHOTON_DATA_TEXELS);
+    vec4 photonVatData = texelFetch(PhotonData, PHOTON_RECORD_INDEX * PHOTON_DATA_TEXELS);
     float photonVatRaw = PhotonVatParams.x
             + photonVatData.x * PhotonVatParams.y
             + photonVatData.y * PhotonVatParams.z;
