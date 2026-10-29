@@ -36,6 +36,7 @@ public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
     private static boolean smokeCpuTrailLogged;
     private static boolean smokeAraPixelsLogged;
+    private static boolean smokeSortedModelPixelsLogged;
     private static boolean smokeWritebackLogged;
     private static byte[] smokeBeforeFrame;
     private static int smokeX, smokeY, smokeWidth, smokeHeight;
@@ -459,6 +460,13 @@ public class RenderPassPipeline {
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle trail
                                 && trail.getPoints().size() >= 3);
                 var araBefore = inspectAra ? smokeReadCurrentViewport() : null;
+                boolean inspectSortedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeSortedModelPixelsLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.size() >= 2
+                        && particleQueue.stream().anyMatch(p -> p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
+                        && tile.getRuntime().renderer.isUseGPUInstance()
+                        && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Model
+                        && tile.getRuntime().renderer.getVertexSortingMode() == com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
+                var sortedBefore = inspectSortedModel ? smokeReadCurrentViewport() : null;
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeX = GlStateManager.Viewport.x();
                     smokeY = GlStateManager.Viewport.y();
@@ -467,6 +475,18 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (sortedBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        if (sortedBefore[i] != after[i] || sortedBefore[i + 1] != after[i + 1]
+                                || sortedBefore[i + 2] != after[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeSortedModelPixelsLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-pixels-smoke] sorted GPU models changed {} pixels", changed);
+                    }
+                }
                 if (inspectAra && araBefore != null) {
                     var araAfter = smokeReadCurrentViewport();
                     int changed = 0;

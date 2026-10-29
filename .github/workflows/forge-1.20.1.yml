@@ -112,6 +112,7 @@ jobs:
           grep -Fq '[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[model-pivot-smoke] custom model shader received nonzero runtime pivot' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-smoke] drew' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-model-sorting-pixels-smoke] sorted GPU models changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-billboard-uv-smoke] restored the default camera-facing UV flip' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require a moving GPU trail smoke result
