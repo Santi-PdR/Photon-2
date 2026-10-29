@@ -114,6 +114,7 @@ jobs:
           grep -Fq '[model-pivot-smoke] custom model shader received nonzero runtime pivot' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-smoke] drew' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-pixels-smoke] sorted GPU models changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-color-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[dynamic-empty-draw-smoke] no provider callback for an empty model queue' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-billboard-uv-smoke] restored the default camera-facing UV flip' "$RUNNER_TEMP/photon-client.log"
 

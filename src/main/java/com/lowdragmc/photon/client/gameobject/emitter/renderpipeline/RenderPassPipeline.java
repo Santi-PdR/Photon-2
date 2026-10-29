@@ -37,6 +37,7 @@ public class RenderPassPipeline {
     private static boolean smokeCpuTrailLogged;
     private static boolean smokeAraPixelsLogged;
     private static boolean smokeSortedModelPixelsLogged;
+    private static boolean smokeSceneColorLogged;
     private static boolean smokeWritebackLogged;
     private static byte[] smokeBeforeFrame;
     private static int smokeX, smokeY, smokeWidth, smokeHeight;
@@ -467,6 +468,9 @@ public class RenderPassPipeline {
                         && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Model
                         && tile.getRuntime().renderer.getVertexSortingMode() == com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
                 var sortedBefore = inspectSortedModel ? smokeReadCurrentViewport() : null;
+                if (inspectSortedModel && !smokeSceneColorLogged && irisTarget == null && !lateLayer) {
+                    smokeCompareSceneColor(sortedBefore);
+                }
                 if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeRenderLogged) {
                     smokeX = GlStateManager.Viewport.x();
                     smokeY = GlStateManager.Viewport.y();
@@ -537,6 +541,42 @@ public class RenderPassPipeline {
         byte[] result = new byte[data.remaining()];
         data.get(result);
         return result;
+    }
+
+    /** Verify that scene-sampling shaders see the actual editor viewport, not a black/stale target. */
+    private void smokeCompareSceneColor(byte[] before) {
+        var sampler = getSceneSamplers();
+        int frameWidth = framebufferWidth(), frameHeight = framebufferHeight();
+        int x = GlStateManager.Viewport.x(), y = GlStateManager.Viewport.y();
+        int width = GlStateManager.Viewport.width(), height = GlStateManager.Viewport.height();
+        var pixels = org.lwjgl.BufferUtils.createByteBuffer(Math.multiplyExact(Math.multiplyExact(frameWidth, frameHeight), 4));
+        int oldTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, sampler.colorTexture());
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, pixels);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, oldTexture);
+        }
+        int compared = 0, mismatch = 0, minimum = 255, maximum = 0;
+        for (int py = 0; py < height; py += 4) {
+            for (int px = 0; px < width; px += 4) {
+                int source = (py * width + px) * 4;
+                int copy = ((py + y) * frameWidth + px + x) * 4;
+                for (int channel = 0; channel < 3; channel++) {
+                    int a = Byte.toUnsignedInt(before[source + channel]);
+                    int b = Byte.toUnsignedInt(pixels.get(copy + channel));
+                    if (Math.abs(a - b) > 2) mismatch++;
+                    minimum = Math.min(minimum, a);
+                    maximum = Math.max(maximum, a);
+                    compared++;
+                }
+            }
+        }
+        if (maximum - minimum < 8 || mismatch > compared / 100)
+            throw new IllegalStateException("Scene sampler differs from the editor framebuffer: mismatches="
+                    + mismatch + "/" + compared + ", range=" + minimum + ".." + maximum);
+        smokeSceneColorLogged = true;
+        com.lowdragmc.photon.Photon.LOGGER.info("[scene-color-copy-smoke] copied {} viewport color components for scene shaders", compared);
     }
 
     private static byte[] smokeReadCurrentViewport() {
