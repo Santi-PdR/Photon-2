@@ -649,6 +649,8 @@ public final class PhotonFXEditorSmokeTest {
         araTrail.config.setLooping(false);
         araTrail.config.time = 10f;
         araTrail.config.minDistance = 0.02f;
+        araTrail.config.thickness = 0.5f;
+        araTrail.config.renderer.getMaterials().get(0).setCull(false).setDepthTest(false);
         araTrail.transform().localPosition(new org.joml.Vector3f(-2.5f, 3, 0));
         source.getFx().getFxData().objects().add(araTrail);
 
