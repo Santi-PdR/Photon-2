@@ -506,6 +506,15 @@ public final class PhotonFXEditorSmokeTest {
                     Math.abs(quadGeometry[vertex * 6 + 1] - expectedXY[i * 2 + 1]) > 0.0001f)
                 throw new IllegalStateException("OBJ quad diagonal or vertex order diverged at vertex " + i);
         }
+        // The shipped shield shader changes displacement at gl_VertexID 255.
+        // Exercise that boundary, not only the first pair of triangles.
+        var manyFaces = new StringBuilder("v 0 0 0\nv 1 0 0\nv 0 1 0\n");
+        for (int i = 0; i < 65; i++) manyFaces.append("f 1 2 3\n");
+        var idBoundaryMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
+                new java.io.ByteArrayInputStream(manyFaces.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
+        if (idBoundaryMesh.vertexCount() != 260 || idBoundaryMesh.indices()[63 * 3 + 2] != 254 ||
+                idBoundaryMesh.indices()[64 * 3] != 256)
+            throw new IllegalStateException("OBJ GPU vertex IDs crossed the shield shader boundary incorrectly");
         Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
         var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
                 0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
