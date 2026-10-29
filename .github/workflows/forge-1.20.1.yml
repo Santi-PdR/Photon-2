@@ -112,6 +112,10 @@ jobs:
         shell: bash
         run: grep -Fq '[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require a moving AraTrail smoke result
+        shell: bash
+        run: grep -Fq '[ara-trail-points-smoke] moving AraTrail accumulated' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require legacy variant uniform restoration
         shell: bash
         run: grep -Fq '[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers' "$RUNNER_TEMP/photon-client.log"

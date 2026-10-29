@@ -55,6 +55,7 @@ public final class PhotonFXEditorSmokeTest {
     private static Screen previousScreen;
     private static Path projectFile;
     private static TrailEmitter smokeTrail;
+    private static com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter smokeAraTrail;
     private static TrailEmitter smokeCpuTrail;
     private static CustomShaderMaterial smokeScreenShader;
 
@@ -271,6 +272,7 @@ public final class PhotonFXEditorSmokeTest {
                 float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
                 smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
                 smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
+                smokeAraTrail.transform().localPosition(new org.joml.Vector3f(x, 3, z));
             }
             if (!started) {
                 started = true;
@@ -288,6 +290,12 @@ public final class PhotonFXEditorSmokeTest {
                 if (smokeCpuTrail.getParticleAmount() != 1 || cpuTrailParticle.getTails().size() < 3) {
                     throw new IllegalStateException("Moving CPU trail did not accumulate renderable segments");
                 }
+                Field araParticleField = smokeAraTrail.getClass().getDeclaredField("trailParticle");
+                araParticleField.setAccessible(true);
+                var araParticle = (com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle) araParticleField.get(smokeAraTrail);
+                if (araParticle.getPoints().size() < 3)
+                    throw new IllegalStateException("Moving AraTrail did not accumulate renderable points");
+                Photon.LOGGER.info("[ara-trail-points-smoke] moving AraTrail accumulated {} points", araParticle.getPoints().size());
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
                 if (live != 3) throw new IllegalStateException("Expected legacy model, tornado-style OBJ shader model, and CPU-billboard particles, got " + live);
@@ -636,6 +644,14 @@ public final class PhotonFXEditorSmokeTest {
         billboard.config.emission.getBursts().add(billboardBurst);
         source.getFx().getFxData().objects().add(billboard);
 
+        var araTrail = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        araTrail.config.setDuration(150);
+        araTrail.config.setLooping(false);
+        araTrail.config.time = 10f;
+        araTrail.config.minDistance = 0.02f;
+        araTrail.transform().localPosition(new org.joml.Vector3f(-2.5f, 3, 0));
+        source.getFx().getFxData().objects().add(araTrail);
+
         var trail = new TrailEmitter();
         trail.config.setDuration(150);
         trail.config.setLooping(false);
@@ -845,6 +861,10 @@ public final class PhotonFXEditorSmokeTest {
         smokeCpuTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
                 .map(TrailEmitter.class::cast).filter(t -> !t.config.renderer.isUseGPUInstance()).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the CPU trail"));
+        smokeAraTrail = editor.runtime.objects.values().stream()
+                .filter(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::isInstance)
+                .map(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::cast).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the AraTrail"));
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
     }
 
