@@ -28,7 +28,11 @@ uniform samplerBuffer PhotonCustomData;
 // that split — a VAO can source each attribute from a different buffer — so the per-instance attributes
 // stay at 4..8 and PhotonGpuChannels.Kind.TILE_MODEL's channel base stays at 9, which is what the
 // additional-data attributes a hand-written shader declares are numbered against.
-layout(location = 0) in vec3 aPos;     // geometry stream
+layout(location = 0) in vec3 photonModelRawPosition; // geometry stream
+uniform vec3 PhotonModelPivot;
+// Photon 26.2 exposes the pivoted model position to custom shaders. The Forge
+// geometry stream stays unmodified so external dynamic buffers remain usable.
+#define aPos (photonModelRawPosition + PhotonModelPivot)
 // attribute stream: xy = uv, z = per-face shade brightness. Brightness rides here rather than taking a
 // location of its own for the reason above — 4..8 and 9+ are not ours to shift.
 // Preserve Photon 26.2's shader inputs while packing brightness alongside UV in the GL buffer.
@@ -62,11 +66,14 @@ uniform ivec2 PhotonVatSize;   // x = vertices a frame, y = frames (intervals; t
 uniform vec4 PhotonVatParams;
 #endif
 
-layout(location = 4) in vec3 iPos;
+layout(location = 4) in vec3 photonModelInstancePosition;
 layout(location = 5) in vec3 iScale;
 layout(location = 6) in vec4 iRot;
 layout(location = 7) in vec4 iColor;
 layout(location = 8) in int iLight;
+// The uploader folds the pivot into the position for shaders that do not use
+// this include. Undo that shift here to expose the original iPos contract.
+#define iPos (photonModelInstancePosition - quatToMat(iRot) * (PhotonModelPivot * iScale))
 
 // additional GPU data: pulled from PhotonData by gl_InstanceID; custom shaders declare their own
 // legacy channel attributes at location 9+. Record = 5 texels — MIRRORED FROM PhotonGpuChannels.
@@ -315,11 +322,11 @@ ParticleData getParticleData() {
         photonVatBlend = step(1.0, photonVatBlend);
     }
     vec4 photonVatTexel = texelFetch(PhotonVat, photonVatFrame * PhotonVatSize.x + gl_VertexID);
-    vec3 photonPos = photonVatTexel.xyz;
+    vec3 photonPos = photonVatTexel.xyz + PhotonModelPivot;
     vec3 photonNormal = photon_unpack_normal(photonVatTexel.w);
     if (photonVatBlend > 0.0) {
         vec4 photonVatTexelNext = texelFetch(PhotonVat, (photonVatFrame + 1) * PhotonVatSize.x + gl_VertexID);
-        photonPos = mix(photonPos, photonVatTexelNext.xyz, photonVatBlend);
+        photonPos = mix(photonPos, photonVatTexelNext.xyz + PhotonModelPivot, photonVatBlend);
         // the packed normals cannot be mixed as scalars; unpack both, then renormalise the blend
         photonNormal = normalize(mix(photonNormal,
                 photon_unpack_normal(photonVatTexelNext.w), photonVatBlend));
@@ -328,8 +335,7 @@ ParticleData getParticleData() {
     vec3 photonPos = aPos;
     vec3 photonNormal = aNormal.xyz;
 #endif
-    // aPos is already in centered model space (PhotonMesh convention); the model pivot is folded into
-    // iPos on the CPU (TileParticleRenderer.uploadInstances), so the mesh buffer holds only the mesh
+    // aPos and iPos reproduce the original custom-shader interface, including the pivot.
     data.Position = (rotMat * (photonPos * iScale)) + iPos;
     data.UV = aUV.xy;
     // vanilla UV2 order is (block, sky); java packs sky<<20 | block<<4

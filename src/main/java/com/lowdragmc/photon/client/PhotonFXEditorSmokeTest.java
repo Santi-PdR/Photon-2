@@ -114,6 +114,7 @@ public final class PhotonFXEditorSmokeTest {
 #ifdef PARTICLE_MODEL_INSTANCE
                         data.UV = aUV;
                         data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
+                        data.UV += 0.001 * (aPos.xy + iPos.xy);
 #endif
                         particleT = T;
                         tornadoUv = data.UV;
@@ -304,6 +305,14 @@ public final class PhotonFXEditorSmokeTest {
                 if (screenUniform == null || screenUniform.getFloatBuffer().get(0) != target.width ||
                         screenUniform.getFloatBuffer().get(1) != target.height)
                     throw new IllegalStateException("ScreenSize did not match the scene framebuffer");
+                var modelShader = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE);
+                int pivotLocation = org.lwjgl.opengl.GL20.glGetUniformLocation(modelShader.getId(), "PhotonModelPivot");
+                if (pivotLocation < 0) throw new IllegalStateException("Model shader did not expose the pivot uniform");
+                float[] actualPivot = new float[3];
+                org.lwjgl.opengl.GL20.glGetUniformfv(modelShader.getId(), pivotLocation, actualPivot);
+                if (Math.abs(actualPivot[0] - 0.125f) > 0.0001f || Math.abs(actualPivot[1] - 0.25f) > 0.0001f)
+                    throw new IllegalStateException("Model shader did not receive the runtime pivot");
+                Photon.LOGGER.info("[model-pivot-smoke] custom model shader received nonzero runtime pivot");
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
                 Photon.LOGGER.info("[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail with {} live segments", trailParticle.getTails().size());
@@ -641,6 +650,7 @@ public final class PhotonFXEditorSmokeTest {
         tornadoModel.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
         tornadoModel.config.renderer.setModel(new MeshData(new JsonModelSource(externalLocation)));
         tornadoModel.config.renderer.setUseGPUInstance(true);
+        tornadoModel.config.renderer.setModelPivot(new org.joml.Vector3f(0.125f, 0.25f, 0));
         tornadoModel.config.renderer.getMaterials().clear();
         var tornadoShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
         tornadoShader.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());

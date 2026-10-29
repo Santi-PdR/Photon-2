@@ -77,6 +77,13 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
      */
     @Override
     protected void bindExtraBuffers(ShaderInstance shader) {
+        if (renderer.getRenderMode() == ParticleRendererSetting.Mode.Model) {
+            int pivotLocation = glGetUniformLocation(shader.getId(), "PhotonModelPivot");
+            if (pivotLocation >= 0) {
+                var pivot = renderer.getModelPivot();
+                glUniform3f(pivotLocation, pivot.x, pivot.y, pivot.z);
+            }
+        }
         var animation = vertexAnimation();
         if (animation == null) return;
         int texture = animation.texture();
