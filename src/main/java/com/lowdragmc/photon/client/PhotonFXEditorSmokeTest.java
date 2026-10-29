@@ -563,6 +563,23 @@ public final class PhotonFXEditorSmokeTest {
         if (Math.abs(randomLoaded.get(0.5f, () -> 0f) - 0.2f) > 0.0001f ||
                 Math.abs(randomLoaded.get(0.5f, () -> 1f) - 0.8f) > 0.0001f)
             throw new IllegalStateException("Random shader curves changed on reload: " + randomSaved);
+        // Legacy tornado materials use normalized multi-segment curves even when their bounds are zero.
+        var authoredCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve(
+                0, 0, 0, 0, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.2f, 0.1f, 0.2f, 0.4f, 0.4f, 0.5f, 0.4f,
+                0.5f, 0.4f, 0.6f, 0.4f, 0.9f, 0.9f, 1, 0.9f));
+        var savedCurves = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        savedCurves.addCurve(authoredCurve);
+        var restoredCurves = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        restoredCurves.deserializeNBT(provider, savedCurves.serializeNBT(provider));
+        var pixels = restoredCurves.getCurveTexture().getPixels();
+        int first = pixels.getPixelRGBA(0, 0) & 255;
+        int last = pixels.getPixelRGBA(7, 0) & 255;
+        if (first != 51 || last != 229)
+            throw new IllegalStateException("Legacy multi-segment shader curve changed while loading: " + first + ", " + last);
+        savedCurves.close();
+        restoredCurves.close();
+        Photon.LOGGER.info("[legacy-tornado-curve-smoke] restored and uploaded a multi-segment dissolve curve");
         var firstCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
         var secondCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
         secondCurve.getCurves().getSegments().get(0).p0.y = 0.9f;
