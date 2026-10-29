@@ -68,6 +68,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
     private long uploadedSortingRevision = Long.MIN_VALUE;
     private boolean sortingPending;
     private static boolean sortingSmokeLogged;
+    private static boolean sceneSamplerSmokeLogged;
 
     public ParticleInstanceRenderer(ParticleConfig config, ParticleRendererSetting.Runtime renderer) {
         this.config = config;
@@ -421,6 +422,24 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         boolean inspectBase = Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingSmokeLogged && count >= 2;
         boolean sawLaterInstance = false;
         try {
+            if (inspectBase && !sceneSamplerSmokeLogged && pipeline != null) {
+                int location = glGetUniformLocation(shader.getId(), "SamplerSceneColor");
+                if (location < 0) throw new IllegalStateException("Scene-sampling test shader lost its sampler");
+                int unit = glGetUniformi(shader.getId(), location);
+                int active = glGetInteger(org.lwjgl.opengl.GL13.GL_ACTIVE_TEXTURE);
+                int bound;
+                try {
+                    org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0 + unit);
+                    bound = glGetInteger(GL_TEXTURE_BINDING_2D);
+                } finally {
+                    org.lwjgl.opengl.GL13.glActiveTexture(active);
+                }
+                int expected = pipeline.getSceneSamplers().colorTexture();
+                if (bound <= 0 || bound != expected)
+                    throw new IllegalStateException("Scene shader sampled texture " + bound + " instead of " + expected);
+                sceneSamplerSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[scene-color-binding-smoke] custom shader sampled the current scene color texture");
+            }
             if (resource().sortedModelEbo == -1) {
                 resource().sortedModelEbo = glGenBuffers();
                 uploadedSortingRevision = Long.MIN_VALUE;
