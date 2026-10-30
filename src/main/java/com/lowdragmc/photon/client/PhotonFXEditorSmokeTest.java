@@ -375,12 +375,46 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[real-scan-project-smoke] opened original scan project in editor");
             } else if (ticks == 160) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realScanSmoke");
+                var realTornadoFile = new File("./ldlib2/assets/tornado.fxproj");
+                var realTornado = (FXProject) FXProject.TYPE.loadProjectFromFile(realTornadoFile);
+                editor.loadProject(realTornado, realTornadoFile);
+                if (editor.getCurrentProject() != realTornado || editor.runtime == null)
+                    throw new IllegalStateException("Real tornado project did not initialize in the editor");
+                System.setProperty("photon.realTornadoSmoke", "true");
+            } else if (ticks == 190) {
+                var modelEmitters = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).filter(e -> e.config.renderer.getRenderMode() == ParticleRendererSetting.Mode.Model)
+                        .toList();
+                if (modelEmitters.size() != 4) throw new IllegalStateException("Expected four real tornado model emitters: " + modelEmitters.size());
+                long tChannel = PhotonGpuChannels.CHANNELS.stream().filter(channel -> channel.id().equals("addition_gpu_data.t"))
+                        .findFirst().orElseThrow().bit();
+                for (var emitter : modelEmitters) {
+                    var source = emitter.config.renderer.getModelSource();
+                    var slot = emitter.config.renderer.getMaterials().get(0).getMaterial();
+                    if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                        slot = reference.getRawMaterial();
+                    if (!(source instanceof JsonModelSource model) || model.getMesh() == null || model.getMesh().vertexCount() < 3
+                            || !(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                            || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "tornado_body"))
+                            || shader.curveTexture.getCurveTexture() == null || !emitter.config.renderer.isUseGPUInstance()
+                            || !emitter.config.additionalGPUDataSetting.isEnable()
+                            || (emitter.config.additionalGPUDataSetting.userMask() & tChannel) == 0
+                            || emitter.getParticleAmount() == 0)
+                        throw new IllegalStateException("Real tornado model, material, curve, channel or particle failed to load");
+                }
+                Photon.LOGGER.info("[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders");
+            } else if (ticks == 210) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
-                            Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString());
+                            Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString());
                             minecraft.execute(minecraft::stop);
                         });
                 finished = true;
                 editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realTornadoSmoke");
                 minecraft.setScreen(previousScreen);
             }
         } catch (Throwable failure) {

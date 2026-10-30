@@ -74,6 +74,7 @@ jobs:
           rm -f run/saves/PhotonCI/session.lock
           mkdir -p run/ldlib2/assets
           cp -a ci-fixtures/real-scan/ldlib2/assets/. run/ldlib2/assets/
+          cp -a ci-fixtures/real-tornado/ldlib2/assets/. run/ldlib2/assets/
 
       - name: Install virtual display and software OpenGL
         run: |
@@ -112,6 +113,8 @@ jobs:
           grep -Fq '[culled-gpu-billboard-smoke] camera-facing billboard changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-scan-project-smoke] opened original scan project in editor' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-scan-pixels-smoke] original scan project changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-tornado-pixels-smoke] original tornado shader changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-tornado-depth-smoke] restored authored depth and culling state' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-tornado-curve-smoke] restored and uploaded a multi-segment dissolve curve' "$RUNNER_TEMP/photon-client.log"
