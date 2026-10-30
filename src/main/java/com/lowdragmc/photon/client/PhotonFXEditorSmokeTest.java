@@ -342,7 +342,7 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[ara-trail-points-smoke] moving AraTrail accumulated {} points", araParticle.getPoints().size());
                 int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
-                if (live != 4) throw new IllegalStateException("Expected legacy model, two tornado-style GPU model particles, and a CPU-billboard particle, got " + live);
+                if (live != 5) throw new IllegalStateException("Expected legacy model, two tornado-style GPU model particles, and CPU/GPU billboard particles, got " + live);
                 var screenUniform = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE).getUniform("ScreenSize");
                 var target = minecraft.getMainRenderTarget();
                 if (screenUniform == null || screenUniform.getFloatBuffer().get(0) != target.width ||
@@ -909,6 +909,28 @@ public final class PhotonFXEditorSmokeTest {
         cpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f, 2, 0));
         source.getFx().getFxData().objects().add(cpuTrail);
 
+        var gpuBillboard = new ParticleEmitter();
+        gpuBillboard.transform().localPosition(new org.joml.Vector3f(2, 3, 0));
+        gpuBillboard.config.setLooping(false);
+        gpuBillboard.config.setStartLifetime(NumberFunction.constant(70));
+        gpuBillboard.config.setStartSpeed(NumberFunction.constant(0));
+        gpuBillboard.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0.8f, 0.8f, 0.8f));
+        gpuBillboard.config.emission.setEmissionRate(NumberFunction.constant(0));
+        gpuBillboard.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Billboard);
+        gpuBillboard.config.renderer.setUseGPUInstance(true);
+        gpuBillboard.config.renderer.getMaterials().clear();
+        var gpuBillboardMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        gpuBillboardMaterial.setCull(true);
+        gpuBillboardMaterial.setDepthTest(false);
+        gpuBillboard.config.renderer.getMaterials().add(gpuBillboardMaterial);
+        var gpuBillboardBurst = new EmissionSetting.Burst();
+        gpuBillboardBurst.time = 0;
+        gpuBillboardBurst.cycles = 1;
+        gpuBillboardBurst.setCount(NumberFunction.constant(1));
+        gpuBillboardBurst.interval = 4;
+        gpuBillboard.config.emission.getBursts().add(gpuBillboardBurst);
+        source.getFx().getFxData().objects().add(gpuBillboard);
+
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
         var encoded = NbtIo.read(projectFile.toFile());
@@ -954,7 +976,7 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
 
         var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
-        if (loaded.getFx().getFxData().objects().size() != 6
+        if (loaded.getFx().getFxData().objects().size() != 7
                 || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
                 || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
                 || restored.config.renderer.getMaterials().size() != 1
@@ -966,6 +988,7 @@ public final class PhotonFXEditorSmokeTest {
                 || !(loaded.getFx().getFxData().objects().get(3) instanceof com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter)
                 || !(loaded.getFx().getFxData().objects().get(4) instanceof TrailEmitter)
                 || !(loaded.getFx().getFxData().objects().get(5) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(6) instanceof ParticleEmitter)
                 || restored.config.emission.getBursts().get(0).cycles != 1) {
             throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
         }
