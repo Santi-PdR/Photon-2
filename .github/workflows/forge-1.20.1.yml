@@ -111,6 +111,7 @@ jobs:
           grep -Fq '[legacy-tornado-curve-smoke] restored and uploaded a multi-segment dissolve curve' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-scan-depth-smoke] restored disabled scan depth settings' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-shield-state-smoke] restored two-sided shield depth settings' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[shield-two-sided-smoke] front and back faces contributed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-obj-json-smoke] preserved centered model position and flipped V' "$RUNNER_TEMP/photon-client.log"

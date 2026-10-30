@@ -36,6 +36,7 @@ public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
     private static boolean smokeCpuTrailLogged;
     private static boolean smokeCulledBillboardLogged;
+    private static boolean smokeTwoSidedModelLogged;
     private static boolean smokeAraPixelsLogged;
     private static boolean smokeSortedModelPixelsLogged;
     private static boolean smokeSceneColorLogged;
@@ -465,6 +466,14 @@ public class RenderPassPipeline {
                                 && !tile.getRuntime().renderer.getMaterials().isEmpty()
                                 && tile.getRuntime().renderer.getMaterials().stream().allMatch(com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting::isEffectiveCull));
                 var billboardBefore = inspectBillboard ? smokeReadCurrentViewport() : null;
+                boolean inspectTwoSidedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeTwoSidedModelLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().allMatch(p ->
+                        p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
+                                && !tile.getRuntime().renderer.isUseGPUInstance()
+                                && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Model
+                                && tile.getRuntime().renderer.getMaterials().size() == 1
+                                && !tile.getRuntime().renderer.getMaterials().get(0).isEffectiveCull());
+                var twoSidedBefore = inspectTwoSidedModel ? smokeReadCurrentViewport() : null;
                 boolean inspectAra = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeAraPixelsLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle trail
@@ -488,6 +497,20 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (twoSidedBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int bothSides = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        int red = Byte.toUnsignedInt(after[i]), green = Byte.toUnsignedInt(after[i + 1]);
+                        int blue = Byte.toUnsignedInt(after[i + 2]);
+                        if ((twoSidedBefore[i] != after[i] || twoSidedBefore[i + 1] != after[i + 1])
+                                && red > blue + 20 && green > blue + 10) bothSides++;
+                    }
+                    if (bothSides > 0) {
+                        smokeTwoSidedModelLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[shield-two-sided-smoke] front and back faces contributed to {} pixels", bothSides);
+                    }
+                }
                 if (billboardBefore != null) {
                     var after = smokeReadCurrentViewport();
                     int changed = 0;

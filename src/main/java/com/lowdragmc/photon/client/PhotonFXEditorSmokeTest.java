@@ -219,6 +219,22 @@ public final class PhotonFXEditorSmokeTest {
                         fragColor = vec4(sampleColor * color.rgb * color.a, 1.0);
                     }
                     """);
+            // A closed CPU model with different front/back colours exercises the same
+            // gl_FrontFacing and transparent sorting contract as the legacy shield.
+            Files.writeString(shaderDir.resolve("shield_cpu_smoke.fsh"), """
+                    #version 150
+                    out vec4 fragColor;
+                    void main() {
+                        fragColor = gl_FrontFacing ? vec4(1.0, 0.0, 0.0, 0.5)
+                                                  : vec4(0.0, 1.0, 0.0, 0.5);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("fragment", "photon:ci/shield_cpu_smoke");
+                Files.writeString(shaderDir.resolve("shield_cpu_smoke.json"), json.toString());
+            }
             try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
                 var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
                         java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
@@ -709,9 +725,10 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.emission.setEmissionRate(NumberFunction.constant(0));
         emitter.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
         emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
-        emitter.config.renderer.setUseGPUInstance(true);
+        emitter.config.renderer.setUseGPUInstance(false);
+        emitter.config.renderer.setVertexSortingMode(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
         emitter.config.renderer.getMaterials().clear();
-        var visibleMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        var visibleMaterial = new MaterialSetting(new CustomShaderMaterial(new ResourceLocation("photon", "ci/shield_cpu_smoke")));
         visibleMaterial.setCull(false);
         visibleMaterial.setDepthTest(false);
         emitter.config.renderer.getMaterials().add(visibleMaterial);
