@@ -105,6 +105,11 @@ public class TileParticleRenderer {
     }
 
     /** ⚠️ MIRRORS the primitive walk in {@link #renderParticle}: four vertices per emitted primitive. */
+    /** Match Photon 26.2 when a particle has not yet received a valid light sample. */
+    public static int validParticleLight(int light) {
+        return light < 0 ? 0xF000F0 : light;
+    }
+
     private static int primitiveCount(PhotonMesh mesh) {
         int primitives = 0;
         int triangle = 0;
@@ -153,7 +158,7 @@ public class TileParticleRenderer {
         var b = color.z();
         var a = color.w();
 
-        var light = particle.getRealLight(partialTicks);
+        var light = validParticleLight(particle.getRealLight(partialTicks));
 
         var rotation = particle.getRealRotation(partialTicks);
         var renderMode = renderer.getRenderMode();
@@ -390,7 +395,7 @@ public class TileParticleRenderer {
             var rotation = particle.getRealRotation(partialTicks);
             var size = particle.getRealSize(partialTicks);
             var scale = particle.getSpaceScale();
-            var light = particle.getRealLight(partialTicks);
+            var light = validParticleLight(particle.getRealLight(partialTicks));
             if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeInstanceLogged) {
                 smokeInstanceLogged = true;
                 var clip = new Vector4f(x, y, z, 1f).mul(com.mojang.blaze3d.systems.RenderSystem.getModelViewMatrix())

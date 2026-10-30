@@ -422,6 +422,11 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(legacyCurve.getCurves().getCurveY(1f) - 0.9f) > 0.0001f)
             throw new IllegalStateException("Legacy multi-segment shader curve was not restored");
         Photon.LOGGER.info("[legacy-multisegment-curve-smoke] restored both legacy shader curve segments");
+        if (com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(-1) != 0xF000F0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(0) != 0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(0xA000B0) != 0xA000B0)
+            throw new IllegalStateException("Uninitialized particle light did not use the original fullbright fallback");
+        Photon.LOGGER.info("[particle-light-fallback-smoke] preserved valid light and restored uninitialized fullbright");
         // The sampled scene depth is addressed in framebuffer coordinates, but
         // the editor projection belongs to its smaller, offset viewport.
         var corrected = new org.joml.Matrix4f();
