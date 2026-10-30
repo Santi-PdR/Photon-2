@@ -218,12 +218,12 @@ public class TileParticleRenderer {
             }
 
             var rawVertexes = new Vector3f[]{
-                    new Vector3f(1.0F, -1.0F, 0.0F),
-                    new Vector3f(1.0F, 1.0F, 0.0F),
-                    new Vector3f(-1.0F, 1.0F, 0.0F),
                     new Vector3f(-1.0F, -1.0F, 0.0F),
+                    new Vector3f(-1.0F, 1.0F, 0.0F),
+                    new Vector3f(1.0F, 1.0F, 0.0F),
+                    new Vector3f(1.0F, -1.0F, 0.0F),
             };
-            var normal = new Vector3f(0, 0, 1);
+            var normal = new Vector3f(0, 0, -1);
 
             for (var i = 0; i < 4; ++i) {
                 var vertex = rawVertexes[i];
@@ -246,10 +246,10 @@ public class TileParticleRenderer {
                 u1 = swap;
             }
 
-            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z()).color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z()).color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z()).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z()).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
         }
     }
 
