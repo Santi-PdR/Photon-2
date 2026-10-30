@@ -57,6 +57,7 @@ public final class PhotonFXEditorSmokeTest {
     private static TrailEmitter smokeTrail;
     private static com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter smokeAraTrail;
     private static TrailEmitter smokeCpuTrail;
+    private static TrailEmitter realArrowTrail;
     private static CustomShaderMaterial smokeScreenShader;
 
     private PhotonFXEditorSmokeTest() {}
@@ -318,6 +319,11 @@ public final class PhotonFXEditorSmokeTest {
                 smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
                 smokeAraTrail.transform().localPosition(new org.joml.Vector3f(x, 3, z));
             }
+            if (realArrowTrail != null) {
+                float elapsed = ticks - 260;
+                realArrowTrail.transform().localPosition(new org.joml.Vector3f(-2.5f + elapsed * 0.12f, 2,
+                        (float) Math.sin(elapsed * 0.12f) * 0.7f));
+            }
             if (!started) {
                 started = true;
                 openLegacyProject(minecraft);
@@ -408,13 +414,55 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders");
             } else if (ticks == 210) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realTornadoSmoke");
+                var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
+                var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
+                editor.loadProject(realShield, realShieldFile);
+                if (editor.getCurrentProject() != realShield || editor.runtime == null)
+                    throw new IllegalStateException("Real shield project did not initialize in the editor");
+                System.setProperty("photon.realShieldSmoke", "true");
+            } else if (ticks == 240) {
+                var shield = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
+                var source = shield.config.renderer.getModelSource();
+                var slot = shield.config.renderer.getMaterials().get(0).getMaterial();
+                if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                    slot = reference.getRawMaterial();
+                if (!(source instanceof JsonModelSource model) || model.getMesh() == null || model.getMesh().vertexCount() < 3
+                        || !(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                        || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "shield"))
+                        || shield.getParticleAmount() == 0)
+                    throw new IllegalStateException("Real shield model, shader or particle failed to load");
+                Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
+            } else if (ticks == 260) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-shield-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realShieldSmoke");
+                var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
+                var realTrail = (FXProject) FXProject.TYPE.loadProjectFromFile(realTrailFile);
+                editor.loadProject(realTrail, realTrailFile);
+                if (editor.getCurrentProject() != realTrail || editor.runtime == null)
+                    throw new IllegalStateException("Real arrow trail project did not initialize in the editor");
+                realArrowTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                        .map(TrailEmitter.class::cast).findFirst().orElseThrow();
+                System.setProperty("photon.realTrailSmoke", "true");
+            } else if (ticks == 295) {
+                if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
+                    throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
+                Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
+            } else if (ticks == 320) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
-                            Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString());
+                            Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString());
                             minecraft.execute(minecraft::stop);
                         });
                 finished = true;
+                realArrowTrail = null;
                 editor.closeCurrentProject(false, null);
-                System.clearProperty("photon.realTornadoSmoke");
+                System.clearProperty("photon.realTrailSmoke");
                 minecraft.setScreen(previousScreen);
             }
         } catch (Throwable failure) {

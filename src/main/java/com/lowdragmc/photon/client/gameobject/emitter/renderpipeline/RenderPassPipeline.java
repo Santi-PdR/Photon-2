@@ -39,6 +39,8 @@ public class RenderPassPipeline {
     private static boolean smokeCulledGpuBillboardLogged;
     private static boolean smokeRealScanLogged;
     private static boolean smokeRealTornadoLogged;
+    private static boolean smokeRealShieldLogged;
+    private static boolean smokeRealTrailLogged;
     private static boolean smokeTwoSidedModelLogged;
     private static boolean smokeAraPixelsLogged;
     private static boolean smokeSortedModelPixelsLogged;
@@ -501,6 +503,30 @@ public class RenderPassPipeline {
                     });
                 });
                 var realTornadoBefore = inspectRealTornado ? smokeReadCurrentViewport() : null;
+                boolean inspectRealShield = Boolean.getBoolean("photon.realShieldSmoke") && !smokeRealShieldLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p -> {
+                    if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile)) return false;
+                    return tile.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> {
+                        var material = slot.getMaterial();
+                        if (material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                            material = reference.getRawMaterial();
+                        return material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial shader
+                                && shader.getShaderLocation().equals(new net.minecraft.resources.ResourceLocation("ldlib2", "shield"));
+                    });
+                });
+                var realShieldBefore = inspectRealShield ? smokeReadCurrentViewport() : null;
+                boolean inspectRealTrail = Boolean.getBoolean("photon.realTrailSmoke") && !smokeRealTrailLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p -> {
+                    if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TrailParticle trail) || trail.getTails().size() < 3) return false;
+                    return trail.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> {
+                        var material = slot.getMaterial();
+                        if (material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                            material = reference.getRawMaterial();
+                        return material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial shader
+                                && shader.getShaderLocation().equals(new net.minecraft.resources.ResourceLocation("ldlib2", "fancy_trail"));
+                    });
+                });
+                var realTrailBefore = inspectRealTrail ? smokeReadCurrentViewport() : null;
                 boolean inspectTwoSidedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeTwoSidedModelLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().allMatch(p ->
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
@@ -596,6 +622,30 @@ public class RenderPassPipeline {
                     if (changed > 0) {
                         smokeRealTornadoLogged = true;
                         com.lowdragmc.photon.Photon.LOGGER.info("[real-tornado-pixels-smoke] original tornado shader changed {} pixels", changed);
+                    }
+                }
+                if (realShieldBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        if (realShieldBefore[i] != after[i] || realShieldBefore[i + 1] != after[i + 1]
+                                || realShieldBefore[i + 2] != after[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeRealShieldLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[real-shield-pixels-smoke] original shield shader changed {} pixels", changed);
+                    }
+                }
+                if (realTrailBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        if (realTrailBefore[i] != after[i] || realTrailBefore[i + 1] != after[i + 1]
+                                || realTrailBefore[i + 2] != after[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeRealTrailLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[real-arrow-trail-pixels-smoke] original moving trail changed {} pixels", changed);
                     }
                 }
                 if (sortedBefore != null && !smokeSortedModelPixelsLogged) {
