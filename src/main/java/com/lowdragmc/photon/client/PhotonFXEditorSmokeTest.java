@@ -133,6 +133,7 @@ public final class PhotonFXEditorSmokeTest {
                     #moj_import <photon:particle_utils.glsl>
                     uniform sampler2D SamplerCurve;
                     uniform sampler2D SamplerSceneColor;
+                    uniform sampler2D SamplerSceneDepth;
                     uniform vec2 ScreenSize;
                     in float particleT;
                     in vec2 tornadoUv;
@@ -144,7 +145,9 @@ public final class PhotonFXEditorSmokeTest {
                         float viewportAspect = ScreenSize.x / max(ScreenSize.y, 1.0);
                         vec3 curveColor = vec3(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8);
                         vec3 backdrop = texture(SamplerSceneColor, gl_FragCoord.xy / ScreenSize).rgb;
+                        float sceneDepth = texture(SamplerSceneDepth, gl_FragCoord.xy / ScreenSize).r;
                         curveColor += backdrop * 0.2;
+                        curveColor.b *= 0.8 + 0.2 * sceneDepth;
                         curveColor.r *= clamp(viewportAspect, 0.1, 1.0);
                         fragColor = vec4(curveColor * tornadoColor.rgb * uvPattern, tornadoColor.a);
                     }
@@ -161,6 +164,9 @@ public final class PhotonFXEditorSmokeTest {
                 var sceneSampler = new com.google.gson.JsonObject();
                 sceneSampler.addProperty("name", "SamplerSceneColor");
                 samplers.add(sceneSampler);
+                var depthSampler = new com.google.gson.JsonObject();
+                depthSampler.addProperty("name", "SamplerSceneDepth");
+                samplers.add(depthSampler);
                 json.add("samplers", samplers);
                 var uniforms = json.has("uniforms") ? json.getAsJsonArray("uniforms") : new com.google.gson.JsonArray();
                 var screenSize = new com.google.gson.JsonObject();

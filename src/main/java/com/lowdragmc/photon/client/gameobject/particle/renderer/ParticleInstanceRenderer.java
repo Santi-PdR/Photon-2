@@ -445,7 +445,21 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
                 int expected = pipeline.getSceneSamplers().colorTexture();
                 if (bound <= 0 || bound != expected)
                     throw new IllegalStateException("Scene shader sampled texture " + bound + " instead of " + expected);
+                int depthLocation = glGetUniformLocation(shader.getId(), "SamplerSceneDepth");
+                if (depthLocation < 0) throw new IllegalStateException("Scene-sampling test shader lost its depth sampler");
+                int depthUnit = glGetUniformi(shader.getId(), depthLocation);
+                int boundDepth;
+                try {
+                    org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0 + depthUnit);
+                    boundDepth = glGetInteger(GL_TEXTURE_BINDING_2D);
+                } finally {
+                    org.lwjgl.opengl.GL13.glActiveTexture(active);
+                }
+                int expectedDepth = pipeline.getSceneSamplers().depthTexture();
+                if (boundDepth <= 0 || boundDepth != expectedDepth)
+                    throw new IllegalStateException("Scene shader sampled depth " + boundDepth + " instead of " + expectedDepth);
                 sceneSamplerSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[scene-depth-binding-smoke] custom shader sampled the current scene depth texture");
                 com.lowdragmc.photon.Photon.LOGGER.info("[scene-color-binding-smoke] custom shader sampled the current scene color texture");
             }
             if (resource().sortedModelEbo == -1) {

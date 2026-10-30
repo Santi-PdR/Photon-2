@@ -120,6 +120,7 @@ jobs:
           grep -Fq '[scene-color-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[scene-depth-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[scene-color-binding-smoke] custom shader sampled the current scene color texture' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-depth-binding-smoke] custom shader sampled the current scene depth texture' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[dynamic-empty-draw-smoke] no provider callback for an empty model queue' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[legacy-billboard-uv-smoke] restored the default camera-facing UV flip' "$RUNNER_TEMP/photon-client.log"
 
