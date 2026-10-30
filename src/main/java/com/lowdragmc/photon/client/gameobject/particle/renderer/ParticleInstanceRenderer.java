@@ -289,10 +289,10 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
     private void createBillboardGeometry(InstanceResource resource) {
         float[] quadVertices = {
                 // x, y, z
-                1f, -1f, 0f,
-                1f, 1f, 0f,
-                -1f, 1f, 0f,
                 -1f, -1f, 0f,
+                -1f, 1f, 0f,
+                1f, 1f, 0f,
+                1f, -1f, 0f,
         };
         int[] quadIndices = {
                 0, 1, 2, 2, 3, 0
