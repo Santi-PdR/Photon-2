@@ -18,10 +18,13 @@ public final class PhotonShaderUtils {
         int dstAlpha = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL14.GL_BLEND_DST_ALPHA);
         int equationRgb = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL20.GL_BLEND_EQUATION_RGB);
         int equationAlpha = org.lwjgl.opengl.GL11.glGetInteger(org.lwjgl.opengl.GL20.GL_BLEND_EQUATION_ALPHA);
-        shader.apply();
-        if (enabled) RenderSystem.enableBlend(); else RenderSystem.disableBlend();
-        RenderSystem.blendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
-        org.lwjgl.opengl.GL20.glBlendEquationSeparate(equationRgb, equationAlpha);
+        try {
+            shader.apply();
+        } finally {
+            if (enabled) RenderSystem.enableBlend(); else RenderSystem.disableBlend();
+            RenderSystem.blendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+            org.lwjgl.opengl.GL20.glBlendEquationSeparate(equationRgb, equationAlpha);
+        }
     }
 
     public static void applyDefaultUniforms(ShaderInstance shader) {
