@@ -363,14 +363,25 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
             } else if (ticks == 110) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                Files.deleteIfExists(projectFile);
+                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
+                editor.loadProject(realScan, realScanFile);
+                if (editor.getCurrentProject() != realScan || editor.runtime == null)
+                    throw new IllegalStateException("Real scan project did not initialize in the editor");
+                System.setProperty("photon.realScanSmoke", "true");
+                Photon.LOGGER.info("[real-scan-project-smoke] opened original scan project in editor");
+            } else if (ticks == 160) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
-                            Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString());
+                            Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString());
                             minecraft.execute(minecraft::stop);
                         });
                 finished = true;
                 editor.closeCurrentProject(false, null);
                 minecraft.setScreen(previousScreen);
-                Files.deleteIfExists(projectFile);
             }
         } catch (Throwable failure) {
             finished = true;

@@ -1,0 +1,22 @@
+{
+    "vertex": "ldlib2:scan",
+    "fragment": "ldlib2:scan",
+    "samplers": [
+        { "name": "IceTexture" },
+        { "name": "SamplerSceneDepth" },
+        { "name": "SamplerSceneColor" },
+        { "name": "Sampler2" }
+    ],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "U_InverseViewMatrix", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "U_InverseProjectionMatrix", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "U_CameraPosition", "type": "float", "count": 3, "values": [ 0, 0, 0 ] },
+        { "name": "FogShape", "type": "int", "count": 1, "values": [ 0 ] },
+        { "name": "ScreenSize", "type": "float", "count": 2, "values": [ 1.0, 1.0 ] },
+        { "name": "GameTime", "type": "float", "count": 1, "values": [ 0 ] },
+		{ "name": "ColorHDR", "type": "float", "count": 4, "values": [ 0.3, 0.4, 0.8, 1.0 ] },
+        { "name": "Refraction", "type": "float", "count": 1, "values":  [0]}
+    ]
+}

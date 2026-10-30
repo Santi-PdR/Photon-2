@@ -37,6 +37,7 @@ public class RenderPassPipeline {
     private static boolean smokeCpuTrailLogged;
     private static boolean smokeCulledBillboardLogged;
     private static boolean smokeCulledGpuBillboardLogged;
+    private static boolean smokeRealScanLogged;
     private static boolean smokeTwoSidedModelLogged;
     private static boolean smokeAraPixelsLogged;
     private static boolean smokeSortedModelPixelsLogged;
@@ -475,6 +476,18 @@ public class RenderPassPipeline {
                                 && !tile.getRuntime().renderer.getMaterials().isEmpty()
                                 && tile.getRuntime().renderer.getMaterials().stream().allMatch(com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting::isEffectiveCull));
                 var gpuBillboardBefore = inspectGpuBillboard ? smokeReadCurrentViewport() : null;
+                boolean inspectRealScan = Boolean.getBoolean("photon.realScanSmoke") && !smokeRealScanLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p -> {
+                    if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile)) return false;
+                    return tile.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> {
+                        var material = slot.getMaterial();
+                        if (material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                            material = reference.getRawMaterial();
+                        return material instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial shader
+                                && shader.getShaderLocation().equals(new net.minecraft.resources.ResourceLocation("ldlib2", "scan"));
+                    });
+                });
+                var realScanBefore = inspectRealScan ? smokeReadCurrentViewport() : null;
                 boolean inspectTwoSidedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeTwoSidedModelLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().allMatch(p ->
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
@@ -546,6 +559,18 @@ public class RenderPassPipeline {
                     if (changed > 0) {
                         smokeCulledGpuBillboardLogged = true;
                         com.lowdragmc.photon.Photon.LOGGER.info("[culled-gpu-billboard-smoke] camera-facing billboard changed {} pixels", changed);
+                    }
+                }
+                if (realScanBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        if (realScanBefore[i] != after[i] || realScanBefore[i + 1] != after[i + 1]
+                                || realScanBefore[i + 2] != after[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeRealScanLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[real-scan-pixels-smoke] original scan project changed {} pixels", changed);
                     }
                 }
                 if (sortedBefore != null && !smokeSortedModelPixelsLogged) {
