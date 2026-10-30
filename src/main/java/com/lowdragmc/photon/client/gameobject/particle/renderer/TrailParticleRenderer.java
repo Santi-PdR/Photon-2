@@ -63,7 +63,7 @@ public class TrailParticleRenderer {
         var tails = particle.getTails();
         var rawTails = particle.getRawTails();
         var color = particle.getRealColor(partialTicks);
-        var light = particle.getRealLight(partialTicks);
+        var light = TileParticleRenderer.validParticleLight(particle.getRealLight(partialTicks));
 
         Vector3f lastNormal = null;
         Vector3f lastFaceNormal = null;
@@ -293,7 +293,7 @@ public class TrailParticleRenderer {
         var tails = particle.getTails();
         var rawTails = particle.getRawTails();
         var color = particle.getRealColor(partialTicks);
-        scratchLight = particle.getRealLight(partialTicks);
+        scratchLight = TileParticleRenderer.validParticleLight(particle.getRealLight(partialTicks));
 
         Vector3f headPos = particle.getHeadPosition(partialTicks);
         int tailSize = tails.size();

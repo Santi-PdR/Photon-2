@@ -59,7 +59,7 @@ public class BeamParticleRenderer {
         return new BeamFrame(from, end,
                 uvs.x + offset, uvs.y, uvs.z + offset, uvs.w,
                 particle.getRealWidth(partialTicks),
-                particle.getRealLight(partialTicks),
+                TileParticleRenderer.validParticleLight(particle.getRealLight(partialTicks)),
                 color.x, color.y, color.z, color.w);
     }
 
