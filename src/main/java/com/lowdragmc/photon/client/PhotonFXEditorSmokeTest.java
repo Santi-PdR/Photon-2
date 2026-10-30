@@ -727,10 +727,12 @@ public final class PhotonFXEditorSmokeTest {
         emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
         emitter.config.renderer.setUseGPUInstance(false);
         emitter.config.renderer.setVertexSortingMode(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
+        emitter.config.renderer.setModelPivot(new org.joml.Vector3f(0, 0.5f, 0));
         emitter.config.renderer.getMaterials().clear();
         var visibleMaterial = new MaterialSetting(new CustomShaderMaterial(new ResourceLocation("photon", "ci/shield_cpu_smoke")));
         visibleMaterial.setCull(false);
-        visibleMaterial.setDepthTest(false);
+        visibleMaterial.setDepthTest(true);
+        visibleMaterial.setDepthMask(false);
         emitter.config.renderer.getMaterials().add(visibleMaterial);
         var burst = new EmissionSetting.Burst();
         burst.time = 0;
@@ -960,6 +962,12 @@ public final class PhotonFXEditorSmokeTest {
                 || sphere.getMesh().vertexCount() < 3) {
             throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
         }
+        var shieldSlotLoaded = restored.config.renderer.getMaterials().get(0);
+        if (restored.config.renderer.isUseGPUInstance() ||
+                restored.config.renderer.getVertexSortingMode() != com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE ||
+                Math.abs(restored.config.renderer.getModelPivot().y - 0.5f) > 0.0001f ||
+                shieldSlotLoaded.isEffectiveCull() || !shieldSlotLoaded.isEffectiveDepthTest() || shieldSlotLoaded.isEffectiveDepthMask())
+            throw new IllegalStateException("Shield-style model settings changed while loading the project");
         var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(5);
         var restoredWidth = restoredCpuTrail.config.getWidthOverTrail().get(0.8f, () -> 0.5f).floatValue();
         if (!Float.isFinite(restoredWidth) || restoredWidth <= 0.01f) {
