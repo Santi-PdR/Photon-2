@@ -427,6 +427,13 @@ public final class PhotonFXEditorSmokeTest {
                 com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(0xA000B0) != 0xA000B0)
             throw new IllegalStateException("Uninitialized particle light did not use the original fullbright fallback");
         Photon.LOGGER.info("[particle-light-fallback-smoke] preserved valid light and restored uninitialized fullbright");
+        if (com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.partialTime(0, 0, 0) != 0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(1, 1, 2, 0.5f) ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(0, 1, Float.NaN, 0.5f) ||
+                !com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(0, 2, 2, 0.5f) ||
+                Math.abs(com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.factor(0, 2, 2, 0.5f) - 0.5f) > 0.0001f)
+            throw new IllegalStateException("Trail interpolation did not guard invalid or equal lifetimes");
+        Photon.LOGGER.info("[trail-interpolation-smoke] guarded invalid durations and equal tail lifetimes");
         // The sampled scene depth is addressed in framebuffer coordinates, but
         // the editor projection belongs to its smaller, offset viewport.
         var corrected = new org.joml.Matrix4f();
