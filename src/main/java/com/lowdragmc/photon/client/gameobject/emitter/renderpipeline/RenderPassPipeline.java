@@ -458,10 +458,12 @@ public class RenderPassPipeline {
                                 && !trail.getRuntime().renderer.isUseGPUInstance() && trail.getTails().size() >= 3);
                 var cpuTrailBefore = inspectCpuTrail ? smokeReadCurrentViewport() : null;
                 boolean inspectBillboard = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeCulledBillboardLogged
-                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().allMatch(p ->
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
                                 && !tile.getRuntime().renderer.isUseGPUInstance()
-                                && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Billboard);
+                                && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Billboard
+                                && !tile.getRuntime().renderer.getMaterials().isEmpty()
+                                && tile.getRuntime().renderer.getMaterials().stream().allMatch(com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting::isEffectiveCull));
                 var billboardBefore = inspectBillboard ? smokeReadCurrentViewport() : null;
                 boolean inspectAra = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeAraPixelsLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
