@@ -35,6 +35,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 public class RenderPassPipeline {
     private static boolean smokeRenderLogged;
     private static boolean smokeCpuTrailLogged;
+    private static boolean smokeCulledBillboardLogged;
     private static boolean smokeAraPixelsLogged;
     private static boolean smokeSortedModelPixelsLogged;
     private static boolean smokeSceneColorLogged;
@@ -456,6 +457,12 @@ public class RenderPassPipeline {
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.TrailParticle trail
                                 && !trail.getRuntime().renderer.isUseGPUInstance() && trail.getTails().size() >= 3);
                 var cpuTrailBefore = inspectCpuTrail ? smokeReadCurrentViewport() : null;
+                boolean inspectBillboard = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeCulledBillboardLogged
+                        && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
+                        p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
+                                && !tile.getRuntime().renderer.isUseGPUInstance()
+                                && tile.getRuntime().renderer.getRenderMode() == com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting.Mode.Billboard);
+                var billboardBefore = inspectBillboard ? smokeReadCurrentViewport() : null;
                 boolean inspectAra = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeAraPixelsLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle trail
@@ -479,6 +486,18 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
+                if (billboardBefore != null) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4) {
+                        if (billboardBefore[i] != after[i] || billboardBefore[i + 1] != after[i + 1]
+                                || billboardBefore[i + 2] != after[i + 2]) changed++;
+                    }
+                    if (changed > 0) {
+                        smokeCulledBillboardLogged = true;
+                        com.lowdragmc.photon.Photon.LOGGER.info("[culled-cpu-billboard-smoke] camera-facing billboard changed {} pixels", changed);
+                    }
+                }
                 if (sortedBefore != null && !smokeSortedModelPixelsLogged) {
                     var after = smokeReadCurrentViewport();
                     int changed = 0;

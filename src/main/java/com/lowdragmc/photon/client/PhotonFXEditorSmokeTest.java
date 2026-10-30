@@ -773,7 +773,7 @@ public final class PhotonFXEditorSmokeTest {
         billboard.config.renderer.setUseGPUInstance(false);
         billboard.config.renderer.getMaterials().clear();
         var billboardMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
-        billboardMaterial.setCull(false);
+        billboardMaterial.setCull(true);
         billboardMaterial.setDepthTest(false);
         billboard.config.renderer.getMaterials().add(billboardMaterial);
         var billboardBurst = new EmissionSetting.Burst();
