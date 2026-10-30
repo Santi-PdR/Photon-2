@@ -599,9 +599,12 @@ public class RenderPassPipeline {
                 depthSamples++;
             }
         }
-        if (nearest >= 0.99999f || depthMismatch > depthSamples / 100)
+        if (depthMismatch > depthSamples / 100)
             throw new IllegalStateException("Scene depth differs from the editor framebuffer: mismatches="
                     + depthMismatch + "/" + depthSamples + ", nearest=" + nearest);
+        // Early editor frames may contain only the depth clear value. Retry until actual geometry
+        // is present; the workflow requires the marker and fails if no such frame ever appears.
+        if (nearest >= 0.99999f) return;
         smokeSceneColorLogged = true;
         com.lowdragmc.photon.Photon.LOGGER.info("[scene-color-copy-smoke] copied {} viewport color components for scene shaders", compared);
         com.lowdragmc.photon.Photon.LOGGER.info("[scene-depth-copy-smoke] copied {} viewport depth samples for scene shaders", depthSamples);
