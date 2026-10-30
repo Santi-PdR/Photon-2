@@ -69,6 +69,7 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
     private boolean sortingPending;
     private static boolean sortingSmokeLogged;
     private static boolean sceneSamplerSmokeLogged;
+    private static boolean sortingFallbackSmokeLogged;
 
     public ParticleInstanceRenderer(ParticleConfig config, ParticleRendererSetting.Runtime renderer) {
         this.config = config;
@@ -407,6 +408,13 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         var pipeline = RenderPassPipeline.getCurrent();
         if (!sortingPending || !glIsEnabled(GL_BLEND) ||
                 (pipeline != null && (pipeline.isMaskSubPass() || pipeline.isWireframeSubPass()))) {
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !sortingFallbackSmokeLogged && count >= 2 &&
+                    renderer.getVertexSortingMode() != RendererSetting.SortMode.NONE) {
+                sortingFallbackSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[gpu-model-sorting-fallback-smoke] pending={} blend={} mask={} wireframe={} count={}",
+                        sortingPending, glIsEnabled(GL_BLEND), pipeline != null && pipeline.isMaskSubPass(),
+                        pipeline != null && pipeline.isWireframeSubPass(), count);
+            }
             super.drawGeometry(shader, count);
             return;
         }
