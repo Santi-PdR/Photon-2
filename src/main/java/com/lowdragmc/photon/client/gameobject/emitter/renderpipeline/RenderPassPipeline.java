@@ -575,8 +575,32 @@ public class RenderPassPipeline {
         if (maximum - minimum < 8 || mismatch > compared / 100)
             throw new IllegalStateException("Scene sampler differs from the editor framebuffer: mismatches="
                     + mismatch + "/" + compared + ", range=" + minimum + ".." + maximum);
+        var viewportDepth = org.lwjgl.BufferUtils.createFloatBuffer(Math.multiplyExact(width, height));
+        GL11.glReadPixels(x, y, width, height, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, viewportDepth);
+        var sceneDepth = org.lwjgl.BufferUtils.createFloatBuffer(Math.multiplyExact(frameWidth, frameHeight));
+        try {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, sampler.depthTexture());
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, sceneDepth);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, oldTexture);
+        }
+        int depthSamples = 0, depthMismatch = 0;
+        float nearest = 1f;
+        for (int py = 0; py < height; py += 4) {
+            for (int px = 0; px < width; px += 4) {
+                float a = viewportDepth.get(py * width + px);
+                float b = sceneDepth.get((py + y) * frameWidth + px + x);
+                if (!Float.isFinite(a) || !Float.isFinite(b) || Math.abs(a - b) > 0.00001f) depthMismatch++;
+                nearest = Math.min(nearest, a);
+                depthSamples++;
+            }
+        }
+        if (nearest >= 0.99999f || depthMismatch > depthSamples / 100)
+            throw new IllegalStateException("Scene depth differs from the editor framebuffer: mismatches="
+                    + depthMismatch + "/" + depthSamples + ", nearest=" + nearest);
         smokeSceneColorLogged = true;
         com.lowdragmc.photon.Photon.LOGGER.info("[scene-color-copy-smoke] copied {} viewport color components for scene shaders", compared);
+        com.lowdragmc.photon.Photon.LOGGER.info("[scene-depth-copy-smoke] copied {} viewport depth samples for scene shaders", depthSamples);
     }
 
     private static byte[] smokeReadCurrentViewport() {
