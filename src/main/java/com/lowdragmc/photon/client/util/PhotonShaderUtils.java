@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.util;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 
@@ -46,9 +47,15 @@ public final class PhotonShaderUtils {
         var fog = RenderSystem.getShaderFogColor();
         shader.safeGetUniform("FogColor").set(fog[0], fog[1], fog[2], fog[3]);
         shader.safeGetUniform("FogShape").set(RenderSystem.getShaderFogShape().getIndex());
+        // Scene samplers use the draw target's backing texture, which may differ
+        // from the window when rendering through an editor or another mod.
+        // Match the dynamic uniform set by CustomShaderMaterial.begin(); this
+        // default is applied afterwards and must not overwrite it with window size.
+        var pipeline = RenderPassPipeline.getCurrent();
+        var target = Minecraft.getInstance().getMainRenderTarget();
         shader.safeGetUniform("ScreenSize").set(
-                (float) Minecraft.getInstance().getWindow().getWidth(),
-                (float) Minecraft.getInstance().getWindow().getHeight());
+                (float) (pipeline != null ? pipeline.framebufferWidth() : target.width),
+                (float) (pipeline != null ? pipeline.framebufferHeight() : target.height));
         shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
         RenderSystem.setupShaderLights(shader);
     }
