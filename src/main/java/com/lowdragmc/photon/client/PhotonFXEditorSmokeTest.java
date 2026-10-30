@@ -468,6 +468,15 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.factor(0, 2, 2, 0.5f) - 0.5f) > 0.0001f)
             throw new IllegalStateException("Trail interpolation did not guard invalid or equal lifetimes");
         Photon.LOGGER.info("[trail-interpolation-smoke] guarded invalid durations and equal tail lifetimes");
+        var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
+                EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
+        burstTrigger.setAccessible(true);
+        var invalidBurst = new EmissionSetting.Burst();
+        invalidBurst.interval = 0;
+        invalidBurst.cycles = 0;
+        int triggers = (int) burstTrigger.invoke(null, invalidBurst, 2, net.minecraft.util.RandomSource.create(0L), 0f, 3f);
+        if (triggers != 6) throw new IllegalStateException("Zero-interval burst did not advance: " + triggers);
+        Photon.LOGGER.info("[burst-interval-smoke] clamped invalid interval and emitted three bursts");
         // The sampled scene depth is addressed in framebuffer coordinates, but
         // the editor projection belongs to its smaller, offset viewport.
         var corrected = new org.joml.Matrix4f();

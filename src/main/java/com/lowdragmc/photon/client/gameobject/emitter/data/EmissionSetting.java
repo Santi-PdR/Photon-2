@@ -150,13 +150,16 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
          * Fire each burst trigger age ({@code time + k*interval}, {@code k} limited by cycles when > 0)
          * that lands in {@code [start, end)}.
          */
-        private int burstTriggers(Burst bust, int count, RandomSource randomSource, float start, float end) {
+        private static int burstTriggers(Burst bust, int count, RandomSource randomSource, float start, float end) {
             var number = 0;
-            int firstK = (int) Math.ceil((start - bust.time) / bust.interval);
+            // Legacy or edited NBT can bypass the configurator's minimum of one.
+            // Match the original Photon and avoid a non-advancing trigger loop.
+            int interval = Math.max(1, bust.interval);
+            int firstK = (int) Math.ceil((start - bust.time) / interval);
             if (firstK < 0) firstK = 0;
             for (int k = firstK; ; k++) {
                 if (bust.cycles > 0 && k >= bust.cycles) break;
-                float triggerAge = bust.time + (long) k * bust.interval;
+                float triggerAge = (long) bust.time + (long) k * interval;
                 if (triggerAge < start) continue;
                 if (triggerAge >= end) break;
                 if (randomSource.nextFloat() < bust.probability) {
