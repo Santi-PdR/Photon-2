@@ -616,7 +616,7 @@ abstract class InstancedRenderBackend {
     public void drawWithShader(ShaderInstance shader) {
         // bind shader
         com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
-        shader.apply();
+        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
 
         if (resource != null) {
             resolveSamplerUnits();

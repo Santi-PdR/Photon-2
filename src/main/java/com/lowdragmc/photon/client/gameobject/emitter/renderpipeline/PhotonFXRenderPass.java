@@ -288,7 +288,10 @@ public abstract class PhotonFXRenderPass {
     protected void renderWithMaterial(IMaterial material, MaterialContext context, VertexBuffer vbo) {
         var shader = material.begin(context);
         RenderSystem.setShader(() -> shader);
-        vbo.drawWithShader(RenderSystem.getModelViewMatrix(), RenderSystem.getProjectionMatrix(), shader);
+        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
+        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
+        vbo.draw();
+        shader.clear();
         material.end(context);
     }
 
@@ -318,7 +321,7 @@ public abstract class PhotonFXRenderPass {
         var shader = material.begin(context);
         RenderSystem.setShader(() -> shader);
         com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
-        shader.apply();
+        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
         bindCpuRecords(shader);
         vbo.draw();
         shader.clear();
