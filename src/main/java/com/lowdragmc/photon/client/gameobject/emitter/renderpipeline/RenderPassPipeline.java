@@ -461,7 +461,7 @@ public class RenderPassPipeline {
                         p instanceof com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle trail
                                 && trail.getPoints().size() >= 3);
                 var araBefore = inspectAra ? smokeReadCurrentViewport() : null;
-                boolean inspectSortedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeSortedModelPixelsLogged
+                boolean inspectSortedModel = Boolean.getBoolean("photon.fxprojSmokeTest") && (!smokeSortedModelPixelsLogged || !smokeSceneColorLogged)
                         && !maskSubPass && !wireframeSubPass && particleQueue.size() >= 2
                         && particleQueue.stream().anyMatch(p -> p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile
                         && tile.getRuntime().renderer.isUseGPUInstance()
@@ -479,7 +479,7 @@ public class RenderPassPipeline {
                     smokeBeforeFrame = smokeReadViewport();
                 }
                 var drewSomething = renderPass.drawParticles(this, particleQueue, camera, partialTicks);
-                if (sortedBefore != null) {
+                if (sortedBefore != null && !smokeSortedModelPixelsLogged) {
                     var after = smokeReadCurrentViewport();
                     int changed = 0;
                     for (int i = 0; i < after.length; i += 4) {
@@ -572,7 +572,11 @@ public class RenderPassPipeline {
                 }
             }
         }
-        if (maximum - minimum < 8 || mismatch > compared / 100)
+        // The editor can render one or more frames before its platform is ready.
+        // Retry on the next frame rather than treating a uniform background as a bad copy;
+        // the workflow still requires the success marker, so a permanently blank scene fails.
+        if (maximum - minimum < 8) return;
+        if (mismatch > compared / 100)
             throw new IllegalStateException("Scene sampler differs from the editor framebuffer: mismatches="
                     + mismatch + "/" + compared + ", range=" + minimum + ".." + maximum);
         var viewportDepth = org.lwjgl.BufferUtils.createFloatBuffer(Math.multiplyExact(width, height));
