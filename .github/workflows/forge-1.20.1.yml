@@ -117,6 +117,7 @@ jobs:
           grep -Fq '[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[model-pivot-smoke] custom model shader received nonzero runtime pivot' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-smoke] drew' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[particle-blend-factors-smoke] preserved authored alpha blend factors after shader apply' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[gpu-model-sorting-pixels-smoke] sorted GPU models changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[scene-color-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[scene-depth-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"

@@ -431,6 +431,16 @@ class ParticleInstanceRenderer extends InstancedRenderBackend {
         boolean sawLaterInstance = false;
         try {
             if (inspectBase && !sceneSamplerSmokeLogged && pipeline != null) {
+                int src = glGetInteger(org.lwjgl.opengl.GL14.GL_BLEND_SRC_RGB);
+                int dst = glGetInteger(org.lwjgl.opengl.GL14.GL_BLEND_DST_RGB);
+                int srcAlpha = glGetInteger(org.lwjgl.opengl.GL14.GL_BLEND_SRC_ALPHA);
+                int dstAlpha = glGetInteger(org.lwjgl.opengl.GL14.GL_BLEND_DST_ALPHA);
+                int equation = glGetInteger(org.lwjgl.opengl.GL20.GL_BLEND_EQUATION_RGB);
+                if (src != GL_SRC_ALPHA || dst != GL_ONE_MINUS_SRC_ALPHA || srcAlpha != GL_ONE ||
+                        dstAlpha != GL_ZERO || equation != org.lwjgl.opengl.GL14.GL_FUNC_ADD)
+                    throw new IllegalStateException("GPU material blend factors changed after shader apply: "
+                            + src + "," + dst + "," + srcAlpha + "," + dstAlpha + "," + equation);
+                com.lowdragmc.photon.Photon.LOGGER.info("[particle-blend-factors-smoke] preserved authored alpha blend factors after shader apply");
                 int location = glGetUniformLocation(shader.getId(), "SamplerSceneColor");
                 if (location < 0) throw new IllegalStateException("Scene-sampling test shader lost its sampler");
                 int unit = glGetUniformi(shader.getId(), location);
