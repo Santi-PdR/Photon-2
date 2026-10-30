@@ -503,7 +503,11 @@ public class RenderPassPipeline {
                     for (int i = 0; i < after.length; i += 4) {
                         int red = Byte.toUnsignedInt(after[i]), green = Byte.toUnsignedInt(after[i + 1]);
                         int blue = Byte.toUnsignedInt(after[i + 2]);
+                        int beforeRed = Byte.toUnsignedInt(twoSidedBefore[i]);
+                        int beforeGreen = Byte.toUnsignedInt(twoSidedBefore[i + 1]);
+                        int beforeBlue = Byte.toUnsignedInt(twoSidedBefore[i + 2]);
                         if ((twoSidedBefore[i] != after[i] || twoSidedBefore[i + 1] != after[i + 1])
+                                && Math.abs(beforeRed - beforeGreen) <= 4 && Math.abs(beforeGreen - beforeBlue) <= 4
                                 && red > blue + 20 && green > blue + 10) bothSides++;
                     }
                     if (bothSides > 0) {
