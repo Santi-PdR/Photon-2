@@ -221,8 +221,19 @@ public final class PhotonFXEditorSmokeTest {
                     """);
             // A closed CPU model with different front/back colours exercises the same
             // gl_FrontFacing and transparent sorting contract as the legacy shield.
+            Files.writeString(shaderDir.resolve("shield_cpu_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+                    void main() {
+                        ParticleData data = getParticleData();
+                        float offset = (gl_VertexID % 1269 > 255) ? 0.015 : 0.035;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position + data.Normal * offset, 1.0);
+                    }
+                    """);
             Files.writeString(shaderDir.resolve("shield_cpu_smoke.fsh"), """
-                    #version 150
+                    #version 330 core
                     out vec4 fragColor;
                     void main() {
                         fragColor = gl_FrontFacing ? vec4(1.0, 0.0, 0.0, 0.5)
@@ -232,6 +243,7 @@ public final class PhotonFXEditorSmokeTest {
             try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
                 var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
                         java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/shield_cpu_smoke");
                 json.addProperty("fragment", "photon:ci/shield_cpu_smoke");
                 Files.writeString(shaderDir.resolve("shield_cpu_smoke.json"), json.toString());
             }
