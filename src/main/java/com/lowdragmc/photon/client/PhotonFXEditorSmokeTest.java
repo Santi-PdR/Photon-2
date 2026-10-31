@@ -1,0 +1,1292 @@
+package com.lowdragmc.photon.client;
+
+import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.JsonModelSource;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjModelSource;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMesh;
+import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
+import net.minecraft.client.renderer.block.model.BlockModel;
+import net.minecraft.resources.ResourceLocation;
+import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
+import com.lowdragmc.lowdraglib2.gui.ui.UI;
+import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.MaterialSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.SubEmittersSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.data.PhotonGpuChannels;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
+import com.lowdragmc.photon.client.gameobject.emitter.data.shape.MeshData;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
+import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleRendererSetting;
+import com.lowdragmc.photon.client.gameobject.emitter.trail.TrailEmitter;
+import com.lowdragmc.photon.client.gameobject.particle.TrailParticle;
+import com.lowdragmc.photon.gui.editor.FXEditor;
+import com.lowdragmc.photon.gui.editor.FXProject;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.FloatTag;
+import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
+
+import java.io.File;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Set;
+
+/** Exercises the editor load and preview path only in the opt-in remote client smoke run. */
+public final class PhotonFXEditorSmokeTest {
+    private static boolean started;
+    private static boolean finished;
+    private static int ticks;
+    private static FXEditor editor;
+    private static Screen previousScreen;
+    private static Path projectFile;
+    private static TrailEmitter smokeTrail;
+    private static com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter smokeAraTrail;
+    private static TrailEmitter smokeCpuTrail;
+    private static TrailEmitter realArrowTrail;
+    private static float savedSceneZoom;
+    private static org.joml.Vector3f savedSceneCenter;
+    private static CustomShaderMaterial smokeScreenShader;
+
+    private PhotonFXEditorSmokeTest() {}
+
+    public static void prepareModelFixtureIfEnabled() {
+        if (!Boolean.getBoolean("photon.fxprojSmokeTest")) return;
+        try {
+            Path modelDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("models").resolve("ci");
+            Files.createDirectories(modelDir);
+            Files.writeString(modelDir.resolve("obj_smoke.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"photon:models/ci/obj_smoke.obj\",\"textures\":{\"particle\":\"minecraft:block/stone\"}}");
+            Files.writeString(modelDir.resolve("obj_smoke.obj"),
+                    "mtllib obj_smoke.mtl\no smoke\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl stone\nf 1/1/1 2/2/1 3/3/1\n");
+            Files.writeString(modelDir.resolve("obj_smoke.mtl"), "newmtl stone\nKd 1 1 1\nmap_Kd minecraft:block/stone\n");
+            Path ldlibModelDir = LDLib2.getAssetsDir().toPath().resolve("ldlib2").resolve("models");
+            Files.createDirectories(ldlibModelDir.resolve("block"));
+            Files.createDirectories(ldlibModelDir.resolve("obj"));
+            Files.writeString(ldlibModelDir.resolve("block").resolve("ci_obj_smoke.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_obj_smoke.obj\",\"textures\":{}}");
+            Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_obj_smoke.obj"),
+                    "o smoke\nv -0.5 -0.5 0\nv 0.5 -0.5 0\nv 0 0.5 0\nvt 0 0\nvt 1 0\nvt 0.5 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            // The direct resource-pack file deliberately conflicts with the nested asset.
+            Files.writeString(ldlibModelDir.resolve("obj").resolve("ci_nested_obj.obj"),
+                    "v 7 0 0\nv 8 0 0\nv 7 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            Path nestedModelDir = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models");
+            Files.createDirectories(nestedModelDir.resolve("block"));
+            Files.createDirectories(nestedModelDir.resolve("obj"));
+            Files.writeString(nestedModelDir.resolve("block/ci_nested_obj.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_nested_obj.obj\",\"textures\":{},\"flip_v\":true}");
+            Files.writeString(nestedModelDir.resolve("obj/ci_nested_obj.obj"),
+                    "v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
+            Files.createDirectories(shaderDir);
+            try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
+                 var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                String source = new String(vertex.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("fog_distance(ModelViewMat, data.Position, FogShape)", "fog_distance(data.Position, FogShape)");
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/fog_smoke");
+                Files.writeString(shaderDir.resolve("fog_smoke.vsh"), source);
+                Files.writeString(shaderDir.resolve("fog_smoke.json"), json.toString());
+            }
+            Files.writeString(shaderDir.resolve("tornado_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    layout(location = 9) in float T;
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+#ifdef PARTICLE_MODEL_INSTANCE
+                    uniform float LegacyVariantOnly;
+#endif
+                    out float particleT;
+                    out vec2 tornadoUv;
+                    out vec4 tornadoColor;
+                    void main() {
+                        ParticleData data = getParticleData();
+#ifdef PARTICLE_MODEL_INSTANCE
+                        data.UV = aUV;
+                        data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
+                        data.UV += 0.001 * (aPos.xy + iPos.xy);
+#endif
+                        particleT = T;
+                        tornadoUv = data.UV;
+                        tornadoColor = data.Color;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
+#ifdef PARTICLE_MODEL_INSTANCE
+                        gl_Position.x += (LegacyVariantOnly + float(PhotonInstanceBase)) * 0.01;
+#endif
+                    }
+                    """);
+            Files.writeString(shaderDir.resolve("tornado_smoke.fsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle_utils.glsl>
+                    uniform sampler2D SamplerCurve;
+                    uniform sampler2D SamplerSceneColor;
+                    uniform sampler2D SamplerSceneDepth;
+                    uniform vec2 ScreenSize;
+                    in float particleT;
+                    in vec2 tornadoUv;
+                    in vec4 tornadoColor;
+                    out vec4 fragColor;
+                    void main() {
+                        float value = getCurveValue(SamplerCurve, 0, clamp(particleT, 0.0, 1.0));
+                        float uvPattern = 0.75 + 0.25 * fract(tornadoUv.x + tornadoUv.y);
+                        float viewportAspect = ScreenSize.x / max(ScreenSize.y, 1.0);
+                        vec3 curveColor = vec3(0.35 + value * 0.65, 0.1, 1.0 - value * 0.8);
+                        vec3 backdrop = texture(SamplerSceneColor, gl_FragCoord.xy / ScreenSize).rgb;
+                        float sceneDepth = texture(SamplerSceneDepth, gl_FragCoord.xy / ScreenSize).r;
+                        curveColor += backdrop * 0.2;
+                        curveColor.b *= 0.8 + 0.2 * sceneDepth;
+                        curveColor.r *= clamp(viewportAspect, 0.1, 1.0);
+                        fragColor = vec4(curveColor * tornadoColor.rgb * uvPattern, tornadoColor.a);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/tornado_smoke");
+                json.addProperty("fragment", "photon:ci/tornado_smoke");
+                var samplers = new com.google.gson.JsonArray();
+                var curveSampler = new com.google.gson.JsonObject();
+                curveSampler.addProperty("name", "SamplerCurve");
+                samplers.add(curveSampler);
+                var sceneSampler = new com.google.gson.JsonObject();
+                sceneSampler.addProperty("name", "SamplerSceneColor");
+                samplers.add(sceneSampler);
+                var depthSampler = new com.google.gson.JsonObject();
+                depthSampler.addProperty("name", "SamplerSceneDepth");
+                samplers.add(depthSampler);
+                json.add("samplers", samplers);
+                var uniforms = json.has("uniforms") ? json.getAsJsonArray("uniforms") : new com.google.gson.JsonArray();
+                var screenSize = new com.google.gson.JsonObject();
+                screenSize.addProperty("name", "ScreenSize");
+                screenSize.addProperty("type", "float");
+                screenSize.addProperty("count", 2);
+                var defaults = new com.google.gson.JsonArray();
+                defaults.add(1.0);
+                defaults.add(1.0);
+                screenSize.add("values", defaults);
+                uniforms.add(screenSize);
+                var legacyVariant = new com.google.gson.JsonObject();
+                legacyVariant.addProperty("name", "LegacyVariantOnly");
+                legacyVariant.addProperty("type", "float");
+                legacyVariant.addProperty("count", 1);
+                var legacyDefaults = new com.google.gson.JsonArray();
+                legacyDefaults.add(0.0);
+                legacyVariant.add("values", legacyDefaults);
+                uniforms.add(legacyVariant);
+                json.add("uniforms", uniforms);
+                Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
+            }
+            Files.writeString(shaderDir.resolve("trail_smoke.fsh"), """
+                    #version 330 core
+                    in float vertexDistance;
+                    in vec2 texCoord0;
+                    in vec4 vertexColor;
+                    out vec4 fragColor;
+                    void main() {
+                        float sweep = 0.8 + 0.2 * sin((texCoord0.x + texCoord0.y) * 6.2831853);
+                        fragColor = vec4(vertexColor.rgb * vec3(0.65, 0.9, 1.0) * sweep, vertexColor.a);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("fragment", "photon:ci/trail_smoke");
+                Files.writeString(shaderDir.resolve("trail_smoke.json"), json.toString());
+            }
+            Files.writeString(shaderDir.resolve("trail_cpu_smoke.fsh"), """
+                    #version 150
+                    uniform sampler2D TailTexture;
+                    uniform vec4 colorHDR1;
+                    uniform vec4 colorHDR2;
+                    in vec2 texCoord0;
+                    out vec4 fragColor;
+                    void main() {
+                        vec3 sampleColor = texture(TailTexture, texCoord0).rgb;
+                        vec4 color = mix(colorHDR1, colorHDR2, texCoord0.x);
+                        fragColor = vec4(sampleColor * color.rgb * color.a, 1.0);
+                    }
+                    """);
+            // A closed CPU model with different front/back colours exercises the same
+            // gl_FrontFacing and transparent sorting contract as the legacy shield.
+            Files.writeString(shaderDir.resolve("shield_cpu_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+                    void main() {
+                        ParticleData data = getParticleData();
+                        float offset = (gl_VertexID % 1269 > 255) ? 0.015 : 0.035;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position + data.Normal * offset, 1.0);
+                    }
+                    """);
+            Files.writeString(shaderDir.resolve("shield_cpu_smoke.fsh"), """
+                    #version 330 core
+                    out vec4 fragColor;
+                    void main() {
+                        fragColor = gl_FrontFacing ? vec4(1.0, 0.0, 0.0, 0.5)
+                                                  : vec4(0.0, 1.0, 0.0, 0.5);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/shield_cpu_smoke");
+                json.addProperty("fragment", "photon:ci/shield_cpu_smoke");
+                Files.writeString(shaderDir.resolve("shield_cpu_smoke.json"), json.toString());
+            }
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("fragment", "photon:ci/trail_cpu_smoke");
+                var tailSampler = new com.google.gson.JsonObject();
+                tailSampler.addProperty("name", "TailTexture");
+                json.getAsJsonArray("samplers").add(tailSampler);
+                for (var name : java.util.List.of("colorHDR1", "colorHDR2")) {
+                    var colorUniform = new com.google.gson.JsonObject();
+                    colorUniform.addProperty("name", name);
+                    colorUniform.addProperty("type", "float");
+                    colorUniform.addProperty("count", 4);
+                    var defaults = new com.google.gson.JsonArray();
+                    for (int i = 0; i < 4; i++) defaults.add(1.0);
+                    colorUniform.add("values", defaults);
+                    json.getAsJsonArray("uniforms").add(colorUniform);
+                }
+                Files.writeString(shaderDir.resolve("trail_cpu_smoke.json"), json.toString());
+            }
+            Files.writeString(shaderDir.resolve("tangent_smoke.vsh"), """
+                    #version 330 core
+                    #moj_import <photon:particle.glsl>
+                    uniform mat4 ModelViewMat;
+                    uniform mat4 ProjMat;
+                    out float vertexDistance;
+                    out vec2 texCoord0;
+                    out vec4 vertexColor;
+                    void main() {
+                        ParticleData data = getParticleData();
+#if defined(PARTICLE_MODEL_INSTANCE) && defined(PHOTON_TANGENT)
+                        data.UV = aUV;
+                        data.Normal = aNormal.xyz;
+                        data.Color.rgb *= aNormal.w;
+                        data.Position += aTangent.xyz * 0.001;
+#endif
+                        vertexDistance = 0.0;
+                        texCoord0 = data.UV;
+                        vertexColor = data.Color;
+                        gl_Position = ProjMat * ModelViewMat * vec4(data.Position, 1.0);
+                    }
+                    """);
+            try (var manifest = Photon.class.getResourceAsStream("/assets/photon/shaders/core/circle.json")) {
+                var json = com.google.gson.JsonParser.parseString(new String(manifest.readAllBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+                json.addProperty("vertex", "photon:ci/tangent_smoke");
+                Files.writeString(shaderDir.resolve("tangent_smoke.json"), json.toString());
+            }
+        } catch (Exception failure) {
+            throw new IllegalStateException("Could not prepare OBJ model and tornado-shader smoke fixtures", failure);
+        }
+    }
+
+    public static void registerIfEnabled() {
+        if (Boolean.getBoolean("photon.fxprojSmokeTest")) {
+            MinecraftForge.EVENT_BUS.addListener(PhotonFXEditorSmokeTest::onClientTick);
+        }
+    }
+
+    private static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || finished) return;
+        var minecraft = Minecraft.getInstance();
+        if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
+        try {
+            if (started && smokeTrail != null) {
+                ticks++;
+                float x = -2.5f + ticks * 0.12f;
+                float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
+                smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
+                smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
+                smokeAraTrail.transform().localPosition(new org.joml.Vector3f(x, 3, z));
+            }
+            if (realArrowTrail != null) {
+                float elapsed = ticks - 260;
+                realArrowTrail.transform().localPosition(new org.joml.Vector3f(-2.5f + elapsed * 0.12f, 2,
+                        (float) Math.sin(elapsed * 0.12f) * 0.7f));
+            }
+            if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks >= 180 && ticks < 208) {
+                String[] names = {"tornado_body", "tornado_body2", "tornado_cap", "tornado_body3"};
+                int phase = (ticks - 180) / 7;
+                String selected = names[phase];
+                if ((ticks - 180) % 7 == 0) {
+                    editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                            .map(ParticleEmitter.class::cast).forEach(e -> e.setSelfVisible(e.getName().equals(selected)));
+                    System.setProperty("photon.realTornadoLayer", selected);
+                } else if ((ticks - 180) % 7 == 6) {
+                    Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                            message -> Photon.LOGGER.info("[real-tornado-layer-smoke] {} screenshot: {}", selected, message.getString()));
+                }
+            } else if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks == 208) {
+                editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).forEach(e -> e.setSelfVisible(true));
+                System.clearProperty("photon.realTornadoLayer");
+                for (String name : new String[]{"tornado_body", "tornado_body2", "tornado_cap", "tornado_body3"})
+                    Photon.LOGGER.info("[real-tornado-layer-smoke] {} contributed pixels: {}", name,
+                            com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.smokeSawTornadoLayer(name));
+            }
+            if (!started) {
+                started = true;
+                openLegacyProject(minecraft);
+            } else if (ticks == 30) {
+                int queued = editor.sceneView.particleManager.particlesByRenderType().values().stream()
+                        .mapToInt(Collection::size).sum();
+                if (queued == 0) throw new IllegalStateException("Editor preview did not queue any particles");
+                var trailParticle = trailParticle(smokeTrail);
+                if (smokeTrail.getParticleAmount() != 1 || trailParticle.getTails().size() < 3) {
+                    throw new IllegalStateException("Moving GPU trail did not accumulate renderable segments: alive="
+                            + smokeTrail.getParticleAmount() + ", segments=" + trailParticle.getTails().size());
+                }
+                var cpuTrailParticle = trailParticle(smokeCpuTrail);
+                if (smokeCpuTrail.getParticleAmount() != 1 || cpuTrailParticle.getTails().size() < 3) {
+                    throw new IllegalStateException("Moving CPU trail did not accumulate renderable segments");
+                }
+                Field araParticleField = smokeAraTrail.getClass().getDeclaredField("trailParticle");
+                araParticleField.setAccessible(true);
+                var araParticle = (com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle) araParticleField.get(smokeAraTrail);
+                if (araParticle.getPoints().size() < 3)
+                    throw new IllegalStateException("Moving AraTrail did not accumulate renderable points");
+                Photon.LOGGER.info("[ara-trail-points-smoke] moving AraTrail accumulated {} points", araParticle.getPoints().size());
+                int live = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).mapToInt(ParticleEmitter::getParticleAmount).sum();
+                if (live != 5) throw new IllegalStateException("Expected legacy model, two tornado-style GPU model particles, and CPU/GPU billboard particles, got " + live);
+                var screenUniform = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE).getUniform("ScreenSize");
+                var target = minecraft.getMainRenderTarget();
+                if (screenUniform == null || screenUniform.getFloatBuffer().get(0) != target.width ||
+                        screenUniform.getFloatBuffer().get(1) != target.height)
+                    throw new IllegalStateException("ScreenSize did not match the scene framebuffer");
+                var modelShader = smokeScreenShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE);
+                int pivotLocation = org.lwjgl.opengl.GL20.glGetUniformLocation(modelShader.getId(), "PhotonModelPivot");
+                if (pivotLocation < 0) throw new IllegalStateException("Model shader did not expose the pivot uniform");
+                float[] actualPivot = new float[3];
+                org.lwjgl.opengl.GL20.glGetUniformfv(modelShader.getId(), pivotLocation, actualPivot);
+                if (Math.abs(actualPivot[0] - 0.125f) > 0.0001f || Math.abs(actualPivot[1] - 0.25f) > 0.0001f)
+                    throw new IllegalStateException("Model shader did not receive the runtime pivot");
+                Photon.LOGGER.info("[model-pivot-smoke] custom model shader received nonzero runtime pivot");
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[fxproj-editor-smoke] screenshot: {}", message.getString()));
+                Photon.LOGGER.info("[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail with {} live segments", trailParticle.getTails().size());
+                Photon.LOGGER.info("[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize");
+                Photon.LOGGER.info("[fxproj-editor-smoke] opened v3 managed-list project and previewed legacy model, tornado-style OBJ shader model, CPU-billboard particles, and moving GPU trail ({} live, {} queued objects)", live, queued);
+            } else if (ticks == 110) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                Files.deleteIfExists(projectFile);
+                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
+                editor.loadProject(realScan, realScanFile);
+                if (editor.getCurrentProject() != realScan || editor.runtime == null)
+                    throw new IllegalStateException("Real scan project did not initialize in the editor");
+                System.setProperty("photon.realScanSmoke", "true");
+                Photon.LOGGER.info("[real-scan-project-smoke] opened original scan project in editor");
+            } else if (ticks == 140) {
+                var scan = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
+                var slot = scan.config.renderer.getMaterials().get(0).getMaterial();
+                if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                    slot = reference.getRawMaterial();
+                if (!(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                        || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "scan"))
+                        || scan.getParticleAmount() == 0)
+                    throw new IllegalStateException("Real scan shader or particle failed to load");
+                shader.getShader(MaterialContext.NORMAL);
+                if (shader.isCompiledError()) throw new IllegalStateException("Real scan shader failed to compile");
+                Photon.LOGGER.info("[real-scan-shader-smoke] original scan shader compiled and particle is alive");
+            } else if (ticks == 160) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realScanSmoke");
+                var realTornadoFile = new File("./ldlib2/assets/tornado.fxproj");
+                var realTornado = (FXProject) FXProject.TYPE.loadProjectFromFile(realTornadoFile);
+                editor.loadProject(realTornado, realTornadoFile);
+                if (editor.getCurrentProject() != realTornado || editor.runtime == null)
+                    throw new IllegalStateException("Real tornado project did not initialize in the editor");
+                savedSceneZoom = editor.sceneView.sceneEditor.scene.getZoom();
+                savedSceneCenter = new org.joml.Vector3f(editor.sceneView.sceneEditor.scene.getCenter());
+                editor.sceneView.sceneEditor.scene.setCenter(new org.joml.Vector3f(0.5f, 5f, 0.5f));
+                editor.sceneView.sceneEditor.scene.setZoom(9f);
+                System.setProperty("photon.realTornadoSmoke", "true");
+            } else if (ticks == 190) {
+                var modelEmitters = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).filter(e -> e.config.renderer.getRenderMode() == ParticleRendererSetting.Mode.Model)
+                        .toList();
+                if (modelEmitters.size() != 4) throw new IllegalStateException("Expected four real tornado model emitters: " + modelEmitters.size());
+                long tChannel = PhotonGpuChannels.CHANNELS.stream().filter(channel -> channel.id().equals("addition_gpu_data.t"))
+                        .findFirst().orElseThrow().bit();
+                for (var emitter : modelEmitters) {
+                    var source = emitter.config.renderer.getModelSource();
+                    var slot = emitter.config.renderer.getMaterials().get(0).getMaterial();
+                    if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                        slot = reference.getRawMaterial();
+                    if (!(source instanceof JsonModelSource model) || model.getMesh() == null || model.getMesh().vertexCount() < 3
+                            || !(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                            || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "tornado_body"))
+                            || shader.curveTexture.getCurveTexture() == null || !emitter.config.renderer.isUseGPUInstance()
+                            || !emitter.config.additionalGPUDataSetting.isEnable()
+                            || (emitter.config.additionalGPUDataSetting.userMask() & tChannel) == 0
+                            || emitter.getParticleAmount() == 0)
+                        throw new IllegalStateException("Real tornado model, material, curve, channel or particle failed to load");
+                }
+                Photon.LOGGER.info("[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders");
+            } else if (ticks == 210) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realTornadoSmoke");
+                editor.sceneView.sceneEditor.scene.setCenter(savedSceneCenter);
+                editor.sceneView.sceneEditor.scene.setZoom(savedSceneZoom);
+                var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
+                var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
+                editor.loadProject(realShield, realShieldFile);
+                if (editor.getCurrentProject() != realShield || editor.runtime == null)
+                    throw new IllegalStateException("Real shield project did not initialize in the editor");
+                System.setProperty("photon.realShieldSmoke", "true");
+            } else if (ticks == 240) {
+                var shield = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
+                var source = shield.config.renderer.getModelSource();
+                var slot = shield.config.renderer.getMaterials().get(0).getMaterial();
+                if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                    slot = reference.getRawMaterial();
+                if (!(source instanceof JsonModelSource model) || model.getMesh() == null || model.getMesh().vertexCount() < 3
+                        || !(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                        || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "shield"))
+                        || shield.getParticleAmount() == 0)
+                    throw new IllegalStateException("Real shield model, shader or particle failed to load");
+                Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
+            } else if (ticks == 260) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-shield-project-smoke] screenshot: {}", message.getString()));
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realShieldSmoke");
+                var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
+                var realTrail = (FXProject) FXProject.TYPE.loadProjectFromFile(realTrailFile);
+                editor.loadProject(realTrail, realTrailFile);
+                if (editor.getCurrentProject() != realTrail || editor.runtime == null)
+                    throw new IllegalStateException("Real arrow trail project did not initialize in the editor");
+                realArrowTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                        .map(TrailEmitter.class::cast).findFirst().orElseThrow();
+                System.setProperty("photon.realTrailSmoke", "true");
+            } else if (ticks == 295) {
+                if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
+                    throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
+                Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
+            } else if (ticks == 320) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> {
+                            Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString());
+                            minecraft.execute(minecraft::stop);
+                        });
+                finished = true;
+                realArrowTrail = null;
+                editor.closeCurrentProject(false, null);
+                System.clearProperty("photon.realTrailSmoke");
+                minecraft.setScreen(previousScreen);
+            }
+        } catch (Throwable failure) {
+            finished = true;
+            Photon.LOGGER.error("[fxproj-editor-smoke] failed to open or preview the legacy project", failure);
+            throw new IllegalStateException("Photon editor project smoke test failed", failure);
+        }
+    }
+
+    private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        com.lowdragmc.photon.client.gameobject.particle.renderer.ModelTriangleOrderRegression.verify();
+        var callbacks = new int[1];
+        var dynamic = new com.lowdragmc.photon.client.gameobject.emitter.data.model.IDynamicMesh() {
+            private final PhotonMesh mesh = new PhotonMesh.Builder().triangle(
+                    new float[]{0, 0, 0, 0, 0, 0, 0, 1},
+                    new float[]{1, 0, 0, 1, 0, 0, 0, 1},
+                    new float[]{0, 1, 0, 0, 1, 0, 0, 1}).build();
+            @Override public PhotonMesh topology() { return mesh; }
+            @Override public long revision() { return 1; }
+            @Override public void onDrawn() { callbacks[0]++; }
+        };
+        var dynamicConfig = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig();
+        dynamicConfig.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        dynamicConfig.renderer.setModel(new MeshData(new com.lowdragmc.photon.client.gameobject.emitter.data.model.DynamicMeshSource(dynamic)));
+        var dynamicRenderer = new com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer(
+                dynamicConfig, dynamicConfig.renderer.createRuntime());
+        dynamicRenderer.renderQueue(null, java.util.List.of(), null, 0);
+        if (callbacks[0] != 0) throw new IllegalStateException("Empty model queue notified a dynamic provider as drawn");
+        Photon.LOGGER.info("[dynamic-empty-draw-smoke] no provider callback for an empty model queue");
+        verifyNestedMeshLoad();
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var legacyMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+        var legacyData = new CompoundTag();
+        var holderData = new CompoundTag();
+        var legacyUniforms = new CompoundTag();
+        var variantValue = new ListTag();
+        variantValue.add(FloatTag.valueOf(0.37f));
+        legacyUniforms.put("LegacyVariantOnly", variantValue);
+        holderData.put("uniforms", legacyUniforms);
+        holderData.put("samplers", new CompoundTag());
+        legacyData.put("shaderData", holderData);
+        legacyMaterial.deserializeAdditionalNBT(legacyData, provider);
+        if (legacyMaterial.getShader(MaterialContext.NORMAL).getUniform("LegacyVariantOnly") != null) {
+            throw new IllegalStateException("Legacy variant-only uniform unexpectedly exists in the base shader");
+        }
+        var legacyVariant = legacyMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE);
+        var restoredVariantUniform = legacyVariant.getUniform("LegacyVariantOnly");
+        if (restoredVariantUniform == null || Math.abs(restoredVariantUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f) {
+            throw new IllegalStateException("Legacy material with samplers lost its variant-only uniform");
+        }
+        Photon.LOGGER.info("[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers");
+        var original = new CustomShaderMaterial();
+        var authoredCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve(
+                0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.15f, 0.1f, 0.15f, 0.9f, 0.85f, 1, 0.85f));
+        original.curveTexture.addCurve(authoredCurve);
+        var saved = com.lowdragmc.lowdraglib2.utils.PersistedParser.serializeNBT(original, provider);
+        if (!saved.contains("curveTexture", Tag.TAG_LIST)) throw new IllegalStateException("Curve sampler did not serialize as a list");
+        var savedSegments = saved.getList("curveTexture", Tag.TAG_COMPOUND).getCompound(0).getList("curves", Tag.TAG_LIST);
+        if (savedSegments.size() != 1 || !savedSegments.get(0).equals(floatList(0f, 0.15f, 0.1f, 0.15f, 0.9f, 0.85f, 1f, 0.85f)))
+            throw new IllegalStateException("Shader curve did not preserve its authored control points: " + savedSegments);
+        var restoredMaterial = new CustomShaderMaterial();
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(saved, restoredMaterial, provider);
+        if (restoredMaterial.curveTexture.serializeNBT(provider).size() != 1 || restoredMaterial.curveTexture.getCurveTexture() == null)
+            throw new IllegalStateException("Saved shader curve was not restored and uploaded");
+        var restoredCurves = restoredMaterial.curveTexture.serializeNBT(provider);
+        if (!saved.getList("curveTexture", Tag.TAG_COMPOUND).equals(restoredCurves))
+            throw new IllegalStateException("Shader curve control points changed on reload: " + restoredCurves);
+        var loadedCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        loadedCurve.deserializeNBT(provider, restoredCurves.getCompound(0));
+        if (Math.abs(loadedCurve.getCurves().getCurveY(0f) - 0.15f) > 0.0001f ||
+                Math.abs(loadedCurve.getCurves().getCurveY(1f) - 0.85f) > 0.0001f)
+            throw new IllegalStateException("Shader curve values changed on reload");
+        // A legacy shader curve can contain multiple raw Bezier segments, as in the tornado material.
+        var legacySegments = new ListTag();
+        legacySegments.add(floatList(0f, 0.3f, 0.1f, 0.3f, 0.4f, 0.4f, 0.5f, 0.4f));
+        legacySegments.add(floatList(0.5f, 0.4f, 0.6f, 0.4f, 0.9f, 0.9f, 1f, 0.9f));
+        var legacyCurveTag = new CompoundTag();
+        legacyCurveTag.put("curves", legacySegments);
+        var legacyCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        legacyCurve.deserializeNBT(provider, legacyCurveTag);
+        if (legacyCurve.getCurves().getSegments().size() != 2 ||
+                Math.abs(legacyCurve.getCurves().getCurveY(0f) - 0.3f) > 0.0001f ||
+                Math.abs(legacyCurve.getCurves().getCurveY(1f) - 0.9f) > 0.0001f)
+            throw new IllegalStateException("Legacy multi-segment shader curve was not restored");
+        Photon.LOGGER.info("[legacy-multisegment-curve-smoke] restored both legacy shader curve segments");
+        if (com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(-1) != 0xF000F0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(0) != 0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.validParticleLight(0xA000B0) != 0xA000B0)
+            throw new IllegalStateException("Uninitialized particle light did not use the original fullbright fallback");
+        Photon.LOGGER.info("[particle-light-fallback-smoke] preserved valid light and restored uninitialized fullbright");
+        if (com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.partialTime(0, 0, 0) != 0 ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(1, 1, 2, 0.5f) ||
+                com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(0, 1, Float.NaN, 0.5f) ||
+                !com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.shouldInterpolate(0, 2, 2, 0.5f) ||
+                Math.abs(com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.factor(0, 2, 2, 0.5f) - 0.5f) > 0.0001f)
+            throw new IllegalStateException("Trail interpolation did not guard invalid or equal lifetimes");
+        Photon.LOGGER.info("[trail-interpolation-smoke] guarded invalid durations and equal tail lifetimes");
+        var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
+                EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
+        burstTrigger.setAccessible(true);
+        var invalidBurst = new EmissionSetting.Burst();
+        invalidBurst.interval = 0;
+        invalidBurst.cycles = 0;
+        int triggers = (int) burstTrigger.invoke(null, invalidBurst, 2, net.minecraft.util.RandomSource.create(0L), 0f, 3f);
+        if (triggers != 6) throw new IllegalStateException("Zero-interval burst did not advance: " + triggers);
+        Photon.LOGGER.info("[burst-interval-smoke] clamped invalid interval and emitted three bursts");
+        // The sampled scene depth is addressed in framebuffer coordinates, but
+        // the editor projection belongs to its smaller, offset viewport.
+        var corrected = new org.joml.Matrix4f();
+        CustomShaderMaterial.adjustLegacyScreenProjection(corrected, new ResourceLocation("ldlib2", "scan"),
+                1920, 1080, 440, 180, 1080, 720);
+        var center = corrected.transform(new org.joml.Vector4f(980f / 1920f * 2f - 1f,
+                540f / 1080f * 2f - 1f, 0.4f, 1f));
+        if (Math.abs(center.x) > 0.0001f || Math.abs(center.y) > 0.0001f ||
+                Math.abs(center.z - 0.4f) > 0.0001f || Math.abs(center.w - 1f) > 0.0001f)
+            throw new IllegalStateException("Legacy scan depth reconstruction used framebuffer NDC: " + center);
+        var unaffected = new org.joml.Matrix4f();
+        CustomShaderMaterial.adjustLegacyScreenProjection(unaffected, new ResourceLocation("example", "custom"),
+                1920, 1080, 440, 180, 1080, 720);
+        if (!unaffected.equals(new org.joml.Matrix4f()))
+            throw new IllegalStateException("Viewport-aware custom shader projection was modified");
+        var perspectiveInverse = new org.joml.Matrix4f().perspective(1.1f, 1.5f, 0.1f, 100f).invert();
+        var originalInverse = new org.joml.Matrix4f(perspectiveInverse);
+        CustomShaderMaterial.adjustLegacyScreenProjection(perspectiveInverse, new ResourceLocation("photon", "shield"),
+                1920, 1080, 440, 180, 1080, 720);
+        var actualView = perspectiveInverse.transform(new org.joml.Vector4f(710f / 1920f * 2f - 1f,
+                720f / 1080f * 2f - 1f, 0.6f, 1f));
+        var expectedView = originalInverse.transform(new org.joml.Vector4f(-0.5f, 0.5f, 0.6f, 1f));
+        if (actualView.distance(expectedView) > 0.0001f)
+            throw new IllegalStateException("Legacy shield depth reconstruction changed perspective: " + actualView);
+        Photon.LOGGER.info("[legacy-viewport-projection-smoke] reconstructed viewport center and preserved custom shader");
+        var legacyGradientData = new CompoundTag();
+        legacyGradientData.put("a", floatList(0f, 1f, 1f, 0f));
+        legacyGradientData.put("rgb", floatList(0f, 1f, 0f, 0f, 1f, 0f, 0f, 1f));
+        var legacyGradientTag = new CompoundTag();
+        legacyGradientTag.put("gradientColor", legacyGradientData);
+        var legacyGradient = new com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Gradient();
+        legacyGradient.deserializeNBT(provider, legacyGradientTag);
+        var stops = legacyGradient.getGradientColor();
+        if (stops.getAP().size() != 2 || stops.getRgbP().size() != 2 ||
+                Math.abs(stops.getAP().get(1).y) > 0.0001f ||
+                Math.abs(stops.getRgbP().get(0).y - 1f) > 0.0001f ||
+                Math.abs(stops.getRgbP().get(1).w - 1f) > 0.0001f)
+            throw new IllegalStateException("Legacy gradient stops were not restored");
+        Photon.LOGGER.info("[legacy-gradient-smoke] restored legacy alpha and color stops");
+        // The legacy tornado stores its custom shader's T attribute in this list.
+        var gpuDataTag = new CompoundTag();
+        gpuDataTag.putBoolean("_enable", true);
+        var gpuChannels = new ListTag();
+        gpuChannels.add(net.minecraft.nbt.StringTag.valueOf("addition_gpu_data.t"));
+        gpuDataTag.put("additionalData", gpuChannels);
+        var gpuSetting = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig().additionalGPUDataSetting;
+        // Toggle groups restore _enable in their deserializeNBT override before
+        // delegating their fields to PersistedParser, as the project loader does.
+        gpuSetting.deserializeNBT(provider, gpuDataTag);
+        if (!gpuSetting.isEnable() || !gpuSetting.hasAttribs() || gpuSetting.attribFloats() != 1)
+            throw new IllegalStateException("Legacy tornado particle T attribute did not load from NBT: enabled="
+                    + gpuSetting.isEnable() + ", mask=" + gpuSetting.userMask() + ", floats=" + gpuSetting.attribFloats());
+        Photon.LOGGER.info("[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT");
+        var legacyRenderState = new CompoundTag();
+        legacyRenderState.putBoolean("cull", true);
+        legacyRenderState.putBoolean("depthTest", true);
+        legacyRenderState.putBoolean("depthMask", true);
+        var legacySlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(legacyRenderState, legacySlot, provider);
+        if (!legacySlot.isEffectiveCull() || !legacySlot.isEffectiveDepthTest() || !legacySlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy tornado material depth or culling state was not restored");
+        Photon.LOGGER.info("[legacy-tornado-depth-smoke] restored authored depth and culling state");
+        var scanRenderState = new CompoundTag();
+        scanRenderState.putBoolean("depthTest", false);
+        scanRenderState.putBoolean("depthMask", false);
+        var scanSlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        scanSlot.setDepthTest(true).setDepthMask(true);
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(scanRenderState, scanSlot, provider);
+        if (scanSlot.isEffectiveDepthTest() || scanSlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy scan material depth settings were not restored");
+        Photon.LOGGER.info("[legacy-scan-depth-smoke] restored disabled scan depth settings");
+        var shieldRenderState = new CompoundTag();
+        shieldRenderState.putBoolean("cull", false);
+        shieldRenderState.putBoolean("depthTest", true);
+        shieldRenderState.putBoolean("depthMask", false);
+        var shieldSlot = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        shieldSlot.setCull(true).setDepthTest(false).setDepthMask(true);
+        com.lowdragmc.lowdraglib2.utils.PersistedParser.deserializeNBT(shieldRenderState, shieldSlot, provider);
+        if (shieldSlot.isEffectiveCull() || !shieldSlot.isEffectiveDepthTest() || shieldSlot.isEffectiveDepthMask())
+            throw new IllegalStateException("Legacy shield material face and depth settings were not restored");
+        Photon.LOGGER.info("[legacy-shield-state-smoke] restored two-sided shield depth settings");
+        int collisionOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(0, 42, 1, 0, 42, 2);
+        int reverseOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(0, 42, 2, 0, 42, 1);
+        int extremeLayerOrder = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .compareRenderPassOrder(Integer.MIN_VALUE, 0, 1, Integer.MAX_VALUE, 0, 2);
+        if (collisionOrder >= 0 || reverseOrder <= 0 || extremeLayerOrder >= 0)
+            throw new IllegalStateException("Distinct render passes with colliding hashes were merged or misordered");
+        class CollisionPass extends com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass {
+            CollisionPass() { super(null, null, null); }
+            @Override public int layerOrder() { return 0; }
+            @Override public int hashCode() { return 42; }
+            @Override public boolean equals(Object other) { return this == other; }
+            @Override protected void renderQueue(com.mojang.blaze3d.vertex.VertexConsumer buffer,
+                    Collection<com.lowdragmc.photon.client.gameobject.particle.IParticle> particles,
+                    net.minecraft.client.Camera camera, float partialTicks) {}
+        }
+        var collidingPasses = new java.util.TreeMap<com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass, String>(
+                com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.makeRenderPassComparator());
+        collidingPasses.put(new CollisionPass(), "first");
+        collidingPasses.put(new CollisionPass(), "second");
+        if (collidingPasses.size() != 2)
+            throw new IllegalStateException("Render-pass tree dropped a pass with a colliding hash");
+        Photon.LOGGER.info("[render-pass-order-smoke] preserved colliding render passes and extreme layers");
+        String legacyQuad = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n";
+        var quadMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
+                new java.io.ByteArrayInputStream(legacyQuad.getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
+        if (!java.util.Arrays.equals(quadMesh.indices(), new int[]{0, 1, 2, 4, 5, 6}) ||
+                quadMesh.vertexCount() != 8)
+            throw new IllegalStateException("OBJ triangle vertex IDs diverged from the original: " + java.util.Arrays.toString(quadMesh.indices()));
+        if (!java.util.Arrays.equals(quadMesh.samplingIds(), new int[]{0, 1, 2, 2, 2, 3, 0, 0}))
+            throw new IllegalStateException("OBJ render vertices lost their shared sampling identity");
+        float[] quadGeometry = quadMesh.geometry();
+        float[] expectedXY = {0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1};
+        for (int i = 0; i < 6; i++) {
+            int vertex = quadMesh.indices()[i];
+            if (Math.abs(quadGeometry[vertex * 6] - expectedXY[i * 2]) > 0.0001f ||
+                    Math.abs(quadGeometry[vertex * 6 + 1] - expectedXY[i * 2 + 1]) > 0.0001f)
+                throw new IllegalStateException("OBJ quad diagonal or vertex order diverged at vertex " + i);
+        }
+        // The shipped shield shader changes displacement at gl_VertexID 255.
+        // Exercise that boundary, not only the first pair of triangles.
+        var manyFaces = new StringBuilder("v 0 0 0\nv 1 0 0\nv 0 1 0\n");
+        for (int i = 0; i < 65; i++) manyFaces.append("f 1 2 3\n");
+        var idBoundaryMesh = com.lowdragmc.photon.client.gameobject.emitter.data.model.ObjMeshParser.parse(
+                new java.io.ByteArrayInputStream(manyFaces.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)), false);
+        if (idBoundaryMesh.vertexCount() != 260 || idBoundaryMesh.indices()[63 * 3 + 2] != 254 ||
+                idBoundaryMesh.indices()[64 * 3] != 256)
+            throw new IllegalStateException("OBJ GPU vertex IDs crossed the shield shader boundary incorrectly");
+        Photon.LOGGER.info("[legacy-obj-quad-smoke] preserved original OBJ quad diagonal");
+        if (!com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Billboard, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.DEFAULT)
+                || com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Billboard, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.LOOKAT_Y)
+                || com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.flipBillboardU(
+                ParticleRendererSetting.Mode.Horizontal, com.lowdragmc.photon.client.gameobject.emitter.particle.FacingMode.DEFAULT))
+            throw new IllegalStateException("Legacy billboard UV orientation was not preserved");
+        Photon.LOGGER.info("[legacy-billboard-uv-smoke] restored the default camera-facing UV flip");
+        var randomCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve(
+                0, 1, 0, 1, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.2f, 0.1f, 0.2f, 0.9f, 0.2f, 1, 0.2f),
+                new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.8f, 0.1f, 0.8f, 0.9f, 0.8f, 1, 0.8f));
+        var randomSaved = randomCurve.serializeNBT(provider);
+        var randomLoaded = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve();
+        randomLoaded.deserializeNBT(provider, randomSaved);
+        if (Math.abs(randomLoaded.get(0.5f, () -> 0f) - 0.2f) > 0.0001f ||
+                Math.abs(randomLoaded.get(0.5f, () -> 1f) - 0.8f) > 0.0001f)
+            throw new IllegalStateException("Random shader curves changed on reload: " + randomSaved);
+        // Legacy tornado materials use normalized multi-segment curves even when their bounds are zero.
+        var authoredTornadoCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve(
+                0, 0, 0, 0, "", "", new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.ECBCurves(
+                0, 0.2f, 0.1f, 0.2f, 0.4f, 0.4f, 0.5f, 0.4f,
+                0.5f, 0.4f, 0.6f, 0.4f, 0.9f, 0.9f, 1, 0.9f));
+        var savedCurves = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        savedCurves.addCurve(authoredTornadoCurve);
+        var restoredTornadoCurves = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        restoredTornadoCurves.deserializeNBT(provider, savedCurves.serializeNBT(provider));
+        var pixels = restoredTornadoCurves.getCurveTexture().getPixels();
+        int first = pixels.getPixelRGBA(0, 0) & 255;
+        int last = pixels.getPixelRGBA(7, 0) & 255;
+        if (first != 51 || last != 229)
+            throw new IllegalStateException("Legacy multi-segment shader curve changed while loading: " + first + ", " + last);
+        savedCurves.close();
+        restoredTornadoCurves.close();
+        Photon.LOGGER.info("[legacy-tornado-curve-smoke] restored and uploaded a multi-segment dissolve curve");
+        var firstCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        var secondCurve = new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve();
+        secondCurve.getCurves().getSegments().get(0).p0.y = 0.9f;
+        var curveRemoval = new com.lowdragmc.photon.client.gameobject.emitter.data.material.CurveTexture(8, 2);
+        curveRemoval.addCurve(firstCurve);
+        curveRemoval.addCurve(secondCurve);
+        int curveBefore = curveRemoval.getCurveTexture().getPixels().getPixelRGBA(0, 0);
+        curveRemoval.removeCurve(firstCurve);
+        int curveAfter = curveRemoval.getCurveTexture().getPixels().getPixelRGBA(0, 0);
+        curveRemoval.close();
+        if (curveBefore == curveAfter) throw new IllegalStateException("Removing a curve did not refresh its texture");
+        var firstGradient = new com.lowdragmc.lowdraglib2.math.GradientColor(0xffff0000);
+        var secondGradient = new com.lowdragmc.lowdraglib2.math.GradientColor(0xff0000ff);
+        var gradientRemoval = new com.lowdragmc.photon.client.gameobject.emitter.data.material.GradientTexture(8, 2);
+        gradientRemoval.addGradient(firstGradient);
+        gradientRemoval.addGradient(secondGradient);
+        int gradientBefore = gradientRemoval.getGradientTexture().getPixels().getPixelRGBA(0, 0);
+        gradientRemoval.removeGradient(firstGradient);
+        int gradientAfter = gradientRemoval.getGradientTexture().getPixels().getPixelRGBA(0, 0);
+        gradientRemoval.close();
+        if (gradientBefore == gradientAfter) throw new IllegalStateException("Removing a gradient did not refresh its texture");
+        restoredMaterial.curveTexture.close();
+        Photon.LOGGER.info("[shader-curve-smoke] restored and uploaded a saved shader curve");
+        var fogMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/fog_smoke"));
+        fogMaterial.recompile();
+        if (fogMaterial.isCompiledError()) throw new IllegalStateException(fogMaterial.getCompiledErrorMessage());
+        if (!(fogMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE) instanceof LDShaderInstance variant)
+                || !variant.defines.contains("PARTICLE_MODEL_INSTANCE")) {
+            throw new IllegalStateException("Two-argument fog shader failed its instanced variant");
+        }
+        Photon.LOGGER.info("[shader-compat-smoke] compiled two-argument fog shader and instanced variant");
+        var tangentMaterial = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tangent_smoke"));
+        tangentMaterial.recompile();
+        if (tangentMaterial.isCompiledError()
+                || !(tangentMaterial.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE_TANGENT) instanceof LDShaderInstance tangentVariant)
+                || !tangentVariant.defines.containsAll(Set.of("PARTICLE_MODEL_INSTANCE", "PHOTON_TANGENT"))) {
+            throw new IllegalStateException("Photon 26.2 tangent shader inputs are incompatible");
+        }
+        Photon.LOGGER.info("[tangent-abi-smoke] compiled original vec2 UV and vec4 normal tangent inputs");
+        var location = new ResourceLocation("photon", "ci/obj_smoke");
+        var resource = minecraft.getResourceManager().getResource(new ResourceLocation("photon", "models/ci/obj_smoke.json")).orElseThrow();
+        try (var reader = resource.openAsReader()) {
+            // This invokes Forge's ExtendedBlockModelDeserializer, not just Photon's loader detection.
+            BlockModel.fromStream(reader);
+        }
+        var mesh = new JsonModelSource(location).getMesh();
+        if (mesh == null || mesh.vertexCount() < 3) {
+            throw new IllegalStateException("NeoForge OBJ resource did not produce a Photon mesh");
+        }
+        Photon.LOGGER.info("[obj-model-smoke] parsed neoforge:obj through Forge and built {} vertices", mesh.vertexCount());
+        var externalLocation = new ResourceLocation("ldlib2", "block/ci_obj_smoke");
+        var externalResource = minecraft.getResourceManager()
+                .getResource(new ResourceLocation("ldlib2", "models/block/ci_obj_smoke.json")).orElseThrow();
+        try (var reader = externalResource.openAsReader()) {
+            BlockModel.fromStream(reader);
+        }
+        var externalMesh = new JsonModelSource(externalLocation).getMesh();
+        if (externalMesh == null || externalMesh.vertexCount() < 3) {
+            throw new IllegalStateException("LDLib2-namespace NeoForge OBJ did not produce a Photon mesh");
+        }
+        Photon.LOGGER.info("[external-obj-model-smoke] loaded ldlib2:block/ci_obj_smoke with {} vertices", externalMesh.vertexCount());
+        var nestedSource = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_nested_obj"));
+        var shadowedResource = minecraft.getResourceManager().getResource(
+                new ResourceLocation("ldlib2", "models/obj/ci_nested_obj.obj")).orElseThrow();
+        try (var reader = shadowedResource.openAsReader()) {
+            if (!reader.readLine().equals("v 7 0 0"))
+                throw new IllegalStateException("Conflicting resource-pack OBJ fixture is unavailable");
+        }
+        var nestedMesh = nestedSource.getMesh();
+        if (nestedMesh == null || nestedMesh.vertexCount() < 3)
+            throw new IllegalStateException("Nested LDLib2 OBJ did not produce a Photon mesh");
+        float[] nestedGeometry = nestedMesh.geometry();
+        float[] nestedAttributes = nestedMesh.attributes();
+        if (Math.abs(nestedGeometry[0] + 0.5f) > 0.0001f ||
+                Math.abs(nestedGeometry[1] + 0.5f) > 0.0001f ||
+                Math.abs(nestedGeometry[2] + 0.5f) > 0.0001f ||
+                Math.abs(nestedAttributes[1] - 1f) > 0.0001f)
+            throw new IllegalStateException("Nested OBJ JSON lost its model-space offset or flip_v setting");
+        Photon.LOGGER.info("[legacy-obj-json-smoke] preserved centered model position and flipped V");
+        var nestedObj = LDLib2.getAssetsDir().toPath().resolve("ldlib2/assets/ldlib2/models/obj/ci_nested_obj.obj");
+        Files.writeString(nestedObj, "v 0 0 0\nv 2 0 0\nv 0 2 0\nv 2 2 0\nf 1 2 3\nf 2 4 3\n");
+        Files.setLastModifiedTime(nestedObj, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 5000));
+        com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache.INSTANCE.pollFileChanges();
+        var reloadedNestedMesh = nestedSource.getMesh();
+        if (reloadedNestedMesh == nestedMesh || reloadedNestedMesh.vertexCount() <= nestedMesh.vertexCount())
+            throw new IllegalStateException("Editing a nested OBJ did not invalidate its JSON model");
+        var samplingMesh = new MeshData(nestedSource);
+        if (samplingMesh.getVertices().size() != 4 || samplingMesh.getEdges().size() != 5 ||
+                samplingMesh.getTriangles().size() != 2 || reloadedNestedMesh.vertexCount() != 8)
+            throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
+        Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
+        Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
+        var source = new FXProject();
+        var emitter = new ParticleEmitter();
+        emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));
+        emitter.config.setLooping(false);
+        emitter.config.setStartLifetime(NumberFunction.constant(70));
+        emitter.config.setStartSpeed(NumberFunction.constant(0));
+        emitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(4, 4, 4));
+        emitter.config.emission.setEmissionRate(NumberFunction.constant(0));
+        emitter.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        emitter.config.renderer.setModel(new MeshData(new JsonModelSource(location)));
+        emitter.config.renderer.setUseGPUInstance(false);
+        emitter.config.renderer.setVertexSortingMode(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
+        emitter.config.renderer.setModelPivot(new org.joml.Vector3f(0, 0.5f, 0));
+        emitter.config.renderer.getMaterials().clear();
+        var visibleMaterial = new MaterialSetting(new CustomShaderMaterial(new ResourceLocation("photon", "ci/shield_cpu_smoke")));
+        visibleMaterial.setCull(false);
+        visibleMaterial.setDepthTest(true);
+        visibleMaterial.setDepthMask(false);
+        emitter.config.renderer.getMaterials().add(visibleMaterial);
+        var burst = new EmissionSetting.Burst();
+        burst.time = 0;
+        burst.cycles = 1;
+        burst.setCount(NumberFunction.constant(1));
+        burst.interval = 4;
+        emitter.config.emission.getBursts().add(burst);
+        emitter.config.subEmitters.setEnable(true);
+        emitter.config.subEmitters.getEmitters().add(new SubEmittersSetting.Emitter());
+        source.getFx().getFxData().objects().add(emitter);
+
+        var tornadoModel = new ParticleEmitter();
+        tornadoModel.transform().localPosition(new org.joml.Vector3f(2.5f, 2, 0));
+        tornadoModel.config.setLooping(false);
+        tornadoModel.config.setStartLifetime(NumberFunction.constant(70));
+        tornadoModel.config.setStartSpeed(NumberFunction.constant(0));
+        tornadoModel.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(4, 4, 4));
+        tornadoModel.config.emission.setEmissionRate(NumberFunction.constant(0));
+        tornadoModel.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Model);
+        tornadoModel.config.renderer.setModel(new MeshData(new JsonModelSource(externalLocation)));
+        tornadoModel.config.renderer.setUseGPUInstance(true);
+        tornadoModel.config.renderer.setModelPivot(new org.joml.Vector3f(0.125f, 0.25f, 0));
+        tornadoModel.config.renderer.setVertexSortingMode(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE);
+        tornadoModel.config.renderer.getMaterials().clear();
+        var tornadoShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+        tornadoShader.curveTexture.addCurve(new com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve());
+        tornadoShader.recompile();
+        if (tornadoShader.isCompiledError()) throw new IllegalStateException(tornadoShader.getCompiledErrorMessage());
+        if (!(tornadoShader.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE) instanceof LDShaderInstance tornadoVariant)
+                || !tornadoVariant.defines.contains("PARTICLE_MODEL_INSTANCE")) {
+            throw new IllegalStateException("Tornado-style custom shader failed its GPU model variant");
+        }
+        if (tornadoShader.curveTexture.getCurveTexture() == null) {
+            throw new IllegalStateException("Tornado-style shader curve sampler did not upload");
+        }
+        var tornadoMaterial = new MaterialSetting(tornadoShader);
+        tornadoMaterial.setCull(false);
+        tornadoMaterial.setDepthTest(false);
+        tornadoModel.config.renderer.getMaterials().add(tornadoMaterial);
+        enableLegacyTChannel(tornadoModel);
+        var tornadoBurst = new EmissionSetting.Burst();
+        tornadoBurst.time = 0;
+        tornadoBurst.cycles = 1;
+        tornadoBurst.setCount(NumberFunction.constant(2));
+        tornadoBurst.interval = 4;
+        tornadoModel.config.emission.getBursts().add(tornadoBurst);
+        source.getFx().getFxData().objects().add(tornadoModel);
+
+        var billboard = new ParticleEmitter();
+        billboard.transform().localPosition(new org.joml.Vector3f(-2, 2, 0));
+        billboard.config.setLooping(false);
+        billboard.config.setStartLifetime(NumberFunction.constant(70));
+        billboard.config.setStartSpeed(NumberFunction.constant(0));
+        billboard.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0.8f, 0.8f, 0.8f));
+        billboard.config.emission.setEmissionRate(NumberFunction.constant(0));
+        billboard.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Billboard);
+        billboard.config.renderer.setUseGPUInstance(false);
+        billboard.config.renderer.getMaterials().clear();
+        var billboardMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        billboardMaterial.setCull(true);
+        billboardMaterial.setDepthTest(false);
+        billboard.config.renderer.getMaterials().add(billboardMaterial);
+        var billboardBurst = new EmissionSetting.Burst();
+        billboardBurst.time = 0;
+        billboardBurst.cycles = 1;
+        billboardBurst.setCount(NumberFunction.constant(1));
+        billboardBurst.interval = 4;
+        billboard.config.emission.getBursts().add(billboardBurst);
+        source.getFx().getFxData().objects().add(billboard);
+
+        var araTrail = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        araTrail.config.setDuration(150);
+        araTrail.config.setLooping(false);
+        araTrail.config.time = 10f;
+        araTrail.config.minDistance = 0.02f;
+        araTrail.config.thickness = 0.5f;
+        araTrail.config.renderer.getMaterials().get(0).setCull(false).setDepthTest(false);
+        araTrail.transform().localPosition(new org.joml.Vector3f(-2.5f, 3, 0));
+        source.getFx().getFxData().objects().add(araTrail);
+
+        var trail = new TrailEmitter();
+        trail.config.setDuration(150);
+        trail.config.setLooping(false);
+        trail.config.setTime(150);
+        trail.config.setMinVertexDistance(0.02f);
+        trail.config.renderer.setUseGPUInstance(true);
+        trail.config.renderer.getMaterials().clear();
+        var trailShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_smoke"));
+        trailShader.recompile();
+        if (trailShader.isCompiledError()) throw new IllegalStateException(trailShader.getCompiledErrorMessage());
+        if (!(trailShader.getShader(MaterialContext.TRAIL_INSTANCE) instanceof LDShaderInstance trailVariant)
+                || !trailVariant.defines.contains("TRAIL_INSTANCE")) {
+            throw new IllegalStateException("Arrow-trail custom shader failed its GPU trail variant");
+        }
+        var trailMaterial = new MaterialSetting(trailShader);
+        trailMaterial.setCull(false);
+        trailMaterial.setDepthTest(false);
+        trail.config.renderer.getMaterials().add(trailMaterial);
+        trail.transform().localPosition(new org.joml.Vector3f(-2.5f, 2, 0));
+        source.getFx().getFxData().objects().add(trail);
+
+        // Old arrow_trail projects omit the GPU toggle and restore a texture sampler from shaderData.
+        var cpuTrail = new TrailEmitter();
+        cpuTrail.config.setDuration(150);
+        cpuTrail.config.setLooping(false);
+        cpuTrail.config.setTime(150);
+        cpuTrail.config.setMinVertexDistance(0.02f);
+        cpuTrail.config.setWidthOverTrail(NumberFunction.constant(0.4f));
+        cpuTrail.config.renderer.setUseGPUInstance(false);
+        cpuTrail.config.renderer.getMaterials().clear();
+        var cpuShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_cpu_smoke"));
+        var cpuData = new CompoundTag();
+        var cpuShaderData = new CompoundTag();
+        var samplers = new CompoundTag();
+        var tailTexture = new CompoundTag();
+        tailTexture.putString("type", "texture");
+        tailTexture.putString("resource", "minecraft:textures/block/stone.png");
+        samplers.put("TailTexture", tailTexture);
+        cpuShaderData.put("samplers", samplers);
+        var cpuUniforms = new CompoundTag();
+        cpuUniforms.put("colorHDR1", floatList(0.8f, 0.4f, 0.2f, 3.0f));
+        cpuUniforms.put("colorHDR2", floatList(0.2f, 0.6f, 0.9f, 2.0f));
+        cpuShaderData.put("uniforms", cpuUniforms);
+        cpuData.put("shaderData", cpuShaderData);
+        cpuShader.deserializeAdditionalNBT(cpuData, provider);
+        if (cpuShader.isCompiledError()) throw new IllegalStateException(cpuShader.getCompiledErrorMessage());
+        assertLegacyHdr(cpuShader, 0.8f, 3.0f);
+        Field holderField = CustomShaderMaterial.class.getDeclaredField("shaderHolder");
+        holderField.setAccessible(true);
+        var holder = (com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder) holderField.get(cpuShader);
+        holder.setHDRUniform("colorHDR1", new com.lowdragmc.lowdraglib2.math.HDRColor(0.4f, 0.3f, 0.2f, 1.0f, 4.0f));
+        assertLegacyHdr(cpuShader, 0.4f, 4.0f);
+        var savedCpuData = (CompoundTag) cpuShader.serializeAdditionalNBT(provider);
+        if (!savedCpuData.getCompound("shaderData").getCompound("samplers").getCompound("TailTexture")
+                .getString("resource").equals("minecraft:textures/block/stone.png")) {
+            throw new IllegalStateException("Legacy trail sampler was lost when saving the material");
+        }
+        cpuShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/trail_cpu_smoke"));
+        cpuShader.deserializeAdditionalNBT(savedCpuData, provider);
+        assertLegacyHdr(cpuShader, 0.4f, 4.0f);
+        Photon.LOGGER.info("[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload");
+        // Match the sample FXP's external LDLib material wrapper and legacy shaderData layout.
+        var materialFile = LDLib2.getAssetsDir().toPath().resolve("ldlib2/resources/global/ci_tail.material.nbt");
+        Files.createDirectories(materialFile.getParent());
+        var oldMaterialData = new CompoundTag();
+        oldMaterialData.putString("shaderLocation", "photon:ci/trail_cpu_smoke");
+        oldMaterialData.put("_additional", cpuData.copy());
+        var oldMaterial = new CompoundTag();
+        oldMaterial.putString("type", "custom_shader");
+        oldMaterial.put("data", oldMaterialData);
+        var resourceFile = new CompoundTag();
+        resourceFile.putString("type", "material");
+        resourceFile.put("data", oldMaterial);
+        NbtIo.write(resourceFile, materialFile.toFile());
+        var resourceReference = new com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial(
+                new com.lowdragmc.lowdraglib2.editor.resource.FilePath(
+                        new File("./ldlib2/assets/ldlib2/resources/global/ci_tail.material.nbt")));
+        var cpuMaterial = new MaterialSetting(resourceReference);
+        cpuMaterial.setCull(false);
+        cpuMaterial.setDepthTest(false);
+        cpuTrail.config.renderer.getMaterials().add(cpuMaterial);
+        cpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f, 2, 0));
+        source.getFx().getFxData().objects().add(cpuTrail);
+
+        var gpuBillboard = new ParticleEmitter();
+        gpuBillboard.transform().localPosition(new org.joml.Vector3f(2, 3, 0));
+        gpuBillboard.config.setLooping(false);
+        gpuBillboard.config.setStartLifetime(NumberFunction.constant(70));
+        gpuBillboard.config.setStartSpeed(NumberFunction.constant(0));
+        gpuBillboard.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0.8f, 0.8f, 0.8f));
+        gpuBillboard.config.emission.setEmissionRate(NumberFunction.constant(0));
+        gpuBillboard.config.renderer.setRenderMode(ParticleRendererSetting.Mode.Billboard);
+        gpuBillboard.config.renderer.setUseGPUInstance(true);
+        gpuBillboard.config.renderer.getMaterials().clear();
+        var gpuBillboardMaterial = new MaterialSetting(new com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial());
+        gpuBillboardMaterial.setCull(true);
+        gpuBillboardMaterial.setDepthTest(false);
+        gpuBillboard.config.renderer.getMaterials().add(gpuBillboardMaterial);
+        var gpuBillboardBurst = new EmissionSetting.Burst();
+        gpuBillboardBurst.time = 0;
+        gpuBillboardBurst.cycles = 1;
+        gpuBillboardBurst.setCount(NumberFunction.constant(1));
+        gpuBillboardBurst.interval = 4;
+        gpuBillboard.config.emission.getBursts().add(gpuBillboardBurst);
+        source.getFx().getFxData().objects().add(gpuBillboard);
+
+        projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
+        FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
+        var encoded = NbtIo.read(projectFile.toFile());
+        var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");
+        var tornadoFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getCompound("config");
+        var trailFixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(5).getCompound("data").getCompound("config");
+        var widthCurve = new CompoundTag();
+        var widthData = new CompoundTag();
+        var widthSegments = new ListTag();
+        widthSegments.add(floatList(0f, 0f, 0.1f, 0f, 0.72f, 1f, 1f, 1f));
+        widthData.put("curves", widthSegments);
+        widthData.putFloat("min", 0f);
+        widthData.putFloat("max", Float.MAX_VALUE);
+        widthData.putFloat("lower", 0f);
+        widthData.putFloat("upper", 0.2f);
+        widthData.putBoolean("lockControlPoint", true);
+        widthData.putString("xAxis", "trail position");
+        widthData.putString("yAxis", "width");
+        widthCurve.putString("type", "curve");
+        widthCurve.put("data", widthData);
+        trailFixtureConfig.put("widthOverTrail", widthCurve);
+        Photon.LOGGER.info("[tornado-render-smoke] saved GPU channel setting before migration: {}",
+                tornadoFixtureConfig.getCompound("additionalGPUDataSetting"));
+        if (fixtureConfig.getCompound("subEmitters").getCompound("emitters")
+                .getList("payload", Tag.TAG_COMPOUND).size() != 1) {
+            throw new IllegalStateException("The enabled sub-emitter fixture was not written: " + fixtureConfig.getCompound("subEmitters"));
+        }
+        var legacyModel = new CompoundTag();
+        legacyModel.putString("modelLocation", "photon:block/sphere");
+        fixtureConfig.getCompound("renderer").put("model", legacyModel);
+        encoded.getCompound("meta").putInt("version_num", 3);
+        encoded.getCompound("meta").putString("version", "3.0");
+        replaceManagedListUids(encoded);
+        NbtIo.write(encoded, projectFile.toFile());
+        var fixedData = com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer.INSTANCE
+                .applyFixes(3, FXProject.VERSION, encoded.getCompound("data"));
+        var fixedTornadoSetting = fixedData.getCompound("fx").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(1).getCompound("data")
+                .getCompound("config").getCompound("additionalGPUDataSetting");
+        Photon.LOGGER.info("[tornado-render-smoke] setting after v3 datafix: {}", fixedTornadoSetting);
+
+        var loaded = (FXProject) FXProject.TYPE.loadProjectFromFile(projectFile.toFile());
+        if (loaded.getFx().getFxData().objects().size() != 7
+                || !(loaded.getFx().getFxData().objects().get(0) instanceof ParticleEmitter restored)
+                || !(loaded.getFx().getFxData().objects().get(1) instanceof ParticleEmitter restoredTornado)
+                || restored.config.renderer.getMaterials().size() != 1
+                || restored.config.emission.getBursts().size() != 1
+                || restored.config.subEmitters.getEmitters().size() != 1
+                || restoredTornado.config.renderer.getMaterials().size() != 1
+                || restoredTornado.config.emission.getBursts().size() != 1
+                || !(loaded.getFx().getFxData().objects().get(2) instanceof ParticleEmitter)
+                || !(loaded.getFx().getFxData().objects().get(3) instanceof com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(4) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(5) instanceof TrailEmitter)
+                || !(loaded.getFx().getFxData().objects().get(6) instanceof ParticleEmitter)
+                || restored.config.emission.getBursts().get(0).cycles != 1) {
+            throw new IllegalStateException("v3 managed lists were not restored: " + loaded.serializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        }
+        if (!(restored.config.renderer.getModelSource() instanceof ObjModelSource sphere)
+                || !sphere.getModelLocation().equals(new ResourceLocation("photon", "models/sphere.obj"))
+                || sphere.getMesh().vertexCount() < 3) {
+            throw new IllegalStateException("Legacy photon:block/sphere did not resolve to the bundled sphere OBJ");
+        }
+        var shieldSlotLoaded = restored.config.renderer.getMaterials().get(0);
+        if (restored.config.renderer.isUseGPUInstance() ||
+                restored.config.renderer.getVertexSortingMode() != com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.SortMode.DISTANCE ||
+                Math.abs(restored.config.renderer.getModelPivot().y - 0.5f) > 0.0001f ||
+                shieldSlotLoaded.isEffectiveCull() || !shieldSlotLoaded.isEffectiveDepthTest() || shieldSlotLoaded.isEffectiveDepthMask())
+            throw new IllegalStateException("Shield-style model settings changed while loading the project");
+        var restoredCpuTrail = (TrailEmitter) loaded.getFx().getFxData().objects().get(5);
+        var restoredWidth = restoredCpuTrail.config.getWidthOverTrail().get(0.8f, () -> 0.5f).floatValue();
+        if (!Float.isFinite(restoredWidth) || restoredWidth <= 0.01f) {
+            throw new IllegalStateException("Legacy trail width curve did not restore: " + restoredWidth);
+        }
+        Photon.LOGGER.info("[legacy-trail-curve-smoke] restored a nonzero width from the legacy curve: {}", restoredWidth);
+        var externalMaterial = restoredCpuTrail.config.renderer.getMaterials().get(0).getMaterial();
+        if (!(externalMaterial instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                || !(reference.getRawMaterial() instanceof CustomShaderMaterial restoredCpuShader)) {
+            throw new IllegalStateException("Legacy trail did not resolve its external custom shader material");
+        }
+        assertLegacyHdr(restoredCpuShader, 0.8f, 3.0f);
+        var restoredExternalData = (CompoundTag) restoredCpuShader.serializeAdditionalNBT(provider);
+        if (!restoredExternalData.getCompound("shaderData").getCompound("samplers").getCompound("TailTexture")
+                .getString("resource").equals("minecraft:textures/block/stone.png")) {
+            throw new IllegalStateException("External legacy trail material lost its texture sampler");
+        }
+        Photon.LOGGER.info("[external-trail-material-smoke] loaded the legacy file-backed trail material");
+        Photon.LOGGER.info("[legacy-model-alias-smoke] photon:block/sphere resolved to bundled OBJ with {} vertices",
+                sphere.getMesh().vertexCount());
+        long tChannel = PhotonGpuChannels.CHANNELS.stream()
+                .filter(channel -> channel.id().equals("addition_gpu_data.t"))
+                .findFirst().orElseThrow().bit();
+        Photon.LOGGER.info("[tornado-render-smoke] loaded enabled channel ids: {}",
+                enabledChannelIds(restoredTornado));
+        var restoredModel = restoredTornado.config.renderer.getModelSource();
+        var restoredTornadoMaterial = restoredTornado.config.renderer.getMaterials().get(0).getMaterial();
+        boolean objLoaded = restoredModel instanceof JsonModelSource obj && obj.getMesh() != null && obj.getMesh().vertexCount() >= 3;
+        boolean tChannelEnabled = restoredTornado.config.additionalGPUDataSetting.isEnable()
+                && (restoredTornado.config.additionalGPUDataSetting.userMask() & tChannel) != 0;
+        boolean shaderLoaded = restoredTornadoMaterial instanceof CustomShaderMaterial shader
+                && !shader.isCompiledError() && shader.curveTexture.getCurveTexture() != null;
+        if (restoredTornadoMaterial instanceof CustomShaderMaterial shader) smokeScreenShader = shader;
+        if (!objLoaded || !tChannelEnabled || !shaderLoaded) {
+            Photon.LOGGER.error("[tornado-render-smoke] reload diagnostics: model={} objLoaded={} tEnabled={} tMask={} tBit={} material={} shaderLoaded={}",
+                    restoredModel, objLoaded, restoredTornado.config.additionalGPUDataSetting.isEnable(),
+                    restoredTornado.config.additionalGPUDataSetting.userMask(), tChannel,
+                    restoredTornadoMaterial.getClass().getName(), shaderLoaded);
+            if (restoredTornadoMaterial instanceof CustomShaderMaterial shader) {
+                Photon.LOGGER.error("[tornado-render-smoke] shader diagnostics: error={} curveTexture={}",
+                        shader.getCompiledErrorMessage(), shader.curveTexture.getCurveTexture());
+            }
+            throw new IllegalStateException("Tornado-style OBJ, T channel, custom shader, or curve sampler did not survive v3 project loading");
+        }
+        Photon.LOGGER.info("[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes, location-9 T data, GPU shader variant, and SamplerCurve");
+
+        previousScreen = minecraft.screen;
+        editor = new FXEditor();
+        minecraft.setScreen(new ModularUIScreen(new ModularUI(UI.of(editor)), Component.literal("Photon CI editor")));
+        editor.loadProject(loaded, projectFile.toFile());
+        editor.sceneView.fxObjectInfoView.setDisplay(false);
+        editor.sceneView.fxObjectAnimationView.setDisplay(false);
+        if (editor.getCurrentProject() != loaded || editor.runtime == null || editor.runtime.objects.size() < 2) {
+            throw new IllegalStateException("Editor did not initialize the loaded project runtime");
+        }
+        smokeTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                .map(TrailEmitter.class::cast).filter(t -> t.config.renderer.isUseGPUInstance()).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the moving trail"));
+        smokeCpuTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
+                .map(TrailEmitter.class::cast).filter(t -> !t.config.renderer.isUseGPUInstance()).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the CPU trail"));
+        smokeAraTrail = editor.runtime.objects.values().stream()
+                .filter(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::isInstance)
+                .map(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::cast).findFirst()
+                .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the AraTrail"));
+        Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
+    }
+
+    private static TrailParticle trailParticle(TrailEmitter emitter) throws ReflectiveOperationException {
+        Field field = TrailEmitter.class.getDeclaredField("trailParticle");
+        field.setAccessible(true);
+        return (TrailParticle) field.get(emitter);
+    }
+
+    private static ListTag floatList(float... values) {
+        var list = new ListTag();
+        for (float value : values) list.add(FloatTag.valueOf(value));
+        return list;
+    }
+
+    private static void assertLegacyHdr(CustomShaderMaterial material, float red, float intensity) {
+        var uniform = material.getShader(MaterialContext.NORMAL).getUniform("colorHDR1");
+        if (uniform == null || Math.abs(uniform.getFloatBuffer().get(0) - red) > 0.0001f
+                || Math.abs(uniform.getFloatBuffer().get(3) - intensity) > 0.0001f) {
+            throw new IllegalStateException("Legacy HDR uniform was changed to premultiplied form");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void enableLegacyTChannel(ParticleEmitter emitter) throws ReflectiveOperationException {
+        var setting = emitter.config.additionalGPUDataSetting;
+        setting.setEnable(true);
+        Field field = setting.getClass().getDeclaredField("additionalData");
+        field.setAccessible(true);
+        ((Set<String>) field.get(setting)).add("addition_gpu_data.t");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object enabledChannelIds(ParticleEmitter emitter) throws ReflectiveOperationException {
+        Field field = emitter.config.additionalGPUDataSetting.getClass().getDeclaredField("additionalData");
+        field.setAccessible(true);
+        return field.get(emitter.config.additionalGPUDataSetting);
+    }
+
+    private static void replaceManagedListUids(Tag value) {
+        if (value instanceof CompoundTag compound) {
+            for (String key : compound.getAllKeys()) {
+                Tag child = compound.get(key);
+                if ((key.equals("materials") || key.equals("bursts") || key.equals("emitters"))
+                        && child instanceof CompoundTag managed
+                        && managed.contains("uid") && managed.get("payload") instanceof ListTag payload) {
+                    managed.put("uid", IntTag.valueOf(payload.size()));
+                }
+                replaceManagedListUids(child);
+            }
+        } else if (value instanceof ListTag list) {
+            for (Tag child : list) replaceManagedListUids(child);
+        }
+    }
+
+    private record CollidingKey(String name) {
+        @Override public int hashCode() { return 0; }
+    }
+
+    private static void verifyNestedMeshLoad() {
+        var cache = PhotonMeshCache.INSTANCE;
+        var parent = new CollidingKey("ci-parent");
+        var child = new CollidingKey("ci-child");
+        try {
+            var loaded = cache.get(parent, ignored -> {
+                cache.invalidate(child);
+                return cache.get(child, alsoIgnored -> PhotonMesh.EMPTY);
+            });
+            if (loaded != PhotonMesh.EMPTY) throw new IllegalStateException("Nested mesh load changed its result");
+            Photon.LOGGER.info("[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded");
+        } finally {
+            cache.invalidate(parent);
+            cache.invalidate(child);
+        }
+    }
+}
+
+
+

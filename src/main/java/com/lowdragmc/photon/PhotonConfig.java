@@ -1,0 +1,139 @@
+package com.lowdragmc.photon;
+
+import com.lowdragmc.photon.client.compat.iris.IrisCompositeMode;
+import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
+import com.lowdragmc.photon.client.light.ShadowMode;
+import net.minecraftforge.common.ForgeConfigSpec;
+import org.apache.commons.lang3.tuple.Pair;
+
+public class PhotonConfig {
+    /** The most lights that cast shadows in a frame; the renderer sizes its visibility maps by it. */
+    public static final int MAX_SHADOWED_LIGHTS = 32;
+    public static final PhotonConfig INSTANCE;
+    public static final ForgeConfigSpec CONFIG_SPEC;
+
+    static {
+        Pair<PhotonConfig, ForgeConfigSpec> pair = new ForgeConfigSpec.Builder().configure(PhotonConfig::new);
+        //Store the resulting values
+        INSTANCE = pair.getLeft();
+        CONFIG_SPEC = pair.getRight();
+    }
+
+    public enum BloomMode {
+        ADD,
+        SCATTER
+    }
+
+
+    public final ForgeConfigSpec.ConfigValue<Boolean> enableBloom;
+    public final ForgeConfigSpec.ConfigValue<Integer> bloomMipLevel;
+//    public final ForgeConfigSpec.ConfigValue<BloomMode> bloomMode;
+    public final ForgeConfigSpec.ConfigValue<Double> bloomThreshold;
+    public final ForgeConfigSpec.ConfigValue<Double> bloomIntensity;
+    public final ForgeConfigSpec.ConfigValue<Boolean> enableBloomWithIrisShader;
+    /** How Photon hands its FX image back to a shader pack — see {@code IrisCompositeMode}.
+     *  AUTO picks per pack; the others are escape hatches for a pack we get wrong. */
+    public final ForgeConfigSpec.ConfigValue<IrisCompositeMode> irisCompositeMode;
+    /** Resolve the translucent Photon queue through the pack's {@code gbuffers_particles_translucent}
+     *  program instead of {@code gbuffers_particles}. Off by default: on NeoForge 1.21.1 Iris does not
+     *  split the vanilla particle pass at all, so that program is not what the engine itself uses. */
+    public final ForgeConfigSpec.ConfigValue<Boolean> irisUseTranslucentParticleProgram;
+    /** Default merge strategy for translucent FX — see {@code FXCompositeMode}. {@code LATE} keeps
+     *  clouds from painting over FX and water from slicing them; {@code VANILLA} is the pre-2.2.2
+     *  behaviour, kept as an escape hatch. Individual emitters may override it. */
+    public final ForgeConfigSpec.ConfigValue<FXCompositeMode> fxCompositeMode;
+    /** Master switch for the custom post-processing chain (requests are dropped when off). */
+    public final ForgeConfigSpec.ConfigValue<Boolean> enableCustomEffects;
+    /** The custom effect chain under a shader pack. Deliberately a NEW key rather than a new default
+     *  for {@code enable_custom_effects_with_iris_shader}: that option gated a fallback that could
+     *  not work, so every existing config has it persisted as false, and the option now means
+     *  something else entirely (run after the pack's composite/final passes, on the finished frame). */
+    public final ForgeConfigSpec.ConfigValue<Boolean> enableCustomEffectsWithShaderPack;
+    /** VRAM cap for the pooled post-processing render targets (free targets evict oldest-first). */
+    public final ForgeConfigSpec.ConfigValue<Integer> postFxPoolBudgetMB;
+
+    public final ForgeConfigSpec.ConfigValue<Boolean> dynamicLights;
+    public final ForgeConfigSpec.ConfigValue<ShadowMode> lightShadowMode;
+    public final ForgeConfigSpec.ConfigValue<Boolean> lightSoftShadows;
+    public final ForgeConfigSpec.ConfigValue<Integer> lightShadowedLights;
+    public final ForgeConfigSpec.ConfigValue<Double> lightResolution;
+    public final ForgeConfigSpec.ConfigValue<Integer> lightContactShadowSteps;
+    public final ForgeConfigSpec.ConfigValue<Double> lightContactShadowLength;
+    public final ForgeConfigSpec.ConfigValue<Integer> lightScreenShadowSteps;
+    public final ForgeConfigSpec.ConfigValue<Double> lightScreenShadowThickness;
+    public final ForgeConfigSpec.ConfigValue<Double> lightScreenShadowDistance;
+    public final ForgeConfigSpec.ConfigValue<Double> lightVoxelBudgetMs;
+    public final ForgeConfigSpec.ConfigValue<Double> lightAlbedoMax;
+    public final ForgeConfigSpec.ConfigValue<Double> lightShaderPackAmbient;
+    public final ForgeConfigSpec.ConfigValue<Boolean> volumetricLights;
+    public final ForgeConfigSpec.ConfigValue<Double> volumetricDensity;
+    public final ForgeConfigSpec.ConfigValue<Double> volumetricForwardScattering;
+    public final ForgeConfigSpec.ConfigValue<Integer> volumetricSamples;
+    public final ForgeConfigSpec.ConfigValue<Boolean> volumetricWithShaderPacks;
+
+    /** Off = collision-enabled emitters always update serially (for mods whose blocks break when read off-thread). */
+    public final ForgeConfigSpec.ConfigValue<Boolean> collisionParallel;
+    public final ForgeConfigSpec.ConfigValue<Integer> collisionSectionCacheLimit;
+
+    private PhotonConfig(ForgeConfigSpec.Builder builder) {
+        enableBloom = builder.define("enable_bloom", true);
+        bloomMipLevel = builder.defineInRange("bloom_mip_level", 5, 2, 10);
+//        bloomMode = builder.defineEnum("bloom_mode", BloomMode.SCATTER, BloomMode.values());
+        bloomThreshold = builder.defineInRange("bloom_threshold", 1.001, 0, 10d);
+        bloomIntensity = builder.defineInRange("bloom_intensity", 0.7, 0, 1);
+
+        // Only consulted when the FX layer is composited into the pack's own colour target, where
+        // the pack's bloom chain will also process it — leaving this on means both apply. It is
+        // ignored (and Photon's bloom always runs) when the layer is held back to after the pack's
+        // passes, because nothing else would ever bloom those pixels.
+        enableBloomWithIrisShader = builder.define("enable_bloom_with_iris_shader", true);
+        irisCompositeMode = builder.defineEnum("iris_composite_mode", IrisCompositeMode.AUTO,
+                IrisCompositeMode.values());
+        irisUseTranslucentParticleProgram = builder.define("iris_use_translucent_particle_program", false);
+
+        // INHERIT is deliberately not an acceptable value here: it only means something per emitter.
+        fxCompositeMode = builder.defineEnum("fx_composite_mode", FXCompositeMode.LATE,
+                FXCompositeMode.VANILLA, FXCompositeMode.LATE);
+
+        enableCustomEffects = builder.define("enable_custom_effects", true);
+        enableCustomEffectsWithShaderPack = builder.define("enable_custom_effects_with_shader_pack", true);
+        postFxPoolBudgetMB = builder.defineInRange("postfx_pool_budget_mb", 256, 16, 4096);
+
+        builder.push("dynamic_lights");
+        dynamicLights = light(builder, "enabled").define("enabled", true);
+        lightShadowMode = light(builder, "shadow_mode").defineEnum("shadow_mode", ShadowMode.VOXEL);
+        lightSoftShadows = light(builder, "soft_shadows").define("soft_shadows", true);
+        lightShadowedLights = light(builder, "shadowed_lights").defineInRange("shadowed_lights", 8, 0, MAX_SHADOWED_LIGHTS);
+        lightResolution = light(builder, "resolution").defineInRange("resolution", 0.5, 0.25, 1.0);
+        lightContactShadowSteps = light(builder, "contact_shadow_steps").defineInRange("contact_shadow_steps", 6, 0, 32);
+        lightContactShadowLength = light(builder, "contact_shadow_length").defineInRange("contact_shadow_length", 0.8, 0.1, 4.0);
+        lightScreenShadowSteps = light(builder, "screen_shadow_steps").defineInRange("screen_shadow_steps", 24, 1, 128);
+        lightScreenShadowThickness = light(builder, "screen_shadow_thickness").defineInRange("screen_shadow_thickness", 1.0, 0.05, 16.0);
+        lightScreenShadowDistance = light(builder, "screen_shadow_distance").defineInRange("screen_shadow_distance", 32.0, 1.0, 128.0);
+        lightVoxelBudgetMs = light(builder, "voxel_budget_ms").defineInRange("voxel_budget_ms", 2.0, 0.1, 20.0);
+        lightAlbedoMax = light(builder, "albedo_max").defineInRange("albedo_max", 0.85, 0.1, 1.0);
+        lightShaderPackAmbient = light(builder, "shader_pack_ambient").defineInRange("shader_pack_ambient", 0.06, 0.001, 1.0);
+        volumetricLights = light(builder, "volumetric").define("volumetric", true);
+        volumetricDensity = light(builder, "volumetric_density").defineInRange("volumetric_density", 1.0, 0.0, 8.0);
+        volumetricForwardScattering = light(builder, "volumetric_forward_scattering")
+                .defineInRange("volumetric_forward_scattering", 0.3, 0.0, 0.9);
+        volumetricSamples = light(builder, "volumetric_samples").defineInRange("volumetric_samples", 4, 1, 16);
+        volumetricWithShaderPacks = light(builder, "volumetric_with_shader_packs").define("volumetric_with_shader_packs", true);
+        builder.pop();
+
+        builder.push("collision");
+        collisionParallel = collision(builder, "parallel").define("parallel", true);
+        collisionSectionCacheLimit = collision(builder, "section_cache_limit")
+                .defineInRange("section_cache_limit", 4096, 64, 16384);
+        builder.pop();
+    }
+
+    private static ForgeConfigSpec.Builder collision(ForgeConfigSpec.Builder builder, String key) {
+        return builder.translation("photon.configuration.collision." + key);
+    }
+
+    // the screen derives value keys from the leaf name alone, which other sections may reuse
+    private static ForgeConfigSpec.Builder light(ForgeConfigSpec.Builder builder, String key) {
+        return builder.translation("photon.configuration.dynamic_lights." + key);
+    }
+}

@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.lowdragmc.photon.core.mixins",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "photon.refmap.json",
+  "plugin": "com.lowdragmc.photon.core.mixins.PhotonMixinPlugin",
+  "client": [
+    "ClientLevelMixin",
+    "GameRendererMixin",
+    "MinecraftMixin",
+    "ParticleEngineMixin",
+    "ShaderInstanceMixin",
+    "LDLibPayloadRegistryMixin",
+    "accessor.FilePackResourcesAccessor",
+    "accessor.LightTextureAccessor",
+    "accessor.ParticleEngineAccessor",
+    "iris.BlendOverrideAccessors$BlendModeOverrideAccessor",
+    "iris.BlendOverrideAccessors$BufferBlendOverrideAccessor",
+    "iris.ExtendedShaderAccessor",
+    "iris.FallbackShaderAccessor",
+    "iris.IrisRenderingPipelineAccessor"
+  ],
+  "mixins": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

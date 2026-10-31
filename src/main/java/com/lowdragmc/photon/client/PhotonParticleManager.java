@@ -1,0 +1,310 @@
+package com.lowdragmc.photon.client;
+
+import com.lowdragmc.lowdraglib2.client.scene.ParticleManager;
+import com.lowdragmc.photon.client.fx.ParticleTickHost;
+import com.lowdragmc.photon.client.fx.FXPostProcessPreparation;
+import com.lowdragmc.photon.client.light.DynamicLightRenderer;
+import com.lowdragmc.photon.client.postfx.runtime.PostFXCamera;
+import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
+import com.mojang.blaze3d.platform.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import lombok.Getter;
+import lombok.Setter;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.ParticleRenderType;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraft.client.Camera;
+import org.joml.Matrix4f;
+
+import javax.annotation.Nullable;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Queue;
+import java.util.function.Predicate;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
+
+@OnlyIn(Dist.CLIENT)
+public class PhotonParticleManager extends ParticleManager implements ParticleTickHost {
+    private static boolean previewStateSmokeLogged;
+    /** The per-frame render switches; {@link FXSceneOptions#DEFAULT} for an embedded preview. */
+    public final FXSceneOptions options;
+    /**
+     * The FX editor's scene view when this manager belongs to it, {@code null} for an embedded
+     * preview. Only kept for callers that already had it; the render path goes through
+     * {@link #options}.
+     */
+    @Nullable
+    public final SceneView sceneView;
+    /** {@link ParticleTickHost} heartbeat. NOT {@link #time}: that is the timeline clock and resets
+     *  in {@link #clear()}, while this must stay monotonic for {@code FXRuntime.isValid()}. */
+    private long tickCounter = 0;
+    /** {@link ParticleTickHost} wipe generation, bumped in {@link #clear()}. */
+    private int generation = 0;
+    // runtime
+    @Nullable
+    @Getter
+    private static SceneView.DrawMode drawMode = null;
+    /**
+     * Whether the editor scene should run the bloom post-processing pass. Default {@code true} keeps
+     * in-game particle bloom following the mod config; the scene relays its
+     * {@link FXSceneOptions#isBloomEnabled()} here only for the duration of its own render.
+     */
+    @Getter
+    private static boolean sceneBloomEnabled = true;
+    /**
+     * The editor-scene manager currently rendering, or {@code null} in the world. Lets the render
+     * pipeline ask "are there still particles queued for a later pass this frame?" against the right
+     * particle source — see {@code ParticleQueueRenderType#hasQueuedParticles}.
+     */
+    @Nullable
+    @Getter
+    private static PhotonParticleManager renderingManager = null;
+    /** The partial tick the current frame is being drawn at, for clocks read mid-render. */
+    private float lastPartialTick;
+    /** Between this frame's first particle draw, where its dynamic lights were applied, and its last. */
+    private boolean sceneLit;
+
+    /** The scene's particles by render type (LDLib2 keeps the map protected). */
+    public Map<ParticleRenderType, Queue<Particle>> particlesByRenderType() {
+        return particles;
+    }
+    /**
+     * True while a timeline seek replays ticks that will never be rendered: particles may skip
+     * pure per-tick visual recomputes (color/rotation/light — see TileParticle.updateChanges).
+     * Volatile: read by parallelUpdate worker threads during the replayed ticks.
+     */
+    @Getter
+    private static volatile boolean fastSimulation = false;
+    @Getter @Setter
+    private long time = 0;
+    @Getter @Setter
+    private long timeOffset = 0;
+    @Getter
+    private boolean isPlaying;
+    private final long[] lastCPUTimes = new long[60];
+    private int tickIndex = 0;
+
+    private final long[] lastFrameTimes = new long[60];
+    private int frameIndex = 0;
+
+    public PhotonParticleManager(SceneView sceneView) {
+        this.options = sceneView;
+        this.sceneView = sceneView;
+    }
+
+    /**
+     * A manager for a scene that is not Photon's FX editor — an FX preview embedded in another
+     * mod's LDLib2 scene. Pass {@link FXSceneOptions#DEFAULT} unless the host has its own toggles.
+     */
+    public PhotonParticleManager(FXSceneOptions options) {
+        this.options = options;
+        this.sceneView = options instanceof SceneView view ? view : null;
+    }
+
+    public static void setFastSimulation(boolean value) {
+        fastSimulation = value;
+    }
+
+    public long getRealTime() {
+        return time + timeOffset;
+    }
+
+    /**
+     * Seconds on the <b>timeline's</b> clock while an editor scene is the thing being rendered, or a
+     * negative number when it is not (i.e. in the world).
+     *
+     * <p>What an animated model poses itself at in the editor, and deliberately the timeline's time
+     * rather than the world's: scrubbing the playhead has to scrub the animation with it, or the author
+     * is looking at a pose that belongs to no frame they can reach. {@link #getTime(float)} already
+     * freezes the partial while paused, so a paused scene holds its pose.</p>
+     */
+    public static float editorAnimationSeconds() {
+        var manager = renderingManager;
+        return manager == null ? -1f : manager.getTime(manager.lastPartialTick) / 20f;
+    }
+
+    public float getRealTime(float pPartialTicks) {
+        return getRealTime() + (isPlaying ? pPartialTicks : 0);
+    }
+
+    /**
+     * Timeline (0-based) time in ticks, plus the intra-tick partial while playing. Unlike
+     * {@link #getRealTime()} this EXCLUDES the seed-derived {@link #timeOffset} (which only shifts
+     * shader game time so noise varies per seed). The timeline ruler/playhead/preview and frame
+     * animation must read this, otherwise a large random seed makes the timeline time astronomical.
+     */
+    public float getTime(float pPartialTicks) {
+        return time + (isPlaying ? pPartialTicks : 0);
+    }
+
+    @Override
+    public void render(PoseStack pMatrixStack, Camera pActiveRenderInfo, float pPartialTicks, Predicate<ParticleRenderType> renderTypeFilter) {
+        var previousDrawMode = drawMode;
+        var previousBloomEnabled = sceneBloomEnabled;
+        var previousRenderingManager = renderingManager;
+        var previousEditorScene = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.isEditorSceneRendering();
+        float previousShaderTicks = RenderSystem.getShaderGameTime() * 24000.0f;
+        boolean previousScissor = org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+        int[] previousScissorBox = new int[4];
+        org.lwjgl.opengl.GL11.glGetIntegerv(org.lwjgl.opengl.GL11.GL_SCISSOR_BOX, previousScissorBox);
+        try {
+        drawMode = options.getDrawMode();
+        sceneBloomEnabled = options.isBloomEnabled();
+        renderingManager = this;
+        lastPartialTick = pPartialTicks;
+        // route post-effect submission/consumption to the isolated editor-scene stack
+        com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(true);
+        com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.EDITOR_SCENE
+                .setEffectsEnabled(options.isEffectsEnabled());
+        if (options.isMaskViewEnabled()) {
+            // top-bar debug toggle: show the CustomMask contents instead of the scene this frame
+            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.EDITOR_SCENE.submit(
+                    com.lowdragmc.lowdraglib2.editor.resource.BuiltinResourceProvider.TYPE.createFullPath("show_mask"),
+                    java.util.Map.of(), 1f);
+        }
+        FXPostProcessPreparation.prepare(particlesByRenderType(), isPlaying ? pPartialTicks : 0.0f);
+        RenderSystem.setShaderGameTime(getRealTime(), isPlaying ? pPartialTicks : 0);
+        // The scene's own camera for post-effect world reconstruction (the game camera would be wrong here).
+        // LDLib2's ParticleManager multiplies pMatrixStack onto the model-view stack around the draws, so
+        // this is exactly the ModelViewMat the particles — and the scene's effect chain — are rendered with.
+        PostFXCamera.captureSubViewport(
+                new Matrix4f(RenderSystem.getModelViewMatrix()).mul(pMatrixStack.last().pose()),
+                RenderSystem.getProjectionMatrix(), pActiveRenderInfo.getPosition());
+
+        var startTime = System.nanoTime();
+        GlStateManager._disableScissorTest();
+        boolean translucentPass = renderTypeFilter.test(ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT);
+        // the first call of a frame: blocks drawn, particles not, the scene's own AFTER_BLOCK_ENTITIES
+        if (!sceneLit && level != null && options.isDynamicLightsEnabled()) {
+            sceneLit = true;
+            DynamicLightRenderer.beginScene(level, new Matrix4f(RenderSystem.getModelViewMatrix()).mul(pMatrixStack.last().pose()),
+                    RenderSystem.getProjectionMatrix(), pActiveRenderInfo.getPosition(), isPlaying ? pPartialTicks : 0);
+        }
+        super.render(pMatrixStack, pActiveRenderInfo, isPlaying ? pPartialTicks : 0, renderTypeFilter);
+        consumeEditorEffectsWithoutParticles(renderTypeFilter);
+        if (translucentPass && sceneLit) {
+            sceneLit = false;
+            DynamicLightRenderer.endScene();
+        }
+        lastFrameTimes[frameIndex] = System.nanoTime() - startTime;
+        frameIndex = (frameIndex + 1) % lastFrameTimes.length;
+        } finally {
+            if (previousScissor) GlStateManager._enableScissorTest();
+            else GlStateManager._disableScissorTest();
+            GlStateManager._scissorBox(previousScissorBox[0], previousScissorBox[1],
+                    previousScissorBox[2], previousScissorBox[3]);
+            long wholeTicks = (long) previousShaderTicks;
+            RenderSystem.setShaderGameTime(wholeTicks, previousShaderTicks - wholeTicks);
+            drawMode = previousDrawMode;
+            sceneBloomEnabled = previousBloomEnabled;
+            renderingManager = previousRenderingManager;
+            com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.setEditorSceneRendering(previousEditorScene);
+            if (Boolean.getBoolean("photon.fxprojSmokeTest") && !previewStateSmokeLogged) {
+                int[] restoredBox = new int[4];
+                org.lwjgl.opengl.GL11.glGetIntegerv(org.lwjgl.opengl.GL11.GL_SCISSOR_BOX, restoredBox);
+                if (org.lwjgl.opengl.GL11.glIsEnabled(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST) != previousScissor ||
+                        !java.util.Arrays.equals(previousScissorBox, restoredBox) ||
+                        Math.abs(RenderSystem.getShaderGameTime() * 24000.0f - previousShaderTicks) > 0.01f)
+                    throw new IllegalStateException("Editor preview did not restore the previous render state");
+                previewStateSmokeLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.info("[editor-state-smoke] restored scissor and shader time after rendering");
+            }
+        }
+    }
+
+    /**
+     * Editor-scene standalone fallback: when the scene has pending post effects but no Photon
+     * particle rendered this frame, the pipeline seam ({@code RenderPassPipeline.afterRendering})
+     * never ran — run the chain here over a copy of the main target so scene effects don't require
+     * particles on screen (mirrors {@code PhotonPostFX.onLevelStageAfterParticles} for the world,
+     * plus the sub-viewport scissor dance from {@code afterRendering}).
+     */
+    private void consumeEditorEffectsWithoutParticles(Predicate<ParticleRenderType> renderTypeFilter) {
+        // render() runs TWICE per scene frame (WorldSceneRenderer: opaque filter then translucent).
+        // Only the translucent (last) call may consume standalone — running on the first call
+        // preempted the pipeline: consumedFrame got marked with doBloom=false, so the real
+        // particle build passed through and silently dropped BLOOM and all effects.
+        if (!renderTypeFilter.test(ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT)) return;
+        var stack = com.lowdragmc.photon.client.postfx.runtime.PostEffectStack.EDITOR_SCENE;
+        if (!stack.hasPending() || stack.isConsumedThisFrame()) return;
+        int viewportX = GlStateManager.Viewport.x();
+        int viewportY = GlStateManager.Viewport.y();
+        int viewportWidth = GlStateManager.Viewport.width();
+        int viewportHeight = GlStateManager.Viewport.height();
+        var mainTarget = UISurface.currentTarget();
+        var chain = com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool
+                .acquire(mainTarget.width, mainTarget.height);
+        chain.copyColorFrom(mainTarget);
+        var output = stack.consumeAndExecute(chain, false, mainTarget.getDepthTextureId());
+        if (output != chain) {
+            // the scene lives in a sub-viewport — the write-back must not touch the UI around it
+            int[] scissorBox = new int[4];
+            org.lwjgl.opengl.GL11.glGetIntegerv(org.lwjgl.opengl.GL11.GL_SCISSOR_BOX, scissorBox);
+            RenderSystem.enableScissor(viewportX, viewportY, viewportWidth, viewportHeight);
+            com.lowdragmc.photon.client.postfx.runtime.SceneBlit.writeBack(output, mainTarget);
+            RenderSystem.disableScissor();
+            GlStateManager._scissorBox(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
+        }
+        com.lowdragmc.photon.client.postfx.runtime.PostFXTargetPool.release(chain);
+        // the write-back/chain leave other framebuffers bound + bindWrite resets the viewport
+        mainTarget.bindWrite(true);
+        RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+    }
+
+    @Override
+    public void tick() {
+        if (!isPlaying) {
+            lastCPUTimes[tickIndex] = 0;
+            tickIndex = (tickIndex + 1) % lastCPUTimes.length;
+            return;
+        }
+        var startTime = System.nanoTime();
+        tickInternal();
+        lastCPUTimes[tickIndex] = System.nanoTime() - startTime;
+        tickIndex = (tickIndex + 1) % lastCPUTimes.length;
+    }
+
+    public void tickInternal() {
+        tickCounter++;
+        super.tick();
+        time++;
+    }
+
+    public long getCPUTime() {
+        return (long) Arrays.stream(lastCPUTimes).average().orElse(0)  / 1000;
+    }
+
+    public long getFrameTime() {
+        return (long) Arrays.stream(lastFrameTimes).average().orElse(0) / 1000;
+    }
+
+    public void play() {
+        if (isPlaying) return;
+        isPlaying = true;
+    }
+
+    public void pause() {
+        if (!isPlaying) return;
+        isPlaying = false;
+    }
+
+    public void clear() {
+        generation++; // mass-discard: cached FXRuntimes emitted into this manager turn invalid
+        clearAllParticles();
+        time = 0;
+    }
+
+    @Override
+    public long tickCount() {
+        return tickCounter;
+    }
+
+    @Override
+    public int generation() {
+        return generation;
+    }
+}
+

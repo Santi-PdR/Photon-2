@@ -1,0 +1,206 @@
+name: Forge 1.20.1 build
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - port/forge-1.20.1-2.2.9
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Forge mod
+        run: bash ./gradlew --no-daemon build
+
+      - name: Verify packaged Photon mixin config and refmap
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          unzip -p "$jar_file" META-INF/MANIFEST.MF | grep -Eq '^MixinConfigs: .*photon.mixins.json'
+          jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
+          jar tf "$jar_file" | grep -Fxq 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.class'
+
+      - name: Upload distributable
+        uses: actions/upload-artifact@v4
+        with:
+          name: photon-forge-1.20.1
+          path: build/libs/*-all.jar
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Smoke-test dedicated Forge server startup
+        shell: bash
+        run: |
+          mkdir -p run
+          printf 'eula=true\n' > run/eula.txt
+          log_file="$RUNNER_TEMP/photon-server.log"
+          set +e
+          timeout --signal=INT --kill-after=15s 180s bash ./gradlew --no-daemon runServer > "$log_file" 2>&1
+          result=$?
+          if grep -Fq 'For help, type "help"' "$log_file"; then
+            echo "Forge server reached the ready state."
+            exit 0
+          fi
+          grep -n -E -C 3 'ERROR|FATAL|Exception|Caused by:|fxproj|smoke|Game crashed|BUILD FAILED|Failed to (load|recompile)' "$log_file" | tail -n 240 || true
+          echo "Forge server exited with status $result before reaching the ready state." >&2
+          exit 1
+
+      - name: Prepare a world for the editor smoke test
+        shell: bash
+        run: |
+          test -s run/world/level.dat
+          mkdir -p run/saves
+          cp -a run/world run/saves/PhotonCI
+          rm -f run/saves/PhotonCI/session.lock
+          mkdir -p run/ldlib2/assets
+          cp -a ci-fixtures/real-scan/ldlib2/assets/. run/ldlib2/assets/
+          cp -a ci-fixtures/real-tornado/ldlib2/assets/. run/ldlib2/assets/
+          cp -a ci-fixtures/real-shield-trail/ldlib2/assets/. run/ldlib2/assets/
+
+      - name: Install virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil
+
+      - name: Smoke-test Forge client startup without a physical display
+        shell: bash
+        run: |
+          log_file="$RUNNER_TEMP/photon-client.log"
+          set +e
+          timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
+          result=$?
+          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-loader-compat] registered neoforge:obj using Forge' "$log_file" && grep -Fq '[obj-model-smoke] parsed neoforge:obj through Forge and built' "$log_file" && grep -Fq '[fxproj-editor-smoke] opened v3 managed-list project and previewed' "$log_file" && grep -Fq '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes' "$log_file" && grep -Fq '[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize' "$log_file" && grep -Fq '[shader-compat-smoke] compiled two-argument fog shader and instanced variant' "$log_file" && grep -Fq '[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
+            grep -E '\[.*smoke\]|\[obj-loader-compat\]' "$log_file" || true
+            echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
+            exit 0
+          fi
+          cat "$log_file"
+          echo "Forge client exited with status $result before Photon and Minecraft reached the ready state." >&2
+          exit 1
+
+
+      - name: Require editor render state restoration
+        shell: bash
+        run: grep -Fq '[editor-state-smoke] restored scissor and shader time after rendering' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require legacy viewport and tornado channel restoration
+        shell: bash
+        run: |
+          grep -Fq '[legacy-viewport-projection-smoke] reconstructed viewport center and preserved custom shader' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[particle-light-fallback-smoke] preserved valid light and restored uninitialized fullbright' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[trail-interpolation-smoke] guarded invalid durations and equal tail lifetimes' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[burst-interval-smoke] clamped invalid interval and emitted three bursts' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[culled-cpu-billboard-smoke] camera-facing billboard changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[culled-gpu-billboard-smoke] camera-facing billboard changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-scan-project-smoke] opened original scan project in editor' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-scan-shader-smoke] original scan shader compiled and particle is alive' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-scan-pixels-smoke] original scan project changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-tornado-pixels-smoke] original tornado shader changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-shield-project-smoke] loaded original shield model and shader' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-shield-pixels-smoke] original shield shader changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-arrow-trail-project-smoke] original trail accumulated moving segments' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-arrow-trail-pixels-smoke] original moving trail changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-gpu-channel-smoke] restored tornado particle T attribute from legacy NBT' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-tornado-depth-smoke] restored authored depth and culling state' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-tornado-curve-smoke] restored and uploaded a multi-segment dissolve curve' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-scan-depth-smoke] restored disabled scan depth settings' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-shield-state-smoke] restored two-sided shield depth settings' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[shield-two-sided-smoke] front and back faces contributed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[render-pass-order-smoke] preserved colliding render passes and extreme layers' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-obj-quad-smoke] preserved original OBJ quad diagonal' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-obj-json-smoke] preserved centered model position and flipped V' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[model-pivot-smoke] custom model shader received nonzero runtime pivot' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-model-sorting-smoke] drew' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[particle-blend-factors-smoke] preserved authored alpha blend factors after shader apply' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-model-sorting-pixels-smoke] sorted GPU models changed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-color-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-depth-copy-smoke] copied' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-color-binding-smoke] custom shader sampled the current scene color texture' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[scene-depth-binding-smoke] custom shader sampled the current scene depth texture' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[dynamic-empty-draw-smoke] no provider callback for an empty model queue' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[legacy-billboard-uv-smoke] restored the default camera-facing UV flip' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require a moving GPU trail smoke result
+        shell: bash
+        run: grep -Fq '[trail-render-smoke] custom TRAIL_INSTANCE shader rendered moving GPU trail' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require a moving AraTrail smoke result
+        shell: bash
+        run: |
+          grep -Fq '[ara-trail-points-smoke] moving AraTrail accumulated' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[ara-trail-mesh-smoke] generated' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[ara-trail-pixels-smoke] AraTrail changed' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require legacy variant uniform restoration
+        shell: bash
+        run: grep -Fq '[legacy-variant-uniform-smoke] restored variant-only uniform from legacy shader data with samplers' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require a textured CPU trail to draw
+        shell: bash
+        run: grep -Fq '[cpu-trail-render-smoke] textured CPU trail changed' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require legacy HDR values to survive editing and reload
+        shell: bash
+        run: grep -Fq '[legacy-hdr-smoke] preserved legacy HDR values through editing and material reload' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the original tangent shader inputs
+        shell: bash
+        run: grep -Fq '[tangent-abi-smoke] compiled original vec2 UV and vec4 normal tangent inputs' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the external legacy trail material
+        shell: bash
+        run: grep -Fq '[external-trail-material-smoke] loaded the legacy file-backed trail material' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the legacy trail width curve
+        shell: bash
+        run: grep -Fq '[legacy-trail-curve-smoke] restored a nonzero width from the legacy curve' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Verify the editor actually displays the particle
+        shell: bash
+        run: |
+          /usr/bin/python3 - <<'PY'
+          from glob import glob
+          from PIL import Image, ImageChops
+          images = sorted(glob('run/screenshots/*.png'))
+          if len(images) != 2:
+              raise SystemExit(f'Expected two editor screenshots; found {len(images)}')
+          active, expired = [Image.open(path).convert('RGB').crop((300, 180, 1010, 550)) for path in images]
+          changed = sum(1 for pixel in ImageChops.difference(active, expired).getdata() if pixel != (0, 0, 0))
+          print(f'Editor scene pixels changed by the live particle: {changed}')
+          if changed < 10:
+              raise SystemExit('Particle was alive but did not visibly change the editor scene')
+          PY
+
+      - name: Upload client smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: photon-client-diagnostics
+          path: |
+            run/logs/*.log
+            run/screenshots/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
