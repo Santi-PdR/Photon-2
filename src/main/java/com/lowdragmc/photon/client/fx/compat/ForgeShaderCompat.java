@@ -15,14 +15,24 @@ public final class ForgeShaderCompat {
 
     public static ResourceProvider wrap(ResourceProvider provider) {
         return location -> provider.getResource(location).map(resource -> {
-            if (!location.getPath().endsWith(".vsh")) return resource;
+            boolean vertex = location.getPath().endsWith(".vsh");
+            boolean legacyScan = location.getNamespace().equals("ldlib2")
+                    && location.getPath().equals("shaders/core/scan.fsh");
+            if (!vertex && !legacyScan) return resource;
             return new Resource(resource.source(), () -> {
                 try (var stream = resource.open()) {
                     String source = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-                    return new ByteArrayInputStream(convertVertex(source).getBytes(StandardCharsets.UTF_8));
+                    String converted = vertex ? convertVertex(source) : convertLegacyScan(source);
+                    return new ByteArrayInputStream(converted.getBytes(StandardCharsets.UTF_8));
                 }
             });
         });
+    }
+
+    /** The bundled legacy scan declares float remapClamped but returns integer literals. */
+    public static String convertLegacyScan(String source) {
+        return source.replaceAll("(?<prefix>if\\s*\\(\\s*value\\s*<\\s*minVal\\s*\\)\\s*return\\s+)0(?<suffix>\\s*;)", "${prefix}0.0${suffix}")
+                .replaceAll("(?<prefix>if\\s*\\(\\s*value\\s*>\\s*maxVal\\s*\\)\\s*return\\s+)1(?<suffix>\\s*;)", "${prefix}1.0${suffix}");
     }
 
     /** 1.21 takes (position, shape); 1.20.1 additionally requires the model-view matrix. */

@@ -113,6 +113,7 @@ jobs:
           grep -Fq '[culled-cpu-billboard-smoke] camera-facing billboard changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[culled-gpu-billboard-smoke] camera-facing billboard changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-scan-project-smoke] opened original scan project in editor' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[real-scan-shader-smoke] original scan shader compiled and particle is alive' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-scan-pixels-smoke] original scan project changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-tornado-pixels-smoke] original tornado shader changed' "$RUNNER_TEMP/photon-client.log"

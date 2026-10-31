@@ -379,6 +379,19 @@ public final class PhotonFXEditorSmokeTest {
                     throw new IllegalStateException("Real scan project did not initialize in the editor");
                 System.setProperty("photon.realScanSmoke", "true");
                 Photon.LOGGER.info("[real-scan-project-smoke] opened original scan project in editor");
+            } else if (ticks == 140) {
+                var scan = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
+                var slot = scan.config.renderer.getMaterials().get(0).getMaterial();
+                if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
+                    slot = reference.getRawMaterial();
+                if (!(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
+                        || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "scan"))
+                        || scan.getParticleAmount() == 0)
+                    throw new IllegalStateException("Real scan shader or particle failed to load");
+                shader.getShader(MaterialContext.NORMAL);
+                if (shader.isCompiledError()) throw new IllegalStateException("Real scan shader failed to compile");
+                Photon.LOGGER.info("[real-scan-shader-smoke] original scan shader compiled and particle is alive");
             } else if (ticks == 160) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString()));
