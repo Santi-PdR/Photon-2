@@ -58,6 +58,7 @@ public final class PhotonFXEditorSmokeTest {
     private static com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter smokeAraTrail;
     private static TrailEmitter smokeCpuTrail;
     private static TrailEmitter realArrowTrail;
+    private static float savedSceneZoom;
     private static CustomShaderMaterial smokeScreenShader;
 
     private PhotonFXEditorSmokeTest() {}
@@ -422,6 +423,8 @@ public final class PhotonFXEditorSmokeTest {
                 editor.loadProject(realTornado, realTornadoFile);
                 if (editor.getCurrentProject() != realTornado || editor.runtime == null)
                     throw new IllegalStateException("Real tornado project did not initialize in the editor");
+                savedSceneZoom = editor.sceneView.sceneEditor.scene.getZoom();
+                editor.sceneView.sceneEditor.scene.setZoom(9f);
                 System.setProperty("photon.realTornadoSmoke", "true");
             } else if (ticks == 190) {
                 var modelEmitters = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
@@ -450,6 +453,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realTornadoSmoke");
+                editor.sceneView.sceneEditor.scene.setZoom(savedSceneZoom);
                 var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
                 var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
                 editor.loadProject(realShield, realShieldFile);
