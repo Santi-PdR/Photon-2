@@ -59,6 +59,7 @@ public final class PhotonFXEditorSmokeTest {
     private static TrailEmitter smokeCpuTrail;
     private static TrailEmitter realArrowTrail;
     private static float savedSceneZoom;
+    private static org.joml.Vector3f savedSceneCenter;
     private static CustomShaderMaterial smokeScreenShader;
 
     private PhotonFXEditorSmokeTest() {}
@@ -424,6 +425,8 @@ public final class PhotonFXEditorSmokeTest {
                 if (editor.getCurrentProject() != realTornado || editor.runtime == null)
                     throw new IllegalStateException("Real tornado project did not initialize in the editor");
                 savedSceneZoom = editor.sceneView.sceneEditor.scene.getZoom();
+                savedSceneCenter = new org.joml.Vector3f(editor.sceneView.sceneEditor.scene.getCenter());
+                editor.sceneView.sceneEditor.scene.setCenter(new org.joml.Vector3f(0.5f, 5f, 0.5f));
                 editor.sceneView.sceneEditor.scene.setZoom(9f);
                 System.setProperty("photon.realTornadoSmoke", "true");
             } else if (ticks == 190) {
@@ -453,6 +456,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[real-tornado-project-smoke] screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realTornadoSmoke");
+                editor.sceneView.sceneEditor.scene.setCenter(savedSceneCenter);
                 editor.sceneView.sceneEditor.scene.setZoom(savedSceneZoom);
                 var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
                 var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
