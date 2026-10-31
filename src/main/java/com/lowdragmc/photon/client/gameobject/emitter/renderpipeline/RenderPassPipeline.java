@@ -39,6 +39,7 @@ public class RenderPassPipeline {
     private static boolean smokeCulledGpuBillboardLogged;
     private static boolean smokeRealScanLogged;
     private static boolean smokeRealTornadoLogged;
+    private static final java.util.Set<String> smokeRealTornadoLayers = new java.util.HashSet<>();
     private static boolean smokeRealShieldLogged;
     private static boolean smokeRealTrailLogged;
     private static boolean smokeTwoSidedModelLogged;
@@ -491,7 +492,9 @@ public class RenderPassPipeline {
                     });
                 });
                 var realScanBefore = inspectRealScan ? smokeReadCurrentViewport() : null;
-                boolean inspectRealTornado = Boolean.getBoolean("photon.realTornadoSmoke") && !smokeRealTornadoLogged
+                String tornadoLayer = System.getProperty("photon.realTornadoLayer", "");
+                boolean inspectRealTornado = Boolean.getBoolean("photon.realTornadoSmoke")
+                        && (!smokeRealTornadoLogged || (!tornadoLayer.isEmpty() && !smokeRealTornadoLayers.contains(tornadoLayer)))
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p -> {
                     if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile)) return false;
                     return tile.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> {
@@ -620,8 +623,12 @@ public class RenderPassPipeline {
                                 || realTornadoBefore[i + 2] != after[i + 2]) changed++;
                     }
                     if (changed > 0) {
-                        smokeRealTornadoLogged = true;
-                        com.lowdragmc.photon.Photon.LOGGER.info("[real-tornado-pixels-smoke] original tornado shader changed {} pixels", changed);
+                        if (!smokeRealTornadoLogged) {
+                            smokeRealTornadoLogged = true;
+                            com.lowdragmc.photon.Photon.LOGGER.info("[real-tornado-pixels-smoke] original tornado shader changed {} pixels", changed);
+                        }
+                        if (!tornadoLayer.isEmpty() && smokeRealTornadoLayers.add(tornadoLayer))
+                            com.lowdragmc.photon.Photon.LOGGER.info("[real-tornado-layer-smoke] {} changed {} pixels in isolation", tornadoLayer, changed);
                     }
                 }
                 if (realShieldBefore != null) {
@@ -1309,5 +1316,10 @@ public class RenderPassPipeline {
     /** See {@link #sceneSamplerCopies}. */
     public static int sceneSamplerCopies() {
         return sceneSamplerCopies;
+    }
+
+    /** CI diagnostic: isolated layers may intentionally contribute no pixels at a particular age. */
+    public static boolean smokeSawTornadoLayer(String name) {
+        return smokeRealTornadoLayers.contains(name);
     }
 }

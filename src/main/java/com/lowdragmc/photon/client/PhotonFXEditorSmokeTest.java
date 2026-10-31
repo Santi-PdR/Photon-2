@@ -324,6 +324,26 @@ public final class PhotonFXEditorSmokeTest {
                 realArrowTrail.transform().localPosition(new org.joml.Vector3f(-2.5f + elapsed * 0.12f, 2,
                         (float) Math.sin(elapsed * 0.12f) * 0.7f));
             }
+            if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks >= 180 && ticks < 208) {
+                String[] names = {"tornado_body", "tornado_body2", "tornado_cap", "tornado_body3"};
+                int phase = (ticks - 180) / 7;
+                String selected = names[phase];
+                if ((ticks - 180) % 7 == 0) {
+                    editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                            .map(ParticleEmitter.class::cast).forEach(e -> e.setSelfVisible(e.getName().equals(selected)));
+                    System.setProperty("photon.realTornadoLayer", selected);
+                } else if ((ticks - 180) % 7 == 6) {
+                    Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                            message -> Photon.LOGGER.info("[real-tornado-layer-smoke] {} screenshot: {}", selected, message.getString()));
+                }
+            } else if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks == 208) {
+                editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).forEach(e -> e.setSelfVisible(true));
+                System.clearProperty("photon.realTornadoLayer");
+                for (String name : new String[]{"tornado_body", "tornado_body2", "tornado_cap", "tornado_body3"})
+                    Photon.LOGGER.info("[real-tornado-layer-smoke] {} contributed pixels: {}", name,
+                            com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.smokeSawTornadoLayer(name));
+            }
             if (!started) {
                 started = true;
                 openLegacyProject(minecraft);
