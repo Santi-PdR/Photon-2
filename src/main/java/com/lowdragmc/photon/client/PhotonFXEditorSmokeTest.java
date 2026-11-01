@@ -429,6 +429,9 @@ public final class PhotonFXEditorSmokeTest {
                 editor.sceneView.sceneEditor.scene.setCenter(new org.joml.Vector3f(0.5f, 5f, 0.5f));
                 editor.sceneView.sceneEditor.scene.setZoom(9f);
                 System.setProperty("photon.realTornadoSmoke", "true");
+            } else if (ticks == 175) {
+                Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
+                        message -> Photon.LOGGER.info("[real-tornado-complete-smoke] screenshot near reference animation time: {}", message.getString()));
             } else if (ticks == 190) {
                 var modelEmitters = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).filter(e -> e.config.renderer.getRenderMode() == ParticleRendererSetting.Mode.Model)
@@ -1287,6 +1290,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 
