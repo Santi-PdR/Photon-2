@@ -507,6 +507,15 @@ public final class PhotonFXEditorSmokeTest {
                         throw new IllegalStateException("Forge is not using the authored emitter cull box");
                 } finally { cull.setEnable(false); }
                 Photon.LOGGER.info("[forge-cull-smoke] disabled culling stays visible and authored bounds reach Forge");
+                var queuedParticle = shield.getParticles().values().stream().flatMap(java.util.Collection::stream)
+                        .findFirst().orElseGet(shield.waitToAdded::peek);
+                if (queuedParticle == null) throw new IllegalStateException("No shield particle for removal test");
+                var removalProbe = new ParticleEmitter();
+                removalProbe.waitToAdded.add(queuedParticle);
+                removalProbe.remove(true);
+                if (!removalProbe.waitToAdded.isEmpty())
+                    throw new IllegalStateException("Forced removal left a particle queued for later");
+                Photon.LOGGER.info("[queued-removal-smoke] forced removal cleared pending particles");
                 Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
             } else if (ticks == 241 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 // Exercise the actual File > Export FX menu callback, including its deferred opening.

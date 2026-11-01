@@ -107,6 +107,10 @@ jobs:
         shell: bash
         run: grep -Fq '[forge-cull-smoke] disabled culling stays visible and authored bounds reach Forge' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require queued particle removal
+        shell: bash
+        run: grep -Fq '[queued-removal-smoke] forced removal cleared pending particles' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require entity effect removal
         shell: bash
         run: grep -Fq '[remove-server-command-smoke] default remove cleared long-lived entity particles' "$RUNNER_TEMP/photon-client.log"
