@@ -40,6 +40,7 @@ public class RenderPassPipeline {
     private static boolean smokeRealScanLogged;
     private static boolean smokeRealTornadoLogged;
     private static final java.util.Set<String> smokeRealTornadoLayers = new java.util.HashSet<>();
+    private static final java.util.Set<String> smokeRealTornadoLayerFrames = new java.util.HashSet<>();
     private static boolean smokeRealShieldLogged;
     private static boolean smokeRealTrailLogged;
     private static boolean smokeTwoSidedModelLogged;
@@ -616,6 +617,7 @@ public class RenderPassPipeline {
                     }
                 }
                 if (realTornadoBefore != null) {
+                    if (!tornadoLayer.isEmpty()) smokeRealTornadoLayerFrames.add(tornadoLayer);
                     var after = smokeReadCurrentViewport();
                     int changed = 0;
                     for (int i = 0; i < after.length; i += 4) {
@@ -1322,4 +1324,9 @@ public class RenderPassPipeline {
     public static boolean smokeSawTornadoLayer(String name) {
         return smokeRealTornadoLayers.contains(name);
     }
+
+    public static boolean smokeSawTornadoLayerFrame(String name) {
+        return smokeRealTornadoLayerFrames.contains(name);
+    }
 }
+

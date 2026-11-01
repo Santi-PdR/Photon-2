@@ -51,6 +51,7 @@ public final class PhotonFXEditorSmokeTest {
     private static boolean started;
     private static boolean finished;
     private static int ticks;
+    private static int tornadoFrameWait;
     private static FXEditor editor;
     private static Screen previousScreen;
     private static Path projectFile;
@@ -313,6 +314,17 @@ public final class PhotonFXEditorSmokeTest {
         var minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
         try {
+            // A slow software renderer may process multiple client ticks before drawing a frame.
+            // Hold each isolated phase until it has actually reached the render pipeline.
+            if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks >= 180 && ticks < 208
+                    && (ticks - 180) % 7 == 6) {
+                String layer = System.getProperty("photon.realTornadoLayer", "");
+                if (!com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.smokeSawTornadoLayerFrame(layer)) {
+                    if (++tornadoFrameWait > 10) throw new IllegalStateException("No rendered frame for tornado layer " + layer);
+                    return;
+                }
+                tornadoFrameWait = 0;
+            }
             if (started && smokeTrail != null) {
                 ticks++;
                 float x = -2.5f + ticks * 0.12f;
