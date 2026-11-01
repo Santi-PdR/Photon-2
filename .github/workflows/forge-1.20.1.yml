@@ -117,6 +117,9 @@ jobs:
           grep -Fq '[real-scan-pixels-smoke] original scan project changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-tornado-project-smoke] loaded four live OBJ model emitters and their original shaders' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-tornado-pixels-smoke] original tornado shader changed' "$RUNNER_TEMP/photon-client.log"
+          for layer in tornado_body tornado_body2 tornado_cap tornado_body3; do
+            grep -Fq "[real-tornado-layer-smoke] $layer contributed pixels: true" "$RUNNER_TEMP/photon-client.log"
+          done
           grep -Fq '[real-shield-project-smoke] loaded original shield model and shader' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-shield-pixels-smoke] original shield shader changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-arrow-trail-project-smoke] original trail accumulated moving segments' "$RUNNER_TEMP/photon-client.log"
