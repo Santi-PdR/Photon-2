@@ -523,6 +523,19 @@ public final class PhotonFXEditorSmokeTest {
                     throw new IllegalStateException("Export FX default filename was " + name.getText());
                 Photon.LOGGER.info("[export-menu-smoke] actual menu action opened a save dialog with the project filename");
                 dialog.close();
+            } else if (ticks == 247) {
+                clickEditorElement(minecraft, editor.menuContainer.getChildren().get(0));
+            } else if (ticks == 250) {
+                clickEditorElement(minecraft, findMenuEntry("ldlib.gui.editor.menu.export"));
+            } else if (ticks == 253) {
+                clickEditorElement(minecraft, findMenuEntry("photon.export_fx"));
+            } else if (ticks == 257) {
+                var root = editor.getModularUI().ui.rootElement;
+                var dialog = root.getChildren().stream()
+                        .filter(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::isInstance)
+                        .map(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::cast).findFirst().orElseThrow();
+                Photon.LOGGER.info("[export-click-smoke] clicking File, Export and Export FX displayed the dialog");
+                dialog.close();
             } else if (ticks == 260) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-shield-project-smoke] screenshot: {}", message.getString()));
@@ -596,6 +609,28 @@ public final class PhotonFXEditorSmokeTest {
             Photon.LOGGER.error("[fxproj-editor-smoke] failed to open or preview the legacy project", failure);
             throw new IllegalStateException("Photon editor project smoke test failed", failure);
         }
+    }
+
+    private static com.lowdragmc.lowdraglib2.gui.ui.UIElement findMenuEntry(String key) {
+        for (var element : editor.getModularUI().getAllElements()) {
+            if (element instanceof com.lowdragmc.lowdraglib2.gui.ui.elements.Menu<?, ?> menu) {
+                for (var entry : menu.getNodeUIs().entrySet()) {
+                    if (entry.getKey().getKey() instanceof net.minecraft.util.Tuple<?, ?> tuple
+                            && tuple.getB() instanceof Component label
+                            && label.equals(Component.translatable(key))) return entry.getValue();
+                }
+            }
+        }
+        throw new IllegalStateException("Menu entry not found: " + key);
+    }
+
+    private static void clickEditorElement(Minecraft minecraft, com.lowdragmc.lowdraglib2.gui.ui.UIElement element) {
+        var pos = element.localToWorld(new org.joml.Vector2f(
+                element.getPositionX() + element.getSizeWidth() / 2,
+                element.getPositionY() + element.getSizeHeight() / 2));
+        minecraft.screen.mouseMoved(pos.x, pos.y);
+        minecraft.screen.mouseClicked(pos.x, pos.y, 0);
+        minecraft.screen.mouseReleased(pos.x, pos.y, 0);
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
