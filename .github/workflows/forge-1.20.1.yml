@@ -99,6 +99,10 @@ jobs:
           exit 1
 
 
+      - name: Require export menu dialog
+        shell: bash
+        run: grep -Fq '[export-menu-smoke] actual menu action opened a save dialog with the project filename' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require editor render state restoration
         shell: bash
         run: grep -Fq '[editor-state-smoke] restored scissor and shader time after rendering' "$RUNNER_TEMP/photon-client.log"
