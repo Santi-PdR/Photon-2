@@ -501,6 +501,27 @@ public final class PhotonFXEditorSmokeTest {
             } else if (ticks == 260) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-shield-project-smoke] screenshot: {}", message.getString()));
+                // Exercise the same file format as File > Export FX, then the entity packet's
+                // encode/decode and client handler against the actual player in the test world.
+                var exported = new File(com.lowdragmc.lowdraglib2.LDLib2.getAssetsDir(), "photon/fx/ci_export_entity.fx");
+                if (!exported.getParentFile().isDirectory() && !exported.getParentFile().mkdirs())
+                    throw new IllegalStateException("Could not create FX export directory");
+                var definition = ((FXProject) editor.getCurrentProject()).getFx().serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+                definition.putInt("version", FXProject.VERSION);
+                net.minecraft.nbt.NbtIo.writeCompressed(definition, exported);
+                com.lowdragmc.photon.client.fx.FXHelper.clearCache();
+                var entityPacket = new com.lowdragmc.photon.command.EntityEffectCommand();
+                entityPacket.setLocation(new ResourceLocation("photon", "ci_export_entity"));
+                entityPacket.setEntities(java.util.List.of(minecraft.player));
+                var buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+                try {
+                    entityPacket.encode(buffer);
+                    com.lowdragmc.photon.command.EntityEffectCommand.execute(com.lowdragmc.photon.command.EntityEffectCommand.decodePacket(buffer));
+                } finally { buffer.release(); }
+                var attached = com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.get(minecraft.player);
+                if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
+                    throw new IllegalStateException("Exported FX did not start on player through entity packet");
+                Photon.LOGGER.info("[export-entity-smoke] exported definition loaded and started on player through decoded packet");
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realShieldSmoke");
                 var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");

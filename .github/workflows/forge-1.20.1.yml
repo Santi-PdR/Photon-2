@@ -122,6 +122,7 @@ jobs:
             grep -Fq "[real-tornado-layer-smoke] $layer contributed pixels: true" "$RUNNER_TEMP/photon-client.log"
           done
           grep -Fq '[real-shield-project-smoke] loaded original shield model and shader' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[export-entity-smoke] exported definition loaded and started on player through decoded packet' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-shield-pixels-smoke] original shield shader changed' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-arrow-trail-project-smoke] original trail accumulated moving segments' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[real-arrow-trail-pixels-smoke] original moving trail changed' "$RUNNER_TEMP/photon-client.log"
