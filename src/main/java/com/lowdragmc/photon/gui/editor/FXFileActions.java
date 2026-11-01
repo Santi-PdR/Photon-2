@@ -64,7 +64,10 @@ public final class FXFileActions {
 
     private static void showExportFxDialog(Editor editor, FXProject project) {
         var fx = project.getFx();
-        Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", new File(LDLib2.getAssetsDir(), "%s/fx/".formatted(Photon.MOD_ID)), false,
+        var directory = new File(LDLib2.getAssetsDir(), "%s/fx/".formatted(Photon.MOD_ID));
+        var projectFile = editor.getCurrentProjectFile();
+        var name = projectFile != null ? baseName(projectFile, FXProject.TYPE.getSuffix()) : "effect";
+        Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", directory, false, new File(directory, name + FX.SUFFIX),
                 Dialog.suffixFilter(FX.SUFFIX), file -> {
                     if (file == null || file.isDirectory()) return;
                     var target = withSuffix(file, FX.SUFFIX);
@@ -86,7 +89,10 @@ public final class FXFileActions {
 
     private static void showExportFxPackDialog(Editor editor, FXProject project) {
         var fx = project.getFx();
-        Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", FXPacks.getFxPacksDir(), false,
+        var directory = FXPacks.getFxPacksDir();
+        var sourceFile = editor.getCurrentProjectFile();
+        var suggestedName = sourceFile != null ? baseName(sourceFile, FXProject.TYPE.getSuffix()) : "effect";
+        Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", directory, false, new File(directory, suggestedName + FXPacks.SUFFIX),
                 Dialog.suffixFilter(FXPacks.SUFFIX), file -> {
                     if (file == null || file.isDirectory()) return;
                     var packFile = withSuffix(file, FXPacks.SUFFIX);
