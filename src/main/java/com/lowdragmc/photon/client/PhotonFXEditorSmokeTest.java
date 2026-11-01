@@ -498,6 +498,31 @@ public final class PhotonFXEditorSmokeTest {
                         || shield.getParticleAmount() == 0)
                     throw new IllegalStateException("Real shield model, shader or particle failed to load");
                 Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
+            } else if (ticks == 241) {
+                // Exercise the actual File > Export FX menu callback, including its deferred opening.
+                var createMenu = com.lowdragmc.lowdraglib2.editor.ui.menu.MenuTab.class.getDeclaredMethod("createMenu");
+                createMenu.setAccessible(true);
+                var menu = (com.lowdragmc.lowdraglib2.gui.util.TreeBuilder.Menu) createMenu.invoke(editor.fileMenu);
+                var export = menu.build().getChildren().stream()
+                        .filter(node -> node.getKey().getB().equals(Component.translatable("ldlib.gui.editor.menu.export")))
+                        .findFirst().orElseThrow();
+                var action = export.getChildren().stream()
+                        .filter(node -> node.getKey().getB().equals(Component.translatable("photon.export_fx")))
+                        .findFirst().orElseThrow();
+                if (action.getContent() == null) throw new IllegalStateException("Export FX action is disabled");
+                action.getContent().run();
+            } else if (ticks == 244) {
+                var root = editor.getModularUI().ui.rootElement;
+                var dialog = root.getChildren().stream()
+                        .filter(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::isInstance)
+                        .map(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::cast).findFirst().orElseThrow();
+                var name = dialog.contentContainer.getChildren().get(0).getChildren().stream()
+                        .filter(com.lowdragmc.lowdraglib2.gui.ui.elements.TextField.class::isInstance)
+                        .map(com.lowdragmc.lowdraglib2.gui.ui.elements.TextField.class::cast).findFirst().orElseThrow();
+                if (!"shield.fx".equals(name.getText()))
+                    throw new IllegalStateException("Export FX default filename was " + name.getText());
+                Photon.LOGGER.info("[export-menu-smoke] actual menu action opened a save dialog with the project filename");
+                dialog.close();
             } else if (ticks == 260) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-shield-project-smoke] screenshot: {}", message.getString()));
