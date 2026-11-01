@@ -181,11 +181,18 @@ jobs:
         shell: bash
         run: |
           /usr/bin/python3 - <<'PY'
-          from glob import glob
+          import os
+          import re
+          from pathlib import Path
           from PIL import Image, ImageChops
-          images = sorted(glob('run/screenshots/*.png'))
-          if len(images) != 2:
-              raise SystemExit(f'Expected two editor screenshots; found {len(images)}')
+          log = Path(os.environ['RUNNER_TEMP'], 'photon-client.log').read_text(errors='replace')
+          def screenshot(marker):
+              match = re.search(re.escape(marker) + r'.*?Saved screenshot as ([^\s]+\.png)', log)
+              if not match:
+                  raise SystemExit(f'Missing editor screenshot marker: {marker}')
+              return Path('run/screenshots') / match.group(1)
+          images = [screenshot('[fxproj-editor-smoke] screenshot:'),
+                    screenshot('[fxproj-editor-smoke] expired screenshot:')]
           active, expired = [Image.open(path).convert('RGB').crop((300, 180, 1010, 550)) for path in images]
           changed = sum(1 for pixel in ImageChops.difference(active, expired).getdata() if pixel != (0, 0, 0))
           print(f'Editor scene pixels changed by the live particle: {changed}')
@@ -203,4 +210,5 @@ jobs:
             run/screenshots/*.png
           if-no-files-found: ignore
           retention-days: 14
+
 
