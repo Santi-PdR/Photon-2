@@ -103,6 +103,10 @@ jobs:
         shell: bash
         run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require export menu mouse interaction
+        shell: bash
+        run: grep -Fq '[export-click-smoke] clicking File, Export and Export FX displayed the dialog' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require export menu dialog
         shell: bash
         run: grep -Fq '[export-menu-smoke] actual menu action opened a save dialog with the project filename' "$RUNNER_TEMP/photon-client.log"
