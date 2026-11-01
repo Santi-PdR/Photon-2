@@ -1120,6 +1120,7 @@ public class ParticleEmitter extends Emitter {
             forceRemoved = true;
             registerLights(null);
             particles.clear();
+            waitToAdded.clear();
             pendingSubEmitterSpawns.clear();
             pendingCollisionReports.clear();
             collisionScene = null;
