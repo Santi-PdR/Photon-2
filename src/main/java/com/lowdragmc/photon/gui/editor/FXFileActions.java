@@ -49,11 +49,12 @@ public final class FXFileActions {
             }
             // plain .fx: pure definition data (references only) — usable wherever the
             // referenced resources already exist (this machine, a mod jar, an .fxpack)
-            export.leaf("photon.export_fx", () -> showExportFxDialog(editor, project));
+            // Let the submenu close before the dialog takes focus.
+            export.leaf("photon.export_fx", () -> Minecraft.getInstance().tell(() -> showExportFxDialog(editor, project)));
             // .fxpack: a resource-pack zip carrying the fx plus everything it references —
             // the self-contained distribution format (additive: exports into the same pack
             // accumulate, shared resources are stored once)
-            export.leaf("photon.export_fxpack", () -> showExportFxPackDialog(editor, project));
+            export.leaf("photon.export_fxpack", () -> Minecraft.getInstance().tell(() -> showExportFxPackDialog(editor, project)));
         });
         menu.leaf(Icons.IMPORT, "photon.convert_fx", () -> showConvertFxDialog(editor));
         menu.leaf(Icons.FOLDER, "photon.manage_fxpack", () -> showManageFxPackDialog(editor));
@@ -80,7 +81,7 @@ public final class FXFileActions {
                         Photon.LOGGER.error("Failed to export fx to {}", target, e);
                         showError(editor, "photon.export_fx", e);
                     }
-                }).show(editor);
+                }).show(editor.getModularUI());
     }
 
     private static void showExportFxPackDialog(Editor editor, FXProject project) {
@@ -94,7 +95,7 @@ public final class FXFileActions {
                     var defaultName = projectFile != null ? baseName(projectFile, FXProject.TYPE.getSuffix()) : "effect";
                     Dialog.stringEditorDialog("photon.export_fxpack.fx_name", defaultName, null,
                             name -> exportIntoFxPack(editor, project, packFile, name)).show(editor);
-                }).show(editor);
+                }).show(editor.getModularUI());
     }
 
     private static void exportIntoFxPack(Editor editor, FXProject project, File packFile, String fxName) {
