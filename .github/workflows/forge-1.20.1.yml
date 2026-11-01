@@ -99,6 +99,10 @@ jobs:
           exit 1
 
 
+      - name: Require exported FX over server network
+        shell: bash
+        run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require export menu dialog
         shell: bash
         run: grep -Fq '[export-menu-smoke] actual menu action opened a save dialog with the project filename' "$RUNNER_TEMP/photon-client.log"
