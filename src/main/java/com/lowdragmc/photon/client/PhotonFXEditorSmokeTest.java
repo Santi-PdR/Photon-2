@@ -433,6 +433,12 @@ public final class PhotonFXEditorSmokeTest {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-tornado-complete-smoke] screenshot near reference animation time: {}", message.getString()));
             } else if (ticks == 190) {
+                var tornadoSparks = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).filter(e -> e.getName().equals("particle_emitter"))
+                        .findFirst().orElseThrow(() -> new IllegalStateException("Real tornado spark emitter is missing"));
+                if (tornadoSparks.getParticleAmount() == 0)
+                    throw new IllegalStateException("Real tornado spark emitter did not emit particles");
+                Photon.LOGGER.info("[real-tornado-sparks-smoke] original spark emitter has {} live particles", tornadoSparks.getParticleAmount());
                 var modelEmitters = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).filter(e -> e.config.renderer.getRenderMode() == ParticleRendererSetting.Mode.Model)
                         .toList();
