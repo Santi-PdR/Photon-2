@@ -547,6 +547,19 @@ public final class PhotonFXEditorSmokeTest {
                 if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
                     throw new IllegalStateException("Exported FX did not start on player through entity packet");
                 Photon.LOGGER.info("[export-entity-smoke] exported definition loaded and started on player through decoded packet");
+                // Clear the direct-packet result so the later assertion can only pass if the
+                // integrated server command sends a new packet across the actual Forge channel.
+                attached.forEach(effect -> effect.getRuntime().destroy(true));
+                com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
+                var server = minecraft.getSingleplayerServer();
+                if (server == null) throw new IllegalStateException("Integrated server is unavailable");
+                var playerId = minecraft.player.getUUID();
+                server.execute(() -> {
+                    var player = server.getPlayerList().getPlayer(playerId);
+                    if (player == null) throw new IllegalStateException("Smoke-test player is unavailable on server");
+                    server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4),
+                            "photon fx photon:ci_export_entity entity @s");
+                });
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realShieldSmoke");
                 var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
@@ -557,6 +570,11 @@ public final class PhotonFXEditorSmokeTest {
                 realArrowTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
                         .map(TrailEmitter.class::cast).findFirst().orElseThrow();
                 System.setProperty("photon.realTrailSmoke", "true");
+            } else if (ticks == 285) {
+                var attached = com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.get(minecraft.player);
+                if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
+                    throw new IllegalStateException("Server command did not deliver the exported effect to the player");
+                Photon.LOGGER.info("[export-server-command-smoke] server command delivered exported FX over Forge networking");
             } else if (ticks == 295) {
                 if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
                     throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
