@@ -256,6 +256,23 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
         return cullBox == null ? new AABB(-Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE) : cullBox;
     }
 
+    // In Forge the particle engine calls shouldCull/getBoundingBox directly. Respect
+    // authored culling and use the emitter's transformed box, never Particle's stale
+    // box at (0, 0, 0). A disabled cull setting must render from every camera angle.
+    @Override
+    public boolean shouldCull() {
+        return getCullBox(1f) != null;
+    }
+
+    @Override
+    public AABB getBoundingBox() {
+        if (transform != null && getScene() != null) {
+            var cullBox = getCullBox(1f);
+            if (cullBox != null) return cullBox;
+        }
+        return super.getBoundingBox();
+    }
+
     public int getAge() {
         return (int) ageF;
     }

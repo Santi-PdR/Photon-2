@@ -52,9 +52,8 @@ public class RemoveBlockEffectCommand {
     private static int execute(CommandContext<CommandSourceStack> context, boolean force, boolean location) throws CommandSyntaxException {
         var command = new RemoveBlockEffectCommand();
         command.pos = BlockPosArgument.getLoadedBlockPos(context, "pos");
-        if (force) {
-            command.setForce(BoolArgumentType.getBool(context, "force"));
-        }
+        // Explicit false keeps graceful draining; an unqualified remove is immediate.
+        command.setForce(!force || BoolArgumentType.getBool(context, "force"));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }

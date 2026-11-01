@@ -366,6 +366,14 @@ public abstract class FXObject extends Particle implements IFXObject {
         return new AABB(-Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
     }
 
+    // Forge 1.20.1 culls Particle#getBoundingBox(), not getRenderBoundingBox(). The
+    // FX root is only a transform/timeline driver and must run even when its
+    // inherited particle box (initially at the world origin) is off-screen.
+    @Override
+    public boolean shouldCull() {
+        return false;
+    }
+
     public static ParticleRenderType NO_RENDER_RENDER_TYPE = new ParticleRenderType() {
         public final RenderPassPipeline pipeline = new RenderPassPipeline();
 

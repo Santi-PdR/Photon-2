@@ -103,13 +103,13 @@ jobs:
         shell: bash
         run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
 
-      - name: Require export menu mouse interaction
+      - name: Require Forge particle culling compatibility
         shell: bash
-        run: grep -Fq '[export-click-smoke] clicking File, Export and Export FX displayed the dialog' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[forge-cull-smoke] disabled culling stays visible and authored bounds reach Forge' "$RUNNER_TEMP/photon-client.log"
 
-      - name: Require export menu dialog
+      - name: Require entity effect removal
         shell: bash
-        run: grep -Fq '[export-menu-smoke] actual menu action opened a save dialog with the project filename' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[remove-server-command-smoke] default remove cleared long-lived entity particles' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require editor render state restoration
         shell: bash
@@ -227,5 +227,4 @@ jobs:
             run/screenshots/*.png
           if-no-files-found: ignore
           retention-days: 14
-
 

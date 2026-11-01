@@ -54,9 +54,9 @@ public class RemoveEntityEffectCommand {
     private static int execute(CommandContext<CommandSourceStack> context, boolean force, boolean location) throws CommandSyntaxException {
         var command = new RemoveEntityEffectCommand();
         command.setEntities(EntityArgument.getEntities(context, "entities").stream().map(e -> (Entity) e).toList());
-        if (force) {
-            command.setForce(BoolArgumentType.getBool(context, "force"));
-        }
+        // The ordinary remove command must also remove long-lived particles. Explicit false
+        // retains the original graceful-drain behavior for callers that need it.
+        command.setForce(!force || BoolArgumentType.getBool(context, "force"));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }

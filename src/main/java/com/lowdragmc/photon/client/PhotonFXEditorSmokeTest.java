@@ -62,6 +62,7 @@ public final class PhotonFXEditorSmokeTest {
     private static float savedSceneZoom;
     private static org.joml.Vector3f savedSceneCenter;
     private static CustomShaderMaterial smokeScreenShader;
+    private static com.lowdragmc.photon.client.fx.FXRuntime removedEntityRuntime;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -497,8 +498,17 @@ public final class PhotonFXEditorSmokeTest {
                         || !shader.getShaderLocation().equals(new ResourceLocation("ldlib2", "shield"))
                         || shield.getParticleAmount() == 0)
                     throw new IllegalStateException("Real shield model, shader or particle failed to load");
+                if (shield.shouldCull() || ((com.lowdragmc.photon.client.gameobject.FXObject) editor.runtime.root).shouldCull())
+                    throw new IllegalStateException("Forge frustum-culls an effect with culling disabled");
+                var cull = shield.runtime().renderer.getCull();
+                cull.setEnable(true);
+                try {
+                    if (!shield.shouldCull() || !shield.getBoundingBox().equals(shield.getCullBox(1f)))
+                        throw new IllegalStateException("Forge is not using the authored emitter cull box");
+                } finally { cull.setEnable(false); }
+                Photon.LOGGER.info("[forge-cull-smoke] disabled culling stays visible and authored bounds reach Forge");
                 Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
-            } else if (ticks == 241) {
+            } else if (ticks == 241 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 // Exercise the actual File > Export FX menu callback, including its deferred opening.
                 var createMenu = com.lowdragmc.lowdraglib2.editor.ui.menu.MenuTab.class.getDeclaredMethod("createMenu");
                 createMenu.setAccessible(true);
@@ -511,7 +521,7 @@ public final class PhotonFXEditorSmokeTest {
                         .findFirst().orElseThrow();
                 if (action.getContent() == null) throw new IllegalStateException("Export FX action is disabled");
                 action.getContent().run();
-            } else if (ticks == 244) {
+            } else if (ticks == 244 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 var root = editor.getModularUI().ui.rootElement;
                 var dialog = root.getChildren().stream()
                         .filter(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::isInstance)
@@ -523,13 +533,13 @@ public final class PhotonFXEditorSmokeTest {
                     throw new IllegalStateException("Export FX default filename was " + name.getText());
                 Photon.LOGGER.info("[export-menu-smoke] actual menu action opened a save dialog with the project filename");
                 dialog.close();
-            } else if (ticks == 247) {
+            } else if (ticks == 247 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 clickEditorElement(minecraft, editor.menuContainer.getChildren().get(0));
-            } else if (ticks == 250) {
+            } else if (ticks == 250 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 clickEditorElement(minecraft, findMenuEntry("ldlib.gui.editor.menu.export"));
-            } else if (ticks == 253) {
+            } else if (ticks == 253 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 clickEditorElement(minecraft, findMenuEntry("photon.export_fx"));
-            } else if (ticks == 257) {
+            } else if (ticks == 257 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 var root = editor.getModularUI().ui.rootElement;
                 var dialog = root.getChildren().stream()
                         .filter(com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog.class::isInstance)
@@ -588,10 +598,24 @@ public final class PhotonFXEditorSmokeTest {
                 if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
                     throw new IllegalStateException("Server command did not deliver the exported effect to the player");
                 Photon.LOGGER.info("[export-server-command-smoke] server command delivered exported FX over Forge networking");
+                removedEntityRuntime = attached.get(attached.size() - 1).getRuntime();
+                var server = minecraft.getSingleplayerServer();
+                var playerId = minecraft.player.getUUID();
+                server.execute(() -> {
+                    var player = server.getPlayerList().getPlayer(playerId);
+                    server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4),
+                            "photon fx remove entity @s");
+                });
             } else if (ticks == 295) {
                 if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
                     throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
                 Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
+            } else if (ticks == 310) {
+                if (removedEntityRuntime == null || !removedEntityRuntime.isFinished()
+                        || removedEntityRuntime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).anyMatch(emitter -> emitter.getParticleAmount() != 0))
+                    throw new IllegalStateException("Remove command left the long-lived shield particles visible");
+                Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
             } else if (ticks == 320) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> {
@@ -1407,7 +1431,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
-
 
 
 
