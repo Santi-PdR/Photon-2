@@ -239,6 +239,10 @@ public class MapperUtils {
         newShapeTag.putString("type", shapeTag.getString("_type"));
         CompoundTag dataTag = shapeTag.copy();
         dataTag.remove("_type");
+        if ("mesh".equalsIgnoreCase(shapeTag.getString("_type")) && shapeTag.contains("mesh", Tag.TAG_COMPOUND)) {
+            dataTag.put("meshData", shapeTag.getCompound("mesh").copy());
+            dataTag.remove("mesh");
+        }
         newShapeTag.put("data", dataTag);
 
         return newShapeTag;
@@ -357,6 +361,9 @@ public class MapperUtils {
     public static CompoundTag mapRendererTag(CompoundTag renderTag, CompoundTag configTag){
         CompoundTag newRendererTag = new CompoundTag();
         newRendererTag.putString("renderMode", renderTag.getString("renderMode"));
+        if (renderTag.contains("model", Tag.TAG_COMPOUND)) {
+            newRendererTag.put("model", renderTag.getCompound("model").copy());
+        }
         newRendererTag.putByte("useBlockUV",  renderTag.getByte("useBlockUV"));
         newRendererTag.putByte("shade",  renderTag.getByte("shade"));
         newRendererTag.putString("layer",  renderTag.getString("layer"));

@@ -50,6 +50,8 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
     // compare is all the staleness detection needed.
     @Nullable
     private volatile PhotonMesh derivedFrom = null;
+    @Nullable
+    private volatile CompoundTag legacySamplingData;
     private final List<Vector3f> vertices = new ArrayList<>();
     private int[] samplingFirst = new int[0];
     private final List<Edge> edges = new ArrayList<>();
@@ -76,6 +78,7 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
 
     public void setSource(IModelSource source) {
         this.source = source;
+        legacySamplingData = null;
         clearDerived();
     }
 
@@ -102,6 +105,7 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
      * spawned on the frame a pose changes can land between the two.</p>
      */
     private void ensureLoaded() {
+        if (legacySamplingData != null) return;
         var mesh = source.getMesh();
         if (mesh == derivedFrom) return;
         synchronized (this) {
@@ -263,6 +267,29 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
             }
         }
         clearDerived();
+        legacySamplingData = null;
+        if (!nbt.contains("source") && nbt.contains("vertices", Tag.TAG_LIST)) {
+            var points = nbt.getList("vertices", Tag.TAG_FLOAT);
+            for (int i = 0; i + 2 < points.size(); i += 3) vertices.add(readLegacyVector(points, i));
+            var oldEdges = nbt.getList("edges", Tag.TAG_FLOAT);
+            for (int i = 0; i + 5 < oldEdges.size(); i += 6) {
+                edgeSumLength += addEdge(readLegacyVector(oldEdges, i), readLegacyVector(oldEdges, i + 3));
+            }
+            var oldTriangles = nbt.getList("triangles", Tag.TAG_FLOAT);
+            for (int i = 0; i + 8 < oldTriangles.size(); i += 9) {
+                triangleSumArea += addTriangle(readLegacyVector(oldTriangles, i), readLegacyVector(oldTriangles, i + 3), readLegacyVector(oldTriangles, i + 6));
+            }
+            legacySamplingData = nbt.copy();
+        }
+    }
+
+    private static Vector3f readLegacyVector(net.minecraft.nbt.ListTag list, int i) {
+        return new Vector3f(list.getFloat(i), list.getFloat(i + 1), list.getFloat(i + 2));
+    }
+
+    @Override
+    public @NotNull CompoundTag serializeNBT(HolderLookup.@NotNull Provider provider) {
+        return legacySamplingData != null ? legacySamplingData.copy() : IPersistedSerializable.super.serializeNBT(provider);
     }
 
     @OnlyIn(Dist.CLIENT)
@@ -378,12 +405,15 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
     public boolean equals(Object o) {
         if (o == null || getClass() != o.getClass()) return false;
         MeshData meshData = (MeshData) o;
+        if (legacySamplingData != null || meshData.legacySamplingData != null) {
+            return java.util.Objects.equals(legacySamplingData, meshData.legacySamplingData);
+        }
         return source.equals(meshData.source);
     }
 
     @Override
     public int hashCode() {
-        return source.hashCode();
+        return legacySamplingData != null ? legacySamplingData.hashCode() : source.hashCode();
     }
 }
 
