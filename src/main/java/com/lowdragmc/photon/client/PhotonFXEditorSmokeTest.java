@@ -516,6 +516,10 @@ public final class PhotonFXEditorSmokeTest {
                 if (!removalProbe.waitToAdded.isEmpty())
                     throw new IllegalStateException("Forced removal left a particle queued for later");
                 Photon.LOGGER.info("[queued-removal-smoke] forced removal cleared pending particles");
+                var shieldHolderField = CustomShaderMaterial.class.getDeclaredField("shaderHolder");
+                shieldHolderField.setAccessible(true);
+                var shieldHolder = (com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder) shieldHolderField.get(shader);
+                shieldHolder.setHDRUniform("FrontHDR", new com.lowdragmc.lowdraglib2.math.HDRColor(0.15f, 0.75f, 0.25f, 1f, 1f));
                 var packDir = Files.createTempDirectory("photon-shield-pack-");
                 var pack = packDir.resolve("shield.fxpack");
                 try {
@@ -530,9 +534,19 @@ public final class PhotonFXEditorSmokeTest {
                             if (zip.getEntry(path) == null)
                                 throw new IllegalStateException("Shield fxpack missing " + path + "; warnings=" + result.warnings());
                         }
-                        var material = zip.stream().anyMatch(entry -> entry.getName().startsWith("assets/photon_fx/material/")
-                                && entry.getName().endsWith(".material.nbt"));
-                        if (!material) throw new IllegalStateException("Shield fxpack omitted its material: " + result.warnings());
+                        var material = zip.stream().filter(entry -> entry.getName().startsWith("assets/photon_fx/material/")
+                                && entry.getName().endsWith(".material.nbt")).findFirst().orElseThrow();
+                        net.minecraft.nbt.CompoundTag wrapper;
+                        try (var input = new java.io.DataInputStream(zip.getInputStream(material))) {
+                            wrapper = net.minecraft.nbt.NbtIo.read(input);
+                        }
+                        var restored = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE
+                                .deserializeResource(wrapper.get("data"), com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+                        if (!(restored instanceof CustomShaderMaterial restoredShader))
+                            throw new IllegalStateException("Shield fxpack material did not deserialize");
+                        var front = restoredShader.getShader(MaterialContext.NORMAL).getUniform("FrontHDR");
+                        if (front == null || Math.abs(front.getFloatBuffer().get(1) - 0.75f) > 0.0001f)
+                            throw new IllegalStateException("Shield fxpack lost the edited color");
                         var metadata = new String(zip.getInputStream(zip.getEntry("pack.mcmeta")).readAllBytes(),
                                 java.nio.charset.StandardCharsets.UTF_8);
                         if (!metadata.contains("\"pack_format\": 15"))
@@ -1469,6 +1483,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 
