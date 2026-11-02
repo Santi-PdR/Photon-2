@@ -1,0 +1,58 @@
+package com.lowdragmc.photon.client.fx.fxpack;
+
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtIo;
+
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+
+/** Exercises the same dependency traversal that runs after each fxpack rewrite. */
+public final class FXPackDependencyRegression {
+    private FXPackDependencyRegression() {}
+
+    public static void verify() throws Exception {
+        var directory = Files.createTempDirectory("photon-pack-deps-");
+        var archive = directory.resolve("test.fxpack");
+        try {
+            try (var zip = FileSystems.newFileSystem(java.net.URI.create("jar:" + archive.toUri()), Map.of("create", "true"))) {
+                var fx = zip.getPath("assets/test/fx/effect.fx");
+                Files.createDirectories(fx.getParent());
+                var root = new CompoundTag();
+                var model = new CompoundTag();
+                var data = new CompoundTag();
+                data.putString("modelLocation", "test:block/shield");
+                model.putString("type", "json_model");
+                model.put("data", data);
+                root.put("model", model);
+                root.putString("mesh", "test:models/foo/anim.gltf");
+                try (var out = Files.newOutputStream(fx)) { NbtIo.writeCompressed(root, out); }
+                put(zip.getPath("assets/test/models/block/shield.json"),
+                        "{\"model\":\"test:models/shield.obj\",\"textures\":{\"base\":\"test:item/pattern\"}}");
+                put(zip.getPath("assets/test/models/shield.obj"), "v 0 0 0\n");
+                put(zip.getPath("assets/test/textures/item/pattern.png"), "texture");
+                put(zip.getPath("assets/test/textures/item/pattern.png.mcmeta"), "metadata");
+                put(zip.getPath("assets/test/models/foo/anim.gltf"), "{\"buffers\":[{\"uri\":\"../buffers/mesh.bin\"}]}");
+                put(zip.getPath("assets/test/models/buffers/mesh.bin"), "buffer");
+                put(zip.getPath("assets/test/unused.bin"), "orphan");
+                FXPacks.gc(zip);
+                for (var path : java.util.List.of("assets/test/models/block/shield.json", "assets/test/models/shield.obj",
+                        "assets/test/textures/item/pattern.png", "assets/test/textures/item/pattern.png.mcmeta",
+                        "assets/test/models/foo/anim.gltf", "assets/test/models/buffers/mesh.bin")) {
+                    if (!Files.isRegularFile(zip.getPath(path))) throw new IllegalStateException("FX pack GC removed " + path);
+                }
+                if (Files.exists(zip.getPath("assets/test/unused.bin")))
+                    throw new IllegalStateException("FX pack GC retained an unrelated file");
+            }
+        } finally {
+            Files.deleteIfExists(archive);
+            Files.deleteIfExists(directory);
+        }
+    }
+
+    private static void put(Path path, String value) throws Exception {
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, value);
+    }
+}

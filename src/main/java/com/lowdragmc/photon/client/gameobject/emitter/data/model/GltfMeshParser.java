@@ -128,7 +128,7 @@ public final class GltfMeshParser {
         return new Reader(root, glbBin, flipV, externalBuffers);
     }
 
-    static ResourceLocation resolveRelativeBufferLocation(ResourceLocation model, String value) throws IOException {
+    public static ResourceLocation resolveRelativeBufferLocation(ResourceLocation model, String value) throws IOException {
         URI uri;
         try {
             uri = new URI(value);

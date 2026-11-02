@@ -516,6 +516,33 @@ public final class PhotonFXEditorSmokeTest {
                 if (!removalProbe.waitToAdded.isEmpty())
                     throw new IllegalStateException("Forced removal left a particle queued for later");
                 Photon.LOGGER.info("[queued-removal-smoke] forced removal cleared pending particles");
+                var packDir = Files.createTempDirectory("photon-shield-pack-");
+                var pack = packDir.resolve("shield.fxpack");
+                try {
+                    var project = (FXProject) editor.getCurrentProject();
+                    var result = com.lowdragmc.photon.client.fx.fxpack.FXPackExporter.exportInto(
+                            pack.toFile(), "smoke", "shield", project.getFx(),
+                            com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+                    try (var zip = new java.util.zip.ZipFile(pack.toFile())) {
+                        for (var path : java.util.List.of("assets/smoke/fx/shield.fx",
+                                "assets/ldlib2/models/block/shield.json", "assets/ldlib2/models/obj/shield.obj",
+                                "assets/ldlib2/shaders/core/shield.json", "assets/ldlib2/shaders/core/shield.fsh")) {
+                            if (zip.getEntry(path) == null)
+                                throw new IllegalStateException("Shield fxpack missing " + path + "; warnings=" + result.warnings());
+                        }
+                        var material = zip.stream().anyMatch(entry -> entry.getName().startsWith("assets/photon_fx/material/")
+                                && entry.getName().endsWith(".material.nbt"));
+                        if (!material) throw new IllegalStateException("Shield fxpack omitted its material: " + result.warnings());
+                        var metadata = new String(zip.getInputStream(zip.getEntry("pack.mcmeta")).readAllBytes(),
+                                java.nio.charset.StandardCharsets.UTF_8);
+                        if (!metadata.contains("\"pack_format\": 15"))
+                            throw new IllegalStateException("Wrong 1.20.1 resource-pack format: " + metadata);
+                    }
+                    Photon.LOGGER.info("[shield-fxpack-smoke] packed shield material, shader, JSON model and OBJ");
+                } finally {
+                    Files.deleteIfExists(pack);
+                    Files.deleteIfExists(packDir);
+                }
                 Photon.LOGGER.info("[real-shield-project-smoke] loaded original shield model and shader");
             } else if (ticks == 241 && Boolean.getBoolean("photon.exportUiSmoke")) {
                 // Exercise the actual File > Export FX menu callback, including its deferred opening.
@@ -667,6 +694,8 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
+        Photon.LOGGER.info("[fxpack-dependency-smoke] model, texture metadata and glTF buffers survive pack cleanup");
         com.lowdragmc.photon.client.gameobject.particle.renderer.ModelTriangleOrderRegression.verify();
         var callbacks = new int[1];
         var dynamic = new com.lowdragmc.photon.client.gameobject.emitter.data.model.IDynamicMesh() {

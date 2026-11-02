@@ -64,8 +64,7 @@ import java.util.Set;
  * </ul>
  * The exporter works on the serialized NBT (a scratch copy — the live project is never touched) with
  * one recursive walk. Assets that resolve from vanilla or a mod jar are skipped (the recipient's game
- * ships them), builtin library paths are skipped (they resolve on every install), and
- * {@code json_model} sources can't be packed (baked through the model system) and produce a warning.
+ * ships them), and builtin library paths are skipped (they resolve on every install).
  * <p>
  * CONTRACT with {@link FXPacks#gc}: gc's mark phase must be able to re-discover every packed file
  * from the fx entries ({@code file(assets/...)} strings, {@code .png}/{@code .obj}/{@code .glb}/{@code .gltf} location strings,
@@ -83,7 +82,7 @@ public final class FXPackExporter {
     public static final String LIBRARY_NAMESPACE = "photon_fx";
     /** pack.mcmeta written into fresh packs (also makes an .fxpack a valid ordinary resource pack). */
     private static final String PACK_MCMETA = """
-            {"pack": {"description": "Photon FX pack", "pack_format": 34}}
+            {"pack": {"description": "Photon FX pack", "pack_format": 15}}
             """;
 
     /** Export outcome for the summary log. */
@@ -223,8 +222,7 @@ public final class FXPackExporter {
                         packCoreShader(ResourceLocation.tryParse(data.getString("shaderLocation")));
                     }
                 }
-                case "json_model" -> warnings.add("json model '%s' cannot be packed (baked models need to ship as assets)"
-                        .formatted(data.getString("modelLocation")));
+                case "json_model" -> packJsonModel(ResourceLocation.tryParse(data.getString("modelLocation")));
                 default -> { }
             }
         }
@@ -391,6 +389,43 @@ public final class FXPackExporter {
         var bytes = readPackableAsset(location);
         if (bytes != null) {
             files.put(location, bytes);
+            if (location.getPath().endsWith(".png")) {
+                var metadata = new ResourceLocation(location.getNamespace(), location.getPath() + ".mcmeta");
+                var resource = Minecraft.getInstance().getResourceManager().getResource(metadata).orElse(null);
+                if (resource != null && !shipsWithTheGame(resource)) {
+                    try (var input = resource.open()) {
+                        files.put(metadata, input.readAllBytes());
+                    } catch (IOException e) {
+                        warnings.add("failed to read texture metadata %s (%s)".formatted(metadata, e.getMessage()));
+                    }
+                }
+            }
+            if (location.getPath().endsWith(".gltf") || location.getPath().endsWith(".glb")) {
+                try {
+                    GltfAssetReferences.buffers(location, bytes).forEach(this::packAsset);
+                } catch (IOException e) {
+                    warnings.add("could not inspect model buffers %s (%s)".formatted(location, e.getMessage()));
+                }
+            }
+        }
+    }
+
+    /** Keep model JSON and its referenced geometry, parents and textures in the pack. */
+    private void packJsonModel(@Nullable ResourceLocation modelId) {
+        if (modelId == null) return;
+        var location = ModelAssetReferences.modelFile(modelId);
+        if (!handledAssets.add(location)) return;
+        var bytes = readPackableAsset(location);
+        if (bytes == null) return;
+        files.put(location, bytes);
+        try {
+            var json = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();
+            var dependencies = ModelAssetReferences.fromJson(json);
+            dependencies.models().forEach(this::packJsonModel);
+            dependencies.assets().forEach(this::packAsset);
+        } catch (Exception e) {
+            warnings.add("could not parse model json %s (%s) — dependencies may be missing"
+                    .formatted(location, e.getMessage()));
         }
     }
 
@@ -421,11 +456,17 @@ public final class FXPackExporter {
         if (programId == null) return;
         var fileLocation = new ResourceLocation(programId.getNamespace(),
                 "shaders/core/" + programId.getPath() + extension);
-        if (!handledAssets.add(fileLocation)) return;
-        var bytes = readPackableAsset(fileLocation);
-        if (bytes != null) { // null: provided by a mod/vanilla on the recipient, or missing (warned)
-            files.put(fileLocation, bytes);
-        }
+        packShaderSource(fileLocation);
+    }
+
+    /** Include source files and their transitive imports, matching the pack GC's traversal. */
+    private void packShaderSource(ResourceLocation location) {
+        if (!handledAssets.add(location)) return;
+        var bytes = readPackableAsset(location);
+        if (bytes == null) return;
+        files.put(location, bytes);
+        var source = new String(bytes, StandardCharsets.UTF_8);
+        ShaderIncludeResolver.imports(source).forEach(this::packShaderSource);
     }
 
     /**

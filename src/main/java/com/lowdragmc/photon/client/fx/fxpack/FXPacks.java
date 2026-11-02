@@ -476,6 +476,10 @@ public final class FXPacks {
                 markCoreShader(shaderId, zip, referenced, visited);
             }
         }
+        if ("json_model".equals(tag.getString("type")) && tag.contains("data", Tag.TAG_COMPOUND)) {
+            var modelId = ResourceLocation.tryParse(tag.getCompound("data").getString("modelLocation"));
+            if (modelId != null) markJsonModel(modelId, zip, referenced, visited);
+        }
         // render-graph pass sources carrying a hand-written shader (PassSource.CODEC shape) —
         // the exporter packs its json+vsh+fsh under their original locations
         if ("CUSTOM_SHADER".equals(tag.getString("type")) && tag.contains("shader", Tag.TAG_STRING)) {
@@ -501,8 +505,7 @@ public final class FXPacks {
      * Whether a plain string in an fx tree is a raw asset location the pack has to carry: a texture or a
      * runtime-parsed model file ({@code IModelSource}'s file-backed implementations address their file by
      * a location that KEEPS its extension, which is exactly what makes them recognisable here). Model
-     * {@code .json} is deliberately absent — those are addressed without an extension and resolve through
-     * the bakery, so there is nothing to match on.
+     * JSON is reached separately through the typed {@code json_model} handler.
      */
     static boolean isPackableAsset(String value) {
         return value.endsWith(".png") || value.endsWith(".obj")
@@ -513,7 +516,7 @@ public final class FXPacks {
         if (isPackableAsset(value)) {
             var location = ResourceLocation.tryParse(value);
             if (location != null) {
-                referenced.add(entryKey(location));
+                markAsset(location, zip, referenced, visited);
             }
         } else if (value.startsWith("file(assets/") && value.endsWith(")")) {
             // a rewritten library reference — mark the file and recurse into it (graphs reference
@@ -554,6 +557,41 @@ public final class FXPacks {
             }
         } catch (Exception e) {
             Photon.LOGGER.warn("fxpack gc: failed to parse shader json {}", jsonKey, e);
+        }
+    }
+
+    /** Mirror the exporter so rewriting a pack does not delete a model or its dependencies. */
+    private static void markJsonModel(ResourceLocation modelId, FileSystem zip, Set<String> referenced,
+                                      Set<String> visited) {
+        var key = entryKey(ModelAssetReferences.modelFile(modelId));
+        referenced.add(key);
+        if (!visited.add(key)) return;
+        var path = zip.getPath(key);
+        if (!Files.isRegularFile(path)) return;
+        try {
+            var json = JsonParser.parseString(Files.readString(path, StandardCharsets.UTF_8)).getAsJsonObject();
+            var dependencies = ModelAssetReferences.fromJson(json);
+            for (var parent : dependencies.models()) markJsonModel(parent, zip, referenced, visited);
+            for (var asset : dependencies.assets()) markAsset(asset, zip, referenced, visited);
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot safely trace model dependencies " + key, e);
+        }
+    }
+
+    private static void markAsset(ResourceLocation location, FileSystem zip, Set<String> referenced,
+                                  Set<String> visited) {
+        var key = entryKey(location);
+        referenced.add(key);
+        if (location.getPath().endsWith(".png"))
+            referenced.add(entryKey(location.getNamespace(), location.getPath() + ".mcmeta"));
+        if (!(location.getPath().endsWith(".gltf") || location.getPath().endsWith(".glb")) || !visited.add(key)) return;
+        var path = zip.getPath(key);
+        if (!Files.isRegularFile(path)) return;
+        try {
+            for (var buffer : GltfAssetReferences.buffers(location, Files.readAllBytes(path)))
+                referenced.add(entryKey(buffer));
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot safely trace model buffers " + key, e);
         }
     }
 
