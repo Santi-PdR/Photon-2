@@ -99,7 +99,7 @@ public class MapperUtils {
                 dataTag.put("gradientColor1", gradient(second.getList("a", Tag.TAG_FLOAT), second.getList("r", Tag.TAG_FLOAT),
                         second.getList("g", Tag.TAG_FLOAT), second.getList("b", Tag.TAG_FLOAT)));
                 break;
-            case "TextureMaterial":
+            case "TextureMaterial", "BlockTextureSheetMaterial":
                 newTypedValueTag.putString("type", "texture");
                 dataTag = buildBlankTexture();
                 dataTag.putString("texture",  typedValueTag.getString("texture"));

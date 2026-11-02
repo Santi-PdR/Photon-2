@@ -1513,6 +1513,14 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
     private static void verifyPhoton1Compatibility() throws Exception {
+        var oldAtlas = new CompoundTag();
+        oldAtlas.putString("_type", "BlockTextureSheetMaterial");
+        oldAtlas.putString("texture", "minecraft:textures/atlas/blocks.png");
+        oldAtlas.putFloat("discardThreshold", 0.01f);
+        var mappedAtlas = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldAtlas, false);
+        if (!mappedAtlas.getString("type").equals("texture")
+                || !mappedAtlas.getCompound("data").getString("texture").equals("minecraft:textures/atlas/blocks.png"))
+            throw new IllegalStateException("Photon 1 block atlas material was not retained");
         var oldMesh = new CompoundTag();
         var oldVertices = new ListTag();
         for (float f : new float[]{0, 0, 0, 1, 0, 0, 0, 1, 0}) oldVertices.add(net.minecraft.nbt.FloatTag.valueOf(f));
