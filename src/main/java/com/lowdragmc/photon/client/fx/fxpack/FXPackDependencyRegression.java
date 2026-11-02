@@ -52,16 +52,18 @@ public final class FXPackDependencyRegression {
                 put(zip.getPath("assets/test/shaders/core/ci/example.json"),
                         "{\"vertex\":\"test:ci/example\",\"fragment\":\"test:ci/example\"}");
                 put(zip.getPath("assets/test/shaders/core/ci/example.vsh"),
-                        "#moj_import \"test:relative.glsl\"\n#moj_import <test:shared.glsl>\n");
+                        "#moj_import \"test:relative.glsl\"\n#moj_import \"test:../parent.glsl\"\n#moj_import <test:shared.glsl>\n");
                 put(zip.getPath("assets/test/shaders/core/ci/example.fsh"), "// fragment\n");
                 put(zip.getPath("assets/test/shaders/core/ci/relative.glsl"), "// relative\n");
+                put(zip.getPath("assets/test/shaders/core/parent.glsl"), "// parent\n");
                 put(zip.getPath("assets/test/shaders/include/shared.glsl"), "// shared\n");
                 put(zip.getPath("assets/test/unused.bin"), "orphan");
                 FXPacks.gc(zip);
                 for (var path : java.util.List.of("assets/test/models/block/shield.json", "assets/test/models/shield.obj",
                         "assets/test/textures/item/pattern.png", "assets/test/textures/item/pattern.png.mcmeta",
                         "assets/test/models/foo/anim.gltf", "assets/test/models/buffers/mesh.bin",
-                        "assets/test/shaders/core/ci/relative.glsl", "assets/test/shaders/include/shared.glsl")) {
+                        "assets/test/shaders/core/ci/relative.glsl", "assets/test/shaders/core/parent.glsl",
+                        "assets/test/shaders/include/shared.glsl")) {
                     if (!Files.isRegularFile(zip.getPath(path))) throw new IllegalStateException("FX pack GC removed " + path);
                 }
                 if (Files.exists(zip.getPath("assets/test/unused.bin")))
