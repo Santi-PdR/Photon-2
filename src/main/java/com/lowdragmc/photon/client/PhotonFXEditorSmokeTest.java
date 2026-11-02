@@ -509,6 +509,15 @@ public final class PhotonFXEditorSmokeTest {
                 if (Math.abs(rotatedBounds.minX - 9) > 0.001 || Math.abs(rotatedBounds.maxX - 11) > 0.001
                         || Math.abs(rotatedBounds.minZ - 1) > 0.001 || Math.abs(rotatedBounds.maxZ - 5) > 0.001)
                     throw new IllegalStateException("Rotated or negatively scaled emitter bounds are wrong: " + rotatedBounds);
+                var forward = new org.joml.Vector3f(0, 0, -1);
+                var atEye = com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.adjustOwnerBillboard(
+                        new org.joml.Vector3f(), true, forward);
+                var other = com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.adjustOwnerBillboard(
+                        new org.joml.Vector3f(), false, forward);
+                var distant = com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer.adjustOwnerBillboard(
+                        new org.joml.Vector3f(1, 0, 0), true, forward);
+                if (atEye.z > -0.099f || other.lengthSquared() != 0 || distant.x != 1 || distant.z != 0)
+                    throw new IllegalStateException("First-person billboard near-plane correction affected the wrong positions");
                 cull.setEnable(true);
                 try {
                     if (!shield.shouldCull() || !shield.getBoundingBox().equals(shield.getCullBox(1f)))

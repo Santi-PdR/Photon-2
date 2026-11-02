@@ -148,9 +148,10 @@ public class TileParticleRenderer {
         var vec3 = camera.getPosition();
 
         var localPos = particle.getSimPos(partialTicks).mulPosition(particle.getSpaceTransform());
-        var x = (float) (localPos.x - vec3.x);
-        var y = (float) (localPos.y - vec3.y);
-        var z = (float) (localPos.z - vec3.z);
+        var relativePos = cameraRelativePosition(particle, camera, localPos, renderer.getRenderMode());
+        var x = relativePos.x;
+        var y = relativePos.y;
+        var z = relativePos.z;
 
         var color = particle.getRealColor(partialTicks);
         var r = color.x();
@@ -387,9 +388,10 @@ public class TileParticleRenderer {
             if (!(p instanceof TileParticle particle) || particle.getDelay() > 0) continue;
             instanceCount++;
             var localPos = particle.getSimPos(partialTicks).mulPosition(particle.getSpaceTransform());
-            var x = (float) (localPos.x - vec3.x);
-            var y = (float) (localPos.y - vec3.y);
-            var z = (float) (localPos.z - vec3.z);
+            var relativePos = cameraRelativePosition(particle, camera, localPos, renderMode);
+            var x = relativePos.x;
+            var y = relativePos.y;
+            var z = relativePos.z;
 
             var color = particle.getRealColor(partialTicks);
             var rotation = particle.getRealRotation(partialTicks);
@@ -483,6 +485,23 @@ public class TileParticleRenderer {
         instanceBackend.checkInstanceStride(buffer.position(), instanceCount);
         instanceBackend.endUpload(buffer, instanceCount);
         return instanceCount > 0;
+    }
+
+    /** A camera-facing plane exactly at its owner's eyes is clipped by the first-person near plane. */
+    private static Vector3f cameraRelativePosition(TileParticle particle, Camera camera, Vector3f worldPos,
+                                                    ParticleRendererSetting.Mode mode) {
+        var cameraPos = camera.getPosition();
+        var relative = new Vector3f((float) (worldPos.x - cameraPos.x),
+                (float) (worldPos.y - cameraPos.y), (float) (worldPos.z - cameraPos.z));
+        var effect = particle.getEmitter().getEffectExecutor();
+        return adjustOwnerBillboard(relative, mode == ParticleRendererSetting.Mode.Billboard && effect != null
+                && effect.owner() != null && effect.owner() == camera.getEntity(), camera.getLookVector());
+    }
+
+    public static Vector3f adjustOwnerBillboard(Vector3f relative, boolean cameraFacingOwner,
+                                                org.joml.Vector3fc cameraForward) {
+        if (cameraFacingOwner && relative.lengthSquared() < 0.0001f) relative.fma(0.1f, cameraForward);
+        return relative;
     }
 
     public void drawInstanced(ShaderInstance shader) {
