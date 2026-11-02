@@ -1513,6 +1513,11 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
     private static void verifyPhoton1Compatibility() throws Exception {
+        var delayedEmitter = new CompoundTag();
+        delayedEmitter.putInt("startDelay", 300);
+        if (com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(delayedEmitter).getInt("startDelay") != 300
+                || com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamConfig(delayedEmitter).getInt("startDelay") != 300)
+            throw new IllegalStateException("Photon 1 trail or beam delay was lost");
         var oldAtlas = new CompoundTag();
         oldAtlas.putString("_type", "BlockTextureSheetMaterial");
         oldAtlas.putString("texture", "minecraft:textures/atlas/blocks.png");

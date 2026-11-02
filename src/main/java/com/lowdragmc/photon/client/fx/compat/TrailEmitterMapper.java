@@ -22,7 +22,7 @@ public class TrailEmitterMapper implements Mapper {
 
     public static CompoundTag mapTrailConfig(CompoundTag trailConfigTag){
         CompoundTag newTrailConfigTag = new CompoundTag();
-        newTrailConfigTag.putInt("startDelay",  trailConfigTag.getByte("startDelay"));
+        newTrailConfigTag.putInt("startDelay", trailConfigTag.getInt("startDelay"));
         newTrailConfigTag.put("lights", MapperUtils.mapLightTag(trailConfigTag.getCompound("lights")));
         newTrailConfigTag.put("uvAnimation", MapperUtils.mapUVTag(trailConfigTag.getCompound("uvAnimation")));
         newTrailConfigTag.put("colorOverTrail", MapperUtils.mapTypedValue(trailConfigTag.getCompound("colorOverTrail"), false));

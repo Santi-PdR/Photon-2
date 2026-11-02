@@ -24,6 +24,7 @@ public class BeamEmitterMapper implements Mapper{
     public static CompoundTag mapBeamConfig(CompoundTag configTag){
         CompoundTag newBeamConfigTag = new CompoundTag();
         newBeamConfigTag.putInt("duration",  configTag.getInt("duration"));
+        newBeamConfigTag.putInt("startDelay", configTag.getInt("startDelay"));
         newBeamConfigTag.putByte("looping", configTag.getByte("looping"));
 
         newBeamConfigTag.put("color", MapperUtils.mapTypedValue(configTag.getCompound("color"), false));
