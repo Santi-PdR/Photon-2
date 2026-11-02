@@ -64,7 +64,14 @@ public class MapperUtils {
                dataTag = typedValueTag.copy();
                dataTag.remove("_type");
                dataTag.remove("defaultValue");
-               dataTag.putByte("lockControlPoint", (byte)1);
+               if (!dataTag.contains("lockControlPoint")) dataTag.putByte("lockControlPoint", (byte)1);
+               break;
+            case "RandomCurve":
+               newTypedValueTag.putString("type", "random_curve");
+               dataTag = typedValueTag.copy();
+               dataTag.remove("_type");
+               dataTag.remove("defaultValue");
+               if (!dataTag.contains("lockControlPoint")) dataTag.putByte("lockControlPoint", (byte)1);
                break;
             case "Constant", "Color":
                 dataTag = typedValueTag.copy();
@@ -75,13 +82,22 @@ public class MapperUtils {
                 }
                 break;
             case "RandomConstant":
-                dataTag.putFloat("a", typedValueTag.getFloat("a"));
-                dataTag.putFloat("b", typedValueTag.getFloat("b"));
+                if (typedValueTag.contains("a")) dataTag.put("a", typedValueTag.get("a").copy());
+                if (typedValueTag.contains("b")) dataTag.put("b", typedValueTag.get("b").copy());
                 newTypedValueTag.putString("type", "random_constant");
                 break;
             case "Gradient":
                 CompoundTag gradientTag = gradient(typedValueTag.getList("a", Tag.TAG_FLOAT), typedValueTag.getList("r", Tag.TAG_FLOAT), typedValueTag.getList("g", Tag.TAG_FLOAT), typedValueTag.getList("b", Tag.TAG_FLOAT));
                 dataTag.put("gradientColor",  gradientTag);
+                break;
+            case "RandomGradient":
+                newTypedValueTag.putString("type", "random_gradient");
+                var first = typedValueTag.getCompound("a");
+                var second = typedValueTag.getCompound("b");
+                dataTag.put("gradientColor0", gradient(first.getList("a", Tag.TAG_FLOAT), first.getList("r", Tag.TAG_FLOAT),
+                        first.getList("g", Tag.TAG_FLOAT), first.getList("b", Tag.TAG_FLOAT)));
+                dataTag.put("gradientColor1", gradient(second.getList("a", Tag.TAG_FLOAT), second.getList("r", Tag.TAG_FLOAT),
+                        second.getList("g", Tag.TAG_FLOAT), second.getList("b", Tag.TAG_FLOAT)));
                 break;
             case "TextureMaterial":
                 newTypedValueTag.putString("type", "texture");

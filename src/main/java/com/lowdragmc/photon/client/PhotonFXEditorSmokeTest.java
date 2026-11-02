@@ -1616,6 +1616,24 @@ public final class PhotonFXEditorSmokeTest {
                 .getString("resource").equals("minecraft:textures/particle/flame.png")
                 || restoredUniform == null || Math.abs(restoredUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f)
             throw new IllegalStateException("Converted Photon 1 shader sampler or variant uniform did not survive deserialization");
+        var oldCurve = new CompoundTag(); oldCurve.putString("_type", "RandomCurve");
+        oldCurve.putByte("lockControlPoint", (byte) 0); oldCurve.putFloat("lower", 0.3f); oldCurve.putFloat("upper", 0.8f);
+        var mappedCurve = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldCurve, false);
+        if (!mappedCurve.getString("type").equals("random_curve") || mappedCurve.getCompound("data").getBoolean("lockControlPoint")
+                || mappedCurve.getCompound("data").getFloat("upper") != 0.8f)
+            throw new IllegalStateException("Photon 1 random curve was not preserved");
+        var oldGradient = new CompoundTag(); oldGradient.putString("_type", "RandomGradient");
+        var gradientA = new CompoundTag(); var gradientB = new CompoundTag();
+        for (var key : new String[]{"a", "r", "g", "b"}) {
+            gradientA.put(key, floatList(0f, 0.25f, 1f, 0.75f));
+            gradientB.put(key, floatList(0f, 0.75f, 1f, 0.25f));
+        }
+        oldGradient.put("a", gradientA); oldGradient.put("b", gradientB);
+        var mappedGradient = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldGradient, false);
+        if (!mappedGradient.getString("type").equals("random_gradient")
+                || mappedGradient.getCompound("data").getCompound("gradientColor0").getList("rgb", Tag.TAG_FLOAT).size() != 8
+                || mappedGradient.getCompound("data").getCompound("gradientColor1").getList("rgb", Tag.TAG_FLOAT).size() != 8)
+            throw new IllegalStateException("Photon 1 random gradients were not preserved");
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
     }
 
