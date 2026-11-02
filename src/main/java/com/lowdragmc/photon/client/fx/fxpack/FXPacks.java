@@ -552,7 +552,8 @@ public final class FXPacks {
                 if (programId != null) {
                     var stageLocation = new ResourceLocation(programId.getNamespace(),
                             "shaders/core/" + programId.getPath() + stage[1]);
-                    markShaderSource(stageLocation, zip, referenced, visited);
+                    var path = stageLocation.getPath();
+                    markShaderSource(stageLocation, path.substring(0, path.lastIndexOf('/') + 1), zip, referenced, visited);
                 }
             }
         } catch (Exception e) {
@@ -596,16 +597,16 @@ public final class FXPacks {
     }
 
     /** Keep every shader stage and recursively imported include inside an exported fxpack. */
-    private static void markShaderSource(ResourceLocation location, FileSystem zip,
+    private static void markShaderSource(ResourceLocation location, String shaderBasePath, FileSystem zip,
                                          Set<String> referenced, Set<String> visited) throws IOException {
         var key = entryKey(location);
         referenced.add(key);
-        if (!visited.add(key)) return;
+        if (!visited.add(key + "|shader-base:" + shaderBasePath)) return;
         var path = zip.getPath(key);
         if (!Files.isRegularFile(path)) return;
         var source = Files.readString(path, StandardCharsets.UTF_8);
-        for (var include : ShaderIncludeResolver.imports(source)) {
-            markShaderSource(include, zip, referenced, visited);
+        for (var include : ShaderIncludeResolver.imports(source, shaderBasePath)) {
+            markShaderSource(include, shaderBasePath, zip, referenced, visited);
         }
     }
 }

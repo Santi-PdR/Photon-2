@@ -34,6 +34,12 @@ public final class FXPackDependencyRegression {
                 model.putString("type", "json_model");
                 model.put("data", data);
                 root.put("model", model);
+                var shader = new CompoundTag();
+                var shaderData = new CompoundTag();
+                shader.putString("type", "custom_shader");
+                shaderData.putString("shaderLocation", "test:ci/example");
+                shader.put("data", shaderData);
+                root.put("shader", shader);
                 root.putString("mesh", "test:models/foo/anim.gltf");
                 try (var out = Files.newOutputStream(fx)) { NbtIo.writeCompressed(root, out); }
                 put(zip.getPath("assets/test/models/block/shield.json"),
@@ -43,11 +49,19 @@ public final class FXPackDependencyRegression {
                 put(zip.getPath("assets/test/textures/item/pattern.png.mcmeta"), "metadata");
                 put(zip.getPath("assets/test/models/foo/anim.gltf"), "{\"buffers\":[{\"uri\":\"../buffers/mesh.bin\"}]}");
                 put(zip.getPath("assets/test/models/buffers/mesh.bin"), "buffer");
+                put(zip.getPath("assets/test/shaders/core/ci/example.json"),
+                        "{\"vertex\":\"test:ci/example\",\"fragment\":\"test:ci/example\"}");
+                put(zip.getPath("assets/test/shaders/core/ci/example.vsh"),
+                        "#moj_import \"test:relative.glsl\"\n#moj_import <test:shared.glsl>\n");
+                put(zip.getPath("assets/test/shaders/core/ci/example.fsh"), "// fragment\n");
+                put(zip.getPath("assets/test/shaders/core/ci/relative.glsl"), "// relative\n");
+                put(zip.getPath("assets/test/shaders/include/shared.glsl"), "// shared\n");
                 put(zip.getPath("assets/test/unused.bin"), "orphan");
                 FXPacks.gc(zip);
                 for (var path : java.util.List.of("assets/test/models/block/shield.json", "assets/test/models/shield.obj",
                         "assets/test/textures/item/pattern.png", "assets/test/textures/item/pattern.png.mcmeta",
-                        "assets/test/models/foo/anim.gltf", "assets/test/models/buffers/mesh.bin")) {
+                        "assets/test/models/foo/anim.gltf", "assets/test/models/buffers/mesh.bin",
+                        "assets/test/shaders/core/ci/relative.glsl", "assets/test/shaders/include/shared.glsl")) {
                     if (!Files.isRegularFile(zip.getPath(path))) throw new IllegalStateException("FX pack GC removed " + path);
                 }
                 if (Files.exists(zip.getPath("assets/test/unused.bin")))

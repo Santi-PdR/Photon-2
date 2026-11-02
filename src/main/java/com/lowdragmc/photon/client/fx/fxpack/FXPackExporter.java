@@ -98,6 +98,7 @@ public final class FXPackExporter {
     private final Set<String> packingInProgress = new HashSet<>();
     /** Asset locations already handled (packed or deliberately skipped). */
     private final Set<ResourceLocation> handledAssets = new HashSet<>();
+    private final Set<String> visitedShaderSources = new HashSet<>();
 
     private FXPackExporter(HolderLookup.Provider provider) {
         this.provider = provider;
@@ -456,17 +457,23 @@ public final class FXPackExporter {
         if (programId == null) return;
         var fileLocation = new ResourceLocation(programId.getNamespace(),
                 "shaders/core/" + programId.getPath() + extension);
-        packShaderSource(fileLocation);
+        var path = fileLocation.getPath();
+        packShaderSource(fileLocation, path.substring(0, path.lastIndexOf('/') + 1));
     }
 
     /** Include source files and their transitive imports, matching the pack GC's traversal. */
-    private void packShaderSource(ResourceLocation location) {
-        if (!handledAssets.add(location)) return;
-        var bytes = readPackableAsset(location);
-        if (bytes == null) return;
-        files.put(location, bytes);
+    private void packShaderSource(ResourceLocation location, String shaderBasePath) {
+        if (!visitedShaderSources.add(location + "|" + shaderBasePath)) return;
+        var bytes = files.get(location);
+        if (bytes == null) {
+            if (!handledAssets.add(location)) return;
+            bytes = readPackableAsset(location);
+            if (bytes == null) return;
+            files.put(location, bytes);
+        }
         var source = new String(bytes, StandardCharsets.UTF_8);
-        ShaderIncludeResolver.imports(source).forEach(this::packShaderSource);
+        for (var include : ShaderIncludeResolver.imports(source, shaderBasePath))
+            packShaderSource(include, shaderBasePath);
     }
 
     /**

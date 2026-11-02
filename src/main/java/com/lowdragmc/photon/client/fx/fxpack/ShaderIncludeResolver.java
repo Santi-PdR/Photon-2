@@ -15,7 +15,7 @@ final class ShaderIncludeResolver {
     private ShaderIncludeResolver() {
     }
 
-    static List<ResourceLocation> imports(String source) {
+    static List<ResourceLocation> imports(String source, String shaderBasePath) {
         LinkedHashSet<ResourceLocation> locations = new LinkedHashSet<>();
         Matcher matcher = IMPORT.matcher(source);
         while (matcher.find()) {
@@ -25,7 +25,9 @@ final class ShaderIncludeResolver {
                     ? ResourceLocation.tryParse(name)
                     : new ResourceLocation("minecraft", name);
             if (location == null) continue;
-            String path = includeDirectory ? "shaders/include/" + location.getPath() : location.getPath();
+            // Forge resolves quoted imports relative to the original stage's directory,
+            // including quotes found transitively in another imported source.
+            String path = (includeDirectory ? "shaders/include/" : shaderBasePath) + location.getPath();
             if (hasParentSegment(path)) continue;
             locations.add(new ResourceLocation(location.getNamespace(), path));
         }
