@@ -368,11 +368,13 @@ public final class PhotonFXEditorSmokeTest {
             }
             if (started && smokeTrail != null) {
                 ticks++;
-                float x = -2.5f + ticks * 0.12f;
-                float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
-                smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
-                smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
-                smokeAraTrail.transform().localPosition(new org.joml.Vector3f(x, 3, z));
+                if (ticks <= 320) {
+                    float x = -2.5f + ticks * 0.12f;
+                    float z = (float) Math.sin(ticks * 0.12f) * 0.7f;
+                    smokeTrail.transform().localPosition(new org.joml.Vector3f(x, 2, z));
+                    smokeCpuTrail.transform().localPosition(new org.joml.Vector3f(2.5f - ticks * 0.12f, 2, z));
+                    smokeAraTrail.transform().localPosition(new org.joml.Vector3f(x, 3, z));
+                }
             }
             if (realArrowTrail != null) {
                 float elapsed = ticks - 260;
@@ -1561,6 +1563,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 
