@@ -501,6 +501,14 @@ public final class PhotonFXEditorSmokeTest {
                 if (shield.shouldCull() || ((com.lowdragmc.photon.client.gameobject.FXObject) editor.runtime.root).shouldCull())
                     throw new IllegalStateException("Forge frustum-culls an effect with culling disabled");
                 var cull = shield.runtime().renderer.getCull();
+                var rotatedBounds = com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.Cull.transformedBounds(
+                        new net.minecraft.world.phys.AABB(-2, -1, -0.5, 2, 1, 0.5),
+                        new org.joml.Vector3f(10, 5, 3),
+                        new org.joml.Quaternionf().rotationY((float) (Math.PI / 2)),
+                        new org.joml.Vector3f(-1, 1, 2));
+                if (Math.abs(rotatedBounds.minX - 9) > 0.001 || Math.abs(rotatedBounds.maxX - 11) > 0.001
+                        || Math.abs(rotatedBounds.minZ - 1) > 0.001 || Math.abs(rotatedBounds.maxZ - 5) > 0.001)
+                    throw new IllegalStateException("Rotated or negatively scaled emitter bounds are wrong: " + rotatedBounds);
                 cull.setEnable(true);
                 try {
                     if (!shield.shouldCull() || !shield.getBoundingBox().equals(shield.getCullBox(1f)))

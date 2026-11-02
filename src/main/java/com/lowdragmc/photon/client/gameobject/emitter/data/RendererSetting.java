@@ -25,6 +25,9 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaternionfc;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -148,11 +151,23 @@ public class RendererSetting {
 
         public AABB getCullAABB(Emitter particle, float partialTicks) {
             var transform = particle.transform();
-            var scale = transform.scale();
-            var pos = transform.position();
-            return new AABB(cullBox.minX * scale.x, cullBox.minY * scale.y, cullBox.minZ * scale.z,
-                    cullBox.maxX * scale.x, cullBox.maxY * scale.y, cullBox.maxZ * scale.z)
-                    .move(pos.x, pos.y, pos.z);
+            return transformedBounds(cullBox, transform.position(), transform.rotation(), transform.scale());
+        }
+
+        /** World-aligned bounds enclosing every corner after scale and rotation. */
+        public static AABB transformedBounds(AABB box, Vector3fc position, Quaternionfc rotation, Vector3fc scale) {
+            double minX = Double.POSITIVE_INFINITY, minY = minX, minZ = minX;
+            double maxX = Double.NEGATIVE_INFINITY, maxY = maxX, maxZ = maxX;
+            var corner = new Vector3f();
+            for (int i = 0; i < 8; i++) {
+                corner.set((float) ((i & 1) == 0 ? box.minX : box.maxX) * scale.x(),
+                        (float) ((i & 2) == 0 ? box.minY : box.maxY) * scale.y(),
+                        (float) ((i & 4) == 0 ? box.minZ : box.maxZ) * scale.z());
+                rotation.transform(corner).add(position);
+                minX = Math.min(minX, corner.x); minY = Math.min(minY, corner.y); minZ = Math.min(minZ, corner.z);
+                maxX = Math.max(maxX, corner.x); maxY = Math.max(maxY, corner.y); maxZ = Math.max(maxZ, corner.z);
+            }
+            return new AABB(minX, minY, minZ, maxX, maxY, maxZ);
         }
     }
 
