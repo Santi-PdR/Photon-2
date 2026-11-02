@@ -226,6 +226,14 @@ public final class PhotonFXEditorSmokeTest {
                 json.add("uniforms", uniforms);
                 Files.writeString(shaderDir.resolve("tornado_smoke.json"), json.toString());
             }
+            var variantSceneFragment = Files.readString(shaderDir.resolve("tornado_smoke.fsh"))
+                    .replace("uniform sampler2D SamplerSceneColor;", "#ifdef PARTICLE_MODEL_INSTANCE\nuniform sampler2D SamplerSceneColor;\n#endif")
+                    .replace("vec3 backdrop = texture(SamplerSceneColor, gl_FragCoord.xy / ScreenSize).rgb;",
+                            "#ifdef PARTICLE_MODEL_INSTANCE\nvec3 backdrop = texture(SamplerSceneColor, gl_FragCoord.xy / ScreenSize).rgb;\n#else\nvec3 backdrop = vec3(0.0);\n#endif");
+            Files.writeString(shaderDir.resolve("variant_scene.fsh"), variantSceneFragment);
+            var variantSceneManifest = com.google.gson.JsonParser.parseString(Files.readString(shaderDir.resolve("tornado_smoke.json"))).getAsJsonObject();
+            variantSceneManifest.addProperty("fragment", "photon:ci/variant_scene");
+            Files.writeString(shaderDir.resolve("variant_scene.json"), variantSceneManifest.toString());
             Files.writeString(shaderDir.resolve("trail_smoke.fsh"), """
                     #version 330 core
                     in float vertexDistance;
@@ -459,6 +467,11 @@ public final class PhotonFXEditorSmokeTest {
                 shader.getShader(MaterialContext.NORMAL);
                 if (shader.isCompiledError()) throw new IllegalStateException("Real scan shader failed to compile");
                 if (!shader.usesSceneColor()) throw new IllegalStateException("Scan shader did not report its scene-colour dependency");
+                var variantScene = new CustomShaderMaterial(new ResourceLocation("photon", "ci/variant_scene"));
+                var variantBase = variantScene.getShader(MaterialContext.NORMAL);
+                if (((LDShaderInstance) variantBase).getShaderInstanceAccessor().getSamplerNames().contains("SamplerSceneColor")
+                        || !variantScene.usesSceneColor())
+                    throw new IllegalStateException("Variant-only scene colour sampler was not detected from its shader manifest");
                 verifyLateSceneSnapshot();
                 Photon.LOGGER.info("[real-scan-shader-smoke] original scan shader compiled and particle is alive");
             } else if (ticks == 160) {
