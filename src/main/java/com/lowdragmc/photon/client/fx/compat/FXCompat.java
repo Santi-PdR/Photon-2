@@ -56,7 +56,13 @@ public class FXCompat {
         CompoundTag new_fx = new CompoundTag();
         ListTag fxObj = new ListTag(); // new fx objects
         //drill down to fxData
-        ListTag fxObjects = fx.getCompound("fx").getCompound("mainFX").getList("fxObjects", 10);
+        ListTag fxObjects;
+        if (fx.contains("emitters", Tag.TAG_LIST)) {
+            fxObjects = fx.getList("emitters", Tag.TAG_COMPOUND);
+        } else {
+            var definition = fx.contains("fx", Tag.TAG_COMPOUND) ? fx.getCompound("fx") : fx;
+            fxObjects = definition.getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
+        }
         for (Tag object : fxObjects) {
             CompoundTag fxObject = (CompoundTag) object;
             switch (fxObject.getString("_type")) {

@@ -222,6 +222,17 @@ public class FXHelper {
      * V1→current fixers on data of unknown true version would risk double-migration.
      */
     public static CompoundTag applyVersionFixes(CompoundTag tag) {
+        // Photon 1 used {fx:{mainFX:{fxObjects:[...]}}}; recognize that exact
+        // shape before the versioned Photon 2 fixer. Conversion only changes
+        // this in-memory tag and never overwrites the author's original file.
+        var photon1 = tag.contains("fx", Tag.TAG_COMPOUND) ? tag.getCompound("fx") : tag;
+        if ((photon1.contains("mainFX", Tag.TAG_COMPOUND)
+                && photon1.getCompound("mainFX").contains("fxObjects", Tag.TAG_LIST))
+                || tag.contains("emitters", Tag.TAG_LIST)) {
+            var converted = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(tag);
+            converted.putInt("version", FXProject.VERSION);
+            return converted;
+        }
         if (!tag.contains("version", Tag.TAG_INT)) {
             return tag;
         }

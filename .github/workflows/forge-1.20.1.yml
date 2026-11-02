@@ -103,6 +103,10 @@ jobs:
         shell: bash
         run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require Photon 1 effect conversion
+        shell: bash
+        run: grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require FX pack dependency retention
         shell: bash
         run: grep -Fq '[fxpack-dependency-smoke] model, texture metadata and glTF buffers survive pack cleanup' "$RUNNER_TEMP/photon-client.log"
@@ -117,7 +121,9 @@ jobs:
 
       - name: Require scan rendering in first person
         shell: bash
-        run: grep -Fq '[first-person-scan-smoke] owner billboard changed' "$RUNNER_TEMP/photon-client.log"
+        run: |
+          grep -Fq '[first-person-scan-cpu-smoke] owner billboard rendered' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[first-person-scan-gpu-smoke] owner billboard rendered' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Forge particle culling compatibility
         shell: bash

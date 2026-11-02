@@ -90,8 +90,24 @@ public class MapperUtils {
                 dataTag.putFloat("discardThreshold", typedValueTag.getFloat("discardThreshold"));
                 break;
             case "CustomShaderMaterial":
-                newTypedValueTag.putString("type", "ui_resource_material");
-                dataTag.putString("resourcePath",  "built-in(built-in:circle)");
+                newTypedValueTag.putString("type", "custom_shader");
+                dataTag.putString("shaderLocation", typedValueTag.getString("shader"));
+                var oldUniforms = typedValueTag.getCompound("uniform");
+                var shaderData = new CompoundTag();
+                shaderData.put("uniforms", oldUniforms.getCompound("uniforms").copy());
+                var samplers = new CompoundTag();
+                var oldSamplers = oldUniforms.getCompound("samplers");
+                for (var key : oldSamplers.getAllKeys()) {
+                    if (!key.matches("[0-9]+") || !oldSamplers.contains(key, Tag.TAG_STRING)) continue;
+                    var texture = net.minecraft.resources.ResourceLocation.tryParse(oldSamplers.getString(key));
+                    if (texture == null) continue;
+                    var sampler = new CompoundTag();
+                    sampler.putString("type", "texture");
+                    sampler.putString("resource", texture.toString());
+                    samplers.put("Sampler" + key, sampler);
+                }
+                shaderData.put("samplers", samplers);
+                dataTag.put("shaderData", shaderData);
                 break;
 
             case "RandomColor":

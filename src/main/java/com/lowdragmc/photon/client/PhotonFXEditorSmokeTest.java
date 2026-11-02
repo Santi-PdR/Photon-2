@@ -63,6 +63,7 @@ public final class PhotonFXEditorSmokeTest {
     private static org.joml.Vector3f savedSceneCenter;
     private static CustomShaderMaterial smokeScreenShader;
     private static com.lowdragmc.photon.client.fx.FXRuntime removedEntityRuntime;
+    private static com.lowdragmc.photon.client.fx.EntityEffectExecutor firstPersonEffect;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -749,12 +750,31 @@ public final class PhotonFXEditorSmokeTest {
                 var firstPersonScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
                 minecraft.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
                 System.setProperty("photon.firstPersonSmoke", "true");
-                new com.lowdragmc.photon.client.fx.EntityEffectExecutor(firstPersonScan.getFx(), minecraft.level,
-                        minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE).start();
-            } else if (ticks == 380) {
+                firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(firstPersonScan.getFx(), minecraft.level,
+                        minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
+                firstPersonEffect.start();
+            } else if (ticks == 350) {
                 if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
-                    throw new IllegalStateException("First-person scan did not draw a camera-centred owner billboard");
+                    throw new IllegalStateException("CPU first-person scan did not draw a camera-centred owner billboard");
+                Photon.LOGGER.info("[first-person-scan-cpu-smoke] owner billboard rendered");
+                firstPersonEffect.getRuntime().destroy(true);
+                com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
+                System.clearProperty("photon.firstPersonBillboardSeen");
+                System.clearProperty("photon.firstPersonScanPixels");
+                System.setProperty("photon.firstPersonGpuSmoke", "true");
+                var scanFile = new File("./ldlib2/assets/scan.fxproj");
+                var gpuScan = (FXProject) FXProject.TYPE.loadProjectFromFile(scanFile);
+                gpuScan.getFx().getFxData().objects().stream().filter(ParticleEmitter.class::isInstance)
+                        .map(ParticleEmitter.class::cast).forEach(emitter -> emitter.config.renderer.setUseGPUInstance(true));
+                firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(gpuScan.getFx(), minecraft.level,
+                        minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
+                firstPersonEffect.start();
+            } else if (ticks == 410) {
+                if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
+                    throw new IllegalStateException("GPU first-person scan did not draw a camera-centred owner billboard");
+                Photon.LOGGER.info("[first-person-scan-gpu-smoke] owner billboard rendered");
                 System.clearProperty("photon.firstPersonSmoke");
+                System.clearProperty("photon.firstPersonGpuSmoke");
                 finished = true;
                 minecraft.stop();
             }
@@ -788,6 +808,7 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     private static void openLegacyProject(Minecraft minecraft) throws Exception {
+        verifyPhoton1Compatibility();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
         Photon.LOGGER.info("[fxpack-dependency-smoke] model, texture metadata and glTF buffers survive pack cleanup");
         com.lowdragmc.photon.client.gameobject.particle.renderer.ModelTriangleOrderRegression.verify();
@@ -1490,6 +1511,74 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
     }
 
+    /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
+    private static void verifyPhoton1Compatibility() {
+        var legacy = new CompoundTag();
+        var definition = new CompoundTag();
+        var main = new CompoundTag();
+        var objects = new ListTag();
+        var empty = new CompoundTag();
+        empty.putString("_type", "empty");
+        empty.putString("name", "legacy_anchor");
+        var transform = new CompoundTag();
+        transform.put("id", net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.randomUUID()));
+        transform.put("_parentId", net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.randomUUID()));
+        for (var key : new String[]{"localPosition", "localRotation", "localScale"}) {
+            var vector = new CompoundTag();
+            vector.putFloat("x", 0); vector.putFloat("y", 0); vector.putFloat("z", 0);
+            if (key.equals("localRotation")) vector.putFloat("w", 1);
+            transform.put(key, vector);
+        }
+        empty.put("transform", transform);
+        objects.add(empty);
+        main.put("fxObjects", objects);
+        definition.put("mainFX", main);
+        legacy.put("fx", definition);
+        var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
+        if (mapped == legacy || !legacy.contains("fx")
+                || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
+            throw new IllegalStateException("Photon 1 effect wrapper was not converted without modifying the source");
+        var oldBurst = new CompoundTag();
+        oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
+        oldBurst.putFloat("probability", 0.75f);
+        var count = new CompoundTag(); count.putString("_type", "Constant"); count.putFloat("number", 7);
+        oldBurst.put("count", count);
+        var oldBursts = new ListTag(); oldBursts.add(oldBurst);
+        var emission = new CompoundTag(); emission.put("bursts", oldBursts);
+        var mappedBursts = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(emission).getCompound("bursts");
+        var burst = mappedBursts.getList("payload", Tag.TAG_COMPOUND).getCompound(0);
+        if (mappedBursts.getInt("uid") != 1 || burst.getInt("time") != 4 || burst.getInt("cycles") != 3
+                || burst.getCompound("count").getCompound("data").getFloat("number") != 7)
+            throw new IllegalStateException("Photon 1 burst was lost during conversion");
+        var enabled = new CompoundTag(); enabled.putByte("enable", (byte) 1);
+        if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapForceOTTag(enabled).contains("force", Tag.TAG_LIST)
+                || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(enabled).contains("frequency")
+                || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapPhysicsTag(enabled).contains("gravity"))
+            throw new IllegalStateException("Photon 1 enabled module settings were lost during conversion");
+        var oldSub = new CompoundTag(); oldSub.putInt("tickInterval", 512); oldSub.putString("emitter", "photon:test");
+        var subList = new ListTag(); subList.add(oldSub);
+        var sub = new CompoundTag(); sub.putByte("enable", (byte) 1); sub.put("emitters", subList);
+        var mappedSub = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapSubEmittersTag(sub).getCompound("emitters");
+        if (mappedSub.getInt("uid") != 1 || mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("tickInterval") != 512)
+            throw new IllegalStateException("Photon 1 sub-emitter list or interval was lost during conversion");
+        var oldShader = new CompoundTag(); oldShader.putString("_type", "CustomShaderMaterial");
+        oldShader.putString("shader", "photon:ci/tornado_smoke");
+        var oldUniform = new CompoundTag();
+        var oldShaderSamplers = new CompoundTag(); oldShaderSamplers.putString("3", "minecraft:textures/particle/flame.png");
+        oldUniform.put("samplers", oldShaderSamplers);
+        var oldValues = new CompoundTag(); var color = new ListTag(); color.add(FloatTag.valueOf(0.37f));
+        oldValues.put("LegacyVariantOnly", color); oldUniform.put("uniforms", oldValues); oldShader.put("uniform", oldUniform);
+        var mappedShader = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldShader, false);
+        var shaderBody = mappedShader.getCompound("data");
+        if (!mappedShader.getString("type").equals("custom_shader")
+                || !shaderBody.getString("shaderLocation").equals("photon:ci/tornado_smoke")
+                || !shaderBody.getCompound("shaderData").getCompound("samplers").getCompound("Sampler3")
+                .getString("resource").equals("minecraft:textures/particle/flame.png")
+                || shaderBody.getCompound("shaderData").getCompound("uniforms").getList("LegacyVariantOnly", Tag.TAG_FLOAT).getFloat(0) != 0.37f)
+            throw new IllegalStateException("Photon 1 custom shader, sampler or uniform was lost during conversion");
+        Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
+    }
+
     private static TrailParticle trailParticle(TrailEmitter emitter) throws ReflectiveOperationException {
         Field field = TrailEmitter.class.getDeclaredField("trailParticle");
         field.setAccessible(true);
@@ -1563,7 +1652,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
-
 
 
 

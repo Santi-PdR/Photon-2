@@ -506,6 +506,7 @@ public class RenderPassPipeline {
                     if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile)) return false;
                     var effect = tile.getEmitter().getEffectExecutor();
                     return effect != null && effect.owner() != null && effect.owner() == camera.getEntity()
+                            && tile.getRuntime().renderer.isUseGPUInstance() == Boolean.getBoolean("photon.firstPersonGpuSmoke")
                             && tile.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> slot.getMaterial().usesSceneColor());
                 });
                 var firstPersonBefore = inspectFirstPerson ? smokeReadCurrentViewport() : null;
