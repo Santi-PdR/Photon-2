@@ -13,6 +13,14 @@ public final class FXPackDependencyRegression {
     private FXPackDependencyRegression() {}
 
     public static void verify() throws Exception {
+        var json = "{\"buffers\":[{\"uri\":\"../buffers/mesh.bin\"}]}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        int padded = (json.length + 3) & ~3;
+        var glb = java.nio.ByteBuffer.allocate(20 + padded).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        glb.putInt(0x46546c67).putInt(2).putInt(20 + padded).putInt(padded).putInt(0x4e4f534a).put(json);
+        while (glb.hasRemaining()) glb.put((byte) ' ');
+        var glbRefs = GltfAssetReferences.buffers(new net.minecraft.resources.ResourceLocation("test:models/foo/anim.glb"), glb.array());
+        if (!glbRefs.equals(java.util.List.of(new net.minecraft.resources.ResourceLocation("test:models/buffers/mesh.bin"))))
+            throw new IllegalStateException("GLB external buffer reference was not resolved: " + glbRefs);
         var directory = Files.createTempDirectory("photon-pack-deps-");
         var archive = directory.resolve("test.fxpack");
         try {
