@@ -22,9 +22,7 @@ final class ShaderIncludeResolver {
         while (matcher.find()) {
             boolean includeDirectory = matcher.group(1) != null;
             String name = includeDirectory ? matcher.group(1) : matcher.group(2);
-            ResourceLocation location = name.indexOf(':') >= 0
-                    ? ResourceLocation.tryParse(name)
-                    : new ResourceLocation("minecraft", name);
+            ResourceLocation location = ResourceLocation.tryParse(name);
             if (location == null) continue;
             // Forge resolves quoted imports relative to the original stage's directory,
             // including quotes found transitively in another imported source.
