@@ -107,7 +107,17 @@ public final class FXPacks {
         return consumer -> {
             mountFolderPacks(consumer);
             mountModPacks(consumer);
+            mountLegacyEditorAssets(consumer);
         };
+    }
+
+    /** Photon 1's editor used <gameDir>/ldlib/assets as a resource-pack tree. */
+    private static void mountLegacyEditorAssets(Consumer<Pack> consumer) {
+        var root = Platform.getGamePath().resolve("ldlib");
+        if (!Files.isDirectory(root.resolve("assets"))) return;
+        consumer.accept(createPack("fxpack/legacy-ldlib", "Photon 1 editor assets",
+                packId -> new PathPackResources(packId, root, false)));
+        Photon.LOGGER.info("mounted Photon 1 editor assets from {}", root);
     }
 
     private static void mountFolderPacks(Consumer<Pack> consumer) {

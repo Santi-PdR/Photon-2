@@ -1541,6 +1541,20 @@ public final class PhotonFXEditorSmokeTest {
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
             throw new IllegalStateException("Photon 1 effect wrapper was not converted without modifying the source");
+        var marker = Minecraft.getInstance().getResourceManager().getResource(
+                new ResourceLocation("photon_legacy_probe", "textures/marker.txt")).orElseThrow(
+                () -> new IllegalStateException("Photon 1 editor assets were not mounted"));
+        try (var stream = marker.open()) {
+            if (!new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).equals("legacy-pack-mounted"))
+                throw new IllegalStateException("Photon 1 editor asset contents changed");
+        }
+        var legacyFxPath = java.nio.file.Path.of("ldlib/assets/photon_legacy_probe/fx/imported.fx");
+        Files.createDirectories(legacyFxPath.getParent());
+        try (var stream = Files.newOutputStream(legacyFxPath)) { NbtIo.writeCompressed(legacy, stream); }
+        com.lowdragmc.photon.client.fx.FXHelper.clearCache();
+        var loadedLegacy = com.lowdragmc.photon.client.fx.FXHelper.getFX(new ResourceLocation("photon_legacy_probe", "imported"));
+        if (loadedLegacy == null || loadedLegacy.getFxData().objects().size() != 1 || !loadedLegacy.getLegacySubFXs().containsKey("spark"))
+            throw new IllegalStateException("Original-format FX could not be loaded directly from the Photon 1 asset folder");
         var converted = new com.lowdragmc.photon.client.fx.FX();
         converted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), mapped);
         var subFx = converted.getLegacySubFXs().get("spark");
