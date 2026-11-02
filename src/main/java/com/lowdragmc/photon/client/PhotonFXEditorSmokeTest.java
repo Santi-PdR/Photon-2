@@ -738,15 +738,23 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
             } else if (ticks == 320) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
-                        message -> {
-                            Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString());
-                            minecraft.execute(minecraft::stop);
-                        });
-                finished = true;
+                        message -> Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString()));
                 realArrowTrail = null;
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realTrailSmoke");
                 minecraft.setScreen(previousScreen);
+                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var firstPersonScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
+                minecraft.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+                System.setProperty("photon.firstPersonSmoke", "true");
+                new com.lowdragmc.photon.client.fx.EntityEffectExecutor(firstPersonScan.getFx(), minecraft.level,
+                        minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE).start();
+            } else if (ticks == 380) {
+                if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
+                    throw new IllegalStateException("First-person scan did not draw a camera-centred owner billboard");
+                System.clearProperty("photon.firstPersonSmoke");
+                finished = true;
+                minecraft.stop();
             }
         } catch (Throwable failure) {
             finished = true;
@@ -1553,7 +1561,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
-
 
 
 

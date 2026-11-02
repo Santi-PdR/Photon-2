@@ -494,8 +494,11 @@ public class TileParticleRenderer {
         var relative = new Vector3f((float) (worldPos.x - cameraPos.x),
                 (float) (worldPos.y - cameraPos.y), (float) (worldPos.z - cameraPos.z));
         var effect = particle.getEmitter().getEffectExecutor();
-        return adjustOwnerBillboard(relative, mode == ParticleRendererSetting.Mode.Billboard && effect != null
-                && effect.owner() != null && effect.owner() == camera.getEntity(), camera.getLookVector());
+        boolean atOwnerCamera = mode == ParticleRendererSetting.Mode.Billboard && effect != null
+                && effect.owner() != null && effect.owner() == camera.getEntity() && relative.lengthSquared() < 0.0001f;
+        if (atOwnerCamera && Boolean.getBoolean("photon.firstPersonSmoke"))
+            System.setProperty("photon.firstPersonBillboardSeen", "true");
+        return adjustOwnerBillboard(relative, atOwnerCamera, camera.getLookVector());
     }
 
     public static Vector3f adjustOwnerBillboard(Vector3f relative, boolean cameraFacingOwner,

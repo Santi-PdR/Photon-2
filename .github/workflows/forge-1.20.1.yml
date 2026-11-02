@@ -115,6 +115,10 @@ jobs:
         shell: bash
         run: grep -Fq '[late-scene-composite-smoke] scene sampling includes previously drawn FX' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require scan rendering in first person
+        shell: bash
+        run: grep -Fq '[first-person-scan-smoke] owner billboard changed' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require Forge particle culling compatibility
         shell: bash
         run: grep -Fq '[forge-cull-smoke] disabled culling stays visible and authored bounds reach Forge' "$RUNNER_TEMP/photon-client.log"

@@ -500,6 +500,15 @@ public class RenderPassPipeline {
                     });
                 });
                 var realScanBefore = inspectRealScan ? smokeReadCurrentViewport() : null;
+                boolean inspectFirstPerson = Boolean.getBoolean("photon.firstPersonSmoke")
+                        && !Boolean.getBoolean("photon.firstPersonScanPixels") && !maskSubPass && !wireframeSubPass
+                        && particleQueue.stream().anyMatch(p -> {
+                    if (!(p instanceof com.lowdragmc.photon.client.gameobject.particle.TileParticle tile)) return false;
+                    var effect = tile.getEmitter().getEffectExecutor();
+                    return effect != null && effect.owner() != null && effect.owner() == camera.getEntity()
+                            && tile.getRuntime().renderer.getMaterials().stream().anyMatch(slot -> slot.getMaterial().usesSceneColor());
+                });
+                var firstPersonBefore = inspectFirstPerson ? smokeReadCurrentViewport() : null;
                 String tornadoLayer = System.getProperty("photon.realTornadoLayer", "");
                 boolean inspectRealTornado = Boolean.getBoolean("photon.realTornadoSmoke")
                         && (!smokeRealTornadoLogged || (!tornadoLayer.isEmpty() && !smokeRealTornadoLayers.contains(tornadoLayer)))
@@ -621,6 +630,17 @@ public class RenderPassPipeline {
                     if (changed > 0) {
                         smokeRealScanLogged = true;
                         com.lowdragmc.photon.Photon.LOGGER.info("[real-scan-pixels-smoke] original scan project changed {} pixels", changed);
+                    }
+                }
+                if (firstPersonBefore != null && Boolean.getBoolean("photon.firstPersonBillboardSeen")) {
+                    var after = smokeReadCurrentViewport();
+                    int changed = 0;
+                    for (int i = 0; i < after.length; i += 4)
+                        if (firstPersonBefore[i] != after[i] || firstPersonBefore[i + 1] != after[i + 1]
+                                || firstPersonBefore[i + 2] != after[i + 2]) changed++;
+                    if (changed > 0) {
+                        System.setProperty("photon.firstPersonScanPixels", "true");
+                        com.lowdragmc.photon.Photon.LOGGER.info("[first-person-scan-smoke] owner billboard changed {} pixels", changed);
                     }
                 }
                 if (realTornadoBefore != null) {
