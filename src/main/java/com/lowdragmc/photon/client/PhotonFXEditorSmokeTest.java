@@ -530,7 +530,8 @@ public final class PhotonFXEditorSmokeTest {
                     try (var zip = new java.util.zip.ZipFile(pack.toFile())) {
                         for (var path : java.util.List.of("assets/smoke/fx/shield.fx",
                                 "assets/ldlib2/models/block/shield.json", "assets/ldlib2/models/obj/shield.obj",
-                                "assets/ldlib2/shaders/core/shield.json", "assets/ldlib2/shaders/core/shield.fsh")) {
+                                "assets/ldlib2/shaders/core/shield.json", "assets/ldlib2/shaders/core/shield.fsh",
+                                "assets/photon/shaders/include/particle.glsl")) {
                             if (zip.getEntry(path) == null)
                                 throw new IllegalStateException("Shield fxpack missing " + path + "; warnings=" + result.warnings());
                         }
@@ -1483,7 +1484,6 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
-
 
 
 

@@ -63,8 +63,9 @@ import java.util.Set;
  *       walked like the fx itself.</li>
  * </ul>
  * The exporter works on the serialized NBT (a scratch copy — the live project is never touched) with
- * one recursive walk. Assets that resolve from vanilla or a mod jar are skipped (the recipient's game
- * ships them), and builtin library paths are skipped (they resolve on every install).
+ * one recursive walk. Vanilla assets are skipped (the recipient's game ships them), and builtin
+ * library paths are skipped (they resolve on every Photon install). Referenced mod assets travel too:
+ * another player may not have the author's other mods.
  * <p>
  * CONTRACT with {@link FXPacks#gc}: gc's mark phase must be able to re-discover every packed file
  * from the fx entries ({@code file(assets/...)} strings, {@code .png}/{@code .obj}/{@code .glb}/{@code .gltf} location strings,
@@ -172,8 +173,8 @@ public final class FXPackExporter {
 
     /**
      * The effects {@code fxRoot}'s FX instances place, and theirs, each as the bytes to write under its own id.
-     * They go the way raw assets go: one the game or a mod ships stays out, and one the recipient has from
-     * elsewhere wins over the copy. Each is walked like the exported fx, so what it references travels too.
+     * They go the way raw assets go: vanilla stays out, and one the recipient has from elsewhere wins
+     * over the copy. Each is walked like the exported fx, so what it references travels too.
      */
     private Map<ResourceLocation, byte[]> packSources(CompoundTag fxRoot, ResourceLocation self) throws IOException {
         var out = new LinkedHashMap<ResourceLocation, byte[]>();
@@ -188,7 +189,7 @@ public final class FXPackExporter {
                 warnings.add("FX instance source %s does not resolve, so it is not packed".formatted(id));
                 continue;
             }
-            if (shipsWithTheGame(resource)) continue;
+            if (shipsWithMinecraft(resource)) continue;
             var tag = FXHelper.readTag(id);
             if (tag == null) {
                 warnings.add("FX instance source %s could not be read, so it is not packed".formatted(id));
@@ -393,7 +394,7 @@ public final class FXPackExporter {
             if (location.getPath().endsWith(".png")) {
                 var metadata = new ResourceLocation(location.getNamespace(), location.getPath() + ".mcmeta");
                 var resource = Minecraft.getInstance().getResourceManager().getResource(metadata).orElse(null);
-                if (resource != null && !shipsWithTheGame(resource)) {
+                if (resource != null && !shipsWithMinecraft(resource)) {
                     try (var input = resource.open()) {
                         files.put(metadata, input.readAllBytes());
                     } catch (IOException e) {
@@ -478,8 +479,8 @@ public final class FXPackExporter {
 
     /**
      * Read an asset's bytes iff it should travel in the pack: missing → warning + null; provided by
-     * vanilla or a mod jar → null (the recipient's game ships it); anything else (the ldlib2 editor
-     * asset dir, resource packs, other fx packs) → bytes.
+     * vanilla → null (the recipient's game ships it); anything else (mods, the ldlib2 editor asset
+     * dir, resource packs, other fx packs) → bytes.
      */
     private byte @Nullable [] readPackableAsset(ResourceLocation location) {
         var resource = Minecraft.getInstance().getResourceManager().getResource(location).orElse(null);
@@ -488,7 +489,7 @@ public final class FXPackExporter {
                     .formatted(location));
             return null;
         }
-        if (shipsWithTheGame(resource)) {
+        if (shipsWithMinecraft(resource)) {
             return null; // no need to carry it
         }
         try (var in = resource.open()) {
@@ -501,10 +502,9 @@ public final class FXPackExporter {
 
     // ---- helpers -----------------------------------------------------------------------------------
 
-    /** Provided by vanilla or a mod jar, so the recipient's game has it too. */
-    private static boolean shipsWithTheGame(Resource resource) {
-        var packId = resource.sourcePackId();
-        return "vanilla".equals(packId) || packId.startsWith("mod");
+    /** Only vanilla is guaranteed to exist on every Minecraft 1.20.1 recipient. */
+    private static boolean shipsWithMinecraft(Resource resource) {
+        return "vanilla".equals(resource.sourcePackId());
     }
 
     private static byte[] nbtBytes(CompoundTag tag) {
