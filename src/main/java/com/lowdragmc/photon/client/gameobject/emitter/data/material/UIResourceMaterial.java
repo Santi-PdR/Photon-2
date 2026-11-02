@@ -84,6 +84,11 @@ public final class UIResourceMaterial implements IMaterial {
     }
 
     @Override
+    public boolean usesSceneColor() {
+        return getInternalMaterial().usesSceneColor();
+    }
+
+    @Override
     public int[] requiredCustomChannels() {
         return getInternalMaterial().requiredCustomChannels();
     }

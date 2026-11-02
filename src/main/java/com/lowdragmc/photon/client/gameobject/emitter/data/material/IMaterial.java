@@ -119,6 +119,11 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
         return false;
     }
 
+    /** Whether this material samples scene colour while drawing. Called on the render thread. */
+    default boolean usesSceneColor() {
+        return false;
+    }
+
     /** Channels this material reads from each custom-data stream (index = stream, 0 = none), when it knows. */
     default int[] requiredCustomChannels() {
         return new int[0];

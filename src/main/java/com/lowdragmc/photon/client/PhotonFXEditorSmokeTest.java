@@ -66,6 +66,38 @@ public final class PhotonFXEditorSmokeTest {
 
     private PhotonFXEditorSmokeTest() {}
 
+    /** Exercise the real framebuffer copy/composite rather than only checking routing flags. */
+    private static void verifyLateSceneSnapshot() {
+        int previous = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var scene = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 4, 4, true);
+        var layer = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 4, 4, true);
+        var snapshot = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 4, 4, true);
+        try {
+            scene.setClearColor(0, 0, 1, 1);
+            scene.clear(Minecraft.ON_OSX);
+            layer.setClearColor(0.5f, 0, 0, 0.5f);
+            layer.clear(Minecraft.ON_OSX);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(0, 0, 4, 4);
+            com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.copyLateSceneColor(scene, layer, snapshot);
+            snapshot.bindWrite(false);
+            var pixel = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            org.lwjgl.opengl.GL11.glReadPixels(2, 2, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (Math.abs(pixel.get(0) - 0.5f) > 0.03f || Math.abs(pixel.get(2) - 0.5f) > 0.03f)
+                throw new IllegalStateException("Late scene snapshot lost accumulated FX: red=" + pixel.get(0) + " blue=" + pixel.get(2));
+            Photon.LOGGER.info("[late-scene-composite-smoke] scene sampling includes previously drawn FX");
+        } finally {
+            scene.destroyBuffers();
+            layer.destroyBuffers();
+            snapshot.destroyBuffers();
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER, previous);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+    }
+
     public static void prepareModelFixtureIfEnabled() {
         if (!Boolean.getBoolean("photon.fxprojSmokeTest")) return;
         try {
@@ -426,6 +458,8 @@ public final class PhotonFXEditorSmokeTest {
                     throw new IllegalStateException("Real scan shader or particle failed to load");
                 shader.getShader(MaterialContext.NORMAL);
                 if (shader.isCompiledError()) throw new IllegalStateException("Real scan shader failed to compile");
+                if (!shader.usesSceneColor()) throw new IllegalStateException("Scan shader did not report its scene-colour dependency");
+                verifyLateSceneSnapshot();
                 Photon.LOGGER.info("[real-scan-shader-smoke] original scan shader compiled and particle is alive");
             } else if (ticks == 160) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),

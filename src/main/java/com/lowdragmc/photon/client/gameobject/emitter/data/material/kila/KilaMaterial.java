@@ -171,6 +171,11 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     public final KilaProjection projection = new KilaProjection();
     @Persisted(subPersisted = true)
     public final KilaScreenDistortion screenDistortion = new KilaScreenDistortion();
+
+    @Override
+    public boolean usesSceneColor() {
+        return screenDistortion.isEnable();
+    }
     @Persisted(subPersisted = true)
     public final KilaRamp ramp = new KilaRamp();
     @Persisted(subPersisted = true)

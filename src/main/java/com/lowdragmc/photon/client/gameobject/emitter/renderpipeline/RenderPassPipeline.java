@@ -459,6 +459,13 @@ public class RenderPassPipeline {
             var renderPass = entry.getKey();
             var particleQueue = entry.getValue();
             if (!particleQueue.isEmpty()) {
+                // Prepare before a pass binds its VBO and material state: the fullscreen composite
+                // changes GL bindings. Later scene-colour readers must see earlier FX in the layer.
+                if (lateLayer && irisTarget == null && !maskSubPass && !wireframeSubPass
+                        && renderPass.renderer.getMaterials().stream()
+                        .anyMatch(slot -> slot.getMaterial().usesSceneColor())) {
+                    prepareLateSceneColor();
+                }
                 renderPass.prepareStatus(this);
                 boolean inspectCpuTrail = Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeCpuTrailLogged
                         && !maskSubPass && !wireframeSubPass && particleQueue.stream().anyMatch(p ->
@@ -1290,6 +1297,23 @@ public class RenderPassPipeline {
         return SCENE_SAMPLER;
     }
 
+    /** Snapshot the frame plus the FX accumulated so far, without feeding back into the draw target. */
+    private void prepareLateSceneColor() {
+        SCENE_SAMPLER = resize(SCENE_SAMPLER, DRAW_TARGET.width, DRAW_TARGET.height, true);
+        copyLateSceneColor(UISurface.currentTarget(), DRAW_TARGET, SCENE_SAMPLER);
+        IS_SCENE_SAMPLER_DIRTY = false;
+        sceneSamplerCopies++;
+        DRAW_TARGET.bindWrite(false);
+    }
+
+    /** Copy scene depth/colour, then blend the accumulated premultiplied FX into the copy. */
+    public static void copyLateSceneColor(RenderTarget scene, RenderTarget layer, HDRTarget snapshot) {
+        snapshot.copyDepthAndColorFrom(scene);
+        snapshot.bindWrite(false);
+        int color = layer.getColorTextureId();
+        SceneBlit.compositePremultipliedToBound(color, color, false);
+    }
+
     public @Nonnull HDRTarget getSceneSampler() {
         if (SCENE_SAMPLER != null && !IS_SCENE_SAMPLER_DIRTY) return SCENE_SAMPLER;
         updateSceneSampler();
@@ -1301,10 +1325,7 @@ public class RenderPassPipeline {
         // On the pack path there is nothing to refresh: samplers point straight at Iris' textures,
         // so this also skips a full-screen copy per drawing pass.
         if (irisTarget != null) return;
-        // Nor on the late path: what it samples is MC's main target, which no draw of ours touches
-        // until the composite. Re-copying it per pass would be a full-screen blit for an image that
-        // cannot have changed. The one copy a build does need is forced in renderGroup().
-        if (lateLayer) return;
+        // The late scene-colour snapshot includes our accumulator, so a successful draw makes it stale.
         IS_SCENE_SAMPLER_DIRTY = true;
     }
 
@@ -1329,4 +1350,3 @@ public class RenderPassPipeline {
         return smokeRealTornadoLayerFrames.contains(name);
     }
 }
-

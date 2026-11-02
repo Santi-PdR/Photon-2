@@ -186,6 +186,13 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         return !compiledErrorMessage.isEmpty();
     }
 
+    @Override
+    public boolean usesSceneColor() {
+        if (shaderHolder == null && !isCompiledError()) recompile();
+        return shaderHolder != null && shaderHolder.baseInstance.getShaderInstanceAccessor()
+                .getSamplerNames().contains("SamplerSceneColor");
+    }
+
     public void recompile() {
         compiledErrorMessage = "";
         litByDynamicLights = false;

@@ -233,6 +233,13 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
     }
 
     @Override
+    public boolean usesSceneColor() {
+        var entry = refreshEntry();
+        var compiled = entry == null ? null : entry.getCompiled();
+        return compiled != null && compiled.usesSceneColor();
+    }
+
+    @Override
     public void preload(MaterialContext context, PreloadContext preload) {
         preload.onRenderThread(() -> {
             var entry = refreshEntry();
