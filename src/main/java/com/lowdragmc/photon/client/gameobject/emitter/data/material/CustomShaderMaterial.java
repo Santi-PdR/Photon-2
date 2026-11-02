@@ -72,6 +72,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public final GradientTexture gradientTexture = new GradientTexture(MAX_SAMPLING, MAX_SAMPLER);
     @Nullable
     private LDShaderHolder shaderHolder;
+    private boolean declaredSceneColor;
+    private boolean declaredSceneDepth;
     private Cleaner.Cleanable shaderCleanable;
     @Getter
     private String compiledErrorMessage = "";
@@ -189,8 +191,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Override
     public boolean usesSceneColor() {
         if (shaderHolder == null && !isCompiledError()) recompile();
-        return shaderHolder != null && shaderHolder.baseInstance.getShaderInstanceAccessor()
-                .getSamplerNames().contains("SamplerSceneColor");
+        return shaderHolder != null && declaredSceneColor;
     }
 
     public void recompile() {
@@ -237,6 +238,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         }
         if (shaderHolder == null) throw new IllegalStateException("Failed to find shader " + shaderLocation);
         try {
+            declaredSceneColor = declaresSceneSampler(shaderLocation, "SamplerSceneColor");
+            declaredSceneDepth = declaresSceneSampler(shaderLocation, "SamplerSceneDepth");
             var shader = shaderHolder.baseInstance;
             var samplerNames = shader.getShaderInstanceAccessor().getSamplerNames();
             if (samplerNames.contains("SamplerBlockAtlas")) {
@@ -264,14 +267,33 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (samplerNames.contains("SamplerGradient")) {
             shaderHolder.addDynamicSampler("SamplerGradient", gradientTexture::getGradientTexture);
         }
-        if (samplerNames.contains("SamplerSceneColor")) {
+        if (declaredSceneColor || samplerNames.contains("SamplerSceneColor")) {
             shaderHolder.addDynamicSampler("SamplerSceneColor", () -> Optional.ofNullable(RenderPassPipeline.getCurrent())
                     .map(pipeline -> pipeline.getSceneSamplers().colorTexture()).orElse(-1));
         }
-        if (samplerNames.contains("SamplerSceneDepth")) {
+        if (declaredSceneDepth || samplerNames.contains("SamplerSceneDepth")) {
             shaderHolder.addDynamicSampler("SamplerSceneDepth", () -> Optional.ofNullable(RenderPassPipeline.getCurrent())
                     .map(pipeline -> pipeline.getSceneSamplers().depthTexture()).orElse(-1));
         }
+    }
+
+    /** A sampler can be optimized out of the base program but used by an instanced variant. */
+    private static boolean declaresSceneSampler(ResourceLocation shader, String name) {
+        var json = new ResourceLocation(shader.getNamespace(), "shaders/core/" + shader.getPath() + ".json");
+        var resource = Minecraft.getInstance().getResourceManager().getResource(json).orElse(null);
+        if (resource == null) return false;
+        try (var reader = resource.openAsReader()) {
+            var root = com.google.gson.JsonParser.parseReader(reader).getAsJsonObject();
+            var samplers = root.getAsJsonArray("samplers");
+            if (samplers == null) return false;
+            for (var sampler : samplers) {
+                var entry = sampler.getAsJsonObject();
+                if (entry.has("name") && name.equals(entry.get("name").getAsString())) return true;
+            }
+        } catch (Exception e) {
+            Photon.LOGGER.warn("Could not inspect shader scene samplers for {}", shader, e);
+        }
+        return false;
     }
 
     private void attachDynamicUniforms(LDShaderHolder shaderHolder) {

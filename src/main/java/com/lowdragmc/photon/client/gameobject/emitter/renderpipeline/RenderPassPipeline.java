@@ -1325,7 +1325,9 @@ public class RenderPassPipeline {
         // On the pack path there is nothing to refresh: samplers point straight at Iris' textures,
         // so this also skips a full-screen copy per drawing pass.
         if (irisTarget != null) return;
-        // The late scene-colour snapshot includes our accumulator, so a successful draw makes it stale.
+        // Late colour readers explicitly rebuild the snapshot before their draw. Depth-only readers
+        // still see the same scene depth, so they can reuse it without a copy after every FX pass.
+        if (lateLayer) return;
         IS_SCENE_SAMPLER_DIRTY = true;
     }
 
