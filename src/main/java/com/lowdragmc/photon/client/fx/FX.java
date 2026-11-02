@@ -11,6 +11,8 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.Collection;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * An FX definition: the authored object tree + timeline, as saved by the editor / a {@code .fx} file.
@@ -28,6 +30,7 @@ public class FX {
     @Setter
     private ResourceLocation fxLocation;
     private final FXData fxData;
+    private final Map<String, FX> legacySubFXs = new LinkedHashMap<>();
 
     public FX() {
         fxData = new FXData();
@@ -36,6 +39,11 @@ public class FX {
     public CompoundTag serializeNBT(HolderLookup.Provider provider) {
         var tag = new CompoundTag();
         tag.put("fxData", fxData.serializeNBT(provider));
+        if (!legacySubFXs.isEmpty()) {
+            var subEffects = new CompoundTag();
+            legacySubFXs.forEach((name, fx) -> subEffects.put(name, fx.serializeNBT(provider)));
+            tag.put("legacySubFXs", subEffects);
+        }
         return tag;
     }
 
@@ -46,6 +54,13 @@ public class FX {
     /** @param as the ids this effect is known by, so an FX instance that leads back to one of them is a cycle */
     public void deserializeNBT(HolderLookup.Provider provider, CompoundTag tag, Collection<ResourceLocation> as) {
         fxData.deserializeNBT(provider, tag.getCompound("fxData"), as);
+        legacySubFXs.clear();
+        var subEffects = tag.getCompound("legacySubFXs");
+        for (var name : subEffects.getAllKeys()) {
+            var subEffect = new FX();
+            subEffect.deserializeNBT(provider, subEffects.getCompound(name));
+            legacySubFXs.put(name, subEffect);
+        }
     }
 
     /**

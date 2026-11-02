@@ -60,6 +60,12 @@ public interface IEffectExecutor {
         return null;
     }
 
+    /** Embedded named subeffects from a Photon 1 definition, when present. */
+    @Nullable
+    default FX legacySubEffect(String name) {
+        return this instanceof IFXEffectExecutor whole ? whole.getFx().getLegacySubFXs().get(name) : null;
+    }
+
     /**
      * Called when a timeline {@code signal} track fires a signal during live forward playback. Override
      * to react per-effect; global subscribers can also listen via {@code PhotonSignals}.

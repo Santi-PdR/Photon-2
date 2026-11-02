@@ -24,6 +24,7 @@ import com.lowdragmc.photon.client.collision.CollisionWorld;
 import com.lowdragmc.photon.client.gameobject.collider.ColliderObject;
 import com.lowdragmc.photon.client.light.DynamicLightManager;
 import com.lowdragmc.photon.gui.editor.FXEditor;
+import com.lowdragmc.photon.gui.editor.FXProject;
 import com.lowdragmc.photon.gui.editor.FXProjectEffectExecutor;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
@@ -100,6 +101,7 @@ public class SceneView extends View implements FXSceneOptions {
         this.getLayout().widthPercent(100.0F);
         this.getLayout().heightPercent(100.0F);
         this.fxEditor = fxEditor;
+        effect.setDefinitionSupplier(() -> fxEditor.getCurrentProject() instanceof FXProject project ? project.getFx() : null);
         level.setParticleManager(particleManager);
         particleManager.setLevel(level);
 

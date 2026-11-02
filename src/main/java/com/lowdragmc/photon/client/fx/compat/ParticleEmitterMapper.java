@@ -357,7 +357,7 @@ public class ParticleEmitterMapper implements Mapper{
         newSubEmitterTag.put("emitProbability", MapperUtils.mapTypedValue(subEmitterTag.getCompound("emitProbability"), false));
         newSubEmitterTag.putByte("inheritDuration",  subEmitterTag.getByte("inheritDuration"));
         newSubEmitterTag.putString("event", subEmitterTag.getString("event"));
-        newSubEmitterTag.putString("fxLocation", subEmitterTag.getString("emitter"));
+        newSubEmitterTag.putString("legacySubFXName", subEmitterTag.getString("emitter"));
 
         return newSubEmitterTag;
     }

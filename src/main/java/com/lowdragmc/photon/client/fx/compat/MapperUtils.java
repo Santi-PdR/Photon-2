@@ -107,7 +107,9 @@ public class MapperUtils {
                     samplers.put("Sampler" + key, sampler);
                 }
                 shaderData.put("samplers", samplers);
-                dataTag.put("shaderData", shaderData);
+                var additional = new CompoundTag();
+                additional.put("shaderData", shaderData);
+                dataTag.put("_additional", additional);
                 break;
 
             case "RandomColor":

@@ -186,6 +186,10 @@ public class SubEmittersSetting extends ToggleGroup {
         @Nullable
         @Persisted
         protected ResourceLocation fxLocation = null;
+        /** Name of an embedded Photon 1 subeffect; ordinary Photon 2 references use fxLocation. */
+        @Nullable
+        @Persisted
+        protected String legacySubFXName;
         @Configurable(name = "Emitter.event", tips = "photon.emitter.config.sub_emitters.emitter.event")
         protected Event event = Event.Birth;
         @Configurable(name = "Emitter.emitProbability", tips = "photon.emitter.config.sub_emitters.emitter.emit_probability")
@@ -276,7 +280,7 @@ public class SubEmittersSetting extends ToggleGroup {
         }
 
         public void spawnEmitter(TileParticle father, @Nullable CollisionEvent contact) {
-            if (fxLocation == null) {
+            if (fxLocation == null && (legacySubFXName == null || legacySubFXName.isBlank())) {
                 return;
             }
             // probability roll stays here: the particle's RandomSource is confined to its update thread
@@ -300,7 +304,9 @@ public class SubEmittersSetting extends ToggleGroup {
         }
 
         private void doSpawn(TileParticle father, @Nullable CollisionEvent contact) {
-            var fx = FXHelper.getFX(fxLocation);
+            var executor = father.getEmitter().getEffectExecutor();
+            var fx = legacySubFXName != null && executor != null ? executor.legacySubEffect(legacySubFXName) : null;
+            if (fx == null && fxLocation != null) fx = FXHelper.getFX(fxLocation);
             if (fx == null) return;
             var runtime = fx.createRuntime();
             runtime.root.updatePos(contact != null && spawnAtContact ? contact.position() : father.getWorldPos());
@@ -344,8 +350,11 @@ public class SubEmittersSetting extends ToggleGroup {
             FXHelper.listAllFX().forEach(fx -> candidates.add(fx.toString()));
 
             father.addConfigurators(new SearchComponentConfigurator<>("fx",
-                    () -> fxLocation == null ? "" : fxLocation.toString(),
-                    v -> fxLocation = (v == null || v.isEmpty()) ? null : new ResourceLocation(v),
+                    () -> fxLocation != null ? fxLocation.toString() : legacySubFXName == null ? "" : legacySubFXName,
+                    v -> {
+                        legacySubFXName = null;
+                        fxLocation = (v == null || v.isEmpty()) ? null : new ResourceLocation(v);
+                    },
                     "", true,
                     (word, handler) -> {
                         var search = word.toLowerCase(Locale.ROOT);

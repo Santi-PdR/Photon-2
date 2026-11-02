@@ -123,7 +123,7 @@ public class ClientCommands {
                                     var converted = FXCompat.convertFX();
                                     if (Minecraft.getInstance().player != null) {
                                         Minecraft.getInstance().player.sendSystemMessage(
-                                                Component.literal("convert result: " + converted)
+                                                Component.literal("Converted " + converted + " Photon 1 effect(s); reload resources with F3+T. Existing files were preserved.")
                                         );
                                     }
                                     return 1;

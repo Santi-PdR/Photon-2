@@ -7,6 +7,9 @@ import net.minecraft.util.RandomSource;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.level.Level;
+import com.lowdragmc.photon.client.fx.FX;
+import org.jetbrains.annotations.Nullable;
+import java.util.function.Supplier;
 
 /**
  * @author KilaBash
@@ -19,6 +22,8 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
     public final Level level;
     @Getter @Setter
     private long seed = 0;
+    @Setter
+    private Supplier<FX> definitionSupplier = () -> null;
     @Getter
     public final RandomSource randomSource = RandomSource.create(seed);
 
@@ -28,6 +33,13 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
 
     public void reset() {
         randomSource.setSeed(seed);
+    }
+
+    @Override
+    @Nullable
+    public FX legacySubEffect(String name) {
+        var definition = definitionSupplier.get();
+        return definition == null ? null : definition.getLegacySubFXs().get(name);
     }
 
     /** Editor previews feed the isolated scene stack — never the world's post-effect chain. */

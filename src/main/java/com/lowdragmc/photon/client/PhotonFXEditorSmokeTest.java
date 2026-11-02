@@ -1512,7 +1512,7 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
-    private static void verifyPhoton1Compatibility() {
+    private static void verifyPhoton1Compatibility() throws Exception {
         var legacy = new CompoundTag();
         var definition = new CompoundTag();
         var main = new CompoundTag();
@@ -1533,11 +1533,40 @@ public final class PhotonFXEditorSmokeTest {
         objects.add(empty);
         main.put("fxObjects", objects);
         definition.put("mainFX", main);
+        var legacySubEffects = new CompoundTag();
+        legacySubEffects.put("spark", main.copy());
+        definition.put("subFXs", legacySubEffects);
         legacy.put("fx", definition);
         var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
             throw new IllegalStateException("Photon 1 effect wrapper was not converted without modifying the source");
+        var converted = new com.lowdragmc.photon.client.fx.FX();
+        converted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), mapped);
+        var subFx = converted.getLegacySubFXs().get("spark");
+        if (subFx == null || subFx.getFxData().objects().size() != 1)
+            throw new IllegalStateException("Photon 1 embedded subeffect was lost during conversion");
+        var reloaded = new com.lowdragmc.photon.client.fx.FX();
+        reloaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                converted.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        var player = Minecraft.getInstance().player;
+        var executor = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(reloaded, player.level(), player,
+                com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
+        if (executor.legacySubEffect("spark") == null)
+            throw new IllegalStateException("Photon 1 embedded subeffect did not survive saving or resolve from its owner");
+        var temp = Files.createTempDirectory("photon1-conversion-smoke");
+        var source = temp.resolve("old"); var dest = temp.resolve("new");
+        Files.createDirectories(source.resolve("nested"));
+        try (var output = Files.newOutputStream(source.resolve("nested/test.fx"))) {
+            NbtIo.writeCompressed(legacy, output);
+        }
+        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 1
+                || !Files.isRegularFile(dest.resolve("nested/test.fx")))
+            throw new IllegalStateException("Photon 1 converter did not preserve nested effect paths");
+        var firstExport = Files.readAllBytes(dest.resolve("nested/test.fx"));
+        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 0
+                || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("nested/test.fx"))))
+            throw new IllegalStateException("Photon 1 converter overwrote an existing effect");
         var oldBurst = new CompoundTag();
         oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
         oldBurst.putFloat("probability", 0.75f);
@@ -1555,11 +1584,12 @@ public final class PhotonFXEditorSmokeTest {
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(enabled).contains("frequency")
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapPhysicsTag(enabled).contains("gravity"))
             throw new IllegalStateException("Photon 1 enabled module settings were lost during conversion");
-        var oldSub = new CompoundTag(); oldSub.putInt("tickInterval", 512); oldSub.putString("emitter", "photon:test");
+        var oldSub = new CompoundTag(); oldSub.putInt("tickInterval", 512); oldSub.putString("emitter", "spark");
         var subList = new ListTag(); subList.add(oldSub);
         var sub = new CompoundTag(); sub.putByte("enable", (byte) 1); sub.put("emitters", subList);
         var mappedSub = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapSubEmittersTag(sub).getCompound("emitters");
-        if (mappedSub.getInt("uid") != 1 || mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("tickInterval") != 512)
+        if (mappedSub.getInt("uid") != 1 || mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("tickInterval") != 512
+                || !mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getString("legacySubFXName").equals("spark"))
             throw new IllegalStateException("Photon 1 sub-emitter list or interval was lost during conversion");
         var oldShader = new CompoundTag(); oldShader.putString("_type", "CustomShaderMaterial");
         oldShader.putString("shader", "photon:ci/tornado_smoke");
@@ -1572,10 +1602,20 @@ public final class PhotonFXEditorSmokeTest {
         var shaderBody = mappedShader.getCompound("data");
         if (!mappedShader.getString("type").equals("custom_shader")
                 || !shaderBody.getString("shaderLocation").equals("photon:ci/tornado_smoke")
-                || !shaderBody.getCompound("shaderData").getCompound("samplers").getCompound("Sampler3")
+                || !shaderBody.getCompound("_additional").getCompound("shaderData").getCompound("samplers").getCompound("Sampler3")
                 .getString("resource").equals("minecraft:textures/particle/flame.png")
-                || shaderBody.getCompound("shaderData").getCompound("uniforms").getList("LegacyVariantOnly", Tag.TAG_FLOAT).getFloat(0) != 0.37f)
+                || shaderBody.getCompound("_additional").getCompound("shaderData").getCompound("uniforms").getList("LegacyVariantOnly", Tag.TAG_FLOAT).getFloat(0) != 0.37f)
             throw new IllegalStateException("Photon 1 custom shader, sampler or uniform was lost during conversion");
+        var restoredLegacyShader = com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial.deserializeWrapper(mappedShader);
+        if (!(restoredLegacyShader instanceof CustomShaderMaterial restored) || restored.isCompiledError()
+                || !restored.getShaderLocation().equals(new ResourceLocation("photon", "ci/tornado_smoke")))
+            throw new IllegalStateException("Converted Photon 1 shader could not be loaded as a material");
+        var restoredData = (CompoundTag) restored.serializeAdditionalNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        var restoredUniform = restored.getShader(MaterialContext.PARTICLE_MODEL_INSTANCE).getUniform("LegacyVariantOnly");
+        if (!restoredData.getCompound("shaderData").getCompound("samplers").getCompound("Sampler3")
+                .getString("resource").equals("minecraft:textures/particle/flame.png")
+                || restoredUniform == null || Math.abs(restoredUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f)
+            throw new IllegalStateException("Converted Photon 1 shader sampler or variant uniform did not survive deserialization");
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
     }
 
