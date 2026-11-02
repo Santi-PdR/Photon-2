@@ -458,6 +458,11 @@ public final class PhotonFXEditorSmokeTest {
                 var scan = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
                 var slot = scan.config.renderer.getMaterials().get(0).getMaterial();
+                if (!slot.usesSceneColor()) throw new IllegalStateException("Referenced scan material lost its scene-colour dependency");
+                var kilaSceneProbe = new com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial();
+                if (kilaSceneProbe.usesSceneColor()) throw new IllegalStateException("Inactive Kila distortion unexpectedly samples scene colour");
+                kilaSceneProbe.screenDistortion.setEnable(true);
+                if (!kilaSceneProbe.usesSceneColor()) throw new IllegalStateException("Kila distortion did not report its scene-colour dependency");
                 if (slot instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial reference)
                     slot = reference.getRawMaterial();
                 if (!(slot instanceof CustomShaderMaterial shader) || shader.isCompiledError()
@@ -1548,6 +1553,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 
