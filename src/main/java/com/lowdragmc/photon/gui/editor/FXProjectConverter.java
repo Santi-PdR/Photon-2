@@ -71,7 +71,7 @@ public final class FXProjectConverter {
                 return NbtIo.readCompressed(in);
             }
         }
-        return NbtIo.read(file.toPath());
+        return NbtIo.read(file);
     }
 
     /** Old editor documents also used {@code .fxproj}, so the suffix alone cannot identify a Photon 2 project. */

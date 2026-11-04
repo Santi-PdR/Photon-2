@@ -136,8 +136,8 @@ public final class PhotonFXProjectSmokeTest {
                 var convertedFile = legacyFile.resolveSibling(stem + "_photon2" + FXProject.TYPE.getSuffix());
                 photon1ConvertedFiles.add(convertedFile);
                 if (!Files.isRegularFile(convertedFile)
-                        || !NbtIo.read(legacyFile).equals(legacyDocument)
-                        || !NbtIo.read(convertedFile).contains("data", Tag.TAG_COMPOUND)) {
+                        || !NbtIo.read(legacyFile.toFile()).equals(legacyDocument)
+                        || !NbtIo.read(convertedFile.toFile()).contains("data", Tag.TAG_COMPOUND)) {
                     throw new IllegalStateException("Photon 1 .fxproj migration overwrote its source or did not save Photon 2 data");
                 }
             }
