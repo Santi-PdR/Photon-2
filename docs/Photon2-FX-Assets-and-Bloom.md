@@ -39,12 +39,13 @@ usa `.fxpack`; no hace falta modificar el JAR de Photon.
 
 ## Recursos ausentes de efectos viejos
 
-El exportador conserva recursos personalizados que encuentra en el gestor de recursos. Si un
-PNG/modelo/shader original ya no existe en la instancia, el log de Photon avisa de su ruta y no
-puede inventar el archivo faltante. Abre el `.fxpack` como ZIP y comprueba la ruta bajo
-`assets/<namespace>/...`; copia ahí el archivo original y vuelve a exportar/instalar. Los assets
-que vienen de otro mod no se duplican: la otra persona también necesita ese mod, salvo que el autor
-incluya legalmente una copia redistribuible en su propio paquete.
+El exportador copia cualquier recurso no vanilla que pueda resolver al exportar, incluidos recursos
+de mods, resource packs y las carpetas de assets de Photon 1/2. Si un PNG/modelo/shader original ya
+no está disponible en la instancia, el log de Photon avisa su ruta y no puede inventar el archivo
+faltante. Abre el `.fxpack` como ZIP y comprueba la ruta bajo `assets/<namespace>/...`; añade ahí
+el archivo original y vuelve a exportar/instalar. Antes de compartir recursos tomados de otro mod,
+asegúrate de tener permiso para redistribuirlos. La carpeta Photon 1 `<instancia>/ldlib/assets`
+también se monta automáticamente como recurso legado.
 
 ## Añadir brillo (Bloom)
 
