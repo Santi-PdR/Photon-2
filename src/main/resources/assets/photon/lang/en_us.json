@@ -1,7 +1,7 @@
 {
   "photon.configuration.title": "Photon Settings",
   "photon.configuration.enable_bloom": "Enable Bloom",
-  "photon.configuration.enable_bloom.tooltip": "Turns on glow for FX in the game. To add glow: enable this, then enable Bloom on the particle renderer. Lower Bloom Threshold (for example to 0.3) if ordinary bright colors should glow; HDR colors above 1 also glow.",
+  "photon.configuration.enable_bloom.tooltip": "Turns on bloom globally for Photon FX. The default threshold only catches HDR highlights; lower Bloom Threshold (for example to 0.3) to make ordinary bright colors glow. Increase Bloom Intensity to strengthen the halo.",
   "photon.configuration.bloom_mip_level": "Bloom mip level",
   "photon.configuration.bloom_mip_level.tooltip": "How many downsample steps the bloom pyramid takes. Higher means a wider, softer glow at a higher cost. Clamped to what the current framebuffer size allows.",
   "photon.configuration.bloom_threshold": "Bloom Threshold",
@@ -535,7 +535,7 @@
   "photon.emitter.config.renderer.facingDirection.minSpeedThreshold": "Minimum particle speed required before velocity-derived facing is used.",
   "photon.emitter.config.renderer.facingDirection.customDirection": "Custom local direction used for Billboard facing. It will be transformed by the particle space rotation.",
   "photon.emitter.config.renderer.layer": "Defines the render layer of the particle renderer.",
-  "photon.emitter.config.renderer.bloomEffect": "Bloom glow for this emitter. Enable Bloom in Photon Settings; lower the threshold if normal-bright colors should glow.",
+  "photon.emitter.config.renderer.bloomEffect": "Bloom effect",
   "photon.emitter.config.renderer.cull": "Cull particles that are out of view.",
   "photon.emitter.config.renderer.orderInLayer": "Order In Layer",
   "photon.emitter.config.renderer.orderInLayer.tips": "Emitter\u0027s layer within a sorted layer",

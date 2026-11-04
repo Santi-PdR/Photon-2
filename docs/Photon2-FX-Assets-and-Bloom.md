@@ -50,11 +50,11 @@ incluya legalmente una copia redistribuible en su propio paquete.
 
 - **Vista previa del editor:** en la barra superior de Scene, pulsa el icono de bloom/brillo; la tecla
   `B` alterna la vista previa.
-- **En juego:** abre la configuración de Photon, activa **Bloom**, y en el emisor abre
-  **Renderer → Bloom effect**.
+- **En juego:** abre **Mods → Photon → Config**, activa **Enable Bloom** y ajusta el umbral.
+  Este ajuste es global para los FX de Photon; no hay una casilla de bloom por emisor en este port.
 - **Colores normales:** baja **Bloom Threshold**; prueba `0.3`. Con el umbral alto, el juego sólo
-  genera halo para colores HDR realmente mayores que 1.
+  genera halo para luces HDR realmente mayores que 1.
 - **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
 
 La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del
-editor no cambia la configuración de renderizado del juego.
+editor no cambia la configuración global de renderizado del juego.

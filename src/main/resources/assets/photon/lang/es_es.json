@@ -1,7 +1,7 @@
 {
   "photon.configuration.title": "Configuración de Photon",
   "photon.configuration.enable_bloom": "Activar bloom (brillo)",
-  "photon.configuration.enable_bloom.tooltip": "Activa el brillo de los FX en el juego. Actívalo y marca Bloom en Renderer del emisor. Baja Bloom Threshold (por ejemplo, a 0.3) para que brillen colores normales; los colores HDR por encima de 1 también brillan.",
+  "photon.configuration.enable_bloom.tooltip": "Activa el bloom global para los FX de Photon. El umbral predeterminado sólo recoge luces HDR; baja Bloom Threshold (por ejemplo a 0.3) para que brillen colores normales. Sube Bloom Intensity para reforzar el halo.",
   "photon.configuration.bloom_mip_level": "Nivel de bloom",
   "photon.configuration.bloom_mip_level.tooltip": "Controla el ancho y suavidad del halo; valores mayores cuestan más rendimiento.",
   "photon.configuration.bloom_threshold": "Umbral de bloom",
@@ -11,6 +11,5 @@
   "photon.configuration.enable_bloom_with_iris_shader": "Activar bloom con Iris",
   "photon.configuration.enable_bloom_with_iris_shader.tooltip": "Permite el bloom de Photon al usar shaders Iris cuando la capa de FX se mezcla con el objetivo de color del shader.",
   "photon.is_bloom_visible": "Vista previa de bloom/brillo (B)",
-  "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo",
-  "photon.emitter.config.renderer.bloomEffect": "Bloom/brillo para este emisor. Activa Bloom en Configuración de Photon; baja el umbral si quieres que brillen colores claros normales."
+  "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo"
 }
