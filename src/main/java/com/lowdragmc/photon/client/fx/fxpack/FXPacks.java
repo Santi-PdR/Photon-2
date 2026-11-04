@@ -57,8 +57,9 @@ import java.util.function.Consumer;
  * content-addressed library files under {@code assets/photon_fx/...}), written by
  * {@link FXPackExporter}.
  * <p>
- * Loading: every {@code <gameDir>/photon/fxpacks/*.fxpack} is mounted as a hidden, always-on,
- * lowest-priority resource pack ({@link #repositorySource()}, registered via
+ * Loading: every {@code <gameDir>/photon/fxpacks/*.fxpack} and every unpacked resource folder directly
+ * under {@code <gameDir>/photon/fxpacks/} is mounted as a hidden, always-on, lowest-priority resource
+ * pack ({@link #repositorySource()}, registered via
  * {@code AddPackFindersEvent}). Being lowest priority, its assets only fill locations nothing else
  * provides — mods, user resource packs and the ldlib2 editor folder all override them, so users can
  * reskin a packed fx with an ordinary resource pack and an author's local files always win. Vanilla
@@ -79,7 +80,7 @@ public final class FXPacks {
     private FXPacks() {
     }
 
-    /** {@code <gameDir>/photon/fxpacks} — where users drop {@code .fxpack} files (and exports go). */
+    /** {@code <gameDir>/photon/fxpacks} — where users drop {@code .fxpack} files or unpacked asset folders (and exports go). */
     public static File getFxPacksDir() {
         return new File(Platform.getGamePath().toFile(), "photon/fxpacks");
     }
@@ -122,12 +123,20 @@ public final class FXPacks {
 
     private static void mountFolderPacks(Consumer<Pack> consumer) {
         deleteLeftoverCopies();
-        var files = getFxPacksDir().listFiles(file -> file.isFile() && file.getName().endsWith(SUFFIX));
-        if (files == null) return;
-        for (var file : files) {
-            consumer.accept(createPack(folderPackId(file), file.getName(),
-                    packId -> new FilePackResources(packId, file, false)));
-            Photon.LOGGER.info("mounted fx pack {}", file.getName());
+        var entries = getFxPacksDir().listFiles(file ->
+                file.isFile() && file.getName().endsWith(SUFFIX)
+                        || file.isDirectory() && !file.getName().startsWith(".")
+                        && Files.isDirectory(file.toPath().resolve("assets")));
+        if (entries == null) return;
+        for (var entry : entries) {
+            if (entry.isDirectory()) {
+                consumer.accept(createPack(folderPackId(entry), entry.getName(),
+                        packId -> new PathPackResources(packId, entry.toPath(), false)));
+            } else {
+                consumer.accept(createPack(folderPackId(entry), entry.getName(),
+                        packId -> new FilePackResources(packId, entry, false)));
+            }
+            Photon.LOGGER.info("mounted fx pack {}", entry.getName());
         }
     }
 

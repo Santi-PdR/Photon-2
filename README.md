@@ -18,6 +18,10 @@ The project also expects LDLib 1.0.52.a in the instance. It is a separate requir
 
 The source adapts the Minecraft APIs, Forge networking and shader integration, resource serialization, and editor UI to the Forge 1.20.1 / LDLib2 2.2.39.a APIs. The upstream interactive UI scenarios are excluded from the production source set because they target newer LDLib2 APIs and are developer-only tools.
 
+## FX packs, models, shaders and bloom
+
+See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) for the folder layout, custom resource rules, and where to turn on Bloom.
+
 ## License
 
 Photon is licensed under CC BY-NC-SA 4.0. See [LICENSE](LICENSE).
