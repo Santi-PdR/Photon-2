@@ -56,11 +56,41 @@ public final class FXProjectConverter {
 
     /** Converts an {@code .fx} file and saves the project; packed references are read from the loaded packs. */
     public static Result convertFile(File fxFile, File projectFile) throws Exception {
-        CompoundTag tag;
-        try (var in = Files.newInputStream(fxFile.toPath())) {
-            tag = NbtIo.readCompressed(in);
-        }
+        CompoundTag tag = readFileTag(fxFile);
         return convert(tag, projectFile, FXProjectConverter::readLoaded, FXInstanceEditing.idOf(fxFile));
+    }
+
+    /** Photon 1 editor projects are raw NBT, while its exported {@code .fx} files are gzip NBT. */
+    static CompoundTag readFileTag(File file) throws IOException {
+        try (var in = new java.io.PushbackInputStream(Files.newInputStream(file.toPath()), 2)) {
+            int first = in.read();
+            int second = in.read();
+            if (second >= 0) in.unread(second);
+            if (first >= 0) in.unread(first);
+            if (first == 0x1f && second == 0x8b) {
+                return NbtIo.readCompressed(in);
+            }
+        }
+        return NbtIo.read(file.toPath());
+    }
+
+    /** Old editor documents also used {@code .fxproj}, so the suffix alone cannot identify a Photon 2 project. */
+    static boolean isLegacyEditorFile(File file) {
+        try {
+            return com.lowdragmc.photon.client.fx.compat.FXCompat.isLegacyEffect(readFileTag(file));
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    /** Keeps the Photon 1 source intact when it is opened and migrated into the Photon 2 editor. */
+    static File convertedProjectFile(File legacyFile) {
+        var name = FXFileActions.baseName(legacyFile, FXProject.TYPE.getSuffix()) + "_photon2";
+        var candidate = new File(legacyFile.getParentFile(), name + FXProject.TYPE.getSuffix());
+        for (int suffix = 1; candidate.exists(); suffix++) {
+            candidate = new File(legacyFile.getParentFile(), name + "_" + suffix + FXProject.TYPE.getSuffix());
+        }
+        return candidate;
     }
 
     /** Converts one fx of a pack file and saves the project, reading only the file itself, mounted or not. */
@@ -80,10 +110,11 @@ public final class FXProjectConverter {
     /** @param knownAs the id the effect was loaded by, so the project knows an FX instance leading back to it is a cycle */
     private static Result convert(CompoundTag fxTag, File projectFile, LibrarySource source,
                                   @Nullable ResourceLocation knownAs) throws Exception {
+        boolean hasEmbeddedLegacyResources = fxTag.contains("resources", Tag.TAG_COMPOUND);
         var tag = FXHelper.applyVersionFixes(fxTag);
         var unpacker = new Unpacker(source, resourceDirectory(projectFile));
-        if (tag.contains("resources", Tag.TAG_COMPOUND)) {
-            unpacker.warnings.add("the embedded 'resources' section of an old export was dropped, nothing reads it anymore");
+        if (hasEmbeddedLegacyResources) {
+            unpacker.warnings.add("the Photon 1 editor's embedded resource library is not available in Photon 2; external textures, models, and shaders must be installed or packed separately");
         }
         // file-format stamps, not project data: left in, the project would read as modified once opened
         tag.remove("version");

@@ -42,6 +42,15 @@ public class FXProject implements IProject {
     public static final ProjectType TYPE = new ProjectType(PhotonIcons.PHOTON_PROJECT, "fx_project", ".fxproj", FXProject::new) {
         @Override
         public IProject loadProjectFromFile(java.io.File file) throws Exception {
+            if (FXProjectConverter.isLegacyEditorFile(file)) {
+                var convertedFile = FXProjectConverter.convertedProjectFile(file);
+                var result = FXProjectConverter.convertFile(file, convertedFile);
+                result.warnings().forEach(warning -> com.lowdragmc.photon.Photon.LOGGER.warn(
+                        "Photon 1 project {}: {}", file.getAbsolutePath(), warning));
+                com.lowdragmc.photon.Photon.LOGGER.info("Imported Photon 1 project {} as {}",
+                        file.getAbsolutePath(), convertedFile.getAbsolutePath());
+                return result.project();
+            }
             try {
                 return super.loadProjectFromFile(file);
             } catch (Exception failure) {

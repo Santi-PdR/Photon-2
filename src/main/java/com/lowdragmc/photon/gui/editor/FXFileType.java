@@ -23,7 +23,10 @@ public final class FXFileType extends ProjectType {
     @Override
     public com.lowdragmc.lowdraglib2.editor.project.IProject loadProjectFromFile(File file) throws Exception {
         File destination = new File(file.getParentFile(), file.getName() + ".fxproj");
-        return FXProjectConverter.convertFile(file, destination).project();
+        var result = FXProjectConverter.convertFile(file, destination);
+        result.warnings().forEach(warning -> com.lowdragmc.photon.Photon.LOGGER.warn(
+                "Photon FX {}: {}", file.getAbsolutePath(), warning));
+        return result.project();
     }
 
     public void appendFileMenu(Editor editor, File file, TreeBuilder.Menu menu) {

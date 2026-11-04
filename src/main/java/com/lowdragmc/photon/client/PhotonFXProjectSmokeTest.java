@@ -32,6 +32,8 @@ public final class PhotonFXProjectSmokeTest {
 
         Path file = null;
         Path objModelJson = null;
+        var photon1ProjectFiles = new java.util.ArrayList<Path>();
+        var photon1ConvertedFiles = new java.util.ArrayList<Path>();
         try {
             if (!(Minecraft.getInstance().particleEngine instanceof ParticleEngineAccessor)) {
                 throw new IllegalStateException("Photon ParticleEngine accessor mixin was not applied");
@@ -105,6 +107,41 @@ public final class PhotonFXProjectSmokeTest {
                 throw new IllegalStateException("Legacy .fxproj burst fields were not restored correctly");
             }
             Photon.LOGGER.info("[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields");
+
+            // Photon 1 editor projects used raw (uncompressed) NBT and two root layouts.
+            // Opening either one must import to a sibling Photon 2 project and leave the source intact.
+            for (int layout = 0; layout < 2; layout++) {
+                var legacyDocument = new CompoundTag();
+                var oldObjects = new ListTag();
+                if (layout == 0) {
+                    legacyDocument.put("emitters", oldObjects);
+                } else {
+                    var oldFx = new CompoundTag();
+                    var mainFx = new CompoundTag();
+                    mainFx.put("fxObjects", oldObjects);
+                    oldFx.put("mainFX", mainFx);
+                    oldFx.put("subFXs", new CompoundTag());
+                    legacyDocument.put("fx", oldFx);
+                }
+                legacyDocument.put("resources", new CompoundTag());
+                var legacyFile = Files.createTempFile("photon1-raw-project-", ".fxproj");
+                photon1ProjectFiles.add(legacyFile);
+                NbtIo.write(legacyDocument, legacyFile.toFile());
+                var imported = FXProject.TYPE.loadProjectFromFile(legacyFile.toFile());
+                if (!(imported instanceof FXProject)) {
+                    throw new IllegalStateException("Photon 1 raw .fxproj did not open as a Photon 2 project");
+                }
+                var stem = legacyFile.getFileName().toString();
+                stem = stem.substring(0, stem.length() - FXProject.TYPE.getSuffix().length());
+                var convertedFile = legacyFile.resolveSibling(stem + "_photon2" + FXProject.TYPE.getSuffix());
+                photon1ConvertedFiles.add(convertedFile);
+                if (!Files.isRegularFile(convertedFile)
+                        || !NbtIo.read(legacyFile).equals(legacyDocument)
+                        || !NbtIo.read(convertedFile).contains("data", Tag.TAG_COMPOUND)) {
+                    throw new IllegalStateException("Photon 1 .fxproj migration overwrote its source or did not save Photon 2 data");
+                }
+            }
+            Photon.LOGGER.info("[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals");
         } catch (Throwable failure) {
             Photon.LOGGER.error("[fxproj-smoke] failed to load synthetic .fxproj", failure);
             throw new IllegalStateException("Photon FX project persistence smoke test failed", failure);
@@ -114,6 +151,20 @@ public final class PhotonFXProjectSmokeTest {
                     Files.deleteIfExists(objModelJson);
                 } catch (IOException cleanupFailure) {
                     Photon.LOGGER.warn("[obj-model-smoke] could not remove temporary model JSON {}", objModelJson, cleanupFailure);
+                }
+            }
+            for (var converted : photon1ConvertedFiles) {
+                try {
+                    Files.deleteIfExists(converted);
+                } catch (IOException cleanupFailure) {
+                    Photon.LOGGER.warn("[photon1-editor-project-smoke] could not remove {}", converted, cleanupFailure);
+                }
+            }
+            for (var legacy : photon1ProjectFiles) {
+                try {
+                    Files.deleteIfExists(legacy);
+                } catch (IOException cleanupFailure) {
+                    Photon.LOGGER.warn("[photon1-editor-project-smoke] could not remove {}", legacy, cleanupFailure);
                 }
             }
             if (file != null) {
