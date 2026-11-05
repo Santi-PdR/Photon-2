@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.AnimatedGltfModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.GltfModelSource;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.IModelSource;
@@ -77,6 +78,11 @@ public class MeshResource extends Resource<MeshData> {
     @Override
     public String getName() {
         return "mesh";
+    }
+
+    @Override
+    public File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
     }
 
     @Nullable

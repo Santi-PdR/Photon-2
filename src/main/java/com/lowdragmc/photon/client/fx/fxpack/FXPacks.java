@@ -61,7 +61,7 @@ import java.util.function.Consumer;
  * under {@code <gameDir>/photon/fxpacks/} is mounted as a hidden, always-on, lowest-priority resource
  * pack ({@link #repositorySource()}, registered via
  * {@code AddPackFindersEvent}). Being lowest priority, its assets only fill locations nothing else
- * provides — mods, user resource packs and the ldlib2 editor folder all override them, so users can
+ * provides — mods, user resource packs and Photon's workspace assets all override them, so users can
  * reskin a packed fx with an ordinary resource pack and an author's local files always win. Vanilla
  * serves everything lazily from the zip (no parsing, no memory copies at reload); the fx definitions
  * inside load through the normal {@code FXHelper} path by id ({@code <ns>:<name>}). Dropping a new
@@ -123,9 +123,8 @@ public final class FXPacks {
     }
 
     /**
-     * Photon 2's editable assets live under <gameDir>/ldlib2/assets. Expose that directory
-     * as a normal low-priority resource pack too, so PNGs and other raw assets placed next
-     * to editor FX can be resolved by Minecraft's ResourceManager.
+     * Keep the pre-workspace Photon 2 assets under <gameDir>/ldlib2/assets available for existing
+     * installations and older projects. New editor files are served by the higher-priority workspace pack.
      */
     private static void mountPhoton2EditorAssets(Consumer<Pack> consumer) {
         var root = Platform.getGamePath().resolve("ldlib2");

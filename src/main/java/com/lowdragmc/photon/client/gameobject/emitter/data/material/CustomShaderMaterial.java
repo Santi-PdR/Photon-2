@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderHolder;
@@ -24,6 +23,7 @@ import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.util.PhotonAssetPath;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -507,7 +507,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 new Button().setText("photon.select_shader").setOnClick(e -> {
                     var mui = e.currentElement.getModularUI();
                     if (mui == null) return;
-                    Dialog.showFileDialog("photon.select_shader", LDLib2.getAssetsDir(), true, Dialog.suffixFilter(".json"), r -> {
+                    Dialog.showFileDialog("photon.select_shader", PhotonPaths.getDataDir(), true, Dialog.suffixFilter(".json"), r -> {
                         if (r != null && r.isFile()) {
                             var location = getShaderFromFile(r);
                             if (location == null) return;
@@ -543,7 +543,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
 
     @Nullable
     public static ResourceLocation getShaderFromFile(File filePath) {
-        return PhotonAssetPath.shaderLocationFromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
+        return PhotonAssetPath.shaderLocationFromFile(PhotonPaths.getAssetsDir().toPath(), filePath.toPath());
     }
 }
 

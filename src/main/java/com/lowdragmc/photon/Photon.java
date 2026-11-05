@@ -1,9 +1,9 @@
 package com.lowdragmc.photon;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.client.PhotonClientProxy;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -14,7 +14,6 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 
 @Mod(Photon.MOD_ID)
 public class Photon {
@@ -34,9 +33,7 @@ public class Photon {
 
     public static void init() {
         LOGGER.info("{} is initializing on platform: {}", NAME, Platform.platformName());
-        if (new File(LDLib2.getAssetsDir(), "photon").mkdirs()) {
-            LOGGER.info("Created photon assets folder");
-        }
+        PhotonPaths.ensureDirectories();
     }
 
     public static ResourceLocation id(String path) {

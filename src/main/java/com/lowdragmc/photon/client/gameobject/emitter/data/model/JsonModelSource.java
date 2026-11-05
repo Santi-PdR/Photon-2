@@ -2,7 +2,6 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -12,6 +11,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
 import com.lowdragmc.photon.client.util.PhotonAssetPath;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -210,7 +210,7 @@ public class JsonModelSource implements IModelSource {
         buttonConfigurator.addInlineChild(new Button().setText("ldlib.gui.editor.tips.select_model").setOnClick(e -> {
             var mui = e.currentElement.getModularUI();
             if (mui == null) return;
-            Dialog.showFileDialog("ldlib.gui.editor.tips.select_model", LDLib2.getAssetsDir(), true, node -> {
+            Dialog.showFileDialog("ldlib.gui.editor.tips.select_model", PhotonPaths.getDataDir(), true, node -> {
                 return !node.getKey().isFile() || node.getKey().getName().toLowerCase().endsWith(".json");
             }, r -> {
                 if (r != null && r.isFile()) {
@@ -235,7 +235,7 @@ public class JsonModelSource implements IModelSource {
 
     @Nullable
     private static ResourceLocation getModelLocationFromFile(java.io.File file) {
-        return PhotonAssetPath.modelLocationFromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
+        return PhotonAssetPath.modelLocationFromFile(PhotonPaths.getAssetsDir().toPath(), file.toPath());
     }
 
     private record ObjLoaderReference(ResourceLocation location, boolean flipV) {

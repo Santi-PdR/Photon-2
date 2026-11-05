@@ -63,15 +63,32 @@ editor no cambia la configuración global de renderizado del juego.
 
 ## Texturas del editor y archivos de Photon 1
 
+Photon guarda el contenido editable en su propio espacio dentro de la instancia:
+
+```text
+<instancia>/photon/
+├── assets/<namespace>/...     # FX exportados, texturas, modelos y shaders
+├── projects/*.fxproj          # proyectos del editor
+├── resources/global/          # materiales, mallas, curvas y graphs del editor
+└── fxpacks/                   # paquetes compartibles exportados
+```
+
+En **File → Save Project in Photon** se guarda una copia `.fxproj` dentro de `photon/projects`.
+**Export FX** guarda el `.fx` en `photon/assets/photon/fx`; el selector de recursos permite elegir
+archivos desde el directorio `photon/`. Estos archivos quedan en la carpeta de datos de la instancia,
+no se escriben dentro del JAR comprimido en caliente. Para distribuirlos integrados en un mod, se
+empaquetan bajo `src/main/resources/assets/` o `src/main/resources/fxpacks/` al compilar ese mod;
+para compartirlos sin compilar, usa `.fxpack`.
+
 La pestaña **Resources** guarda definiciones de materiales y otros recursos del editor (archivos .nbt/JSON). No almacena los píxeles de una imagen. Las texturas son archivos PNG dentro de una ruta de pack de Minecraft.
 
 Por ejemplo, para una textura con ID myfx:textures/hollow/aura.png, coloca el archivo en:
 
 ```
-<carpeta-de-la-instancia>/ldlib2/assets/myfx/textures/hollow/aura.png
+<carpeta-de-la-instancia>/photon/assets/myfx/textures/hollow/aura.png
 ```
 
-El campo **Texture** del material debe apuntar exactamente a myfx:textures/hollow/aura.png. Tras copiar archivos mientras el juego está abierto, recarga recursos con **F3+T**. Photon monta ldlib2 como un pack externo de baja prioridad; así los recursos de usuario también se pueden incluir al exportar el efecto a .fxpack.
+El campo **Texture** del material debe apuntar exactamente a myfx:textures/hollow/aura.png. Tras copiar archivos mientras el juego está abierto, recarga recursos con **F3+T**. Photon monta `photon/assets` como el pack del espacio de trabajo, y el exportador puede incluir sus recursos en `.fxpack`.
 
 Los efectos antiguos conservan sus IDs de textura. Por ejemplo, ldlib:textures/enraged.png requiere:
 
@@ -95,4 +112,4 @@ La inspección de `enraged.fx`, `conqclash.fxproj`, `domainfire.fxproj` y `elect
 | `trueprimepiecetwo:textures/particle/pixxxii.png` | `assets/trueprimepiecetwo/textures/particle/pixxxii.png` |
 | `cursed_fate_sky_manipulation:textures/particle/fire.png` | `assets/cursed_fate_sky_manipulation/textures/particle/fire.png` |
 
-Put those paths under either `ldlib/` or `ldlib2/` in the instance. Photon and Minecraft texture IDs in the same projects are supplied by their mods and do not need copying. Alex's Nov 4 log also reports `cursedfate:textures/particle/cursedeneryaura2.png` and shader `photon:slash`; the PNG and shader files themselves were not present in the shared project files, so their original source files are still required to render those references.
+Pon esos archivos en `<instancia>/photon/assets/<namespace>/...`; por ejemplo `ldlib:textures/enraged.png` va en `photon/assets/ldlib/textures/enraged.png`. Photon y Minecraft suministran sus propios IDs de textura y no hay que copiarlos. También se pueden leer los árboles antiguos `<instancia>/ldlib/assets` y `<instancia>/ldlib2/assets` para compatibilidad. El log de Alex del 4 de noviembre también reportó `cursedfate:textures/particle/cursedeneryaura2.png` y el shader `photon:slash`; esos archivos fuente no estaban en los proyectos compartidos, así que siguen haciendo falta sus originales para renderizar esas referencias.

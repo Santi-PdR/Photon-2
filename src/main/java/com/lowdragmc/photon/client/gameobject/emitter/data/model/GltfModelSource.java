@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -14,6 +13,7 @@ import lombok.Getter;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.SkinnedModel;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -118,7 +118,7 @@ public class GltfModelSource implements IModelSource {
         buttonConfigurator.addInlineChild(new Button().setText("photon.gui.editor.tips.select_gltf").setOnClick(e -> {
             var mui = e.currentElement.getModularUI();
             if (mui == null) return;
-            Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", LDLib2.getAssetsDir(), true,
+            Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", PhotonPaths.getDataDir(), true,
                     node -> {
                         if (!node.getKey().isFile()) return true; // allow directories
                         var name = node.getKey().getName().toLowerCase();

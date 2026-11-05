@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import com.lowdragmc.lowdraglib2.configurator.ConfiguratorParser;
@@ -18,6 +17,7 @@ import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
 import com.lowdragmc.photon.client.util.PhotonAssetPath;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -174,7 +174,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
                         new Button().setText("ldlib.gui.editor.tips.select_image").setOnClick(e -> {
                             var mui = e.currentElement.getModularUI();
                             if (mui == null) return;
-                            Dialog.showFileDialog("ldlib.gui.editor.tips.select_image", LDLib2.getAssetsDir(), true, Dialog.suffixFilter(".png"), r -> {
+                            Dialog.showFileDialog("ldlib.gui.editor.tips.select_image", PhotonPaths.getDataDir(), true, Dialog.suffixFilter(".png"), r -> {
                                 if (r != null && r.isFile()) {
                                     var location = getTextureFromFile(r);
                                     if (location == null) return;
@@ -188,7 +188,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     }
 
     public @Nullable ResourceLocation getTextureFromFile(File filePath) {
-        return PhotonAssetPath.fromFile(LDLib2.getAssetsDir().toPath(), filePath.toPath());
+        return PhotonAssetPath.fromFile(PhotonPaths.getAssetsDir().toPath(), filePath.toPath());
     }
 }
 

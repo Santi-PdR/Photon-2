@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
@@ -9,6 +8,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import dev.vfyjxf.taffy.style.AlignItems;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
@@ -23,8 +23,8 @@ import java.util.Objects;
 /**
  * Geometry from a Wavefront OBJ file parsed at runtime through the resource manager — no bakery,
  * no atlas, no resource reload needed. The location keeps its {@code .obj} extension (e.g.
- * {@code photon:models/rocket.obj}); files under {@code <gameDir>/ldlib2/assets/<ns>/...} (LDLib2's
- * injected pack) or any resource pack resolve. UVs are raw 0..1 — the texture comes from the
+ * {@code photon:models/rocket.obj}); files under {@code <gameDir>/photon/assets/<ns>/...} or any
+ * resource pack resolve. Existing LDLib2 assets remain readable. UVs are raw 0..1 — the texture comes from the
  * material system. Load failures are cached as an empty mesh (cleared by reload/invalidate) so a
  * missing file doesn't retry every frame.
  */
@@ -115,7 +115,7 @@ public class ObjModelSource implements IModelSource {
         buttonConfigurator.addInlineChild(new Button().setText("photon.gui.editor.tips.select_obj").setOnClick(e -> {
             var mui = e.currentElement.getModularUI();
             if (mui == null) return;
-            Dialog.showFileDialog("photon.gui.editor.tips.select_obj", LDLib2.getAssetsDir(), true,
+            Dialog.showFileDialog("photon.gui.editor.tips.select_obj", PhotonPaths.getDataDir(), true,
                     Dialog.suffixFilter(".obj"), r -> {
                         if (r != null && r.isFile()) {
                             var location = IModelSource.getAssetLocationFromFile(r);

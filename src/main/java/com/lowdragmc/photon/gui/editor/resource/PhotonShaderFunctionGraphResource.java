@@ -4,6 +4,7 @@ import com.lowdragmc.kilagraph.editor.ShaderFunctionGraphResource;
 import com.lowdragmc.kilagraph.rendertype.ShaderFunctionGraph;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.shadergraph.PhotonShaderFunctionGraph;
 
 /**
@@ -16,6 +17,11 @@ public class PhotonShaderFunctionGraphResource extends ShaderFunctionGraphResour
     public static final PhotonShaderFunctionGraphResource INSTANCE = new PhotonShaderFunctionGraphResource();
 
     protected PhotonShaderFunctionGraphResource() {}
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
+    }
 
     @Override
     public ShaderFunctionGraph createGraph() {

@@ -7,11 +7,18 @@ import com.lowdragmc.photon.client.fx.FXHelper;
 import com.lowdragmc.photon.client.fx.FXPreloader;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.gui.editor.resource.MeshResource;
 import com.lowdragmc.photon.gui.editor.PhotonEditorKeyMappings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.repository.Pack;
+import net.minecraft.server.packs.repository.PackSource;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.flag.FeatureFlagSet;
+import java.nio.file.Files;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.client.ConfigScreenHandler;
 import net.minecraftforge.client.event.ModelEvent;
@@ -57,6 +64,18 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     @SubscribeEvent
     public void addPackFinders(AddPackFindersEvent event) {
         if (event.getPackType() == PackType.CLIENT_RESOURCES) {
+            // User-authored content in <gameDir>/photon/assets is a normal Minecraft resource pack.
+            // Keep it above Photon 1/2 compatibility packs so new files and edits resolve first.
+            event.addRepositorySource(consumer -> {
+                var root = PhotonPaths.getDataDir().toPath();
+                if (!Files.isDirectory(PhotonPaths.getAssetsDir().toPath())) return;
+                var info = new Pack.Info(Component.literal("Photon workspace"), 15, 15,
+                        FeatureFlagSet.of(), true);
+                var pack = Pack.create("photon/workspace", Component.literal("Photon workspace"), true,
+                        id -> new PathPackResources(id, root, false), info, PackType.CLIENT_RESOURCES,
+                        Pack.Position.TOP, true, PackSource.BUILT_IN);
+                if (pack != null) consumer.accept(pack);
+            });
             event.addRepositorySource(FXPacks.repositorySource());
         }
     }

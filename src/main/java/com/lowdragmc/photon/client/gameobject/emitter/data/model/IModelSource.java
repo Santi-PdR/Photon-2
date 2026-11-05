@@ -1,12 +1,12 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.IConfigurable;
 import com.lowdragmc.lowdraglib2.registry.ILDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.utils.PersistedParser;
 import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.util.PhotonAssetPath;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.nbt.CompoundTag;
@@ -61,7 +61,7 @@ public interface IModelSource extends IConfigurable, IPersistedSerializable, ILD
      */
     @Nullable
     static ResourceLocation getAssetLocationFromFile(File file) {
-        return PhotonAssetPath.fromFile(LDLib2.getAssetsDir().toPath(), file.toPath());
+        return PhotonAssetPath.fromFile(PhotonPaths.getAssetsDir().toPath(), file.toPath());
     }
 
     /** The source's geometry via the shared cache; {@link PhotonMesh#EMPTY} when unavailable. */

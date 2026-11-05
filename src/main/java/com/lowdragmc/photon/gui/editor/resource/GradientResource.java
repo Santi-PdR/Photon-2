@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.editor.resource.BuiltinResourceProvider;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourceProvider;
 import com.lowdragmc.lowdraglib2.editor.resource.Resource;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.lowdraglib2.editor.ui.resource.ResourceProviderContainer;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
@@ -43,6 +44,11 @@ public class GradientResource extends Resource<GradientResource.Gradients> {
     @Override
     public String getName() {
         return "gradient";
+    }
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
     }
 
     @Nullable

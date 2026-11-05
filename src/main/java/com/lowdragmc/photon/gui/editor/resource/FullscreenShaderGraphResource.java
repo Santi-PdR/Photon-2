@@ -12,6 +12,7 @@ import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.gui.GraphView;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.NodeModel;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.postfx.shadergraph.FullscreenShaderGraph;
 import com.lowdragmc.photon.client.postfx.shadergraph.gui.FullscreenGraphView;
 import net.minecraft.nbt.CompoundTag;
@@ -38,6 +39,11 @@ public class FullscreenShaderGraphResource extends RenderTypeGraphResource {
     private Consumer<IResourcePath> pathSelectListener;
 
     protected FullscreenShaderGraphResource() {}
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
+    }
 
     public void setPathSelectListener(@Nullable Consumer<IResourcePath> listener) {
         this.pathSelectListener = listener;

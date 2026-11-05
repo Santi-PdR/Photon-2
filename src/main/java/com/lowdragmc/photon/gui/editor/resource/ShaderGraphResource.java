@@ -10,6 +10,7 @@ import com.lowdragmc.lowdraglib2.editor.ui.resource.ResourceProviderContainer;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.gui.GraphView;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.ShaderGraphMaterial;
 import com.lowdragmc.photon.client.shadergraph.ShaderGraph;
 import com.lowdragmc.photon.client.shadergraph.gui.ShaderGraphView;
@@ -38,6 +39,11 @@ public class ShaderGraphResource extends RenderTypeGraphResource {
     private Consumer<IResourcePath> pathSelectListener;
 
     protected ShaderGraphResource() {}
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
+    }
 
     public void setPathSelectListener(@Nullable Consumer<IResourcePath> listener) {
         this.pathSelectListener = listener;

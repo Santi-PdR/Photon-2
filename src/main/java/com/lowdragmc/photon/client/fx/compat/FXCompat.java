@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import com.lowdragmc.photon.client.fx.FXHelper;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -18,10 +19,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class FXCompat {
 
-    private static final Path FX_CVT_PATH = Path.of(LDLib2.getAssetsDir() + "/photon/fx_old");
+    private static final Path FX_CVT_PATH = PhotonPaths.getAssetsDir().toPath().resolve("photon/fx_old");
 
     public static int convertFX() {
-        var converted = convertFX(FX_CVT_PATH, LDLib2.getAssetsDir().toPath().resolve("photon/fx"));
+        var destination = PhotonPaths.getAssetsDir().toPath().resolve("photon/fx");
+        var converted = convertFX(FX_CVT_PATH, destination);
+        if (converted == 0) {
+            // Migrate old installations once, but keep Photon 1 files in place as a read-only source.
+            converted = convertFX(LDLib2.getAssetsDir().toPath().resolve("photon/fx_old"), destination);
+        }
         if (converted > 0) FXHelper.clearCache();
         return converted;
     }

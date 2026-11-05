@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
 import com.lowdragmc.lowdraglib2.LDLib2;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.SkinnedModel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -104,8 +105,11 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
      * so a file caught half-written is reloaded once it is complete.
      */
     public void trackAssetFile(Object key, ResourceLocation location) {
-        var file = new File(LDLib2.getAssetsDir(), location.getNamespace() + "/" + location.getPath());
-        if (file.isFile()) trackFile(key, file);
+        var relative = location.getNamespace() + "/" + location.getPath();
+        var photonFile = new File(PhotonPaths.getAssetsDir(), relative);
+        if (photonFile.isFile()) trackFile(key, photonFile);
+        var legacyFile = new File(LDLib2.getAssetsDir(), relative);
+        if (legacyFile.isFile()) trackFile(key, legacyFile);
     }
 
     /** {@code key} was built from {@code dependency}, so dropping the dependency drops it too. */

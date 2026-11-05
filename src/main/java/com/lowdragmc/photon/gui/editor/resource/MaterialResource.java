@@ -16,6 +16,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Selector;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.*;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.export.KilaGraphExport;
@@ -66,6 +67,11 @@ public class MaterialResource extends Resource<IMaterial> {
     @Override
     public String getName() {
         return "material";
+    }
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
     }
 
     @Nullable

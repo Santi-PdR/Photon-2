@@ -17,6 +17,7 @@ import com.lowdragmc.photon.client.fx.FXInstances;
 import com.lowdragmc.photon.client.gameobject.FXInstanceObject;
 import com.lowdragmc.photon.client.fx.fxpack.FXPackExporter;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.gui.editor.resource.ResourceDialogs;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -47,6 +48,7 @@ public final class FXFileActions {
             if (project == null) {
                 return;
             }
+            export.leaf("photon.save_project", () -> Minecraft.getInstance().tell(() -> showSaveProjectDialog(editor, project)));
             // plain .fx: pure definition data (references only) — usable wherever the
             // referenced resources already exist (this machine, a mod jar, an .fxpack)
             // Let the submenu close before the dialog takes focus.
@@ -62,9 +64,38 @@ public final class FXFileActions {
 
     // ---- export ------------------------------------------------------------------------------------
 
+    private static void showSaveProjectDialog(Editor editor, FXProject project) {
+        var root = PhotonPaths.getProjectsDir();
+        var currentFile = editor.getCurrentProjectFile();
+        var name = currentFile != null ? baseName(currentFile, FXProject.TYPE.getSuffix()) : "effect";
+        var target = new File(root, name + FXProject.TYPE.getSuffix());
+        for (int i = 1; target.exists(); i++) target = new File(root, name + "_" + i + FXProject.TYPE.getSuffix());
+        Dialog.showFileDialog("photon.save_project", root, false, target, Dialog.suffixFilter(FXProject.TYPE.getSuffix()), file -> {
+            if (file == null || file.isDirectory()) return;
+            var projectFile = withSuffix(file, FXProject.TYPE.getSuffix());
+            if (projectFile.exists()) {
+                Dialog.showCheckBox("photon.save_project", Component.translatable("photon.convert_fx.overwrite", projectFile.getName()), overwrite -> {
+                    if (overwrite) saveProject(editor, project, projectFile);
+                }).show(editor);
+            } else {
+                saveProject(editor, project, projectFile);
+            }
+        }).show(editor.getModularUI());
+    }
+
+    private static void saveProject(Editor editor, FXProject project, File target) {
+        try {
+            FXProject.TYPE.saveProjectToFile(project, target);
+            notify(editor, "photon.save_project", Component.translatable("photon.save_project.saved", target.getAbsolutePath()));
+        } catch (Exception e) {
+            Photon.LOGGER.error("Failed to save Photon project to {}", target, e);
+            showError(editor, "photon.save_project", e);
+        }
+    }
+
     private static void showExportFxDialog(Editor editor, FXProject project) {
         var fx = project.getFx();
-        var directory = new File(LDLib2.getAssetsDir(), "%s/fx/".formatted(Photon.MOD_ID));
+        var directory = new File(PhotonPaths.getAssetsDir(), "%s/fx/".formatted(Photon.MOD_ID));
         var projectFile = editor.getCurrentProjectFile();
         var name = projectFile != null ? baseName(projectFile, FXProject.TYPE.getSuffix()) : "effect";
         Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", directory, false, new File(directory, name + FX.SUFFIX),
@@ -150,9 +181,9 @@ public final class FXFileActions {
     // ---- conversion --------------------------------------------------------------------------------
 
     private static void showConvertFxDialog(Editor editor) {
-        var fxDir = new File(LDLib2.getAssetsDir(), Photon.MOD_ID + "/fx");
+        var fxDir = new File(PhotonPaths.getAssetsDir(), Photon.MOD_ID + "/fx");
         Dialog.showFileDialog("photon.convert_fx", Platform.getGamePath().toFile(), true,
-                fxDir.isDirectory() ? fxDir : LDLib2.getAssetsDir(), Dialog.suffixFilter(FX.SUFFIX), file -> {
+                fxDir.isDirectory() ? fxDir : PhotonPaths.getAssetsDir(), Dialog.suffixFilter(FX.SUFFIX), file -> {
                     if (file == null || !file.isFile()) return;
                     pickProjectFile(editor, baseName(file, FX.SUFFIX), projectFile -> openConverted(editor, projectFile,
                             () -> FXProjectConverter.convertFile(file, projectFile)));
@@ -161,7 +192,7 @@ public final class FXFileActions {
 
     /** Asks where a converted project goes, confirming before it replaces an existing file. */
     private static void pickProjectFile(Editor editor, String name, Consumer<File> onPicked) {
-        var root = LDLib2.getAssetsDir();
+        var root = PhotonPaths.getProjectsDir();
         var suffix = FXProject.TYPE.getSuffix();
         var defaultFile = new File(root, name + suffix);
         for (int i = 1; defaultFile.exists(); i++) {
@@ -331,7 +362,11 @@ public final class FXFileActions {
     /** Open the source of an FX instance: the {@code .fx} under the editor's assets folder, converted into a project. */
     public static void openSource(Editor editor, @Nullable ResourceLocation fx) {
         if (fx == null) return;
-        var file = new File(LDLib2.getAssetsDir(), fx.getNamespace() + "/fx/" + fx.getPath() + FX.SUFFIX);
+        var file = new File(PhotonPaths.getAssetsDir(), fx.getNamespace() + "/fx/" + fx.getPath() + FX.SUFFIX);
+        if (!file.isFile()) {
+            // Read existing projects created with earlier Photon 2 versions from LDLib2's tree.
+            file = new File(LDLib2.getAssetsDir(), fx.getNamespace() + "/fx/" + fx.getPath() + FX.SUFFIX);
+        }
         if (!file.isFile()) {
             notify(editor, "photon.fx_instance", Component.translatable("photon.fx_instance.open_source.elsewhere", fx.toString()));
             return;

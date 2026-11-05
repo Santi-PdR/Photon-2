@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.editor.ui.EditorWindow;
 import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
@@ -11,6 +10,7 @@ import com.lowdragmc.photon.client.compat.iris.IrisCompositeMode;
 import com.lowdragmc.photon.client.compat.iris.IrisDiagnostics;
 import com.lowdragmc.photon.client.compat.iris.IrisOverlay;
 import com.lowdragmc.photon.client.fx.compat.FXCompat;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.FXObject;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType;
 import com.lowdragmc.photon.client.fx.BlockEffectExecutor;
@@ -112,10 +112,10 @@ public class ClientCommands {
                                     if (Minecraft.getInstance().player != null) {
                                         Minecraft.getInstance().player.sendSystemMessage(
                                                 Component.literal("trying to convert photon 1 fx under the ")
-                                                        .append(Component.literal("[ldlib2/assets/photon/fx_old]")
+                                                        .append(Component.literal("[photon/assets/photon/fx_old]")
                                                                 .withStyle(style -> style.withColor(0xff008000)
                                                                         .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE,
-                                                                                LDLib2.getAssetsDir() + "/photon/fx_old")))
+                                                                                new java.io.File(PhotonPaths.getAssetsDir(), "photon/fx_old").getAbsolutePath())))
                                                         )
                                                         .append(Component.literal(" folder"))
                                         );

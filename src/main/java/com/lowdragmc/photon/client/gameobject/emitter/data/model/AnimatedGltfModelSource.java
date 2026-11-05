@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigList;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSetter;
@@ -14,6 +13,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.PhotonParticleManager;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.AnimationClip;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.skin.ClipRetarget;
@@ -540,7 +540,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
 
     /** The glb/gltf picker, shared by the model field and every animation-file row. */
     private static void showGlbDialog(UIElement root, Consumer<ResourceLocation> onPicked) {
-        Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", LDLib2.getAssetsDir(), true,
+        Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", PhotonPaths.getDataDir(), true,
                 node -> {
                     if (!node.getKey().isFile()) return true; // allow directories
                     var name = node.getKey().getName().toLowerCase();

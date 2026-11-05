@@ -13,6 +13,7 @@ import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.ICustomNodeModel;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.NodeModel;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.kilagraph.rendertype.RenderTypeGraphTypes;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.api.type.TypeHandle;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.api.type.TypeHandles;
@@ -50,6 +51,11 @@ public class RenderGraphResource extends GraphResource<RenderGraph> {
     private Consumer<IResourcePath> pathSelectListener;
 
     protected RenderGraphResource() {}
+
+    @Override
+    public java.io.File getGlobalResourceDirectory() {
+        return PhotonPaths.getEditorResourcesDir();
+    }
 
     public void setPathSelectListener(@Nullable Consumer<IResourcePath> listener) {
         this.pathSelectListener = listener;
