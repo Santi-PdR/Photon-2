@@ -32,8 +32,10 @@ import net.minecraftforge.event.AddPackFindersEvent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.common.MinecraftForge;
+import com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
@@ -50,6 +52,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
 
     public PhotonClientProxy(IEventBus eventBus) {
         super(eventBus);
+        MinecraftForge.EVENT_BUS.addListener(ClientFxPackSync::onClientLogout);
         PhotonFXEditorSmokeTest.prepareModelFixtureIfEnabled();
         eventBus.addListener(this::clientSetup);
         eventBus.addListener(this::shaderRegistry);
