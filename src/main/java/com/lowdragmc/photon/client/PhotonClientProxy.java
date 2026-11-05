@@ -87,6 +87,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // (a pack toggled, an .fxpack mounted, F3+T) is exactly when they stop being true
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
             FXHelper.clearCache();
+            com.lowdragmc.photon.client.fx.timeline.SoundLengthCache.clear();
             FXPreloader.onResourcesReloaded();
         });
     }

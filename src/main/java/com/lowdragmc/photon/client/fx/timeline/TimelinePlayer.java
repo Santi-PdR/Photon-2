@@ -325,13 +325,15 @@ public class TimelinePlayer {
                 }
                 audioClips.put(audioTrack, clip);
                 if (clip != null && clip.sound() != null) {
-                    var soundEvent = BuiltInRegistries.SOUND_EVENT.get(clip.sound());
-                    if (soundEvent != null) {
+                    var soundManagerEvent = soundManager.getSoundEvent(clip.sound());
+                    if (soundManagerEvent != null) {
+                        var soundEvent = BuiltInRegistries.SOUND_EVENT.get(clip.sound());
+                        if (soundEvent == null) soundEvent = net.minecraft.sounds.SoundEvent.createVariableRangeEvent(clip.sound());
                         var supplier = attenuatedSupplier(audioTrack, clip);
                         // volume/pitch are envelopes over the clip — sample them at clip-local time
                         var local = time - clip.start();
                         var newInstance = new TimelineSoundInstance(soundEvent, clip.category(),
-                                clip.volumeAt(local), clip.pitchAt(local), supplier != null, supplier);
+                                clip.volumeAt(local), clip.pitchAt(local), clip.loop(), supplier != null, supplier);
                         soundManager.queueTickingSound(newInstance);
                         audioInstances.put(audioTrack, newInstance);
                     }

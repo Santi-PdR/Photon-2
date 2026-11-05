@@ -34,6 +34,8 @@ public class AudioClip extends Clip {
     /** Pitch over the clip, sampled like {@link #volume}. */
     private NumberFunction pitch = NumberFunction.constant(1);
     private SoundSource category = SoundSource.MASTER;
+    /** Repeat the sound until the clip ends. Defaults to true for compatibility with existing projects. */
+    private boolean loop = true;
     /** When true (and the track has a bound target) the sound plays positional/attenuated at the target. */
     private boolean attenuation = false;
 
@@ -91,6 +93,15 @@ public class AudioClip extends Clip {
         return this;
     }
 
+    public boolean loop() {
+        return loop;
+    }
+
+    public AudioClip loop(boolean loop) {
+        this.loop = loop;
+        return this;
+    }
+
     public boolean attenuation() {
         return attenuation;
     }
@@ -108,6 +119,7 @@ public class AudioClip extends Clip {
         clip.volume = volume.copy();
         clip.pitch = pitch.copy();
         clip.category = category;
+        clip.loop = loop;
         clip.attenuation = attenuation;
         return clip;
     }

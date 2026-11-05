@@ -25,6 +25,12 @@ public class SoundLengthCache {
     private static final Map<ResourceLocation, Double> LENGTHS = new ConcurrentHashMap<>();
     private static final Set<ResourceLocation> PENDING = ConcurrentHashMap.newKeySet();
 
+    /** Forget durations after resources are replaced or a server-synced sound pack changes. */
+    public static void clear() {
+        LENGTHS.clear();
+        PENDING.clear();
+    }
+
     /** Length of {@code soundId} in ticks, or 0 when unknown / not yet decoded (triggers a load). */
     public static double getTicks(@Nullable ResourceLocation soundId) {
         if (soundId == null) return 0;

@@ -11,5 +11,8 @@
   "photon.configuration.enable_bloom_with_iris_shader": "Activar bloom con Iris",
   "photon.configuration.enable_bloom_with_iris_shader.tooltip": "Permite el bloom de Photon al usar shaders Iris cuando la capa de FX se mezcla con el objetivo de color del shader.",
   "photon.is_bloom_visible": "Vista previa de bloom/brillo (B)",
-  "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo"
+  "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo",
+  "photon.gui.editor.timeline.audio.ogg": "Audio OGG personalizado",
+  "photon.gui.editor.timeline.audio.import_ogg": "Importar .ogg",
+  "photon.gui.editor.timeline.audio.loop": "Repetir sonido"
 }

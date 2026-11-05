@@ -25,9 +25,9 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
     private boolean stopRequested = false;
 
     public TimelineSoundInstance(SoundEvent soundEvent, SoundSource source, float volume, float pitch,
-                                 boolean attenuated, @Nullable Supplier<Vector3f> positionSupplier) {
+                                 boolean looping, boolean attenuated, @Nullable Supplier<Vector3f> positionSupplier) {
         super(soundEvent, source, RandomSource.create());
-        this.looping = true;
+        this.looping = looping;
         this.delay = 0;
         this.volume = volume;
         this.pitch = pitch;

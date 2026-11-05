@@ -10,6 +10,22 @@ El formato recomendado es un paquete `.fxpack`. Photon lo carga como un paquete 
 4. Si el paquete se copió después de abrir el juego, recarga los recursos con **F3+T** o con **Manage FXPack → Reload Resources**.
 5. Para usarlo, conserva el namespace e ID del efecto: `namespace:nombre`.
 
+### Sonido propio en un FX
+
+En el editor, agrega una pista **Audio**, crea un clip en la línea de tiempo y pulsa **Import .ogg** en
+su inspector. Photon copia el audio a `photon/assets/photon/sounds/user/`, lo registra en el formato
+`sounds.json` de Minecraft y lo asigna al clip. El clip permite activar **Loop sound**; si se desactiva,
+el audio suena una vez. Los controles de volumen, pitch, categoría y atenuación espacial siguen siendo
+editables. Al exportar el efecto, Photon incluye el `.ogg` y su registro junto al FX en el `.fxpack`.
+
+### Sincronización de FX desde un servidor
+
+Con Photon instalado tanto en el servidor como en el cliente, el administrador coloca los `.fxpack` en
+`<carpeta del servidor>/photon/fxpacks/`. Al entrar, Photon compara hashes y descarga solo los packs que
+el cliente aún no tiene. Verifica el contenido, lo guarda en la caché de la instancia y actualiza los
+recursos automáticamente; el jugador no tiene que instalar otra versión del mod ni habilitar un pack.
+Los jugadores que ya están conectados reciben los packs al volver a entrar.
+
 También se puede instalar un paquete descomprimido en una carpeta bajo `photon/fxpacks/`:
 
 ```text

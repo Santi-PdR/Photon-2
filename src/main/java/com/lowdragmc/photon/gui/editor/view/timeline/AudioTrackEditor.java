@@ -8,10 +8,12 @@ import com.lowdragmc.lowdraglib2.configurator.ui.SelectorConfigurator;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider;
 import com.lowdragmc.lowdraglib2.gui.util.DrawerHelper;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
 import com.lowdragmc.photon.client.fx.timeline.AudioClip;
+import com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter;
 import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
 import com.lowdragmc.photon.client.fx.timeline.Track;
@@ -36,6 +38,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.io.File;
 
 /**
  * Editor for {@code audio} tracks: an optional bound-target header (position source for 3D playback) +
@@ -88,6 +91,7 @@ public class AudioTrackEditor extends ClipTrackEditor {
         if (!(clip instanceof AudioClip audio)) {
             return;
         }
+        if (!audio.loop()) return;
         // one sub-division per loop, spaced by the auto-detected sound length (the clip length = rounds)
         var loop = SoundLengthCache.getTicks(audio.sound());
         if (loop <= 0) return;
@@ -114,6 +118,38 @@ public class AudioTrackEditor extends ClipTrackEditor {
                     var key = BuiltInRegistries.SOUND_EVENT.getKey(sound);
                     return Component.literal(key == null ? "unknown" : key.toString());
                 })));
+        Button importedSoundButton = new Button();
+        importedSoundButton.setText(Component.literal(audio.sound().toString()));
+        importedSoundButton.layout(layout -> layout.flex(1));
+        var oggConfigurator = new Configurator("photon.gui.editor.timeline.audio.ogg")
+                .addInlineChild(importedSoundButton)
+                .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_ogg", true)
+                        .setOnClick(event -> {
+                            var mui = event.currentElement.getModularUI();
+                            if (mui == null) return;
+                            Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
+                                    new File(System.getProperty("user.home")), true,
+                                    Dialog.suffixFilter(".ogg"), file -> {
+                                        if (file == null || !file.isFile()) return;
+                                        try {
+                                            audio.sound(AudioAssetImporter.importOgg(file));
+                                            ctx.refreshPreview();
+                                            Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                                                    Minecraft.getInstance().execute(() -> {
+                                                        if (failure != null) {
+                                                            com.lowdragmc.photon.Photon.LOGGER.error(
+                                                                    "Failed to load imported Photon OGG", failure);
+                                                        } else {
+                                                            importedSoundButton.setText(Component.literal(audio.sound().toString()));
+                                                            ctx.refreshPreview();
+                                                        }
+                                                    }));
+                                        } catch (Exception exception) {
+                                            com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
+                                        }
+                                    }).show(mui.ui.rootElement);
+                        }).layout(layout -> layout.flex(1)));
+        group.addConfigurator(oggConfigurator);
         // a preview button: play the sound once (non-positional) so the user can hear it
         group.addConfigurator(new Configurator("photon.gui.editor.timeline.audio.preview").addInlineChild(
                 new Button().setText("photon.gui.editor.timeline.audio.play", true)
@@ -128,12 +164,18 @@ public class AudioTrackEditor extends ClipTrackEditor {
                 List.of(SoundSource.values()), SoundSource::getName));
         group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.attenuation",
                 audio::attenuation, v -> { audio.attenuation(v); ctx.refreshPreview(); }, audio.attenuation(), true));
+        group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.loop",
+                audio::loop, v -> { audio.loop(v); ctx.refreshPreview(); }, audio.loop(), true));
     }
 
     /** Play the clip's sound once, non-positional, honoring its category/volume/pitch, for previewing.
      *  The envelopes are sampled at the clip's start — a one-shot preview cannot follow a curve. */
     private static void previewSound(AudioClip audio) {
-        if (BuiltInRegistries.SOUND_EVENT.get(audio.sound()) == null) return;
+        var event = BuiltInRegistries.SOUND_EVENT.get(audio.sound());
+        if (event == null && Minecraft.getInstance().getSoundManager().getSoundEvent(audio.sound()) != null) {
+            event = SoundEvent.createVariableRangeEvent(audio.sound());
+        }
+        if (event == null) return;
         Minecraft.getInstance().getSoundManager().play(new SimpleSoundInstance(
                 audio.sound(), audio.category(), Math.max(0.0001f, audio.volumeAt(0)), audio.pitchAt(0),
                 SoundInstance.createUnseededRandom(), false, 0, SoundInstance.Attenuation.NONE, 0, 0, 0, true));

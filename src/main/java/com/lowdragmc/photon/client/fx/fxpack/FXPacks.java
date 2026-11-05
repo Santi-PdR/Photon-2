@@ -47,6 +47,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Collection;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 
@@ -76,6 +77,7 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 public final class FXPacks {
     public static final String SUFFIX = ".fxpack";
+    private static volatile Set<String> activeServerPacks = Set.of();
 
     private FXPacks() {
     }
@@ -83,6 +85,15 @@ public final class FXPacks {
     /** {@code <gameDir>/photon/fxpacks} — where users drop {@code .fxpack} files or unpacked asset folders (and exports go). */
     public static File getFxPacksDir() {
         return new File(Platform.getGamePath().toFile(), "photon/fxpacks");
+    }
+
+    /** Replace the server-provided cache entries mounted by the next internal resource reload. */
+    public static boolean setActiveServerPacks(Collection<String> sha256Hashes) {
+        var next = sha256Hashes.stream().map(hash -> "server-" + hash + SUFFIX)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var changed = !activeServerPacks.equals(next);
+        activeServerPacks = next;
+        return changed;
     }
 
     /** Directory inside a mod jar scanned for shipped fx packs ({@code .fxpack} files or unzipped folders). */
@@ -138,6 +149,7 @@ public final class FXPacks {
         deleteLeftoverCopies();
         var entries = getFxPacksDir().listFiles(file ->
                 file.isFile() && file.getName().endsWith(SUFFIX)
+                        && (!file.getName().startsWith("server-") || activeServerPacks.contains(file.getName()))
                         || file.isDirectory() && !file.getName().startsWith(".")
                         && Files.isDirectory(file.toPath().resolve("assets")));
         if (entries == null) return;
@@ -501,6 +513,14 @@ public final class FXPacks {
 
     /** Collect every in-pack location a packed NBT references (recursing into packed library files). */
     private static void mark(CompoundTag tag, FileSystem zip, Set<String> referenced, Set<String> visited) {
+        if (tag.contains("sound", Tag.TAG_STRING)) {
+            var soundId = ResourceLocation.tryParse(tag.getString("sound"));
+            if (soundId != null && !soundId.getNamespace().equals("minecraft")) {
+                markAsset(new ResourceLocation(soundId.getNamespace(), "sounds/" + soundId.getPath() + ".ogg"),
+                        zip, referenced, visited);
+                referenced.add(entryKey(soundId.getNamespace(), "sounds.json"));
+            }
+        }
         // custom shaders: the json names the vsh/fsh program files
         if ("custom_shader".equals(tag.getString("type")) && tag.contains("data", Tag.TAG_COMPOUND)) {
             var shaderId = ResourceLocation.tryParse(tag.getCompound("data").getString("shaderLocation"));
