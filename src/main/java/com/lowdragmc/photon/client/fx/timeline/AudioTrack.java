@@ -36,6 +36,7 @@ public class AudioTrack extends Track {
             clipTag.put("pitch", audio.pitch().serializeWrapper());
             clipTag.putString("category", audio.category().name());
             clipTag.putBoolean("attenuation", audio.attenuation());
+            clipTag.putBoolean("loop", audio.loop());
         }
     }
 
@@ -50,6 +51,7 @@ public class AudioTrack extends Track {
             audio.pitch(readEnvelope(clipTag, "pitch"));
             if (clipTag.contains("category")) audio.category(parseCategory(clipTag.getString("category")));
             audio.attenuation(clipTag.getBoolean("attenuation"));
+            audio.loop(!clipTag.contains("loop") || clipTag.getBoolean("loop"));
         }
     }
 

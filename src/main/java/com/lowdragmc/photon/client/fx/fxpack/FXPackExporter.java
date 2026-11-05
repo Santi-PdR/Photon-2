@@ -1,6 +1,8 @@
 package com.lowdragmc.photon.client.fx.fxpack;
 
 import com.google.gson.JsonParser;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath;
 import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
@@ -100,6 +102,8 @@ public final class FXPackExporter {
     /** Asset locations already handled (packed or deliberately skipped). */
     private final Set<ResourceLocation> handledAssets = new HashSet<>();
     private final Set<String> visitedShaderSources = new HashSet<>();
+    /** sounds.json entries included for audio clips whose OGG data is packed with the FX. */
+    private final Map<String, JsonObject> audioSoundDefinitions = new LinkedHashMap<>();
 
     private FXPackExporter(HolderLookup.Provider provider) {
         this.provider = provider;
@@ -124,6 +128,7 @@ public final class FXPackExporter {
         var fxBytes = new ByteArrayOutputStream();
         NbtIo.writeCompressed(root, fxBytes);
         var sources = exporter.packSources(root, fxId);
+        exporter.finishAudioResources();
 
         if (fxpackFile.getParentFile() != null) {
             fxpackFile.getParentFile().mkdirs();
@@ -242,6 +247,11 @@ public final class FXPackExporter {
         }
         if (tag.contains("graph", Tag.TAG_STRING)) {
             rewriteFullscreenGraphRef(tag);
+        }
+        // Timeline audio stores an event ResourceLocation in this field. Custom Photon sounds use the
+        // same id for their sounds.json event and their .ogg under assets/<ns>/sounds/<path>.ogg.
+        if (tag.contains("sound", Tag.TAG_STRING)) {
+            packAudio(ResourceLocation.tryParse(tag.getString("sound")));
         }
         // generic recursion + raw-asset string sweep
         for (var key : tag.getAllKeys()) {
@@ -410,6 +420,47 @@ public final class FXPackExporter {
                 }
             }
         }
+    }
+
+    /** Pack a timeline's custom OGG plus its sounds.json registration; vanilla and mod events stay as references. */
+    private void packAudio(@Nullable ResourceLocation eventId) {
+        if (eventId == null || eventId.getNamespace().equals("minecraft")) return;
+        var audioLocation = new ResourceLocation(eventId.getNamespace(), "sounds/" + eventId.getPath() + ".ogg");
+        if (!handledAssets.add(audioLocation)) return;
+        var bytes = readPackableAsset(audioLocation);
+        if (bytes == null) return; // registered mod event whose audio uses a different sounds.json path
+        files.put(audioLocation, bytes);
+
+        var namespace = eventId.getNamespace();
+        var soundsJsonLocation = new ResourceLocation(namespace, "sounds.json");
+        var definitions = audioSoundDefinitions.computeIfAbsent(namespace, ignored -> {
+            var resource = Minecraft.getInstance().getResourceManager().getResource(soundsJsonLocation).orElse(null);
+            if (resource != null) {
+                try (var input = resource.open()) {
+                    return JsonParser.parseString(new String(input.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+                } catch (Exception e) {
+                    warnings.add("could not read sounds.json for " + namespace + " (" + e.getMessage() + ")");
+                }
+            }
+            return new JsonObject();
+        });
+        var eventPath = eventId.getPath();
+        if (!definitions.has(eventPath)) {
+            var event = new JsonObject();
+            var sounds = new JsonArray();
+            var sound = new JsonObject();
+            sound.addProperty("name", eventPath);
+            sound.addProperty("stream", true);
+            sounds.add(sound);
+            event.add("sounds", sounds);
+            definitions.add(eventPath, event);
+        }
+    }
+
+    private void finishAudioResources() {
+        audioSoundDefinitions.forEach((namespace, definitions) -> files.put(
+                new ResourceLocation(namespace, "sounds.json"),
+                definitions.toString().getBytes(StandardCharsets.UTF_8)));
     }
 
     /** Keep model JSON and its referenced geometry, parents and textures in the pack. */
