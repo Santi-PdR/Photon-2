@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - port/forge-1.20.1-2.2.9
   push:
     branches:
       - port/forge-1.20.1-2.2.9
