@@ -66,6 +66,10 @@ public final class PhotonFXEditorSmokeTest {
     private static CustomShaderMaterial smokeScreenShader;
     private static com.lowdragmc.photon.client.fx.FXRuntime removedEntityRuntime;
     private static com.lowdragmc.photon.client.fx.EntityEffectExecutor firstPersonEffect;
+    private static boolean exportReloadComplete;
+    private static boolean exportServerCommandVerified;
+    private static boolean exportRemoveVerified;
+    private static Throwable exportReloadFailure;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -736,32 +740,44 @@ public final class PhotonFXEditorSmokeTest {
                 var definition = ((FXProject) editor.getCurrentProject()).getFx().serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
                 definition.putInt("version", FXProject.VERSION);
                 net.minecraft.nbt.NbtIo.writeCompressed(definition, exported);
-                com.lowdragmc.photon.client.fx.FXHelper.clearCache();
-                var entityPacket = new com.lowdragmc.photon.command.EntityEffectCommand();
-                entityPacket.setLocation(new ResourceLocation("photon", "ci_export_entity"));
-                entityPacket.setEntities(java.util.List.of(minecraft.player));
-                var buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
-                try {
-                    entityPacket.encode(buffer);
-                    com.lowdragmc.photon.command.EntityEffectCommand.execute(com.lowdragmc.photon.command.EntityEffectCommand.decodePacket(buffer));
-                } finally { buffer.release(); }
-                var attached = com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.get(minecraft.player);
-                if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
-                    throw new IllegalStateException("Exported FX did not start on player through entity packet");
-                Photon.LOGGER.info("[export-entity-smoke] exported definition loaded and started on player through decoded packet");
-                // Clear the direct-packet result so the later assertion can only pass if the
-                // integrated server command sends a new packet across the actual Forge channel.
-                attached.forEach(effect -> effect.getRuntime().destroy(true));
-                com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
-                var server = minecraft.getSingleplayerServer();
-                if (server == null) throw new IllegalStateException("Integrated server is unavailable");
-                var playerId = minecraft.player.getUUID();
-                server.execute(() -> {
-                    var player = server.getPlayerList().getPlayer(playerId);
-                    if (player == null) throw new IllegalStateException("Smoke-test player is unavailable on server");
-                    server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4),
-                            "photon fx photon:ci_export_entity entity @s");
-                });
+                // Resource packs snapshot their files during reload. Wait for that asynchronous reload
+                // before exercising the command against a newly exported workspace effect.
+                minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> minecraft.execute(() -> {
+                    if (failure != null) {
+                        exportReloadFailure = failure;
+                        return;
+                    }
+                    try {
+                        com.lowdragmc.photon.client.fx.FXHelper.clearCache();
+                        var entityPacket = new com.lowdragmc.photon.command.EntityEffectCommand();
+                        entityPacket.setLocation(new ResourceLocation("photon", "ci_export_entity"));
+                        entityPacket.setEntities(java.util.List.of(minecraft.player));
+                        var buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+                        try {
+                            entityPacket.encode(buffer);
+                            com.lowdragmc.photon.command.EntityEffectCommand.execute(
+                                    com.lowdragmc.photon.command.EntityEffectCommand.decodePacket(buffer));
+                        } finally { buffer.release(); }
+                        var attached = com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.get(minecraft.player);
+                        if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
+                            throw new IllegalStateException("Exported FX did not start on player through entity packet");
+                        Photon.LOGGER.info("[export-entity-smoke] exported definition loaded and started on player through decoded packet");
+                        attached.forEach(effect -> effect.getRuntime().destroy(true));
+                        com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
+                        var server = minecraft.getSingleplayerServer();
+                        if (server == null) throw new IllegalStateException("Integrated server is unavailable");
+                        var playerId = minecraft.player.getUUID();
+                        server.execute(() -> {
+                            var player = server.getPlayerList().getPlayer(playerId);
+                            if (player == null) throw new IllegalStateException("Smoke-test player is unavailable on server");
+                            server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withPermission(4),
+                                    "photon fx photon:ci_export_entity entity @s");
+                        });
+                        exportReloadComplete = true;
+                    } catch (Throwable error) {
+                        exportReloadFailure = error;
+                    }
+                }));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realShieldSmoke");
                 var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
@@ -772,11 +788,20 @@ public final class PhotonFXEditorSmokeTest {
                 realArrowTrail = editor.runtime.objects.values().stream().filter(TrailEmitter.class::isInstance)
                         .map(TrailEmitter.class::cast).findFirst().orElseThrow();
                 System.setProperty("photon.realTrailSmoke", "true");
-            } else if (ticks == 285) {
+            } else if (ticks >= 310 && !exportServerCommandVerified) {
+                if (exportReloadFailure != null)
+                    throw new IllegalStateException("Exported workspace FX did not reload", exportReloadFailure);
+                if (!exportReloadComplete) {
+                    if (ticks >= 400) throw new IllegalStateException("Photon workspace resource reload did not complete");
+                    return;
+                }
                 var attached = com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.get(minecraft.player);
-                if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null)
-                    throw new IllegalStateException("Server command did not deliver the exported effect to the player");
+                if (attached == null || attached.isEmpty() || attached.get(attached.size() - 1).getRuntime() == null) {
+                    if (ticks >= 400) throw new IllegalStateException("Server command did not deliver the exported effect to the player");
+                    return;
+                }
                 Photon.LOGGER.info("[export-server-command-smoke] server command delivered exported FX over Forge networking");
+                exportServerCommandVerified = true;
                 removedEntityRuntime = attached.get(attached.size() - 1).getRuntime();
                 var server = minecraft.getSingleplayerServer();
                 var playerId = minecraft.player.getUUID();
@@ -789,13 +814,14 @@ public final class PhotonFXEditorSmokeTest {
                 if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
                     throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
                 Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
-            } else if (ticks == 310) {
+            } else if (ticks >= 325 && exportServerCommandVerified && !exportRemoveVerified) {
                 if (removedEntityRuntime == null || !removedEntityRuntime.isFinished()
                         || removedEntityRuntime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).anyMatch(emitter -> emitter.getParticleAmount() != 0))
                     throw new IllegalStateException("Remove command left the long-lived shield particles visible");
                 Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
-            } else if (ticks == 320) {
+                exportRemoveVerified = true;
+            } else if (ticks == 335) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString()));
                 realArrowTrail = null;
@@ -809,7 +835,7 @@ public final class PhotonFXEditorSmokeTest {
                 firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(firstPersonScan.getFx(), minecraft.level,
                         minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
                 firstPersonEffect.start();
-            } else if (ticks == 350) {
+            } else if (ticks == 365) {
                 if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
                     throw new IllegalStateException("CPU first-person scan did not draw a camera-centred owner billboard");
                 Photon.LOGGER.info("[first-person-scan-cpu-smoke] owner billboard rendered");
@@ -825,7 +851,7 @@ public final class PhotonFXEditorSmokeTest {
                 firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(gpuScan.getFx(), minecraft.level,
                         minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
                 firstPersonEffect.start();
-            } else if (ticks == 410) {
+            } else if (ticks == 425) {
                 if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
                     throw new IllegalStateException("GPU first-person scan did not draw a camera-centred owner billboard");
                 Photon.LOGGER.info("[first-person-scan-gpu-smoke] owner billboard rendered");

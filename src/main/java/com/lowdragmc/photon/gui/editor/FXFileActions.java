@@ -109,8 +109,21 @@ public final class FXFileActions {
                         // stamp the format version so FXHelper can run the datafixer on future loads
                         fileData.putInt("version", FXProject.VERSION);
                         NbtIo.writeCompressed(fileData, target);
-                        FXHelper.clearCache();
                         if (id != null) project.addKnownAs(id);
+                        // The Photon workspace pack is mounted when resources load. Exporting into
+                        // its folder at runtime must reload packs before commands can resolve the new FX.
+                        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                                Minecraft.getInstance().execute(() -> {
+                                    if (failure != null) {
+                                        Photon.LOGGER.error("Failed to reload resources after exporting FX {}", target, failure);
+                                        notify(editor, "photon.export_fx", Component.translatable(
+                                                "photon.export_fx.reload_failed", target.getAbsolutePath()));
+                                        return;
+                                    }
+                                    FXHelper.clearCache();
+                                    notify(editor, "photon.export_fx", Component.translatable(
+                                            "photon.export_fx.reloaded", id == null ? target.getAbsolutePath() : id.toString()));
+                                }));
                     } catch (Exception e) {
                         Photon.LOGGER.error("Failed to export fx to {}", target, e);
                         showError(editor, "photon.export_fx", e);
