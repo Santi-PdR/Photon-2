@@ -59,3 +59,23 @@ también se monta automáticamente como recurso legado.
 
 La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del
 editor no cambia la configuración global de renderizado del juego.
+
+## Texturas del editor y archivos de Photon 1
+
+La pestaña **Resources** guarda definiciones de materiales y otros recursos del editor (archivos .nbt/JSON). No almacena los píxeles de una imagen. Las texturas son archivos PNG dentro de una ruta de pack de Minecraft.
+
+Por ejemplo, para una textura con ID myfx:textures/hollow/aura.png, coloca el archivo en:
+
+```
+<carpeta-de-la-instancia>/ldlib2/assets/myfx/textures/hollow/aura.png
+```
+
+El campo **Texture** del material debe apuntar exactamente a myfx:textures/hollow/aura.png. Tras copiar archivos mientras el juego está abierto, recarga recursos con **F3+T**. Photon monta ldlib2 como un pack externo de baja prioridad; así los recursos de usuario también se pueden incluir al exportar el efecto a .fxpack.
+
+Los efectos antiguos conservan sus IDs de textura. Por ejemplo, ldlib:textures/enraged.png requiere:
+
+```
+<carpeta-de-la-instancia>/ldlib/assets/ldlib/textures/enraged.png
+```
+
+Los FX/proyectos por sí solos no contienen necesariamente esos PNG. Si el archivo referenciado no existe en un mod, pack de recursos, ldlib2/assets o ldlib/assets, Photon no puede reconstruir la imagen. Los modelos y shaders también deben existir en sus rutas de assets correspondientes.
