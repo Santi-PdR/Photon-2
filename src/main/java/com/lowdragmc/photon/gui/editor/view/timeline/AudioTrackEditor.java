@@ -118,8 +118,9 @@ public class AudioTrackEditor extends ClipTrackEditor {
                     var key = BuiltInRegistries.SOUND_EVENT.getKey(sound);
                     return Component.literal(key == null ? "unknown" : key.toString());
                 })));
-        var importedSoundButton = new Button().setText(Component.literal(audio.sound().toString()))
-                .layout(layout -> layout.flex(1));
+        Button importedSoundButton = new Button();
+        importedSoundButton.setText(Component.literal(audio.sound().toString()));
+        importedSoundButton.layout(layout -> layout.flex(1));
         var oggConfigurator = new Configurator("photon.gui.editor.timeline.audio.ogg")
                 .addInlineChild(importedSoundButton)
                 .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_ogg", true)
