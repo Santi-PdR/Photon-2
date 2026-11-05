@@ -13,7 +13,7 @@ void main(){
     vec3 c = texture(inputSampler, texCoord).rgb;
     float br = dot(c, LUMA);
     // soft-knee
-    float knee = Threshold * Knee;
+    float knee = max(Threshold * Knee, 1e-5);
     float soft = clamp((br - Threshold + knee) / (2.0 * knee), 0.0, 1.0);
     float bright = max(br - Threshold, 0.0) + soft * soft * 2.0 * knee;
     fragColor = vec4(c * (bright / max(br, 1e-5)), 1.0);  // 仅保留亮区

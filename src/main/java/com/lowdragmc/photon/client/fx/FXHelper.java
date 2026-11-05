@@ -21,6 +21,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.io.IOException;
+import java.io.DataInputStream;
+import java.io.PushbackInputStream;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -177,7 +180,9 @@ public class FXHelper {
     public static CompoundTag readTag(ResourceLocation fxLocation) {
         var resourceLocation = fileLocation(fxLocation);
         try (var inputStream = Minecraft.getInstance().getResourceManager().open(resourceLocation)) {
-            var tag = NbtIo.readCompressed(inputStream);
+            // Photon 1's exported effects are often raw NBT, while Photon 2 .fx files use gzip NBT.
+            // Accept both so old effects stored under assets/<namespace>/fx can be migrated in memory.
+            var tag = readNbt(inputStream);
             tag = applyVersionFixes(tag);
             if (tag.contains("resources", Tag.TAG_COMPOUND)) {
                 // short-lived dev format that embedded assets in the .fx — superseded by .fxpack
@@ -189,6 +194,17 @@ public class FXHelper {
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
             return null;
         }
+    }
+
+    private static CompoundTag readNbt(java.io.InputStream input) throws IOException {
+        var buffered = new PushbackInputStream(input, 2);
+        int first = buffered.read();
+        int second = buffered.read();
+        if (second >= 0) buffered.unread(second);
+        if (first >= 0) buffered.unread(first);
+        return first == 0x1f && second == 0x8b
+                ? NbtIo.readCompressed(buffered)
+                : NbtIo.read(new DataInputStream(buffered));
     }
 
     /** Render thread only: a custom shader material compiles while it deserializes. */

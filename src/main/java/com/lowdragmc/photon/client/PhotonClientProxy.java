@@ -75,6 +75,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     @SubscribeEvent
     public void clientSetup(final FMLClientSetupEvent e) {
         e.enqueueWork(() -> {
+            migrateOldBloomDefaults();
             PhotonShaders.init();
             PhotonFXProjectSmokeTest.runIfEnabled();
             PhotonFXEditorSmokeTest.registerIfEnabled();
@@ -83,6 +84,23 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // bound to ShaderGraph self-register (mirrors KilaGraph's own registry bootstrap).
         Photon.LOGGER.info("Photon shader graph nodes loaded: {}",
                 com.lowdragmc.photon.client.shadergraph.ShaderGraph.NODE_REGISTRY.getNodeClasses().size());
+    }
+
+    /** Existing installs persist config values, so update only the old shipped defaults once. */
+    private static void migrateOldBloomDefaults() {
+        boolean changed = false;
+        if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0) {
+            PhotonConfig.INSTANCE.bloomThreshold.set(0.1);
+            changed = true;
+        }
+        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0) {
+            PhotonConfig.INSTANCE.bloomIntensity.set(1.0);
+            changed = true;
+        }
+        if (changed) {
+            PhotonConfig.CONFIG_SPEC.save();
+            Photon.LOGGER.info("Updated Photon bloom defaults for ordinary FX colors");
+        }
     }
 
     @SubscribeEvent

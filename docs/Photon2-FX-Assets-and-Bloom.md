@@ -53,8 +53,9 @@ también se monta automáticamente como recurso legado.
   `B` alterna la vista previa.
 - **En juego:** abre **Mods → Photon → Config**, activa **Enable Bloom** y ajusta el umbral.
   Este ajuste es global para los FX de Photon; no hay una casilla de bloom por emisor en este port.
-- **Colores normales:** baja **Bloom Threshold**; prueba `0.3`. Con el umbral alto, el juego sólo
-  genera halo para luces HDR realmente mayores que 1.
+- **Colores normales:** Bloom Threshold empieza en `0.1`, así que los rojos y colores brillantes
+  normales también generan halo. Súbelo si quieres que sólo brillen luces HDR.
+- **Intensidad:** el control global va de `0` a `2` y empieza en `1`. Se encuentra en **Mods → Photon → Config**.
 - **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
 
 La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del

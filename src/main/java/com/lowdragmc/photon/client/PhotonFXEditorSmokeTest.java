@@ -50,6 +50,7 @@ import java.util.Set;
 public final class PhotonFXEditorSmokeTest {
     private static boolean started;
     private static boolean finished;
+    private static boolean bloomSmokeLogged;
     private static int ticks;
     private static int tornadoFrameWait;
     private static FXEditor editor;
@@ -95,6 +96,53 @@ public final class PhotonFXEditorSmokeTest {
             layer.destroyBuffers();
             snapshot.destroyBuffers();
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER, previous);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+    }
+
+    /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
+    private static void verifyBloomDefaults() {
+        var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
+        var oldEnabled = config.enableBloom.get();
+        var oldThreshold = config.bloomThreshold.get();
+        var oldIntensity = config.bloomIntensity.get();
+        int previousFramebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var source = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .resize(null, 64, 64, false);
+        try {
+            config.enableBloom.set(true);
+            config.bloomThreshold.set(0.1);
+            config.bloomIntensity.set(1.0);
+            source.setClearColor(0, 0, 0, 0);
+            source.clear(Minecraft.ON_OSX);
+            source.bindWrite(false);
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+            org.lwjgl.opengl.GL11.glScissor(30, 30, 4, 4);
+            org.lwjgl.opengl.GL11.glClearColor(1, 0, 0, 1);
+            org.lwjgl.opengl.GL11.glClear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT);
+            org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(64, 64);
+            var output = com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.postTarget(source);
+            output.bindWrite(false);
+            var pixel = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            org.lwjgl.opengl.GL11.glReadPixels(38, 32, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA,
+                    org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (!(pixel.get(0) > 0.001f)) {
+                throw new IllegalStateException("Ordinary red FX did not produce a bloom halo: red=" + pixel.get(0));
+            }
+            Photon.LOGGER.info("[bloom-smoke] ordinary red FX produced an out-of-source halo (red={})", pixel.get(0));
+        } finally {
+            config.enableBloom.set(oldEnabled);
+            config.bloomThreshold.set(oldThreshold);
+            config.bloomIntensity.set(oldIntensity);
+            source.destroyBuffers();
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
+                    previousFramebuffer);
             com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
         }
     }
@@ -359,6 +407,10 @@ public final class PhotonFXEditorSmokeTest {
         var minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
         try {
+            if (!bloomSmokeLogged) {
+                verifyBloomDefaults();
+                bloomSmokeLogged = true;
+            }
             // A slow software renderer may process multiple client ticks before drawing a frame.
             // Hold each isolated phase until it has actually reached the render pipeline.
             if (Boolean.getBoolean("photon.realTornadoSmoke") && ticks >= 180 && ticks < 208

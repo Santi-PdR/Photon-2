@@ -79,8 +79,10 @@ public class PhotonConfig {
         enableBloom = builder.define("enable_bloom", true);
         bloomMipLevel = builder.defineInRange("bloom_mip_level", 5, 2, 10);
 //        bloomMode = builder.defineEnum("bloom_mode", BloomMode.SCATTER, BloomMode.values());
-        bloomThreshold = builder.defineInRange("bloom_threshold", 1.001, 0, 10d);
-        bloomIntensity = builder.defineInRange("bloom_intensity", 0.7, 0, 1);
+        // Most authored effects use ordinary 0..1 colours, so the old HDR-only threshold made
+        // Bloom appear broken for legacy FX even when it was enabled. Keep it visible by default.
+        bloomThreshold = builder.defineInRange("bloom_threshold", 0.1, 0, 10d);
+        bloomIntensity = builder.defineInRange("bloom_intensity", 1.0, 0, 2);
 
         // Only consulted when the FX layer is composited into the pack's own colour target, where
         // the pack's bloom chain will also process it — leaving this on means both apply. It is

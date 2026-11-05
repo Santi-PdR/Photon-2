@@ -1,11 +1,11 @@
 {
   "photon.configuration.title": "Photon Settings",
   "photon.configuration.enable_bloom": "Enable Bloom",
-  "photon.configuration.enable_bloom.tooltip": "Turns on bloom globally for Photon FX. The default threshold only catches HDR highlights; lower Bloom Threshold (for example to 0.3) to make ordinary bright colors glow. Increase Bloom Intensity to strengthen the halo.",
+  "photon.configuration.enable_bloom.tooltip": "Turns on bloom globally for Photon FX. The default threshold also catches ordinary bright colors; raise Bloom Threshold to limit bloom to HDR highlights. Increase Bloom Intensity to strengthen the halo.",
   "photon.configuration.bloom_mip_level": "Bloom mip level",
   "photon.configuration.bloom_mip_level.tooltip": "How many downsample steps the bloom pyramid takes. Higher means a wider, softer glow at a higher cost. Clamped to what the current framebuffer size allows.",
   "photon.configuration.bloom_threshold": "Bloom Threshold",
-  "photon.configuration.bloom_threshold.tooltip": "Brightness cutoff for the glow. Lower values make more of the effect glow; try 0.3 for ordinary bright colors. Higher values limit glow to HDR highlights.",
+  "photon.configuration.bloom_threshold.tooltip": "Brightness cutoff for the glow. Lower values make more of the effect glow; the default works with ordinary bright colors. Higher values limit glow to HDR highlights.",
   "photon.configuration.bloom_intensity": "Bloom Intensity",
   "photon.configuration.bloom_intensity.tooltip": "How strongly the blurred bloom is added back onto the frame.",
   "photon.configuration.enable_bloom_with_iris_shader": "Enable Bloom with Iris shader",
