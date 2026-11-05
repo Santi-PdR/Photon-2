@@ -109,6 +109,7 @@ public final class FXPacks {
             mountFolderPacks(consumer);
             mountModPacks(consumer);
             mountLegacyEditorAssets(consumer);
+            mountPhoton2EditorAssets(consumer);
         };
     }
 
@@ -119,6 +120,19 @@ public final class FXPacks {
         consumer.accept(createPack("fxpack/legacy-ldlib", "Photon 1 editor assets",
                 packId -> new PathPackResources(packId, root, false)));
         Photon.LOGGER.info("mounted Photon 1 editor assets from {}", root);
+    }
+
+    /**
+     * Photon 2's editable assets live under <gameDir>/ldlib2/assets. Expose that directory
+     * as a normal low-priority resource pack too, so PNGs and other raw assets placed next
+     * to editor FX can be resolved by Minecraft's ResourceManager.
+     */
+    private static void mountPhoton2EditorAssets(Consumer<Pack> consumer) {
+        var root = Platform.getGamePath().resolve("ldlib2");
+        if (!Files.isDirectory(root.resolve("assets"))) return;
+        consumer.accept(createPack("fxpack/editor-ldlib2", "Photon 2 editor assets",
+                packId -> new PathPackResources(packId, root, false)));
+        Photon.LOGGER.info("mounted Photon 2 editor assets from {}", root);
     }
 
     private static void mountFolderPacks(Consumer<Pack> consumer) {
