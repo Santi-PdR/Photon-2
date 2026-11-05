@@ -102,6 +102,9 @@ public final class PhotonFXEditorSmokeTest {
     public static void prepareModelFixtureIfEnabled() {
         if (!Boolean.getBoolean("photon.fxprojSmokeTest")) return;
         try {
+            Path photon2Asset = LDLib2.getAssetsDir().toPath().resolve("photon2_probe/textures/marker.txt");
+            Files.createDirectories(photon2Asset.getParent());
+            Files.writeString(photon2Asset, "photon2-editor-assets-mounted");
             Path modelDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("models").resolve("ci");
             Files.createDirectories(modelDir);
             Files.writeString(modelDir.resolve("obj_smoke.json"),
@@ -1513,6 +1516,14 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
     private static void verifyPhoton1Compatibility() throws Exception {
+        var sparseTransform = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTransformTag(new CompoundTag());
+        if (!com.lowdragmc.photon.client.fx.FXRuntime.ROOT_UUID.toString().equals(sparseTransform.getString("_parentId"))
+                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).size() != 3
+                || sparseTransform.getList("localScale", Tag.TAG_FLOAT).size() != 3
+                || sparseTransform.getList("localPosition", Tag.TAG_FLOAT).size() != 3) {
+            throw new IllegalStateException("Sparse Photon 1 transform fields were not safely defaulted");
+        }
+        java.util.UUID.fromString(sparseTransform.getString("id"));
         var delayedEmitter = new CompoundTag();
         delayedEmitter.putInt("startDelay", 300);
         if (com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(delayedEmitter).getInt("startDelay") != 300
@@ -1590,6 +1601,16 @@ public final class PhotonFXEditorSmokeTest {
             if (!new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).equals("legacy-pack-mounted"))
                 throw new IllegalStateException("Photon 1 editor asset contents changed");
         }
+        var photon2Marker = Minecraft.getInstance().getResourceManager().getResource(
+                new ResourceLocation("photon2_probe", "textures/marker.txt")).orElseThrow(
+                () -> new IllegalStateException("Photon 2 editor assets were not mounted"));
+        try (var stream = photon2Marker.open()) {
+            if (!new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    .equals("photon2-editor-assets-mounted")) {
+                throw new IllegalStateException("Photon 2 editor asset contents changed");
+            }
+        }
+        Photon.LOGGER.info("[editor-assets-smoke] loaded custom assets from Photon 1 and Photon 2 folders");
         var legacyFxPath = java.nio.file.Path.of("ldlib/assets/photon_legacy_probe/fx/imported.fx");
         Files.createDirectories(legacyFxPath.getParent());
         try (var stream = Files.newOutputStream(legacyFxPath)) { NbtIo.writeCompressed(legacy, stream); }

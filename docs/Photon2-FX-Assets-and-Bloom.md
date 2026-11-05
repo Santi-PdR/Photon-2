@@ -79,3 +79,19 @@ Los efectos antiguos conservan sus IDs de textura. Por ejemplo, ldlib:textures/e
 ```
 
 Los FX/proyectos por sí solos no contienen necesariamente esos PNG. Si el archivo referenciado no existe en un mod, pack de recursos, ldlib2/assets o ldlib/assets, Photon no puede reconstruir la imagen. Los modelos y shaders también deben existir en sus rutas de assets correspondientes.
+
+### Referencias de los archivos Photon 1 compartidos
+
+La inspección de `enraged.fx`, `conqclash.fxproj`, `domainfire.fxproj` y `electricburst.fxproj` encontró estas texturas externas:
+
+| ID de textura | Ruta dentro de los assets |
+| --- | --- |
+| `ldlib:textures/enraged.png` | `assets/ldlib/textures/enraged.png` |
+| `trueprimepiecetwo:textures/particle/hakilightningtest.png` | `assets/trueprimepiecetwo/textures/particle/hakilightningtest.png` |
+| `trueprimepiecetwo:textures/particle/huraganconq.png` | `assets/trueprimepiecetwo/textures/particle/huraganconq.png` |
+| `trueprimepiecetwo:textures/particle/lightning1.png` | `assets/trueprimepiecetwo/textures/particle/lightning1.png` |
+| `trueprimepiecetwo:textures/particle/nothing.png` | `assets/trueprimepiecetwo/textures/particle/nothing.png` |
+| `trueprimepiecetwo:textures/particle/pixxxii.png` | `assets/trueprimepiecetwo/textures/particle/pixxxii.png` |
+| `cursed_fate_sky_manipulation:textures/particle/fire.png` | `assets/cursed_fate_sky_manipulation/textures/particle/fire.png` |
+
+Put those paths under either `ldlib/` or `ldlib2/` in the instance. Photon and Minecraft texture IDs in the same projects are supplied by their mods and do not need copying. Alex's Nov 4 log also reports `cursedfate:textures/particle/cursedeneryaura2.png` and shader `photon:slash`; the PNG and shader files themselves were not present in the shared project files, so their original source files are still required to render those references.

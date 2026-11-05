@@ -425,9 +425,9 @@ public class MapperUtils {
         // older projects; the Photon 2 scene assigns that object a fresh identity on import.
         newTransformTag.putString("_parentId", readTransformUuid(transformTag.get("_parentId"), new UUID(0L, 0L)).toString());
         newTransformTag.putString("id", readTransformUuid(transformTag.get("id"), UUID.randomUUID()).toString());
-        newTransformTag.put("localRotation", MapperUtils.mapCoords(transformTag.get("localRotation")));
-        newTransformTag.put("localScale", MapperUtils.mapCoords(transformTag.get("localScale")));
-        newTransformTag.put("localPosition",  MapperUtils.mapCoords(transformTag.get("localPosition")));
+        newTransformTag.put("localRotation", mapTransformCoords(transformTag.get("localRotation"), 0, 0, 0));
+        newTransformTag.put("localScale", mapTransformCoords(transformTag.get("localScale"), 1, 1, 1));
+        newTransformTag.put("localPosition", mapTransformCoords(transformTag.get("localPosition"), 0, 0, 0));
 
         return newTransformTag;
     }
@@ -444,5 +444,14 @@ public class MapperUtils {
             }
         }
         return fallback;
+    }
+
+    private static ListTag mapTransformCoords(Tag tag, float x, float y, float z) {
+        if (tag instanceof CompoundTag coords) return mapCoords(coords);
+        ListTag result = new ListTag();
+        result.add(FloatTag.valueOf(x));
+        result.add(FloatTag.valueOf(y));
+        result.add(FloatTag.valueOf(z));
+        return result;
     }
 }
