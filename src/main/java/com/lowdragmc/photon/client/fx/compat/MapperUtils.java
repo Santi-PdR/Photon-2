@@ -420,12 +420,28 @@ public class MapperUtils {
     public static CompoundTag mapTransformTag(CompoundTag transformTag){
         CompoundTag newTransformTag = new CompoundTag();
         newTransformTag.put("_childrenId", new ListTag());
-        newTransformTag.putString("_parentId", NbtUtils.loadUUID(transformTag.get("_parentId")).toString());
-        newTransformTag.putString("id", NbtUtils.loadUUID(transformTag.get("id")).toString());
+        // Photon 1 leaves _parentId out for root-level emitters. A missing id is also valid in
+        // older projects; the Photon 2 scene assigns that object a fresh identity on import.
+        newTransformTag.putString("_parentId", readTransformUuid(transformTag.get("_parentId"), new UUID(0L, 0L)).toString());
+        newTransformTag.putString("id", readTransformUuid(transformTag.get("id"), UUID.randomUUID()).toString());
         newTransformTag.put("localRotation", MapperUtils.mapCoords(transformTag.get("localRotation")));
         newTransformTag.put("localScale", MapperUtils.mapCoords(transformTag.get("localScale")));
         newTransformTag.put("localPosition",  MapperUtils.mapCoords(transformTag.get("localPosition")));
 
         return newTransformTag;
+    }
+
+    private static UUID readTransformUuid(Tag tag, UUID fallback) {
+        if (tag instanceof IntArrayTag array && array.getAsIntArray().length == 4) {
+            return NbtUtils.loadUUID(array);
+        }
+        if (tag instanceof StringTag string) {
+            try {
+                return UUID.fromString(string.getAsString());
+            } catch (IllegalArgumentException ignored) {
+                // fall through to the scene-compatible default
+            }
+        }
+        return fallback;
     }
 }
