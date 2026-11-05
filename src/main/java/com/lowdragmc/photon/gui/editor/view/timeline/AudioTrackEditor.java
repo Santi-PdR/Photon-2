@@ -118,9 +118,10 @@ public class AudioTrackEditor extends ClipTrackEditor {
                     var key = BuiltInRegistries.SOUND_EVENT.getKey(sound);
                     return Component.literal(key == null ? "unknown" : key.toString());
                 })));
+        var importedSoundButton = new Button().setText(Component.literal(audio.sound().toString()))
+                .layout(layout -> layout.flex(1));
         var oggConfigurator = new Configurator("photon.gui.editor.timeline.audio.ogg")
-                .addInlineChild(new Button().setText(Component.literal(audio.sound().toString()))
-                        .layout(layout -> layout.flex(1)))
+                .addInlineChild(importedSoundButton)
                 .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_ogg", true)
                         .setOnClick(event -> {
                             var mui = event.currentElement.getModularUI();
@@ -138,7 +139,7 @@ public class AudioTrackEditor extends ClipTrackEditor {
                                                             com.lowdragmc.photon.Photon.LOGGER.error(
                                                                     "Failed to load imported Photon OGG", failure);
                                                         } else {
-                                                            oggConfigurator.notifyChanges();
+                                                            importedSoundButton.setText(Component.literal(audio.sound().toString()));
                                                             ctx.refreshPreview();
                                                         }
                                                     }));
@@ -175,7 +176,7 @@ public class AudioTrackEditor extends ClipTrackEditor {
         }
         if (event == null) return;
         Minecraft.getInstance().getSoundManager().play(new SimpleSoundInstance(
-                event, audio.category(), Math.max(0.0001f, audio.volumeAt(0)), audio.pitchAt(0),
+                audio.sound(), audio.category(), Math.max(0.0001f, audio.volumeAt(0)), audio.pitchAt(0),
                 SoundInstance.createUnseededRandom(), false, 0, SoundInstance.Attenuation.NONE, 0, 0, 0, true));
     }
 

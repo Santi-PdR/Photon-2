@@ -55,7 +55,7 @@ public final class FxPackSync {
     }
 
     private static List<PackEntry> scan(MinecraftServer server) {
-        var directory = server.getServerDirectory().resolve(PACK_DIRECTORY);
+        var directory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY);
         try {
             Files.createDirectories(directory);
         } catch (IOException e) {
@@ -142,7 +142,7 @@ public final class FxPackSync {
         if (entry == null || packet.offset() >= entry.size()) return;
         var server = player.getServer();
         if (server == null) return;
-        var directory = server.getServerDirectory().resolve(PACK_DIRECTORY).normalize();
+        var directory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY).normalize();
         var path = directory.resolve(entry.fileName()).normalize();
         if (!path.getParent().equals(directory)) return;
         try (var file = new RandomAccessFile(path.toFile(), "r")) {
