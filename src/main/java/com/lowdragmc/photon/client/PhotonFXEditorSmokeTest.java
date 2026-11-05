@@ -70,6 +70,8 @@ public final class PhotonFXEditorSmokeTest {
     private static boolean exportServerCommandVerified;
     private static boolean exportRemoveVerified;
     private static Throwable exportReloadFailure;
+    private static boolean serverFxPackSyncLogged;
+    private static int serverFxPackSyncTicks;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -412,6 +414,16 @@ public final class PhotonFXEditorSmokeTest {
         var minecraft = Minecraft.getInstance();
         if (minecraft.getOverlay() != null || minecraft.level == null || minecraft.player == null) return;
         try {
+            if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) {
+                serverFxPackSyncTicks++;
+                var marker = new ResourceLocation("photon_sync_probe", "textures/server_sync_marker.txt");
+                if (minecraft.getResourceManager().getResource(marker).isPresent()) {
+                    Photon.LOGGER.info("[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload");
+                    serverFxPackSyncLogged = true;
+                } else if (serverFxPackSyncTicks >= 600) {
+                    throw new IllegalStateException("Server FX pack did not reach the client after login");
+                }
+            }
             if (!bloomSmokeLogged) {
                 verifyBloomDefaults();
                 bloomSmokeLogged = true;
