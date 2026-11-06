@@ -226,16 +226,4 @@ public final class ClientFxPackSync {
         }
     }
 
-    private static final class Transfer {
-        private final FxPackSync.PackEntry entry;
-        private final Path target;
-        private final Path temp;
-        private long received;
-
-        private Transfer(FxPackSync.PackEntry entry, Path target, Path temp) {
-            this.entry = entry;
-            this.target = target;
-            this.temp = temp;
-        }
-    }
 }
