@@ -45,12 +45,16 @@ public final class KilaDialogs {
 
     /** A titled section of {@code list}, as a configurator group; returns the grid its cells go in. */
     static UIElement section(ScrollerView list, String title) {
+        return section(list, Component.translatable(title));
+    }
+
+    static UIElement section(ScrollerView list, Component title) {
         var grid = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.flexDirection(FlexDirection.ROW);
             layout.wrap(FlexWrap.WRAP);
         });
-        var group = new ConfiguratorGroup(title, false);
+        var group = new ConfiguratorGroup(title.getString(), false);
         group.addConfigurator(new Configurator().addInlineChild(grid));
         list.addScrollViewChild(group);
         return grid;
@@ -153,3 +157,4 @@ public final class KilaDialogs {
         return entry;
     }
 }
+
