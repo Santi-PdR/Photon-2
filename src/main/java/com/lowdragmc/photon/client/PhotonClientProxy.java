@@ -113,8 +113,10 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     private static void migrateOldBloomDefaults() {
         boolean changed = false;
         if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0
-                || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.1) == 0) {
-            PhotonConfig.INSTANCE.bloomThreshold.set(0.15);
+                || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.1) == 0
+                || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.15) == 0
+                || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.65) == 0) {
+            PhotonConfig.INSTANCE.bloomThreshold.set(0.5);
             changed = true;
         }
         if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
