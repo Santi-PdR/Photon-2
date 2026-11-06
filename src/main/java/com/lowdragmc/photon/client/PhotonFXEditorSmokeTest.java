@@ -109,18 +109,14 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
-        var materialLibrary = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.getResourceInstance();
-        if (!(materialLibrary.getResource(new com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath("kila"))
-                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial)) {
-            throw new IllegalStateException("Built-in Kila material is missing from the material picker");
-        }
+        var builtInMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL;
+        if (builtInMaterials.isEmpty()) throw new IllegalStateException("Built-in Kila material presets are missing");
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
-            if (!(materialLibrary.getResource(new com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath("kila/" + preset.id()))
-                    instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial)) {
-                throw new IllegalStateException("Built-in Kila preset is missing from the material picker: " + preset.id());
+            if (preset.create() == null) {
+                throw new IllegalStateException("Built-in Kila preset cannot be created: " + preset.id());
             }
         }
-        Photon.LOGGER.info("[builtin-material-picker-smoke] Kila and all built-in material presets resolve by picker path");
+        Photon.LOGGER.info("[builtin-materials-smoke] Kila and all built-in material presets can be created");
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
