@@ -109,6 +109,18 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
+        var materialLibrary = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.getResourceInstance();
+        if (!(materialLibrary.getResource(new com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath("kila"))
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial)) {
+            throw new IllegalStateException("Built-in Kila material is missing from the material picker");
+        }
+        for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
+            if (!(materialLibrary.getResource(new com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath("kila/" + preset.id()))
+                    instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial)) {
+                throw new IllegalStateException("Built-in Kila preset is missing from the material picker: " + preset.id());
+            }
+        }
+        Photon.LOGGER.info("[builtin-material-picker-smoke] Kila and all built-in material presets resolve by picker path");
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
@@ -122,9 +134,9 @@ public final class PhotonFXEditorSmokeTest {
                 .resize(null, 64, 64, false);
         try {
             config.enableBloom.set(true);
-            config.bloomThreshold.set(0.1);
-            config.bloomIntensity.set(1.0);
-            source.setClearColor(0, 0, 0, 0);
+            config.bloomThreshold.set(0.65);
+            config.bloomIntensity.set(0.18);
+            source.setClearColor(0.3f, 0.3f, 0.3f, 1);
             source.clear(Minecraft.ON_OSX);
             source.bindWrite(false);
             org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
@@ -142,7 +154,15 @@ public final class PhotonFXEditorSmokeTest {
             if (!(pixel.get(0) > 0.001f)) {
                 throw new IllegalStateException("Ordinary red FX did not produce a bloom halo: red=" + pixel.get(0));
             }
-            Photon.LOGGER.info("[bloom-smoke] ordinary red FX produced an out-of-source halo (red={})", pixel.get(0));
+            var background = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            org.lwjgl.opengl.GL11.glReadPixels(8, 8, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA,
+                    org.lwjgl.opengl.GL11.GL_FLOAT, background);
+            if (Math.abs(background.get(0) - 0.3f) > 0.04f || Math.abs(background.get(1) - 0.3f) > 0.04f
+                    || Math.abs(background.get(2) - 0.3f) > 0.04f) {
+                throw new IllegalStateException("Bloom altered non-highlight scene pixels: rgb="
+                        + background.get(0) + "," + background.get(1) + "," + background.get(2));
+            }
+            Photon.LOGGER.info("[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact (halo red={})", pixel.get(0));
         } finally {
             config.enableBloom.set(oldEnabled);
             config.bloomThreshold.set(oldThreshold);
@@ -995,6 +1015,32 @@ public final class PhotonFXEditorSmokeTest {
                 Math.abs(com.lowdragmc.photon.client.gameobject.particle.renderer.TrailInterpolation.factor(0, 2, 2, 0.5f) - 0.5f) > 0.0001f)
             throw new IllegalStateException("Trail interpolation did not guard invalid or equal lifetimes");
         Photon.LOGGER.info("[trail-interpolation-smoke] guarded invalid durations and equal tail lifetimes");
+        if (TrailParticle.movementSampleCount(12f, 0.02f) != 64
+                || TrailParticle.movementSampleCount(0.2f, 0.1f) != 2
+                || TrailParticle.movementSampleCount(Float.NaN, 0.1f) != 1) {
+            throw new IllegalStateException("Fast trail movement was not sub-sampled with a safe per-tick bound");
+        }
+        Photon.LOGGER.info("[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap");
+        var colourConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        colourConfig.setMinVertexDistance(0.1f);
+        colourConfig.setColorOverTrail(new com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Gradient(
+                new com.lowdragmc.lowdraglib2.math.GradientColor(0xFFFF0000, 0xFF0000FF)));
+        var colourEmitter = new TrailEmitter(colourConfig);
+        var colourTrail = new TrailParticle(colourEmitter, colourConfig);
+        boolean oldFastSimulation = com.lowdragmc.photon.client.PhotonParticleManager.isFastSimulation();
+        com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(true);
+        try {
+            colourTrail.updateTick(1f);
+            colourEmitter.transform().localPosition(new org.joml.Vector3f(1f, 0f, 0f));
+            colourTrail.updateTick(1f);
+        } finally {
+            com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(oldFastSimulation);
+        }
+        var colourTails = colourTrail.getRawTails();
+        if (colourTails.size() < 2 || colourTails.getColor(0).x() < 0.9f || colourTails.getColor(colourTails.size() - 1).z() < 0.9f) {
+            throw new IllegalStateException("Trail colour gradient did not reach its rendered endpoints");
+        }
+        Photon.LOGGER.info("[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
@@ -1889,6 +1935,7 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 }
+
 
 
 
