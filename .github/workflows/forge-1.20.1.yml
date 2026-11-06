@@ -96,7 +96,7 @@ jobs:
           mkdir -p run/photon/fxpacks
           python3 - <<'PY'
           from zipfile import ZIP_DEFLATED, ZipFile
-          with ZipFile("run/photon/fxpacks/ci-server-sync.fxpack", "w", ZIP_DEFLATED) as pack:
+          with ZipFile("run/photon/fxpacks/server-ci-server-sync.fxpack", "w", ZIP_DEFLATED) as pack:
               pack.writestr("assets/photon_sync_probe/fx/server_sync.fx", b"server fx pack sync probe")
               pack.writestr("assets/photon_sync_probe/textures/server_sync_marker.txt", b"delivered only by the integrated server")
           PY

@@ -424,6 +424,8 @@ public final class PhotonFXEditorSmokeTest {
                     throw new IllegalStateException("Server FX pack did not reach the client after login");
                 }
             }
+            // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
+            if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
                 verifyBloomDefaults();
                 bloomSmokeLogged = true;
