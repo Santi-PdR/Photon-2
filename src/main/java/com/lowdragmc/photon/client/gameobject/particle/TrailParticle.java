@@ -263,7 +263,7 @@ public class TrailParticle implements IParticle {
     }
 
     /** Keep fast movement continuous without allowing extreme teleports to allocate unbounded points. */
-    static int movementSampleCount(float distance, float minVertexDistance) {
+    public static int movementSampleCount(float distance, float minVertexDistance) {
         if (!(distance > 0) || !Float.isFinite(distance)) return 1;
         float spacing = Math.max(minVertexDistance, FAST_MOVE_SAMPLE_SPACING);
         if (!(spacing > 0) || !Float.isFinite(spacing)) spacing = FAST_MOVE_SAMPLE_SPACING;
