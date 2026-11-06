@@ -79,10 +79,10 @@ public class PhotonConfig {
         enableBloom = builder.define("enable_bloom", true);
         bloomMipLevel = builder.defineInRange("bloom_mip_level", 5, 2, 10);
 //        bloomMode = builder.defineEnum("bloom_mode", BloomMode.SCATTER, BloomMode.values());
-        // Bloom is run on the FX colour target. A low threshold on ordinary 0..1 output turns
-        // nearly every pixel into a highlight and washes the full frame out. Use a soft, additive
-        // glow at a conservative default; the threshold/intensity remain adjustable in the config.
-        bloomThreshold = builder.defineInRange("bloom_threshold", 0.65, 0, 10d);
+        // Bloom is run on the FX colour target. Keep the threshold low enough for red FX, then use
+        // additive composition and a conservative intensity so the halo stays visible without
+        // replacing or washing out the scene.
+        bloomThreshold = builder.defineInRange("bloom_threshold", 0.15, 0, 10d);
         bloomIntensity = builder.defineInRange("bloom_intensity", 0.18, 0, 2);
 
         // Only consulted when the FX layer is composited into the pack's own colour target, where
