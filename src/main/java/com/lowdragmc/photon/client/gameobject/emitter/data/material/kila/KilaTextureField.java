@@ -102,8 +102,13 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
             return Component.translatable("kila.texture.builtin." + KilaTextures.nameOf(location));
         }
         var path = location.getPath();
+        if (path.startsWith("textures/")) path = path.substring("textures/".length());
         var name = path.substring(path.lastIndexOf('/') + 1);
-        return Component.literal(name.endsWith(".png") ? name.substring(0, name.length() - 4) : name);
+        if (name.endsWith(".png")) name = name.substring(0, name.length() - 4);
+        if (!location.getNamespace().equals("photon") && !location.getNamespace().equals("minecraft")) {
+            return Component.literal(location.getNamespace() + ":" + path.replaceFirst("\\.png$", ""));
+        }
+        return Component.literal(name);
     }
 
     private void onHoverTooltips(UIEvent event) {
@@ -182,3 +187,4 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
         return menu;
     }
 }
+
