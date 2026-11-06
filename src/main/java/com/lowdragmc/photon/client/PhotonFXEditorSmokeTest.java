@@ -109,14 +109,18 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
-        var builtInMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL;
-        if (builtInMaterials.isEmpty()) throw new IllegalStateException("Built-in Kila material presets are missing");
-        for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
-            if (preset.create() == null) {
-                throw new IllegalStateException("Built-in Kila preset cannot be created: " + preset.id());
-            }
+        var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
+        var actualBuiltinKilaMaterials = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.getResourceInstance()
+                .listAllResourceEntries().stream()
+                .filter(entry -> entry.path() instanceof com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath)
+                .map(com.lowdragmc.lowdraglib2.editor.resource.ResourceInstance.ResourceEntry::getResource)
+                .filter(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial.class::isInstance)
+                .count();
+        if (actualBuiltinKilaMaterials < expectedBuiltinKilaMaterials) {
+            throw new IllegalStateException("Material picker exposes " + actualBuiltinKilaMaterials
+                    + " built-in Kila materials; expected " + expectedBuiltinKilaMaterials);
         }
-        Photon.LOGGER.info("[builtin-materials-smoke] Kila and all built-in material presets can be created");
+        Photon.LOGGER.info("[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector");
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
