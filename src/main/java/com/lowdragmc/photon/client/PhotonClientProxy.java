@@ -114,7 +114,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         boolean changed = false;
         if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.1) == 0) {
-            PhotonConfig.INSTANCE.bloomThreshold.set(0.65);
+            PhotonConfig.INSTANCE.bloomThreshold.set(0.15);
             changed = true;
         }
         if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
