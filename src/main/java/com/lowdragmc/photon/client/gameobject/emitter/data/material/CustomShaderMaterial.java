@@ -211,7 +211,17 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
             this.shaderHolder = loadShaderHolder(shaderLocation);
             this.shaderCleanable = AutoCloseCleaner.registerRenderThread(this, this.shaderHolder);
         } catch (Throwable e) {
-            Photon.LOGGER.error("Failed to recompile shader", e);
+            // A shader the install does not ship (a project carrying `photon:slash` from an older
+            // Photon, or an FX pack whose shader was not included) is a content problem, not a
+            // crash: report it once as a warning and let the material fall back to the built-in HDR
+            // particle program, so the rest of the effect — geometry, colours, trails — still draws.
+            if (e instanceof IllegalStateException && e.getMessage() != null
+                    && e.getMessage().startsWith("Failed to find shader ")) {
+                Photon.LOGGER.warn("Shader {} is not installed; the material falls back to the built-in particle shader",
+                        shaderLocation);
+            } else {
+                Photon.LOGGER.error("Failed to recompile shader", e);
+            }
             // Never blank, and never null: a blank message reads as "no error", and this flag is the
             // only thing stopping getShader() from re-running the whole compile on every frame it
             // draws — which would build (and strand) a GL program per frame per material.

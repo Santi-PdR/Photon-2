@@ -45,6 +45,10 @@ public final class KilaSlotPreview implements IGuiTexture {
         var shader = PhotonShaders.getKilaPreviewShader();
         if (shader == null) return;
         graphics.flush();
+        // The thumbnail runs the same uv chain as the material, and that chain is time driven
+        // (scroll, spin, noise motion). KilaMaterial uploads GameTime on every material draw, so the
+        // inspector has to do the same or an animated material sits frozen in its own preview.
+        shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
         boolean procedural = texture.isProcedural();
         RenderSystem.setShaderTexture(0, procedural ? KilaTextures.WHITE : texture.getTexture());
         if (uvChain) {

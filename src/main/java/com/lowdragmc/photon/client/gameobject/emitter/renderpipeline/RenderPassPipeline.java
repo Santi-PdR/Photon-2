@@ -430,6 +430,19 @@ public class RenderPassPipeline {
         return current == null ? null : DRAW_TARGET;
     }
 
+    /**
+     * Whether the build drawing right now paints onto a <b>working copy of the finished frame</b>
+     * (the plain in-place path) rather than onto a standalone FX layer.
+     *
+     * <p>Only that path can tell FX apart from the scene: the copy started as the frame and
+     * everything drawn since is Photon's, so comparing a target against the frame Photon was
+     * handed isolates the FX. The late layer and the shader-pack accumulator are transparent and
+     * hold FX only — there is nothing to mask there, and the frame is a different picture anyway.
+     */
+    public static boolean isSceneBackedBuild() {
+        return current != null && !current.lateLayer && current.irisTarget == null;
+    }
+
     /** Whether a screen distortion drawing now can add itself to {@link StackedDistortion}: under a pack only
      *  for {@link IrisCompositeMode#AFTER_PACK}, the one path that bends the finished frame. */
     public boolean supportsStackedDistortion() {
