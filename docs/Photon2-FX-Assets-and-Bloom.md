@@ -72,6 +72,11 @@ también se monta automáticamente como recurso legado.
 - **Colores normales:** Bloom Threshold empieza en `0.5`; el pase mide el canal RGB más brillante,
   así que los rojos y azules saturados también pueden generar halo sin tratar el gris de la escena como luz.
   Súbelo si quieres que sólo brillen luces HDR.
+- **Sólo FX:** el pase de brillo lleva una máscara de escena. Compara el frame con el que se empezó a
+  dibujar contra el frame más los FX y sólo deja florecer los píxeles que añadió Photon, así que el cielo,
+  el sol, las nubes y el terreno iluminado no generan halo ni lavan la imagen. En las rutas que trabajan
+  sobre una capa de FX suelta (composición tardía, shader packs) la máscara queda neutra porque ahí sólo
+  hay FX.
 - **Intensidad:** el control global va de `0` a `2` y empieza en `0.18` para conservar el detalle de la escena.
   Se encuentra en **Mods → Photon → Config**.
 - **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
