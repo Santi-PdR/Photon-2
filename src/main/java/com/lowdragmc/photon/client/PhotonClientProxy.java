@@ -109,15 +109,17 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 com.lowdragmc.photon.client.shadergraph.ShaderGraph.NODE_REGISTRY.getNodeClasses().size());
     }
 
-    /** Existing installs persist config values, so update only the old shipped defaults once. */
+    /** Existing installs persist config values, so replace the old shipped defaults once. */
     private static void migrateOldBloomDefaults() {
         boolean changed = false;
-        if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0) {
-            PhotonConfig.INSTANCE.bloomThreshold.set(0.1);
+        if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0
+                || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.1) == 0) {
+            PhotonConfig.INSTANCE.bloomThreshold.set(0.65);
             changed = true;
         }
-        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0) {
-            PhotonConfig.INSTANCE.bloomIntensity.set(1.0);
+        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
+                || Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 1.0) == 0) {
+            PhotonConfig.INSTANCE.bloomIntensity.set(0.18);
             changed = true;
         }
         if (changed) {
@@ -166,3 +168,4 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         MeshResource.INSTANCE.onAdditionalModel(event::register);
     }
 }
+
