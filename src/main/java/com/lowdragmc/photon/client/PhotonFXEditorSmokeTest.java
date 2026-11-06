@@ -134,7 +134,7 @@ public final class PhotonFXEditorSmokeTest {
                 .resize(null, 64, 64, false);
         try {
             config.enableBloom.set(true);
-            config.bloomThreshold.set(0.15);
+            config.bloomThreshold.set(0.5);
             config.bloomIntensity.set(0.18);
             source.setClearColor(0.3f, 0.3f, 0.3f, 1);
             source.clear(Minecraft.ON_OSX);
