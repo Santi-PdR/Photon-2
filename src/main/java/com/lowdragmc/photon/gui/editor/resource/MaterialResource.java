@@ -19,6 +19,7 @@ import com.lowdragmc.photon.PhotonRegistries;
 import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.*;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.export.KilaGraphExport;
 import com.lowdragmc.photon.client.shadergraph.runtime.ShaderGraphRuntime;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -38,6 +39,11 @@ public class MaterialResource extends Resource<IMaterial> {
     public void buildBuiltin(BuiltinResourceProvider<IMaterial> provider) {
         provider.addResource("missing", IMaterial.MISSING);
         provider.addResource("block_atlas", BlockTextureSheetMaterial.INSTANCE);
+        // Keep the new all-in-one material alongside the original built-ins in the material picker.
+        provider.addResource("kila", new KilaMaterial());
+        for (var preset : KilaPresets.ALL) {
+            provider.addResource("kila/" + preset.id(), preset.create());
+        }
 
         addBuiltinShaderMaterial(provider, "circle");
         addBuiltinTextureMaterial(provider, "kila_tail");
@@ -277,3 +283,4 @@ public class MaterialResource extends Resource<IMaterial> {
         return path;
     }
 }
+
