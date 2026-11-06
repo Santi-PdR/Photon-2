@@ -1,0 +1,122 @@
+package com.lowdragmc.photon.client.gameobject.emitter.data.model;
+
+import com.lowdragmc.photon.client.AutoCloseCleaner;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import org.jetbrains.annotations.Nullable;
+import org.lwjgl.system.MemoryUtil;
+
+import java.lang.ref.Cleaner;
+
+import static org.lwjgl.opengl.GL31.*;
+
+/**
+ * A baked pose table on the GPU: the buffer texture the model path samples when every particle is at its
+ * own frame of the animation.
+ *
+ * <p>Uploaded once and then read-only, so a swarm costs one texture and no per-frame work at all.</p>
+ */
+@OnlyIn(Dist.CLIENT)
+public final class VertexAnimation {
+
+    private static final class Resource implements AutoCloseable {
+        private int buffer = -1;
+        private int texture = -1;
+
+        @Override
+        public void close() {
+            if (texture != -1) {
+                glDeleteTextures(texture);
+                texture = -1;
+            }
+            if (buffer != -1) {
+                glDeleteBuffers(buffer);
+                buffer = -1;
+            }
+        }
+    }
+
+    private final float[] table;
+    private final int vertexCount;
+    private final int frames;
+    /** (shared clip position, random weight, t weight, flags: +1 blend, +2 clamp) — MIRRORED FROM the
+     *  PHOTON_VAT block of particle.glsl. */
+    private final float[] phase = new float[4];
+    @Nullable
+    private Resource resource;
+    @Nullable
+    private Cleaner.Cleanable cleanable;
+
+    public VertexAnimation(float[] table, int vertexCount, int frames) {
+        this.table = table;
+        this.vertexCount = vertexCount;
+        this.frames = frames;
+    }
+
+    /** The baked poses, for the CPU draw path — the instanced one reads {@link #texture()} instead. */
+    public float[] table() {
+        return table;
+    }
+
+    public int vertexCount() {
+        return vertexCount;
+    }
+
+    /** In intervals: the table holds one more row than this, the clip's end. */
+    public int frames() {
+        return frames;
+    }
+
+    public float[] phase() {
+        return phase;
+    }
+
+    public void setPhase(float base, float randomWeight, float tWeight, boolean interpolate, boolean clamp) {
+        phase[0] = base;
+        phase[1] = randomWeight;
+        phase[2] = tWeight;
+        phase[3] = (interpolate ? 1f : 0f) + (clamp ? 2f : 0f);
+    }
+
+    /** Whether adjacent baked frames are blended rather than snapped between. */
+    public boolean interpolates() {
+        return phase[3] % 2f > 0.5f;
+    }
+
+    public boolean clamps() {
+        return phase[3] > 1.5f;
+    }
+
+    /** The buffer texture, created on first use. {@code -1} when it could not be made. */
+    public int texture() {
+        if (resource == null) {
+            resource = new Resource();
+            cleanable = AutoCloseCleaner.registerRenderThread(this, resource);
+            resource.buffer = glGenBuffers();
+            // the table can be tens of megabytes, so the staging copy is freed rather than left to the GC
+            var staging = MemoryUtil.memAllocFloat(table.length);
+            try {
+                staging.put(table).flip();
+                glBindBuffer(GL_TEXTURE_BUFFER, resource.buffer);
+                glBufferData(GL_TEXTURE_BUFFER, staging, GL_STATIC_DRAW);
+                glBindBuffer(GL_TEXTURE_BUFFER, 0);
+            } finally {
+                MemoryUtil.memFree(staging);
+            }
+
+            resource.texture = glGenTextures();
+            glBindTexture(GL_TEXTURE_BUFFER, resource.texture);
+            glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, resource.buffer);
+            glBindTexture(GL_TEXTURE_BUFFER, 0);
+        }
+        return resource.texture;
+    }
+
+    public void dispose() {
+        if (cleanable != null) {
+            cleanable.clean();
+            cleanable = null;
+        }
+        resource = null;
+    }
+}

@@ -1,0 +1,246 @@
+package com.lowdragmc.photon.client.shadergraph.runtime;
+
+import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
+import com.lowdragmc.kilagraph.rendertype.format.KGVertexFormat;
+import com.lowdragmc.kilagraph.rendertype.runtime.DynamicShaderSourceRegistry;
+import com.lowdragmc.kilagraph.rendertype.runtime.KGShaderManifest;
+import com.lowdragmc.kilagraph.rendertype.runtime.KGShaderResourceProvider;
+import com.lowdragmc.lowdraglib2.Platform;
+import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
+import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
+import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.api.graph.Graph;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.editor.GraphResource;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.editor.IGraphReferenceResolver;
+import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.LitParticles;
+import com.lowdragmc.photon.client.shadergraph.PhotonShaderCompiler;
+import com.lowdragmc.photon.client.shadergraph.ShaderGraph;
+import com.lowdragmc.photon.gui.editor.resource.PhotonShaderFunctionGraphResource;
+import com.lowdragmc.photon.gui.editor.resource.ShaderGraphResource;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import lombok.Getter;
+import net.minecraft.client.Minecraft;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * The shared compile cache for {@link ShaderGraph} resources: one {@link Entry} per graph resource path,
+ * holding the compiled GLSL plus the lazily-built {@code #define} shader variants ({@code ""} for the CPU
+ * quad/trail/beam paths, {@code PARTICLE_INSTANCE} / {@code PARTICLE_MODEL_INSTANCE} for the GPU-instanced
+ * particle paths). Every {@code ShaderGraphMaterial} referencing the same graph shares one entry — the
+ * GL programs exist once; each material stages its own uniform values before its draw.
+ *
+ * <p>Staleness is detected by tag identity: {@code ResourceInstance.getResource} returns the cached
+ * {@link CompoundTag} instance, which is replaced when the resource is saved in the editor (or reloaded
+ * from a pack) — so a per-frame identity compare is enough to catch edits without hashing. A same-source
+ * recompile whose {@code contentHash} is unchanged still refreshes baked defaults (materials re-bake their
+ * value stores off the new entry). Render thread only.</p>
+ */
+@OnlyIn(Dist.CLIENT)
+public final class ShaderGraphRuntime {
+
+    private static final Map<IResourcePath, Entry> CACHE = new HashMap<>();
+
+    private ShaderGraphRuntime() {}
+
+    /** One compiled graph: sources + define variants. Closed (GL programs freed) when its source changes. */
+    public static final class Entry {
+        /** The source tag this entry was compiled from — identity marker for staleness detection. */
+        final CompoundTag sourceTag;
+        @Getter
+        @Nullable
+        private final ShaderGraph graph;
+        @Getter
+        @Nullable
+        private final CompiledShaderGraph compiled;
+        @Getter
+        private final String errorMessage;
+        private final Map<String, LDShaderInstance> variants = new HashMap<>();
+        /** Defines whose GL build failed — remembered so a broken graph doesn't retry every frame. */
+        private final Set<String> failedVariants = new HashSet<>();
+        /** {@code PhotonGpuChannels} bits of the additional-data channels the graph reads. */
+        @Getter
+        private final long usedChannelMask;
+        /** Whether the graph reads any user custom-data stream (a {@code CustomDataNode}). */
+        @Getter
+        private final boolean usesCustomData;
+        /** Whether the graph is lit by the dynamic lights (a {@code DynamicLightNode}). */
+        @Getter
+        private final boolean usesDynamicLights;
+        private Entry(CompoundTag sourceTag, @Nullable ShaderGraph graph,
+                      @Nullable CompiledShaderGraph compiled, String errorMessage) {
+            this(sourceTag, graph, compiled, errorMessage, 0, false);
+        }
+
+        private Entry(CompoundTag sourceTag, @Nullable ShaderGraph graph,
+                      @Nullable CompiledShaderGraph compiled, String errorMessage, long usedChannelMask,
+                      boolean usesCustomData) {
+            this.sourceTag = sourceTag;
+            this.graph = graph;
+            this.compiled = compiled;
+            this.errorMessage = errorMessage;
+            this.usedChannelMask = usedChannelMask;
+            this.usesCustomData = usesCustomData;
+            this.usesDynamicLights = compiled != null && LitParticles.includedBy(compiled.fragmentSource());
+        }
+
+        public boolean isValid() {
+            return compiled != null;
+        }
+
+        /**
+         * Compiling with an EMPTY define set would cache the GL program stages under their PLAIN
+         * name in the vanilla {@code Program} cache. A later DEFINED variant of the same source
+         * would then silently REUSE that stage: {@code ShaderInstance.getOrCreate}'s defines-aware
+         * lookup (LDLib2's ShaderInstanceMixin) only early-returns on a defines-key hit and falls
+         * through to the vanilla plain-name lookup — so e.g. the PARTICLE_INSTANCE variant links
+         * the CPU-attribute-layout vertex stage and renders nothing (until a reload rebuilds the
+         * variants in a luckier order). Always compile under a defines-qualified cache key —
+         * {@code LDShaderHolder} does the same via its per-holder uid define.
+         */
+        private static final String BASE_VARIANT_DEFINE = "PHOTON_VARIANT_BASE";
+
+        /**
+         * The shader for one define permutation, built lazily on the render thread. Null when the graph
+         * or the GL build failed. {@code key} identifies the permutation in the variant cache (an empty
+         * define set = the plain BLOCK-attribute variant); {@code defines} is what actually gets spliced
+         * into the source.
+         */
+        @Nullable
+        public LDShaderInstance variant(String key, Set<String> defines) {
+            if (compiled == null || failedVariants.contains(key)) return null;
+            var existing = variants.get(key);
+            if (existing != null) return existing;
+            var format = KGVertexFormat.of(compiled.settings().vertexFormatElements());
+            var created = createShaderInstance(compiled, format, defines);
+            if (created == null) {
+                failedVariants.add(key);
+                return null;
+            }
+            variants.put(key, created);
+            return created;
+        }
+
+        private void close() {
+            variants.values().forEach(LDShaderInstance::close);
+            variants.clear();
+        }
+    }
+
+    /**
+     * {@code KGShaderResourceProvider.createShaderInstance}, except that no define set is empty (see
+     * {@code BASE_VARIANT_DEFINE}) and a graph including the dynamic lights gets their samplers and uniforms
+     * in its json: the GLSL declares them through the include, out of KilaGraph's sight.
+     */
+    @Nullable
+    public static LDShaderInstance createShaderInstance(CompiledShaderGraph compiled, VertexFormat format, Set<String> defines) {
+        var variant = defines.isEmpty() ? Set.of(Entry.BASE_VARIANT_DEFINE) : defines;
+        if (!LitParticles.includedBy(compiled.fragmentSource())) {
+            return KGShaderResourceProvider.createShaderInstance(compiled, format, variant);
+        }
+        if (compiled.hasStageErrors()) {
+            compiled.stageErrors().forEach(error -> Photon.LOGGER.warn("Shader graph stage error: {}", error.message()));
+            return null;
+        }
+        var id = DynamicShaderSourceRegistry.shaderId(compiled.contentHash());
+        String json = null;
+        try {
+            json = LitParticles.declareIn(KGShaderManifest.json(compiled, id.toString()));
+            var provider = new KGShaderResourceProvider(id, json, compiled.vertexSource(), compiled.fragmentSource(),
+                    Minecraft.getInstance().getResourceManager());
+            return LDShaderInstance.create(provider, id, format, variant);
+        } catch (Throwable e) {
+            Photon.LOGGER.warn("Failed to build lit shader graph {}: {}\n--- MANIFEST ---\n{}\n--- VERTEX ---\n{}\n--- FRAGMENT ---\n{}",
+                    id, e.getMessage(), json, compiled.vertexSource(), compiled.fragmentSource());
+            return null;
+        } finally {
+            // create() only clears them on success; a failed compile would leak them into every later one
+            variant.forEach(LDProgramDefineManager::removeProgramDefine);
+        }
+    }
+
+    /**
+     * Resolve + compile the graph at {@code path} (cached; recompiles only when the stored resource tag
+     * changed). Returns an error entry (non-{@link Entry#isValid()}) when the resource is missing or the
+     * graph fails to compile. Render thread only.
+     */
+    @Nullable
+    public static Entry get(@Nullable IResourcePath path) {
+        if (path == null) return null;
+        var tag = ShaderGraphResource.INSTANCE.getResourceInstance().getResource(path);
+        var entry = CACHE.get(path);
+        if (entry != null && entry.sourceTag == tag) return entry;
+        if (entry != null) entry.close();
+        entry = compile(tag);
+        CACHE.put(path, entry);
+        return entry;
+    }
+
+    /** Force-recompile {@code path} on next {@link #get} (the inspector's reload button). */
+    public static void invalidate(@Nullable IResourcePath path) {
+        if (path == null) return;
+        var entry = CACHE.remove(path);
+        if (entry != null) entry.close();
+    }
+
+    private static Entry compile(@Nullable CompoundTag tag) {
+        if (tag == null) {
+            return new Entry(null, null, null, "shader graph resource not found");
+        }
+        try {
+            var graph = (ShaderGraph) ShaderGraphResource.INSTANCE.deserializeGraph(tag, RESOLVER);
+            var compiler = (PhotonShaderCompiler) graph.createCompiler();
+            var compiled = compiler.compile();
+            if (compiled.hasStageErrors()) {
+                return new Entry(tag, graph, null, compiled.stageErrors().get(0).message());
+            }
+            return new Entry(tag, graph, compiled, "", compiler.getUsedChannelMask(), compiler.isUsesCustomData());
+        } catch (Throwable e) {
+            Photon.LOGGER.error("Failed to compile shader graph", e);
+            return new Entry(tag, null, null, String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
+     * Resolves EXTERNAL subgraph references (dragged-in {@code ShaderFunctionGraph}s / nested shader
+     * graphs) outside the editor, by looking the referenced path up across the shader-graph and
+     * shader-function resource libraries — the runtime twin of the editor container's resolver.
+     */
+    private static final IGraphReferenceResolver RESOLVER = new IGraphReferenceResolver() {
+        @Override
+        public Graph resolve(IResourcePath refPath) {
+            if (refPath == null) return null;
+            var fnTag = PhotonShaderFunctionGraphResource.INSTANCE.getResourceInstance().getResource(refPath);
+            if (fnTag != null) {
+                var fn = PhotonShaderFunctionGraphResource.INSTANCE.createGraph();
+                fn.graphModel.setReferenceResolver(this);
+                fn.graphModel.deserializeNBT(Platform.getFrozenRegistry(), fnTag);
+                fn.graphModel.setReferenceResolver(this);
+                return fn;
+            }
+            var sgTag = ShaderGraphResource.INSTANCE.getResourceInstance().getResource(refPath);
+            if (sgTag != null) {
+                return ShaderGraphResource.INSTANCE.deserializeGraph(sgTag, this);
+            }
+            return null;
+        }
+
+        @Override
+        public void save(IResourcePath refPath, CompoundTag refTag) {
+            // runtime resolution never writes back
+        }
+
+        @Override
+        public GraphResource<?> getSourceResource() {
+            return ShaderGraphResource.INSTANCE;
+        }
+    };
+}
