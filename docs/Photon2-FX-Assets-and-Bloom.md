@@ -69,9 +69,11 @@ también se monta automáticamente como recurso legado.
   `B` alterna la vista previa.
 - **En juego:** abre **Mods → Photon → Config**, activa **Enable Bloom** y ajusta el umbral.
   Este ajuste es global para los FX de Photon; no hay una casilla de bloom por emisor en este port.
-- **Colores normales:** Bloom Threshold empieza en `0.1`, así que los rojos y colores brillantes
-  normales también generan halo. Súbelo si quieres que sólo brillen luces HDR.
-- **Intensidad:** el control global va de `0` a `2` y empieza en `1`. Se encuentra en **Mods → Photon → Config**.
+- **Colores normales:** Bloom Threshold empieza en `0.5`; el pase mide el canal RGB más brillante,
+  así que los rojos y azules saturados también pueden generar halo sin tratar el gris de la escena como luz.
+  Súbelo si quieres que sólo brillen luces HDR.
+- **Intensidad:** el control global va de `0` a `2` y empieza en `0.18` para conservar el detalle de la escena.
+  Se encuentra en **Mods → Photon → Config**.
 - **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
 
 La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del
@@ -129,3 +131,4 @@ La inspección de `enraged.fx`, `conqclash.fxproj`, `domainfire.fxproj` y `elect
 | `cursed_fate_sky_manipulation:textures/particle/fire.png` | `assets/cursed_fate_sky_manipulation/textures/particle/fire.png` |
 
 Pon esos archivos en `<instancia>/photon/assets/<namespace>/...`; por ejemplo `ldlib:textures/enraged.png` va en `photon/assets/ldlib/textures/enraged.png`. Photon y Minecraft suministran sus propios IDs de textura y no hay que copiarlos. También se pueden leer los árboles antiguos `<instancia>/ldlib/assets` y `<instancia>/ldlib2/assets` para compatibilidad. El log de Alex del 4 de noviembre también reportó `cursedfate:textures/particle/cursedeneryaura2.png` y el shader `photon:slash`; esos archivos fuente no estaban en los proyectos compartidos, así que siguen haciendo falta sus originales para renderizar esas referencias.
+
