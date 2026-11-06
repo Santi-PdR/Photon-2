@@ -6,13 +6,16 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.Photon;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.function.BooleanSupplier;
 
 /** A texture slot's picker: a click applies at once so the material preview shows it, a double click also closes. */
@@ -81,6 +84,30 @@ public final class KilaTexturePicker {
             particles.addChild(textureTile(dialog, field, location));
         }
 
+        // Resource ids retain the `textures/...png` path expected by Minecraft's texture manager.
+        // Enumerate non-vanilla assets so textures from Photon and installed mods/server FX packs
+        // are selectable without copying them into LDLib's editor directory. The vanilla namespace
+        // is intentionally omitted here because it contains thousands of block/model textures.
+        var alreadyShown = new HashSet<ResourceLocation>();
+        alreadyShown.addAll(KilaTextures.ALL);
+        alreadyShown.addAll(PARTICLES);
+        alreadyShown.addAll(RECENT);
+        var byNamespace = new TreeMap<String, List<ResourceLocation>>();
+        Minecraft.getInstance().getResourceManager().listResources("textures",
+                location -> location.getPath().startsWith("textures/") && location.getPath().endsWith(".png"))
+                .keySet().stream()
+                .filter(location -> !location.getNamespace().equals("minecraft"))
+                .filter(alreadyShown::add)
+                .sorted()
+                .forEach(location -> byNamespace.computeIfAbsent(location.getNamespace(), key -> new java.util.ArrayList<>())
+                        .add(location));
+        for (var entry : byNamespace.entrySet()) {
+            var resources = KilaDialogs.section(list, Component.literal(entry.getKey()));
+            for (var location : entry.getValue()) {
+                resources.addChild(textureTile(dialog, field, location));
+            }
+        }
+
         dialog.addContent(list);
         dialog.addButton(new Button().setText("kila.texture.file").setOnClick(e -> {
             dialog.close();
@@ -117,3 +144,4 @@ public final class KilaTexturePicker {
         return cell;
     }
 }
+

@@ -31,6 +31,10 @@ import java.util.function.Supplier;
  */
 @OnlyIn(Dist.CLIENT)
 public class TrailParticle implements IParticle {
+    /** Hard bound for fast-moving emitters; keeps sub-sampling from exploding on teleports. */
+    private static final int MAX_HEAD_SAMPLES_PER_TICK = 64;
+    /** At least this spatial frequency is kept even when the authored minimum distance is tiny. */
+    private static final float FAST_MOVE_SAMPLE_SPACING = 0.1f;
     public enum UVMode {
         Stretch,
         Tile
@@ -233,16 +237,22 @@ public class TrailParticle implements IParticle {
         if (!isRemoved()) {
             var headPos = getHeadPosition();
             var shouldAdd = true;
+            Vector3f last = null;
             if (!rawTails.isEmpty()) {
-                Vector3f last = rawTails.getPosition(rawTails.size() - 1);
+                last = rawTails.getPosition(rawTails.size() - 1);
                 var minVertexDistance = runtime.minVertexDistance.get();
                 if (headPos.distanceSquared(last) < minVertexDistance * minVertexDistance) {
                     shouldAdd = false;
                 }
             }
             if (shouldAdd) {
-                Tail newTail = new Tail(headPos, lifetimeSupplier.get(), new Vector4f(1, 1, 1, 1), 0.2f);
-                rawTails.add(newTail);
+                float lifetime = lifetimeSupplier.get();
+                int samples = last == null ? 1 : movementSampleCount(last.distance(headPos), runtime.minVertexDistance.get());
+                for (int sample = 1; sample <= samples; sample++) {
+                    float t = sample / (float) samples;
+                    Vector3f position = last == null ? new Vector3f(headPos) : new Vector3f(last).lerp(headPos, t);
+                    rawTails.add(new Tail(position, lifetime, new Vector4f(1, 1, 1, 1), 0.2f));
+                }
             } else if (rawTails.size() == 1) {
                 rawTails.posX[0] = headPos.x;
                 rawTails.posY[0] = headPos.y;
@@ -250,6 +260,14 @@ public class TrailParticle implements IParticle {
                 rawTails.lifeTime[0] = lifetimeSupplier.get();
             }
         }
+    }
+
+    /** Keep fast movement continuous without allowing extreme teleports to allocate unbounded points. */
+    public static int movementSampleCount(float distance, float minVertexDistance) {
+        if (!(distance > 0) || !Float.isFinite(distance)) return 1;
+        float spacing = Math.max(minVertexDistance, FAST_MOVE_SAMPLE_SPACING);
+        if (!(spacing > 0) || !Float.isFinite(spacing)) spacing = FAST_MOVE_SAMPLE_SPACING;
+        return Mth.clamp((int) Math.ceil(distance / spacing), 1, MAX_HEAD_SAMPLES_PER_TICK);
     }
 
     public TailArray generateSmoothPath(TailArray vertices, TailArray lastSmooth, float distance) {
@@ -500,3 +518,4 @@ public class TrailParticle implements IParticle {
         }
     }
 }
+

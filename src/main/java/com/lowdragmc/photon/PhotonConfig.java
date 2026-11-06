@@ -79,10 +79,10 @@ public class PhotonConfig {
         enableBloom = builder.define("enable_bloom", true);
         bloomMipLevel = builder.defineInRange("bloom_mip_level", 5, 2, 10);
 //        bloomMode = builder.defineEnum("bloom_mode", BloomMode.SCATTER, BloomMode.values());
-        // Most authored effects use ordinary 0..1 colours, so the old HDR-only threshold made
-        // Bloom appear broken for legacy FX even when it was enabled. Keep it visible by default.
-        bloomThreshold = builder.defineInRange("bloom_threshold", 0.1, 0, 10d);
-        bloomIntensity = builder.defineInRange("bloom_intensity", 1.0, 0, 2);
+        // Bloom thresholds the brightest RGB channel so saturated reds/blues glow too. The additive
+        // pass preserves the scene, and the conservative intensity keeps that glow from washing out.
+        bloomThreshold = builder.defineInRange("bloom_threshold", 0.5, 0, 10d);
+        bloomIntensity = builder.defineInRange("bloom_intensity", 0.18, 0, 2);
 
         // Only consulted when the FX layer is composited into the pack's own colour target, where
         // the pack's bloom chain will also process it — leaving this on means both apply. It is
@@ -139,3 +139,4 @@ public class PhotonConfig {
         return builder.translation("photon.configuration.dynamic_lights." + key);
     }
 }
+
