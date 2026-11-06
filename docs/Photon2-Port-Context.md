@@ -104,6 +104,22 @@ Los trails insertan muestras espaciales intermedias con un límite de 64 muestra
 - **Verificación local:** el archivo declara `modId="photon"` y hay un solo JAR Photon en `test-1/mods`.
 - **Límite de la verificación:** no se abrió Minecraft en la PC del usuario. CI headless comprueba arranque y condiciones de código, pero la apariencia final y el uso real en un mundo/servidor deben confirmarse en la próxima prueba manual del usuario.
 
+## Historial relevante de reportes
+
+- **Carga de `.fx`/`.fxproj` viejos:** aparecieron cuadros “Loading Failed” en el editor. El port ha recibido adaptadores para layouts legacy de Photon 1 y proyectos manejados de Photon 2; los smoke tests abren ejemplos de esos formatos. Aun así, si el proyecto refiere a recursos externos que no se encuentran, la migración no los puede inventar.
+- **Efectos incompletos o invisibles:** se reportaron tornado parcialmente visible y problemas anteriores con slash, scan, arrow trail, ice step, shield y crystal. Después el usuario confirmó que ice step funcionaba y más tarde que la mayoría de los efectos ya se veían bien; el tornado seguía bajo revisión. Los smoke tests ejercitan varias rutas de shaders, modelos y render, pero no certifican cada FX de usuario ni sustituyen su comparación visual en juego.
+- **Editor de FX:** también se reportó que Export FX no abría un diálogo. Se añadieron rutas de exportación y el flujo de Export FXPack/Manage FXPack; para una actualización de servidor, el formato importante es `.fxpack`.
+- **VFX combinados y cámara:** Alex informó que efectos hechos con varios meshes/texturas/luz podían volverse invisibles en primera persona. La integración de materiales y render se ha ido ajustando, pero ese caso compuesto no se marca como resuelto en este documento sin una reproducción/confirmación suya tras el último JAR.
+- **Lentitud o artefactos:** hubo fallos por memoria de Java en un arranque local, crashes de render con mod listings que no identificaban la causa, partículas negras y trails entrecortados. Un listado de mods en estado `DONE` no es diagnóstico suficiente; para una caída concreta se necesita el `latest.log`/crash report de esa misma sesión y jugador.
+
+## Límites y criterios de diagnóstico
+
+- Un archivo `.fx` puede cargar pero no mostrar su textura si el namespace/archivo no existe o el shader/modelo apunta a una ubicación equivocada. Revisar el ID, la ruta ZIP `assets/<namespace>/...` y el Resource Manager activo.
+- El selector puede mostrar recursos registrados; no descarga por sí solo un asset que falta en el cliente. Para recursos privados o personalizados, distribuirlos dentro del `.fxpack`.
+- El JAR fijo no cambia cuando Alex modifica un efecto en el disco del servidor: tiene que exportar un `.fxpack` nuevo y colocarlo en `photon/fxpacks`. Si cambia código del mod, sí corresponde actualizar JAR.
+- Los smoke tests pueden comprobar composición de shader, carga y datos de partículas sin validar cómo luce cada efecto artístico en todas las GPUs, shaderpacks, cámaras y combinaciones de mods.
+- Para reproducir una falla, identificar primero si es carga, asset faltante, configuración Bloom, interacción con Oculus/Embeddium/Flywheel u otro crash. Comparar el log del jugador afectado y registrar el nombre/ID del FX y si ocurre en primera/tercera persona.
+
 ## Compilar y diagnosticar
 
 Desde la raíz del proyecto, con JDK 17:
