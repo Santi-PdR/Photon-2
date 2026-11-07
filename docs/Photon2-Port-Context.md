@@ -171,9 +171,15 @@ CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`, `[sec
 efecto concreto, que `Drain` dé la sensación buscada y que una despedida dure lo que tiene que durar
 sigue necesitando la prueba de Alex en juego.
 
-Lo que **todavía no hay** de las secciones: no hay interfaz en el editor para crearlas ni para
-moverlas en la línea de tiempo (se pueden definir por código y se guardan y se leen bien). El reloj y
-el guardado están completos; el editor de secciones es el paso siguiente.
+Lo que **todavía no hay** de las secciones, dicho claro:
+
+- no hay interfaz en el editor para crearlas ni para moverlas en la línea de tiempo: se definen por
+  código (`Timeline.sections()`) y se guardan y se leen bien;
+- la despedida se reproduce en la timeline del efecto, no en las timelines internas de un efecto
+  anidado (un `.fx` dentro de otro): esas se siguen cortando como antes.
+
+El reloj, el guardado y la reproducción de la despedida están completos; el editor de secciones es el
+paso siguiente.
 
 ## Audio
 
