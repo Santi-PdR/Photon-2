@@ -40,14 +40,29 @@ public final class FxPackSync {
     private FxPackSync() {}
 
     public static void onPlayerLogin(ServerPlayer player) {
+        offer(player, false);
+    }
+
+    /**
+     * Send one player the current pack list again, on their request. The manifest is otherwise sent only at login, so
+     * a pack uploaded while somebody was already online was invisible to them until they reconnected. Re-sending a
+     * manifest is safe: the client compares hashes and skips whatever it already has.
+     */
+    public static void onRefreshRequest(ServerPlayer player) {
+        offer(player, true);
+    }
+
+    private static void offer(ServerPlayer player, boolean requested) {
         var server = player.getServer();
         if (server == null) return;
+        // every offer re-scans the folder: a pack added a minute ago is on disk now, and the hash is what decides
         var entries = scan(server);
         var offered = new ConcurrentHashMap<String, PackEntry>();
         entries.forEach(entry -> offered.put(entry.sha256(), entry));
         OFFERED.put(player.getUUID(), Map.copyOf(offered));
         PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ManifestPacket(entries));
-        Photon.LOGGER.info("Offered {} Photon FX pack(s) to {}", entries.size(), player.getGameProfile().getName());
+        Photon.LOGGER.info("{} {} Photon FX pack(s) to {}", requested ? "Re-offered" : "Offered", entries.size(),
+                player.getGameProfile().getName());
     }
 
     public static void onPlayerLogout(ServerPlayer player) {
@@ -137,7 +152,13 @@ public final class FxPackSync {
     }
 
     public static void handleRequest(RequestPacket packet, ServerPlayer player) {
-        if (player == null || packet.offset() < 0 || !packet.sha256().matches("[0-9a-f]{64}")) return;
+        if (player == null) return;
+        if (packet.isRefresh()) {
+            Photon.LOGGER.info("Photon FX pack refresh requested by {}", player.getGameProfile().getName());
+            onRefreshRequest(player);
+            return;
+        }
+        if (packet.offset() < 0 || !packet.sha256().matches("[0-9a-f]{64}")) return;
         var entry = OFFERED.getOrDefault(player.getUUID(), Map.of()).get(packet.sha256());
         if (entry == null || packet.offset() >= entry.size()) return;
         var server = player.getServer();
@@ -156,6 +177,20 @@ public final class FxPackSync {
             Photon.LOGGER.warn("Could not stream Photon FX pack {} to {}", entry.fileName(),
                     player.getGameProfile().getName(), e);
         }
+    }
+
+    /** Asks the server for the current pack list, for the client command, without the offset/chunk machinery. */
+    public static RequestPacket refreshRequest() {
+        return new RequestPacket("", -1);
+    }
+
+    /**
+     * The manifest goes out at login, which for a player coming back from the nether or respawning is not "later": the
+     * server may have received a new pack while they were in a loading screen. Re-offering on every (re)join costs one
+     * directory scan and a hash list, and the client skips what it already has.
+     */
+    public static void onPlayerJoinLevel(ServerPlayer player) {
+        offer(player, true);
     }
 
     public static void handleChunk(ChunkPacket packet) {
@@ -206,6 +241,11 @@ public final class FxPackSync {
     }
 
     public record RequestPacket(String sha256, long offset) {
+        /** A request with no hash and a negative offset asks for the manifest, not for a chunk. */
+        public boolean isRefresh() {
+            return offset < 0 && sha256.isEmpty();
+        }
+
         public static void encode(RequestPacket packet, FriendlyByteBuf buf) {
             buf.writeUtf(packet.sha256(), 64);
             buf.writeVarLong(packet.offset());

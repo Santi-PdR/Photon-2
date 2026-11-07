@@ -116,7 +116,8 @@ public class ClientCommands {
                                 .executes(context -> convertLegacyFx())
                                 .then(Commands.literal("status").executes(context -> legacyFxStatus())))
                         .then(createLiteral("textures").executes(context -> textureStatus()))
-                        .then(createLiteral("reload").executes(context -> reloadResources("requested"))),
+                        .then(createLiteral("reload").executes(context -> reloadResources("requested")))
+                        .then(createLiteral("fxpacks").executes(context -> refreshServerPacks())),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be
                 // characterised by loading it and running "status".
@@ -249,6 +250,23 @@ public class ClientCommands {
     /** Why an effect's image does not show: the roots searched, the namespaces found, and each id's status. */
     private static int textureStatus() {
         com.lowdragmc.photon.client.fx.LooseTextures.reportTexturesTo(ClientCommands::feedback);
+        return 1;
+    }
+
+    /**
+     * "El server subió un efecto nuevo y yo ya estoy dentro": ask the server for the current pack list. It answers
+     * with the same manifest it sends at login, anything already downloaded is skipped by hash, and the download
+     * reloads the resources by itself when it finishes.
+     */
+    private static int refreshServerPacks() {
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection == null) {
+            feedback("photon: not connected to a server");
+            return 0;
+        }
+        feedback("photon: asking the server for its FX packs ...");
+        com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(
+                com.lowdragmc.photon.network.FxPackSync.refreshRequest());
         return 1;
     }
 
