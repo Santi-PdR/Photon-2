@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           log="$RUNNER_TEMP/photon-client.log"
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -178,7 +178,10 @@ jobs:
 
       - name: Require Photon 1 effect conversion
         shell: bash
-        run: grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
+        run: |
+          grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-conversion-report-smoke] a second pass reported' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[loose-texture-smoke] found cursedfate_probe:textures/particle/loose_probe.png' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 editor project import
         shell: bash

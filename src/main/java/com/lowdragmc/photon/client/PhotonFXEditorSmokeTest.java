@@ -231,6 +231,75 @@ public final class PhotonFXEditorSmokeTest {
         }
 
         verifySliderDragsContinuously();
+        verifyLooseTextureLookup();
+    }
+
+    /**
+     * What Alex kept hitting: an effect names {@code cursedfate:textures/...} but no pack serves it, because the folder
+     * was dropped somewhere that was never registered, and the particles draw the purple checkerboard. The lookup must
+     * find the file in an assets tree on disk and copy it into the workspace so the id resolves from then on.
+     */
+    private static void verifyLooseTextureLookup() {
+        var assets = com.lowdragmc.photon.client.util.PhotonPaths.getAssetsDir().toPath();
+        var id = new ResourceLocation("cursedfate_probe", "textures/particle/loose_probe.png");
+        // a file outside any mounted pack: "the author's folder", in the same shape the game reads
+        var looseRoot = assets.resolve("loose_probe_root");
+        var looseFile = looseRoot.resolve("assets").resolve(id.getNamespace()).resolve(id.getPath());
+        var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
+        try {
+            Files.createDirectories(looseFile.getParent());
+            Files.write(looseFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+            com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+
+            var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
+            if (folder == null || !Files.isRegularFile(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
+                throw new IllegalStateException("The loose texture lookup did not find " + id + " in " + looseRoot
+                        + "; indexed namespace folder was " + folder);
+            }
+            var resolved = com.lowdragmc.photon.client.fx.LooseTextures.resolve(id);
+            if (!resolved.equals(id) || !Files.isRegularFile(adopted)) {
+                throw new IllegalStateException("Resolving " + id + " did not adopt the loose file into "
+                        + adopted + " (got " + resolved + ")");
+            }
+            Photon.LOGGER.info("[loose-texture-smoke] found {} in a folder no pack mounts and copied it to the workspace",
+                    id);
+
+            // the converter's destination is what the picker reads: a flat assets/photon/fx, never fx_old/ inside it
+            var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
+            if (!destination.equals(assets.resolve("photon/fx"))) {
+                throw new IllegalStateException("Converted effects do not land in assets/photon/fx: " + destination);
+            }
+            var source = Files.createTempDirectory("photon1-flat-conversion");
+            var nested = source.resolve("fx_old");
+            Files.createDirectories(nested);
+            var legacy = new CompoundTag();
+            legacy.put("emitters", new ListTag());
+            try (var output = Files.newOutputStream(nested.resolve("matrix.fx"))) {
+                NbtIo.writeCompressed(legacy, output);
+            }
+            var tempDestination = Files.createTempDirectory("photon2-converted");
+            var report = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(nested, tempDestination);
+            if (report.converted() != 1 || !Files.isRegularFile(tempDestination.resolve("matrix.fx"))
+                    || Files.exists(tempDestination.resolve("fx_old"))) {
+                throw new IllegalStateException("Conversion kept the legacy folder inside the id: "
+                        + report.lines());
+            }
+            Photon.LOGGER.info("[loose-texture-smoke] conversion flattens fx_old into the effect folder");
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("Loose texture lookup fixture failed", failure);
+        } finally {
+            try {
+                Files.deleteIfExists(adopted);
+                Files.deleteIfExists(looseFile);
+                Files.deleteIfExists(looseFile.getParent());
+                Files.deleteIfExists(looseRoot.resolve("assets").resolve(id.getNamespace()));
+                Files.deleteIfExists(looseRoot.resolve("assets"));
+                Files.deleteIfExists(looseRoot);
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+            } catch (java.io.IOException ignored) {
+                // leftovers in a temp tree are harmless
+            }
+        }
     }
 
     /**

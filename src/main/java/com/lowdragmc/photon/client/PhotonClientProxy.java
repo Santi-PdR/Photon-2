@@ -4,6 +4,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonCommonProxy;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.fx.FXHelper;
+import com.lowdragmc.photon.client.fx.LooseTextures;
 import com.lowdragmc.photon.client.fx.FXPreloader;
 import com.lowdragmc.photon.client.fx.fxpack.FXPacks;
 import com.lowdragmc.photon.client.gameobject.emitter.data.model.PhotonMeshCache;
@@ -90,6 +91,8 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // (a pack toggled, an .fxpack mounted, F3+T) is exactly when they stop being true
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
             FXHelper.clearCache();
+            // files on disk and the packs that serve them both just changed: the loose-texture answers are stale
+            LooseTextures.invalidate();
             com.lowdragmc.photon.client.fx.timeline.SoundLengthCache.clear();
             FXPreloader.onResourcesReloaded();
         });
