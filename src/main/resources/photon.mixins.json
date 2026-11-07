@@ -12,6 +12,7 @@
     "ParticleEngineMixin",
     "ShaderInstanceMixin",
     "LDLibPayloadRegistryMixin",
+    "SearchComponentMixin",
     "accessor.FilePackResourcesAccessor",
     "accessor.LightTextureAccessor",
     "accessor.ParticleEngineAccessor",

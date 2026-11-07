@@ -176,6 +176,87 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     /**
+     * A search box that has a value already chosen must still open on the whole catalogue.
+     * <p>
+     * This is the reported symptom: "the particle picker and the fx list are still the same" — the dropdown only
+     * ever showed the value already selected, and typing made it worse because the first keystroke was appended to
+     * that leftover name instead of replacing it. The cause is in the widget itself (LDLib 2.2.39, fixed upstream in
+     * 2.2.39.8): it searches on open with the text the field still holds, which is the current value's name.
+     * {@code SearchComponentMixin} re-runs the search empty and selects the text.
+     * <p>
+     * The box is built the way the editor builds one (a {@code SearchComponentConfigurator} over a two-entry
+     * catalogue), given a selected value, and opened. Without the fix the dialog holds that one entry; with it, both.
+     */
+    private static void verifySearchBoxOpensOnTheWholeCatalogue() {
+        var queried = new ArrayList<String>();
+        var candidateCount = new int[]{0};
+        var configurator = new com.lowdragmc.lowdraglib2.configurator.ui.SearchComponentConfigurator<>(
+                "catalogue", () -> "photon:chosen", value -> { }, "photon:chosen", false,
+                (word, handler) -> {
+                    queried.add(word == null ? "<null>" : word);
+                    candidateCount[0] = 0;
+                    for (var candidate : java.util.List.of("photon:chosen", "photon:other")) {
+                        if (Thread.currentThread().isInterrupted()) return;
+                        if (candidate.contains(word == null ? "" : word)) {
+                            handler.accept(candidate);
+                            candidateCount[0]++;
+                        }
+                    }
+                },
+                value -> value,
+                com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider.text(
+                        value -> Component.literal(value == null ? "---" : value)));
+        var box = configurator.searchComponent;
+        if (!"photon:chosen".equals(box.getValue())) {
+            throw new IllegalStateException("The search box did not start on the chosen value");
+        }
+        // What show() does, minus the dialog (there is no screen to add it to in a headless run): the box runs its
+        // search and the candidates are pulled in by the search engine, which is asynchronous.
+        box.show();
+        waitForSearch(candidateCount, 2, "opening the box searched '" + queried + "' and collected only "
+                + candidateCount[0] + " of 2 effects");
+        // and the fix asks for the whole catalogue, not for the value already chosen
+        if (!queried.contains("")) {
+            throw new IllegalStateException("Opening the search box never searched the whole catalogue, only "
+                    + queried);
+        }
+        // what the author then types replaces the leftover name instead of being appended to it
+        var field = readField(box, "textField");
+        if (!(field instanceof com.lowdragmc.lowdraglib2.gui.ui.elements.TextField text)
+                || text.getSelectionStart() != 0 || text.getSelectionEnd() != text.getValue().length()) {
+            throw new IllegalStateException("The chosen name was left unselected, so typing would append to it");
+        }
+        Photon.LOGGER.info("[search-box-smoke] opening a picker with a value already chosen lists the whole "
+                + "catalogue ({}) and selects the old name so typing replaces it", candidateCount[0]);
+    }
+
+    /** Wait for the asynchronous search to hand over at least {@code expected} candidates (a few client ticks). */
+    private static void waitForSearch(int[] count, int expected, String message) {
+        for (int i = 0; i < 100 && count[0] < expected; i++) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        if (count[0] < expected) {
+            throw new IllegalStateException(message);
+        }
+    }
+
+    /** Read a private field of a library widget (the test drives the real widget, not a copy of it). */
+    private static Object readField(Object owner, String name) {
+        try {
+            var field = owner.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(owner);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not read " + owner.getClass().getSimpleName() + "." + name, e);
+        }
+    }
+
+    /**
      * Prove the two editor entry points that were reported broken: the fx picker lists effect ids (a list that
      * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes the config
      * without changing the shipped default.
@@ -203,6 +284,8 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[fx-picker-smoke] the fx search lists every loadable effect ({} ids) and a fresh search reads the live list",
                 fxIds.size());
+
+        verifySearchBoxOpensOnTheWholeCatalogue();
 
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
         var shippedDefault = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
