@@ -29,6 +29,8 @@ public class Clip {
     private long seed;
     /** How the bound object leaves this clip: cut at once, or wind down and let what shows finish. */
     private ExitMode exitMode = ExitMode.CUT;
+    /** What happens to the bound object when a section wrap or jump happens while this clip is on. */
+    private SeamMode seamMode = SeamMode.AUTO;
 
     /** Stable per-clip lerp source for Random* sampling functions (re-rolls with the clip seed). */
     private transient float lerpValue = Float.NaN;
@@ -99,6 +101,15 @@ public class Clip {
         return this;
     }
 
+    public SeamMode seamMode() {
+        return seamMode;
+    }
+
+    public Clip seamMode(SeamMode seamMode) {
+        this.seamMode = seamMode;
+        return this;
+    }
+
     public double start() {
         return start;
     }
@@ -131,7 +142,7 @@ public class Clip {
      */
     public Clip copy() {
         return new Clip(start, duration, speed).targetId(targetId).seed(seed).randomSeed(randomSeed)
-                .exitMode(exitMode);
+                .exitMode(exitMode).seamMode(seamMode);
     }
 
     /**
@@ -229,5 +240,17 @@ public class Clip {
     public enum ExitMode {
         CUT,
         DRAIN
+    }
+
+    /**
+     * What a control clip that is still on across a section wrap or jump does to its object. Ported from 26.3, where
+     * jumping back into a section would otherwise leave a finished emitter finished.
+     * <p>
+     * {@code AUTO} is the default and keeps what still plays playing, restarting only what already finished.
+     * {@code RESTART} restarts it every time, which is what a one-shot burst wants when its section repeats.
+     */
+    public enum SeamMode {
+        AUTO,
+        RESTART
     }
 }

@@ -123,6 +123,39 @@ diferencia entre un efecto que **termina** y un efecto que **desaparece**.
 Se elige en el editor: clic derecho en el clip → **Exit**, o en el configurador del clip. Sólo se
 guarda en el NBT cuando vale `Drain`, así un proyecto sin tocar se guarda igual que antes.
 
+### Portado: secciones de timeline
+
+Una timeline puede ahora partirse en trozos con nombre (`Timeline.sections()`), cada uno con:
+
+- **inicio** — el trozo va desde su inicio hasta el inicio del siguiente (el último, hasta el final del
+  contenido);
+- **repeticiones** — `1` por defecto; `0` significa "siempre" (hasta que algo lo mueva);
+- **qué pasa después** (`then`) — `LINEAR` sigue al siguiente trozo, `END` termina la timeline, `GOTO`
+  salta al trozo cuyo nombre dice `target`.
+
+Además `Timeline.releaseSection()` marca un trozo de **despedida** y `releaseNow()` decide si se entra
+en él al instante o al terminar la vuelta actual. Cuando el efecto se destruye sin forzar, en vez de
+cortarse en seco entra en ese trozo: lo que estaba en pantalla termina, y un trozo marcado "siempre"
+se juega **una vez** (por eso la despedida no puede quedarse girando para siempre).
+
+Una timeline **sin** secciones se comporta exactamente como antes: el reloj avanza `tiempo + velocidad`
+y no se guarda ninguna clave nueva (ni `sections` ni `release`), así que todos los proyectos ya hechos
+se leen y se escriben igual.
+
+Detalles que se portaron porque cambian lo que se ve:
+
+- señales en los bordes — el trozo que queda detrás de un salto se dispara igual, si no una señal
+  después del último tick evaluado de un trozo repetido no sonaría nunca;
+- los fotogramas entre dos ticks no interpolan a través de un salto: un `PingPong`/bucle pequeño se
+  vería congelado en el borde en vez de dar el salto de golpe;
+- `Clip.seamMode` (`Auto` / `Restart`) decide qué pasa con un objeto que sigue dentro de su clip cuando
+  la timeline salta o se repite: `Auto` deja seguir lo que ya está en marcha y reinicia sólo lo que
+  terminó; `Restart` lo reinicia siempre.
+
+El editor sólo obedece las secciones durante la reproducción en vivo; al arrastrar el cabezal
+(replay desde 0) se recorre la timeline en orden, sin bucles ni saltos, que es lo que uno espera al
+buscar un momento concreto.
+
 ### No portado (y por qué)
 
 - **Transparencia order-independent / dos puntos de render libres** (`PhotonOit`, `PhotonFrameSeams`):
@@ -133,9 +166,14 @@ guarda en el NBT cuando vale `Drain`, así un proyecto sin tocar se guarda igual
 
 ### Límites
 
-CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`), no apariencia. Que un
-`PingPong` se vea bien en un efecto concreto, y que `Drain` dé la sensación buscada, sigue necesitando
-la prueba de Alex en juego.
+CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`, `[sections-smoke]`,
+`[release-section-smoke]`, `[sections-save-smoke]`), no apariencia. Que un `PingPong` se vea bien en un
+efecto concreto, que `Drain` dé la sensación buscada y que una despedida dure lo que tiene que durar
+sigue necesitando la prueba de Alex en juego.
+
+Lo que **todavía no hay** de las secciones: no hay interfaz en el editor para crearlas ni para
+moverlas en la línea de tiempo (se pueden definir por código y se guardan y se leen bien). El reloj y
+el guardado están completos; el editor de secciones es el paso siguiente.
 
 ## Audio
 

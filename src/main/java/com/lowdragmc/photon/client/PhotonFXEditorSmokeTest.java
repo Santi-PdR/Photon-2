@@ -233,6 +233,142 @@ public final class PhotonFXEditorSmokeTest {
         verifySliderDragsContinuously();
         verifyLooseTextureLookup();
         verifyCyclicLifetimes();
+        verifySections();
+    }
+
+    /**
+     * Timeline sections, ported from 26.3, checked where they decide something: which tick of the timeline plays next.
+     * <p>
+     * A section set to repeat 3 must play its own stretch three times and only then move on — not run into the next
+     * section the first time it reaches the end. A section set to end must stop the clock instead of continuing, a
+     * "goto" must jump. Sections that would be empty (sharing a start, or starting at the content end) are dropped
+     * rather than making a zero-length pass. And a timeline without sections has to save exactly as before, because
+     * every project made until now is one of those.
+     */
+    private static void verifySections() {
+        // A (0..10) repeats 3 times, then B (10..20) plays: 30 ticks of A before B is reached
+        var repeating = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0).repeat(3),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("B", 10)), 20, null, true);
+        repeating.begin(null);
+        for (int i = 0; i < 5; i++) {
+            repeating.step(5);
+        }
+        // 25 ticks in: A has played twice and is on its third pass, still inside its own stretch (0..10)
+        if (!"A".equals(repeating.current()) || repeating.pass() != 2
+                || repeating.time() < 0 || repeating.time() > 10) {
+            throw new IllegalStateException("A section set to repeat 3 did not stay inside its own stretch: now in '"
+                    + repeating.current() + "', pass " + repeating.pass() + ", tick " + repeating.time());
+        }
+        repeating.step(5); // the 30th tick: the third pass ends and B starts exactly at its own start
+        if (!"B".equals(repeating.current()) || Math.abs(repeating.time() - 10) > 1e-4) {
+            throw new IllegalStateException("After three passes A did not hand over to B at tick 10: got '"
+                    + repeating.current() + "' at " + repeating.time());
+        }
+        Photon.LOGGER.info("[sections-smoke] a section repeating 3 times plays 30 ticks and then starts the next one");
+
+        // "then: end" stops the clock at the seam instead of running into the next section
+        var ending = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0)
+                        .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.END)), 20, null, true);
+        ending.begin(null);
+        ending.step(25);
+        if (!ending.endPending() && !ending.ended()) {
+            throw new IllegalStateException(""then: end" let the clock run past the end of its section to "
+                    + ending.time());
+        }
+
+        // "goto" jumps to the named section instead of carrying on
+        var jumping = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0)
+                        .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO).target("C"),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("B", 10),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("C", 20)), 30, null, true);
+        jumping.begin(null);
+        jumping.step(15);
+        if (!"C".equals(jumping.current())) {
+            throw new IllegalStateException(""goto C" landed in '" + jumping.current() + "' instead");
+        }
+
+        // sections that would be empty are left out and reported, not silently played as zero-length passes
+        var dropped = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("twin", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("past-the-end", 40)), 20, null, true);
+        if (dropped.names().size() != 1 || dropped.skipped().size() != 2) {
+            throw new IllegalStateException("Empty sections were not left out: kept " + dropped.names()
+                    + ", skipped " + dropped.skipped());
+        }
+
+        // a destroy walks into the release section and plays it once instead of repeating it forever
+        var releasing = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0).repeat(
+                        com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("release", 10).repeat(
+                        com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)), 20, "release", true);
+        releasing.begin(null);
+        if (!releasing.beginWindDown()) {
+            throw new IllegalStateException("Stopping an effect with a release section did nothing");
+        }
+        releasing.applyPendingJump();
+        if (!"release".equals(releasing.current()) || !releasing.isReleased()) {
+            throw new IllegalStateException("The release section was not entered on stop");
+        }
+        // once through it, a forever release section must not repeat: the clock runs past its end, which is how the
+        // runtime knows the effect is finished and can let the remnants go
+        releasing.step(15);
+        if (releasing.time() <= 20) {
+            throw new IllegalStateException("A forever release section kept looping while the effect was stopped: "
+                    + "the clock is at " + releasing.time() + " instead of past the end");
+        }
+        Photon.LOGGER.info("[release-section-smoke] stopping enters the release section and it plays once, not forever");
+
+        // saving: a timeline without sections writes neither key, so every existing project reads and writes as before
+        var bare = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        var bareTag = bare.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        if (bareTag.contains("sections") || bareTag.contains("release")) {
+            throw new IllegalStateException("A timeline without sections saved extra keys: " + bareTag.getAllKeys());
+        }
+        // and one with them round-trips, including the parts that are only written when they differ from the default
+        var withSections = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        withSections.sections().add(new com.lowdragmc.photon.client.fx.timeline.TimelineSection("intro", 0)
+                .repeat(com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)
+                .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO).target("loop"));
+        withSections.sections().add(new com.lowdragmc.photon.client.fx.timeline.TimelineSection("loop", 10)
+                .repeat(3));
+        withSections.releaseSection("loop").releaseNow(false);
+        var tag = withSections.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        if (!tag.contains("sections") || !tag.contains("release")) {
+            throw new IllegalStateException("A timeline with sections did not save them");
+        }
+        var reloaded = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        reloaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), tag);
+        if (reloaded.sections().size() != 2
+                || !"intro".equals(reloaded.sections().get(0).name())
+                || reloaded.sections().get(0).repeat() != com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER
+                || reloaded.sections().get(0).then()
+                        != com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO
+                || !"loop".equals(reloaded.sections().get(0).target())
+                || Math.abs(reloaded.sections().get(1).start() - 10) > 1e-4
+                || reloaded.sections().get(1).repeat() != 3
+                || reloaded.sections().get(1).then()
+                        != com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.LINEAR
+                || !"loop".equals(reloaded.releaseSection())
+                || reloaded.releaseNow()) {
+            throw new IllegalStateException("Sections did not survive saving: " + reloaded.sections().size()
+                    + " section(s), release '" + reloaded.releaseSection() + "', now=" + reloaded.releaseNow());
+        }
+        // a project written before sections existed has no key at all and must load with none
+        var legacy = tag.copy();
+        legacy.remove("sections");
+        legacy.remove("release");
+        var old = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        old.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), legacy);
+        if (!old.sections().isEmpty() || old.releaseSection() != null || !old.releaseNow()) {
+            throw new IllegalStateException("An older project did not load as one implicit section");
+        }
+        Photon.LOGGER.info("[sections-save-smoke] sections and the release section survive saving, "
+                + "and an older project still loads as a single stretch");
     }
 
     /**

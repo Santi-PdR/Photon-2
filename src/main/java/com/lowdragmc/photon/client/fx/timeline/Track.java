@@ -174,6 +174,9 @@ public abstract class Track {
             if (clip.exitMode() == Clip.ExitMode.DRAIN) {
                 c.putString("exit", "drain");
             }
+            if (clip.seamMode() == Clip.SeamMode.RESTART) {
+                c.putString("seam", "restart");
+            }
             writeClipExtra(clip, c, provider);
             list.add(c);
         }
@@ -197,6 +200,8 @@ public abstract class Track {
                 clip.seed(c.getLong("seed")).randomSeed(c.getBoolean("randomSeed"));
                 // a file with no "exit" predates the setting: cut, which is what it always did
                 clip.exitMode("drain".equals(c.getString("exit")) ? Clip.ExitMode.DRAIN : Clip.ExitMode.CUT);
+                // same for "seam": absent means the historical behaviour, keep playing what still plays
+                clip.seamMode("restart".equals(c.getString("seam")) ? Clip.SeamMode.RESTART : Clip.SeamMode.AUTO);
                 readClipExtra(clip, c, provider);
                 clips.add(clip);
             }

@@ -148,6 +148,16 @@ public class ControlTrackEditor extends ClipTrackEditor {
                         : "photon.gui.editor.timeline.edit_clip.exit_mode.cut",
                 (mode, subGroup) -> { })
         );
+        // what happens when the timeline wraps a repeating section or jumps while this clip is still on
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
+                "photon.gui.editor.timeline.edit_clip.seam_mode", clip::seamMode,
+                v -> { clip.seamMode(v); ctx.refreshPreview(); }, clip.seamMode(), true,
+                List.of(Clip.SeamMode.AUTO, Clip.SeamMode.RESTART),
+                mode -> mode == Clip.SeamMode.RESTART
+                        ? "photon.gui.editor.timeline.edit_clip.seam_mode.restart"
+                        : "photon.gui.editor.timeline.edit_clip.seam_mode.auto",
+                (mode, subGroup) -> { })
+        );
     }
 
     @Override

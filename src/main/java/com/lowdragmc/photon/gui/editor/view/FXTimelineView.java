@@ -1696,6 +1696,9 @@ public class FXTimelineView extends View implements TimelineContext {
             runtime.timelinePlayer.setAudioDispatch(isPlaying());
             // in the editor, 3D clips play non-positional so they're audible in the preview
             runtime.timelinePlayer.setEditorPreview(true);
+            // sections (repeats, jumps) only steer live playback: a scrub replays from 0 in time order, so it must
+            // not loop a section forever or jump away from where the playhead was asked to go
+            runtime.timelinePlayer.setFollowSections(isPlaying());
         }
     }
 

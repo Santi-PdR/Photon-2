@@ -1893,5 +1893,8 @@
   "photon.emitter.config.lifetimeMode": "How the lifetime drives T (the 0-1 age every over-lifetime curve reads). Once: T runs 0 to 1 and the particle dies. Loop: T starts over every lifetime and the particle never dies of age. PingPong: T goes 0 to 1 and back, so curves need not match at their ends. Looping particles finish the cycle they are in and die when their emitter is stopped (a drain, or the effect being stopped).",
   "photon.gui.editor.timeline.edit_clip.exit_mode": "Exit",
   "photon.gui.editor.timeline.edit_clip.exit_mode.cut": "Cut (stops at once)",
-  "photon.gui.editor.timeline.edit_clip.exit_mode.drain": "Drain (lets what is showing finish)"
+  "photon.gui.editor.timeline.edit_clip.exit_mode.drain": "Drain (lets what is showing finish)",
+  "photon.gui.editor.timeline.edit_clip.seam_mode": "On a section wrap or jump",
+  "photon.gui.editor.timeline.edit_clip.seam_mode.auto": "Auto (keep playing, restart what finished)",
+  "photon.gui.editor.timeline.edit_clip.seam_mode.restart": "Restart every time"
 }
