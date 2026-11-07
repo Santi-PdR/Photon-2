@@ -6,7 +6,7 @@ Este documento resume el estado del mod y las decisiones del port para que Santi
 
 - **Mod:** Photon, toolkit de efectos visuales (VFX) para Minecraft.
 - **Repositorio:** [Santi-PdR/Photon-2](https://github.com/Santi-PdR/Photon-2).
-- **Base del port:** Photon upstream `v26.2.2.9`.
+- **Base del port:** Photon upstream `v26.2.2.9` (lógica), con la capa de comportamiento de `26.3.2.11` portada archivo por archivo. Ver [Photon2-Upstream-26.3-Analisis.md](Photon2-Upstream-26.3-Analisis.md) para el diff y qué es portable.
 - **Destino:** Minecraft `1.20.1`, Forge `47.x` (compilación actual con `47.4.28`; metadata declara compatibilidad desde `47.4.10`), Java 17.
 - **ID de mod:** `photon`.
 - **Licencia:** CC BY-NC-SA 4.0.
@@ -75,6 +75,98 @@ Este mecanismo resuelve el objetivo de Alex de añadir efectos en el servidor si
 Los clientes que ya están conectados reciben la actualización al volver a entrar; el flujo documentado no promete una descarga instantánea a mitad de sesión. Servidor y cliente necesitan tener Photon instalado, pero cuando sólo cambian FX/assets no hace falta reconstruir ni sustituir el JAR de Photon. Para cambiar código/funciones del mod sí se necesita una versión nueva del mod.
 
 Límites de validación del lado del servidor en `FxPackSync`: hasta 32 packs por manifiesto, 64 MiB por pack, 128 MiB de transferencia total, 256 MiB expandidos por ZIP y 20 000 entradas. El código rechaza rutas ZIP sospechosas y verifica los hashes.
+
+## Etapa actual: texturas sueltas, conversión completa y packs en caliente
+
+Cierre de los tres reportes de Alex sobre el pack `cursedfate`, más lo que salió al revisarlos.
+PR [#7](https://github.com/Santi-PdR/Photon-2/pull/7), merge `9ae02dd`.
+
+### 1. Las imágenes no se encontraban (cuadriculado violeta)
+
+`TextureMaterial` pedía el ID tal cual y, si ningún pack montado lo servía, dibujaba la textura de
+error. `PhotonAssetPath.fromFile` sólo aceptaba archivos bajo `<gameDir>/photon/assets` con un
+segmento `assets` y dos partes de ruta, así que el selector descartaba en silencio cualquier archivo
+de una carpeta del autor.
+
+Ahora hay un buscador (`client/fx/LooseTextures.java`) que busca el ID del material **en disco**, no
+sólo en los packs montados, y adopta el archivo al workspace para que el ID siga resolviendo al
+exportar. Es deliberadamente tolerante, en este orden:
+
+1. el ID en su propio namespace (`assets/<ns>/<ruta>`);
+2. el mismo ID bajo **cualquier otro** namespace que exista en disco;
+3. el nombre del archivo en cualquier punto de las carpetas buscadas.
+
+Carpetas buscadas: el workspace de Photon, `assets/` del workspace, `ldlib2`, `ldlib`, todos los
+resource packs instalados (activados o no) y lo que se agregue en `[assets] extra_roots` de la config
+(por ejemplo `.../cursedfate`). El selector de imágenes del editor ya no se queda callado: dice por
+qué rechaza un archivo, en el chat y en el log.
+
+### 2. «Convierto todos los FX del Photon 1 y no aparece todo»
+
+Tres causas distintas, las tres cerradas:
+
+- **El ID quedaba invisible.** La conversión escribía `assets/photon/fx_old/<nombre>.fx` *dentro* de
+  `assets/photon/fx/`, así que el ID salía `photon:fx_old/<nombre>`; el selector pide
+  `photon:<nombre>`, sin ese segmento, y nunca lo listaba. Ahora el destino es plano
+  (`FXCompat.destination()`), y un resultado anidado viejo se **reporta**, no se mueve solo.
+- **Sólo se leía una carpeta.** `convertAllFX()` ahora recorre las tres raíces legacy (workspace,
+  `ldlib2`, `ldlib`) y devuelve un informe: convertidos, omitidos con motivo, fallidos y carpetas
+  leídas. `/photon_client convert` lo imprime entero.
+- **No había forma de saber qué pasó.** `/photon_client convert status` lista cada `.fx` encontrado y
+  si ya tiene gemelo convertido, sin convertir nada.
+
+### 3. Recargar recursos (F3+T) ya casi nunca hace falta
+
+Los packs se montan en el *pack repository* de Minecraft, que sólo se vuelve a leer en una recarga.
+Antes eso significaba F3+T manual después de cada cambio. Ahora Photon lo resuelve solo:
+
+| Situación | Necesita F3+T |
+| --- | --- |
+| Copiar un `.fxpack` en `photon/fxpacks/` | No: `FxPackWatcher` lo detecta en ~1 s y recarga |
+| Exportar desde el editor | No: el editor recarga al exportar |
+| `/photon_client convert` | No: recarga al terminar si convirtió algo |
+| Un pack llega del servidor | No: recarga al terminar la descarga |
+| Editar a mano en `photon/assets/` | Sí, o `/photon_client reload` |
+| Cambiar `assets.extra_roots` | Sí, o `/photon_client reload` |
+| Una textura suelta que aparece después | No: se busca al vuelo y se copia al workspace |
+
+`FxPackWatcher` espera a que el tamaño del archivo se estabilice (no monta un zip a medio copiar),
+limita a 3 recargas por minuto para que un pack roto no entre en bucle, y su primera pasada sólo
+toma una foto inicial para no recargar al arrancar. `/photon_client reload` es el equivalente exacto
+de F3+T desde el chat.
+
+### 4. Un jugador que ya está dentro cuando se sube un pack
+
+El manifiesto sólo se enviaba en el login, así que un pack subido mientras alguien jugaba era
+invisible para esa persona hasta reconectarse. Ahora:
+
+- `/photon fxpacks` (servidor, nivel 2) re-escanea la carpeta y re-ofrece la lista a todos los online.
+- `/photon_client fxpacks` pide la lista al servidor en ese momento.
+- El manifiesto también se reenvía al cambiar de dimensión y al reaparecer.
+
+El refresco reutiliza el paquete ya existente (`RequestPacket` con hash vacío y offset `-1`,
+distinguido con `isRefresh()`), así que la validación de tamaño, hash e integridad es la misma de
+siempre. La descarga sigue recargando los recursos sola al terminar.
+
+### Comandos nuevos
+
+| Comando | Lado | Qué hace |
+| --- | --- | --- |
+| `/photon_client convert` | cliente | Convierte Photon 1 → 2 con informe completo y recarga |
+| `/photon_client convert status` | cliente | Lista los `.fx` encontrados y si ya están convertidos |
+| `/photon_client textures` | cliente | Raíces buscadas, namespaces hallados, y cada ID con estado `pack` / `loose folder` / `MISSING` |
+| `/photon_client reload` | cliente | F3+T desde el chat |
+| `/photon_client fxpacks` | cliente | Pide al servidor la lista de packs |
+| `/photon fxpacks` | servidor | Re-ofrece los packs a todos los jugadores online |
+
+### Límites de esta etapa (verificado en CI, no en juego)
+
+- CI run `42407401586`, verde, con los marcadores `[loose-texture-smoke]`,
+  `[photon1-conversion-report-smoke]`, `[slider-drag-smoke]`, `[bloom-control-smoke]` y
+  `[editor-open]` como candados obligatorios.
+- Los smoke tests cubren la búsqueda de una textura fuera de todo pack (incluido el caso de namespace
+  distinto) y la conversión plana con su informe. **No** certifican cómo se ve cada efecto en juego:
+  eso sigue necesitando la prueba de Alex.
 
 ## Audio
 
