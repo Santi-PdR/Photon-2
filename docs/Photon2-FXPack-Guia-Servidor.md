@@ -68,8 +68,13 @@ prioridad lo tapa ("shadowed") o si hay que recargar recursos ("not mounted" →
 
 1. Copia el `.fxpack` dentro de `<instancia>/photon/fxpacks/`.
    - Si el archivo lo hizo el mismo juego, seguramente ya está ahí.
-2. Recarga recursos: **F3+T** (o salir y entrar).
-3. Ya está. No se toca `mods/`, no se toca `config/`.
+2. Espera un segundo. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete nuevo o
+   reemplazado (avisa en el log: `fxpacks: detected new pack ...` y luego `reloading resources
+   automatically`).
+3. Si querés forzarlo, `/photon_client reload` hace exactamente lo mismo que **F3+T**, sin salir del
+   juego ni buscar la tecla.
+
+No se toca `mods/`, no se toca `config/`.
 
 Notas útiles:
 
@@ -103,10 +108,13 @@ Photon ya trae ese circuito hecho. Funciona así:
    ```
 
    Sólo se leen archivos que terminen en `.fxpack` y que estén directamente en esa carpeta
-   (no en subcarpetas del servidor).
+   (no en subcarpetas del servidor). El servidor **no** necesita recargar nada a mano: el hash se
+   calcula al leer el archivo, y cada jugador que entra recibe el anuncio.
 
-3. Reinicia o cambia el archivo y pide a los jugadores que **vuelvan a entrar**. Photon anuncia los
-   paquetes al jugador en el momento del login.
+3. Cambia el archivo y pide a los jugadores que **vuelvan a entrar**. Photon anuncia los paquetes al
+   jugador en el momento del login; no hay comando que "empuje" un paquete a quien ya está dentro.
+   El cliente tampoco necesita F3+T: cuando la descarga termina, Photon recarga los recursos solo
+   (`Server Photon FX packs are ready`).
 
 ### 4.2 Qué pasa cuando un jugador entra
 
@@ -196,6 +204,12 @@ los del servidor.
 
 **¿Puedo actualizar un paquete mientras el servidor está encendido?** Sí, el siguiente jugador que
 entre recibe la versión nueva; los que ya están dentro, al reconectar.
+
+**¿Cuándo hay que apretar F3+T entonces?** Casi nunca. Photon recarga solo en estos cuatro casos:
+un `.fxpack` que aparece o cambia en `photon/fxpacks/`, un paquete que llega del servidor, una
+exportación desde el editor, y una conversión de Photon 1 a 2 (`/photon_client convert`). El atajo
+manual sigue existiendo (`/photon_client reload` o F3+T) por si editás archivos fuera del juego
+—por ejemplo a mano dentro de `photon/assets/`— y querés verlo al instante.
 
 **¿Y si mi servidor usa un proxy (BungeeCord/Velocity)?** Photon anuncia desde el servidor de Forge;
 coloca los paquetes en el `photon/fxpacks/` de **cada** servidor que los use.
