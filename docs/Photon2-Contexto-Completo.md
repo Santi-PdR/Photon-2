@@ -242,6 +242,8 @@ gh run download <RUN_ID> -R Santi-PdR/Photon-2 -n photon-forge-1.20.1
 | --- | --- | --- | --- |
 | Ronda 1 (bloom + fallbacks) | `b9489f2` | run `42310663551` ✅ | `photon-forge-1.20.1` id `13548900490` |
 | **Ronda 2 (picker + control de bloom + guía)** | `0fbf2ad` | run `42384055373` (build **#526**) ✅ | `photon-forge-1.20.1` id `13578638461` (13 378 526 B) · diagnóstico `13578569377` |
+| Docs y limpieza de repo | `c5bf27b` | run `42386451673` ✅ | — (solo documentación) |
+| **Merge del port a `main`** | `61fcf63` | PR #1 ✅ | build lanzado desde `main` |
 
 - Ruta de descarga directa: `https://github.com/Santi-PdR/Photon-2/actions/runs/42384055373/artifacts/13578638461`
 - Los artifacts de GitHub caducan a los **90 días**.
@@ -263,29 +265,33 @@ Estos registros vivían en las ramas `backup/photon-forge-*`, que se eliminaron 
 
 ## 10. Estado del repositorio y limpieza de ramas
 
-Situación al momento de escribir esto (2026-11-07):
+### 10.1 Situación final (2026-11-07)
 
-| Rama | Contenido | Destino |
-| --- | --- | --- |
-| `main` | Solo `Initial commit` (README) — **vacía de código** | Recibe el merge del port |
-| `port/forge-1.20.1-2.2.9` | Rama del port (289 commits) | Base del merge a `main`, luego se puede borrar |
-| `arena/9edfd416-photon-2` | Rondas 1 y 2 sobre el port | PR #4 → port, luego se puede borrar |
-| `fix/photon-owned-workspace` | Contenido ya integrado (0 commits propios) | Borrada |
-| `backup/port-forge-before-alex-captures-24d4306` | Contenido ya integrado (0 commits propios) | Borrada |
-| `fix/alex-four-captures-2026-11-06` | 27 commits, todos mergeados como squash en `port` (PR #3) | Borrada |
-| `port/forge-1.20.1-sync-sound` | 4 commits, todos integrados vía PR #2 (squash) | Borrada |
-| `backup/photon-forge-1.20.1-run155` | 4 commits solo de notas de JAR | Borrada (contenido rescatado en la tabla de la sección 9) |
-| `backup/photon-forge-run177` | 2 commits solo de notas de JAR | Borrada (idem) |
+El port **está en `main`**. Estado tras la limpieza:
 
-> Se verificó con `git diff` que **ninguna** de las ramas borradas aporta código que no esté ya en `port/forge-1.20.1-2.2.9`: sus diferencias son solo assets de fixtures de CI (`ldlib2/assets/...`), workflows de verificación temporales y los ficheros de notas rescatados arriba.
+| Rama | Estado |
+| --- | --- |
+| `main` | **Rama única de trabajo.** Contiene el port completo + rondas 1 y 2. Commit de merge `61fcf63`. |
+| `arena/9edfd416-photon-2` | Rama de la sesión del agente en Arena; se conserva porque la plataforma la usa para seguir el trabajo. Apunta al mismo contenido que `main` y no debe usarse como base de desarrollo. |
 
-### Política recomendada a partir de ahora
+Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
-- Todo entra por PR a `main`.
-- Ramas de trabajo con vida corta (`fix/...`, `feat/...`), borradas al mergear.
-- Para cortes estables usar **tags** (`v26.2.2.9-forge.1.20.1-rc1`) en vez de ramas `backup/*`.
+| Rama | Por qué se pudo borrar |
+| --- | --- |
+| `port/forge-1.20.1-2.2.9` | Ancestro directo de `main` tras el merge del PR #1. |
+| `fix/photon-owned-workspace` | 0 commits propios; contenido ya integrado. |
+| `backup/port-forge-before-alex-captures-24d4306` | 0 commits propios; snapshot previo a las capturas de Alex. |
+| `fix/alex-four-captures-2026-11-06` | 27 commits, todos integrados vía PR #3 (squash). Sus diferencias son solo el estado **anterior** del código que la ronda 2 ya reemplazó. |
+| `port/forge-1.20.1-sync-sound` | 4 commits, integrados vía PR #2 (squash). |
+| `backup/photon-forge-1.20.1-run155` | Solo notas de JARs validados → **rescatadas en la sección 9**. |
+| `backup/photon-forge-run177` | Solo notas de JARs validados + workflows temporales (`backup-run177.yml`, `verify-candidate-run205.yml`). |
 
----
+### 10.2 Política recomendada de aquí en adelante
+
+- Todo entra por **PR a `main`**; ramas de trabajo cortas (`fix/...`, `feat/...`) borradas al mergear.
+- Para hitos estables usar **tags** (ya existe `v26.2.2.9-forge.1.20.1`), no ramas `backup/*`.
+- Los JARs se publican como **release adjunta al tag**; los artifacts de Actions caducan a los 90 días.
+- El contexto se mantiene en **este documento**, no repartido en ramas.
 
 ## 11. Pendientes y siguientes pasos sugeridos
 
