@@ -287,7 +287,7 @@ public final class PhotonFXEditorSmokeTest {
         jumping.begin(null);
         jumping.step(15);
         if (!"C".equals(jumping.current())) {
-            throw new IllegalStateException(""goto C" landed in '" + jumping.current() + "' instead");
+            throw new IllegalStateException("\"goto C\" landed in '" + jumping.current() + "' instead");
         }
 
         // sections that would be empty are left out and reported, not silently played as zero-length passes
