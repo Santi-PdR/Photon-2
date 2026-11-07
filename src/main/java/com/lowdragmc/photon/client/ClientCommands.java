@@ -150,7 +150,7 @@ public class ClientCommands {
                                                 }
                                             }
                                             return 1;
-                                        })),
+                                        }))
                         .then(createLiteral("textures")
                                 .executes(context -> {
                                     // why a texture does not show: where Photon looks, what it found there, and what
