@@ -274,7 +274,7 @@ public final class PhotonFXEditorSmokeTest {
         ending.begin(null);
         ending.step(25);
         if (!ending.endPending() && !ending.ended()) {
-            throw new IllegalStateException(""then: end" let the clock run past the end of its section to "
+            throw new IllegalStateException("\"then: end\" let the clock run past the end of its section to "
                     + ending.time());
         }
 
