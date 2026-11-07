@@ -392,11 +392,18 @@ public final class PhotonFXEditorSmokeTest {
                 + "moves a playing timeline into the named section");
     }
 
+    /** The raw child nodes of a command node (Brigadier keeps them under a Set). */
+    private static java.util.List<com.mojang.brigadier.tree.CommandNode<?>> children(Object node) {
+        if (node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder) {
+            return java.util.List.copyOf(builder.getArguments());
+        }
+        return java.util.List.of();
+    }
+
     /** The literal child {@code name} of a command node, or null. */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<?> literal(Object node, String name) {
-        if (!(node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder)) return null;
-        for (var child : builder.getArguments()) {
-            if (child instanceof com.mojang.brigadier.builder.LiteralArgumentBuilder<?> literal
+    private static Object literal(Object node, String name) {
+        for (var child : children(node)) {
+            if (child instanceof com.mojang.brigadier.tree.LiteralCommandNode<?> literal
                     && name.equals(literal.getLiteral())) {
                 return literal;
             }
@@ -406,9 +413,8 @@ public final class PhotonFXEditorSmokeTest {
 
     /** The argument child named {@code name} of a command node, or null (arguments are named, not literal). */
     private static Object argument(Object node, String name) {
-        if (!(node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder)) return null;
-        for (var child : builder.getArguments()) {
-            if (child instanceof com.mojang.brigadier.builder.RequiredArgumentBuilder<?, ?> argument
+        for (var child : children(node)) {
+            if (child instanceof com.mojang.brigadier.tree.ArgumentCommandNode<?, ?> argument
                     && name.equals(argument.getName())) {
                 return argument;
             }
