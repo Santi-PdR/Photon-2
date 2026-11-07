@@ -72,7 +72,7 @@ Este mecanismo resuelve el objetivo de Alex de añadir efectos en el servidor si
 4. El cliente valida/guarda el paquete en su caché y actualiza los recursos de Photon automáticamente, sin que el jugador use F3+T ni reinstale el mod.
 5. El efecto se ejecuta usando el mismo namespace e ID incluido en el pack.
 
-Los clientes que ya están conectados reciben la actualización al volver a entrar; el flujo documentado no promete una descarga instantánea a mitad de sesión. Servidor y cliente necesitan tener Photon instalado, pero cuando sólo cambian FX/assets no hace falta reconstruir ni sustituir el JAR de Photon. Para cambiar código/funciones del mod sí se necesita una versión nueva del mod.
+Los clientes que ya están conectados **sí** pueden recibir un pack subido después de que entraron: `/photon fxpacks` en el servidor re-ofrece la lista a todos, `/photon_client fxpacks` la pide desde el cliente, y el manifiesto también se reenvía al cambiar de dimensión o reaparecer. Reconectar sigue funcionando y es lo más simple si son muchos jugadores. Servidor y cliente necesitan tener Photon instalado, pero cuando sólo cambian FX/assets no hace falta reconstruir ni sustituir el JAR de Photon. Para cambiar código/funciones del mod sí se necesita una versión nueva del mod.
 
 Límites de validación del lado del servidor en `FxPackSync`: hasta 32 packs por manifiesto, 64 MiB por pack, 128 MiB de transferencia total, 256 MiB expandidos por ZIP y 20 000 entradas. El código rechaza rutas ZIP sospechosas y verifica los hashes.
 
