@@ -232,6 +232,75 @@ public final class PhotonFXEditorSmokeTest {
 
         verifySliderDragsContinuously();
         verifyLooseTextureLookup();
+        verifyCyclicLifetimes();
+    }
+
+    /**
+     * The two lifetime modes ported from 26.3, checked where they actually decide something: {@code T} per tick.
+     * <p>
+     * {@code Once} must behave exactly as before (0 → 1, then it holds 1) so nothing that already worked changes.
+     * {@code Loop} must return to 0 at every lifetime instead of clamping — that is the whole point of the mode.
+     * {@code PingPong} must come back down, which is what a ping-pong particle draws differently from a looping one.
+     * The clamp is what the old code did, so a regression here would silently make the setting a no-op.
+     */
+    private static void verifyCyclicLifetimes() {
+        var once = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.Once;
+        var loop = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.Loop;
+        var pingPong = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.PingPong;
+        var lifetime = 20;
+        // once: monotonic, saturates at 1 and stays there
+        if (Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(once, 10, lifetime) - 0.5f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(once, 40, lifetime) - 1f) > 1e-4
+                || once.cyclic()) {
+            throw new IllegalStateException("Once no longer runs 0 to 1 and holds at 1");
+        }
+        // loop: one full lifetime later it is back at the start, not past the end
+        var loopHalf = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 10, lifetime);
+        var loopWrapped = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 10 + lifetime, lifetime);
+        if (Math.abs(loopHalf - 0.5f) > 1e-4 || Math.abs(loopWrapped - 0.5f) > 1e-4 || !loop.cyclic()) {
+            throw new IllegalStateException("Loop did not wrap back to the same phase: " + loopHalf + " then "
+                    + loopWrapped);
+        }
+        // ping-pong: the second cycle runs backwards
+        var out = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 5, lifetime);
+        var back = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 15, lifetime);
+        var returned = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 25, lifetime);
+        if (Math.abs(out - 0.25f) > 1e-4 || Math.abs(back - 0.75f) > 1e-4 || Math.abs(returned - 0.25f) > 1e-4) {
+            throw new IllegalStateException("PingPong did not go out and back: " + out + ", " + back + ", " + returned);
+        }
+        // a cyclic particle only dies because its emitter stopped: it finishes the cycle it is in
+        var endAge = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.endOfCycle(25, lifetime);
+        if (Math.abs(endAge - 40f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.finalT(pingPong, endAge, lifetime)) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 41, lifetime, endAge) - 1f) > 1e-4) {
+            throw new IllegalStateException("A cyclic particle did not finish and hold its last cycle value");
+        }
+        Photon.LOGGER.info("[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns "
+                + "({} -> {} -> {})", out, back, returned);
+
+        // the exit mode survives a save/load round trip and an old file (no "exit") still reads as Cut
+        var track = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        track.clips().add(new com.lowdragmc.photon.client.fx.timeline.Clip(0.0, 20.0, 1f)
+                .exitMode(com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.DRAIN));
+        var saved = track.writeData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        var reread = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        reread.readData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), saved);
+        if (reread.clips().size() != 1
+                || reread.clips().get(0).exitMode() != com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.DRAIN) {
+            throw new IllegalStateException("A draining clip did not survive saving");
+        }
+        // and a project written before the setting existed still reads as Cut, which is what it always did
+        var legacy = saved.copy();
+        for (var entry : legacy.getList("clips", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            if (entry instanceof net.minecraft.nbt.CompoundTag tag) tag.remove("exit");
+        }
+        var old = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        old.readData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), legacy);
+        if (old.clips().isEmpty()
+                || old.clips().get(0).exitMode() != com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.CUT) {
+            throw new IllegalStateException("A project saved before the setting existed did not read as Cut");
+        }
+        Photon.LOGGER.info("[drain-exit-smoke] a draining clip survives saving and an older project still reads as Cut");
     }
 
     /**

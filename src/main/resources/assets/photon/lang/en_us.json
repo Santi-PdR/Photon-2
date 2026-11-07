@@ -1888,5 +1888,9 @@
   "keymap.photon.playback.stop": "Stop FX Timeline",
   "keymap.photon.playback.step_back": "Step FX Timeline Back",
   "keymap.photon.playback.step_forward": "Step FX Timeline Forward",
-  "keymap.photon.playback.reload_effect": "Reload FX Project"
+  "keymap.photon.playback.reload_effect": "Reload FX Project",
+  "ParticleConfig.lifetimeMode": "Lifetime Mode",
+  "photon.emitter.config.lifetimeMode": "How the lifetime drives T (the 0-1 age every over-lifetime curve reads). Once: T runs 0 to 1 and the particle dies. Loop: T starts over every lifetime and the particle never dies of age. PingPong: T goes 0 to 1 and back, so curves need not match at their ends. Looping particles finish the cycle they are in and die when their emitter is stopped (a drain, or the effect being stopped).",
+  "photon.clip.exitMode": "Exit",
+  "photon.clip.exit_mode.tooltip": "What happens when this clip stops covering the object. Cut: it stops at once. Drain: it stops doing new work and lets what is already on screen finish, so the effect ends instead of disappearing."
 }

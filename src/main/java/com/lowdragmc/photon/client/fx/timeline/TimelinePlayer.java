@@ -38,6 +38,12 @@ public class TimelinePlayer {
     private final Timeline timeline;
     /** Per-object previously-active control clip, used to detect restart (enter/switch) transitions. */
     private final Map<UUID, Clip> lastControlClip = new HashMap<>();
+    /**
+     * Objects that left a draining control clip and still have something to show. They keep ticking (see
+     * {@link TimelineState#resolve(boolean, boolean, boolean, boolean, boolean)}) until what they emitted is gone, so
+     * an effect ends instead of disappearing. Ported from Photon 26.3.
+     */
+    private final Set<UUID> draining = new HashSet<>();
     /** Objects controlled on the previous evaluation, to revert ones that stop being controlled. */
     private final Set<UUID> lastControlled = new HashSet<>();
     /** Objects speed-controlled on the previous evaluation, to revert ones that stop (back to speed 1). */
@@ -106,6 +112,7 @@ public class TimelinePlayer {
         this.stopped = false;
         this.lastSignalTick = -1;
         this.lastControlClip.clear();
+        this.draining.clear();
         this.lastControlled.clear();
         this.lastSpeedControlled.clear();
         this.lastAnimated.clear();
@@ -270,16 +277,29 @@ public class TimelinePlayer {
                 }
             }
 
-            // control restart: reset + reseed when entering (or switching to) a control clip
+            // control restart: reset + reseed when entering (or switching to) a control clip.
+            // Nothing new starts under something winding down: a clip coming on there is as if it were not there.
             var previous = lastControlClip.get(id);
+            if (controlClip != null && controlClip != previous && object.hasWindingDownAncestor()) {
+                controlClip = null;
+            }
             if (controlClip != previous) {
                 if (controlClip != null) {
+                    draining.remove(id);
                     restart(object, controlClip);
+                } else if (previous != null && previous.exitMode() == Clip.ExitMode.DRAIN) {
+                    // the clip ended and asked to drain: stop new work, let what is on screen finish
+                    windDown(object);
+                    draining.add(id);
                 }
                 lastControlClip.put(id, controlClip);
             }
+            if (controlClip == null && draining.contains(id) && !stillShowing(object)) {
+                draining.remove(id);
+            }
 
-            var state = TimelineState.resolve(hasActivator, activatorActive, hasControl, controlClip != null);
+            var state = TimelineState.resolve(hasActivator, activatorActive, hasControl, controlClip != null,
+                    draining.contains(id));
             gate(object, state.tick(), state.render());
         }
 
@@ -454,6 +474,23 @@ public class TimelinePlayer {
                 }
             }
         }
+    }
+
+    /**
+     * Stop new work in {@code object}'s subtree and let what is already on screen finish. The gate keeps the object
+     * ticking, so its particles age out and its emitters close their cycle; when nothing shows any more it is left
+     * alone like any other released object.
+     */
+    protected void windDown(FXObject object) {
+        object.windDown();
+    }
+
+    /**
+     * Whether a drained object still has something worth ticking for. A leaf emitter is done when it holds no
+     * particles; a parent is done when nothing under it shows. Cheap, and only consulted for draining objects.
+     */
+    protected boolean stillShowing(FXObject object) {
+        return object.hasVisibleRemnants();
     }
 
     /**

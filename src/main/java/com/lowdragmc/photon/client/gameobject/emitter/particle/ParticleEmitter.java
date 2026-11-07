@@ -1113,6 +1113,15 @@ public class ParticleEmitter extends Emitter {
         collisionWorld = null;
     }
 
+    /**
+     * A draining emitter is done when it holds no particles at all: the ones in flight finished and nothing new is
+     * being spawned, since winding down stops new work.
+     */
+    @Override
+    public boolean hasVisibleRemnants() {
+        return !waitToAdded.isEmpty() || getParticleAmount() > 0 || super.hasVisibleRemnants();
+    }
+
     @Override
     public void remove(boolean force) {
         super.remove(force);

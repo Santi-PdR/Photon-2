@@ -170,6 +170,10 @@ public abstract class Track {
             }
             c.putLong("seed", clip.seed());
             c.putBoolean("randomSeed", clip.randomSeed());
+            // only written when it differs from the historical default, so an untouched project saves the same bytes
+            if (clip.exitMode() == Clip.ExitMode.DRAIN) {
+                c.putString("exit", "drain");
+            }
             writeClipExtra(clip, c, provider);
             list.add(c);
         }
@@ -191,6 +195,8 @@ public abstract class Track {
                     clip.targetId(c.getUUID("clipTarget"));
                 }
                 clip.seed(c.getLong("seed")).randomSeed(c.getBoolean("randomSeed"));
+                // a file with no "exit" predates the setting: cut, which is what it always did
+                clip.exitMode("drain".equals(c.getString("exit")) ? Clip.ExitMode.DRAIN : Clip.ExitMode.CUT);
                 readClipExtra(clip, c, provider);
                 clips.add(clip);
             }
