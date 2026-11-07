@@ -14,5 +14,7 @@
   "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo",
   "photon.gui.editor.timeline.audio.ogg": "Audio OGG personalizado",
   "photon.gui.editor.timeline.audio.import_ogg": "Importar .ogg",
-  "photon.gui.editor.timeline.audio.loop": "Repetir sonido"
+  "photon.gui.editor.timeline.audio.loop": "Repetir sonido",
+  "photon.configuration.bloom_intensity_in_scene": "Intensidad de bloom (barra de escena)",
+  "photon.configuration.bloom_intensity_in_scene.tooltip": "Mueve el deslizador para reforzar o suavizar el halo de bloom sin abrir la configuración. Escribe el mismo valor que Intensidad de bloom (0 a 2); el valor por defecto no cambia."
 }

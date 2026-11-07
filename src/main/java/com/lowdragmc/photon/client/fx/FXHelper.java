@@ -164,6 +164,35 @@ public class FXHelper {
         return listing;
     }
 
+    /**
+     * The search every effect picker runs: the ids that match {@code word}, handed to {@code handler} in listing
+     * order. The empty word lists everything, and an empty entry is what clears the selection.
+     * <p>
+     * The listing is read on every search rather than captured when the picker was built: a picker (or an
+     * emitter's configurator) can outlive a resource reload, and a mounted {@code .fxpack} only becomes listable
+     * then — a list frozen at build time would keep showing the effects that existed when the panel opened, and
+     * nothing at all when it opened before the first scan finished. {@link #listAllFX()} is cached, so this is a
+     * list read per keystroke, not a walk over every pack. Any thread: the search runs on a worker.
+     */
+    public static void searchFX(String word, java.util.function.Consumer<String> handler) {
+        searchFX(word, handler, true);
+    }
+
+    /** {@link #searchFX(String, java.util.function.Consumer)}, with the leading empty entry optional: a picker
+     *  whose result cannot be cleared has no use for a "---" row. */
+    public static void searchFX(String word, java.util.function.Consumer<String> handler, boolean clearEntry) {
+        if (clearEntry) handler.accept("");
+        var search = word == null ? "" : word.toLowerCase(java.util.Locale.ROOT);
+        for (var fx : listAllFX()) {
+            // the search runs off-thread and is cancelled when the query moves on
+            if (Thread.currentThread().isInterrupted()) return;
+            var id = fx.toString();
+            if (id.toLowerCase(java.util.Locale.ROOT).contains(search)) {
+                handler.accept(id);
+            }
+        }
+    }
+
 
     @Nullable
     public static FX getFX(ResourceLocation fxLocation, boolean useCache) {

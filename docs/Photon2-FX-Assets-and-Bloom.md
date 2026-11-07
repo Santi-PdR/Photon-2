@@ -78,7 +78,9 @@ también se monta automáticamente como recurso legado.
   sobre una capa de FX suelta (composición tardía, shader packs) la máscara queda neutra porque ahí sólo
   hay FX.
 - **Intensidad:** el control global va de `0` a `2` y empieza en `0.18` para conservar el detalle de la escena.
-  Se encuentra en **Mods → Photon → Config**.
+  Se encuentra en **Mods → Photon → Config**, y también en la barra superior de la vista
+  **Scene**: junto al icono de bloom hay un deslizador con su valor (`0.00`–`2.00`) que escribe el
+  mismo `bloom_intensity`. El valor por defecto no cambia y los dos controles se mantienen sincronizados.
 - **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
 
 La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del

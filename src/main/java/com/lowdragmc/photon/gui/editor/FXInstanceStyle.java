@@ -9,8 +9,6 @@ import com.lowdragmc.photon.client.fx.FXHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.ArrayList;
-import java.util.Locale;
 import java.util.function.Consumer;
 
 /** How FX instances look in the editor, and the picker for the effect an instance places. */
@@ -23,8 +21,6 @@ public final class FXInstanceStyle {
 
     /** Ask for an effect by id, from every effect the game can load (mod jars, resource packs, fx packs). */
     public static void pickFx(FXEditor editor, Consumer<ResourceLocation> onPicked) {
-        var candidates = new ArrayList<String>();
-        FXHelper.listAllFX().forEach(fx -> candidates.add(fx.toString()));
         var chosen = new String[]{""};
         var dialog = new Dialog();
         dialog.overlay.layout(layout -> layout.width(240).maxWidthPercent(95));
@@ -32,13 +28,9 @@ public final class FXInstanceStyle {
         var content = new UIElement().layout(layout -> layout.widthPercent(100));
         content.addChild(new SearchComponentConfigurator<>("photon.fx_instance.pick.fx",
                 () -> chosen[0], value -> chosen[0] = value == null ? "" : value, "", true,
-                (word, handler) -> {
-                    var search = word.toLowerCase(Locale.ROOT);
-                    for (var candidate : candidates) {
-                        if (Thread.currentThread().isInterrupted()) return;
-                        if (candidate.toLowerCase(Locale.ROOT).contains(search)) handler.accept(candidate);
-                    }
-                },
+                // searched live: an effect exported or an .fxpack mounted while this dialog is open is
+                // listable on the next keystroke, and the picker never shows a list frozen at build time
+                (word, handler) -> FXHelper.searchFX(word, handler, false),
                 value -> value,
                 UIElementProvider.text(value -> Component.literal(value == null || value.isEmpty() ? "---" : value))));
         dialog.addContent(content);

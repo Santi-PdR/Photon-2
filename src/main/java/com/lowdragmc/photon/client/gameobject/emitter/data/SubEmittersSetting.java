@@ -45,7 +45,6 @@ import org.joml.Quaternionf;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -342,13 +341,6 @@ public class SubEmittersSetting extends ToggleGroup {
 
         @Override
         public void buildConfigurator(ConfiguratorGroup father) {
-            // The search runs per keystroke, so it gets a plain list to scan: FXHelper owns the caching
-            // (and drops it on resource reload), and the ids are turned into strings once here rather
-            // than once per search. The leading "" is the entry that clears the selection.
-            var candidates = new ArrayList<String>();
-            candidates.add("");
-            FXHelper.listAllFX().forEach(fx -> candidates.add(fx.toString()));
-
             father.addConfigurators(new SearchComponentConfigurator<>("fx",
                     () -> fxLocation != null ? fxLocation.toString() : legacySubFXName == null ? "" : legacySubFXName,
                     v -> {
@@ -356,16 +348,7 @@ public class SubEmittersSetting extends ToggleGroup {
                         fxLocation = (v == null || v.isEmpty()) ? null : new ResourceLocation(v);
                     },
                     "", true,
-                    (word, handler) -> {
-                        var search = word.toLowerCase(Locale.ROOT);
-                        for (var candidate : candidates) {
-                            // the search runs off-thread and is cancelled when the query moves on
-                            if (Thread.currentThread().isInterrupted()) return;
-                            if (candidate.toLowerCase(Locale.ROOT).contains(search)) {
-                                handler.accept(candidate);
-                            }
-                        }
-                    },
+                    FXHelper::searchFX,
                     s -> s,
                     UIElementProvider.text(s -> Component.literal(s == null || s.isEmpty() ? "---" : s)))
                     .setTips("photon.emitter.config.sub_emitters.emitter.name"));

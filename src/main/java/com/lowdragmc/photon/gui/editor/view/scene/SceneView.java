@@ -364,6 +364,9 @@ public class SceneView extends View implements FXSceneOptions {
                             .icon(PhotonIcons.BLOOM)
                             .tooltipKey("photon.is_bloom_visible")
                             .build(),
+                    // how strong the halo is, right beside what turns it on and off
+                    // (the row is reversed, so this lands immediately left of the bloom toggle)
+                    new SceneBloomIntensityControl(),
                     new SceneToggleBuilder(SceneView.this::isEffectsEnabled,
                             SceneView.this::setEffectsEnabled)
                             .icon(PhotonIcons.SHADER_GRAPH)
