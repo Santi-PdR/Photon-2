@@ -44,6 +44,18 @@ jobs:
           path: ${{ runner.temp }}/photon-build.log
           if-no-files-found: ignore
 
+      # Artifact downloads and raw job logs are unreachable from some environments (the blob storage
+      # refuses them); check-run annotations are not, so a failed compile says what broke right there.
+      - name: Publish compile errors as annotations
+        if: failure()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/photon-build.log"
+          [ -f "$log" ] || exit 0
+          grep -E '\.java:[0-9]+: (error|warning: \[.*\])|^e: |error: ' "$log" | head -n 40 | \
+            sed -E 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g' | \
+            while IFS= read -r line; do echo "::error title=compile::$line"; done
+
       - name: Verify packaged Photon mixin config and refmap
         shell: bash
         run: |
