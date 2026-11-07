@@ -63,7 +63,7 @@ public class ClientCommands {
                             .shouldCloseOnKeyInventory(false);
                     var screen = new ModularUIScreen(ui, Component.empty());
                     minecraft.setScreen(screen);
-                    com.lowdragmc.photon.Photon.LOGGER.info("[editor-open] /photon_editor -> screen in {} ms (window + UI mount)",
+                    Photon.LOGGER.info("[editor-open] /photon_editor -> screen in {} ms (window + UI mount)",
                             (System.nanoTime() - startedAt) / 1_000_000.0);
                     return 1;
                 }),
@@ -115,7 +115,8 @@ public class ClientCommands {
                         .then(Commands.literal("convert").requires(source -> source.hasPermission(2))
                                 .executes(context -> convertLegacyFx())
                                 .then(Commands.literal("status").executes(context -> legacyFxStatus())))
-                        .then(createLiteral("textures").executes(context -> textureStatus())),
+                        .then(createLiteral("textures").executes(context -> textureStatus()))
+                        .then(createLiteral("reload").executes(context -> reloadResources("requested"))),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be
                 // characterised by loading it and running "status".
@@ -189,8 +190,33 @@ public class ClientCommands {
         feedback("photon 1 -> 2 conversion");
         report.lines().forEach(ClientCommands::feedback);
         if (report.converted() > 0) {
-            feedback("Reload resources with F3+T to see them in the effect list.");
+            // no F3+T needed: the new files only become listable when the packs are re-read, so ask for that
+            // reload here instead of making the player remember a key combination
+            reloadResources("converted " + report.converted() + " effect(s)");
         }
+        return 1;
+    }
+
+    /**
+     * Re-read the resource packs, the same thing F3+T does, and say when it finished. Everything that mounts packs
+     * (the fx folder, {@code photon/fxpacks}, the ldlib trees) only rescans on this, which is why "drop a file and
+     * play it" never worked without a manual refresh.
+     */
+    private static int reloadResources(String reason) {
+        feedback("photon: reloading resources (" + reason + ") ...");
+        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                Minecraft.getInstance().execute(() -> {
+                    if (failure != null) {
+                        Photon.LOGGER.error("photon: resource reload failed", failure);
+                        feedback("photon: reload failed: " + failure.getMessage());
+                        return;
+                    }
+                    FXHelper.clearCache();
+                    com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                    // the same work the F3+T path does, so nothing is left for the player to redo by hand
+                    com.lowdragmc.photon.client.fx.FXPreloader.onResourcesReloaded();
+                    feedback("photon: resources reloaded, the effect list is up to date");
+                }));
         return 1;
     }
 
