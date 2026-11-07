@@ -1981,13 +1981,15 @@ public final class PhotonFXEditorSmokeTest {
         try (var output = Files.newOutputStream(source.resolve("nested/test.fx"))) {
             NbtIo.writeCompressed(legacy, output);
         }
-        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 1
-                || !Files.isRegularFile(dest.resolve("nested/test.fx")))
-            throw new IllegalStateException("Photon 1 converter did not preserve nested effect paths");
-        var firstExport = Files.readAllBytes(dest.resolve("nested/test.fx"));
-        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 0
-                || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("nested/test.fx"))))
-            throw new IllegalStateException("Photon 1 converter overwrote an existing effect");
+        // flattened on purpose: a nested target would become photon:nested/test, an id the picker never asks for
+        var conversion = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (conversion.converted() != 1 || !Files.isRegularFile(dest.resolve("test.fx")))
+            throw new IllegalStateException("Photon 1 converter did not flatten the effect into assets/photon/fx");
+        var firstExport = Files.readAllBytes(dest.resolve("test.fx"));
+        var second = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (second.converted() != 0 || second.skipped().isEmpty()
+                || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
+            throw new IllegalStateException("Photon 1 converter overwrote an existing effect or hid the skip");
         var oldBurst = new CompoundTag();
         oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
         oldBurst.putFloat("probability", 0.75f);
@@ -2055,6 +2057,8 @@ public final class PhotonFXEditorSmokeTest {
                 || mappedGradient.getCompound("data").getCompound("gradientColor0").getList("rgb", Tag.TAG_FLOAT).size() != 8
                 || mappedGradient.getCompound("data").getCompound("gradientColor1").getList("rgb", Tag.TAG_FLOAT).size() != 8)
             throw new IllegalStateException("Photon 1 random gradients were not preserved");
+        // a skipped file is reported by name, not swallowed: "converted everything and nothing appears" needs an answer
+        Photon.LOGGER.info("[photon1-conversion-report-smoke] a second pass reported {} skip(s)", second.skipped().size());
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
     }
 
