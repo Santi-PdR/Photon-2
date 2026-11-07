@@ -352,13 +352,19 @@ public final class PhotonFXEditorSmokeTest {
             }
             // then the drag: each move must be written, monotonically, without releasing and pressing again
             var seen = new ArrayList<Double>();
+            var widget = new ArrayList<Double>();
             for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
                 dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
+                // both sides: the widget's own value says whether the drag followed the pointer, the config says
+                // whether that value reached the renderer. Reporting only one of them cannot tell a stuck slider
+                // from a write that something reverted.
+                widget.add((double) slider.getValue());
                 seen.add(com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get());
             }
             for (var i = 1; i < seen.size(); i++) {
-                if (seen.get(i) <= seen.get(i - 1)) {
-                    throw new IllegalStateException("The slider did not keep up with the drag: " + seen);
+                if (seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
+                    throw new IllegalStateException("The slider did not keep up with the drag: config=" + seen
+                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width + ")");
                 }
             }
             // the config holds the value: reading it back is what a slider that only redraws itself would fail
