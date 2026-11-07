@@ -305,6 +305,23 @@ jobs:
               raise SystemExit('Particle was alive but did not visibly change the editor scene')
           PY
 
+      # the same reason as the build's: the client log is where a failed smoke test says why, and the
+      # artifact holding it may be unreachable, so its smoke lines and its exception are annotated too
+      - name: Publish client smoke failures as annotations
+        if: failure()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/photon-client.log"
+          [ -f "$log" ] || exit 0
+          echo "::group::smoke markers"
+          grep -E '\[[a-z0-9-]+smoke\]' "$log" | tail -n 40 || true
+          echo "::endgroup::"
+          echo "::group::last 60 lines"
+          tail -n 60 "$log"
+          echo "::endgroup::"
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | head -n 20 | \
+            while IFS= read -r line; do echo "::error title=client::$line"; done
+
       - name: Upload client smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v4
