@@ -6,7 +6,27 @@ Este documento resume el estado del mod y las decisiones del port para que Santi
 
 - **Mod:** Photon, toolkit de efectos visuales (VFX) para Minecraft.
 - **Repositorio:** [Santi-PdR/Photon-2](https://github.com/Santi-PdR/Photon-2).
-- **Base del port:** Photon upstream `v26.2.2.9`.
+- **Base del port:** Photon upstream `v26.2.2.9` (lógica), con comportamiento de `26.3.2.11` portado pieza por pieza.
+  Ver [Photon2-Upstream-26.3-Analisis.md](Photon2-Upstream-26.3-Analisis.md) para el diff y qué es portable.
+
+## Aclaración de versiones (por qué no se "actualiza" el número)
+
+Comprobado contra el código fuente de upstream:
+
+| Versión | Rama | Minecraft | Loader | LDLib2 |
+| --- | --- | --- | --- | --- |
+| `26.3.2.11` | `26.3` | **26.3** | NeoForge | `26.3.2.45.a` |
+| `2.2.11` | `1.21` | 1.21.1 | NeoForge | `2.2.45` / `2.2.46.a` |
+| `26.2.2.9` (base de este port) | `26.2` | 26.2 | NeoForge | `26.2.x` |
+| **este port** | — | **1.20.1** | **Forge 47.x** | `2.2.39.a+forge.1.20.1` |
+
+`ldlib2 2.2.46.a` es de Minecraft **1.21.1**, no de 1.20.1, y `26.3.2.11` es de Minecraft **26.3**. Para Forge 1.20.1
+no existe ninguna de las dos. Por eso "actualizar a 26.3.2.11 + ldlib 2.2.46.a" no es un cambio de número en
+`gradle.properties`: es cambiar de Minecraft y de loader. Lo que sí se puede, y es lo que se hace aquí, es portar el
+**comportamiento** de 26.3 al código que ya corre en 1.20.1.
+
+Los JAR de referencia de ambas líneas están en la rama `Origin` del repo (`photon-neoforge-26.3-26.3.2.11.jar`,
+`ldlib2-neoforge-1.21.1-2.2.46.a-all.jar`); se usan para leer qué hizo upstream, no como dependencia de compilación.
 - **Destino:** Minecraft `1.20.1`, Forge `47.x` (compilación actual con `47.4.28`; metadata declara compatibilidad desde `47.4.10`), Java 17.
 - **ID de mod:** `photon`.
 - **Licencia:** CC BY-NC-SA 4.0.
@@ -75,6 +95,47 @@ Este mecanismo resuelve el objetivo de Alex de añadir efectos en el servidor si
 Los clientes que ya están conectados reciben la actualización al volver a entrar; el flujo documentado no promete una descarga instantánea a mitad de sesión. Servidor y cliente necesitan tener Photon instalado, pero cuando sólo cambian FX/assets no hace falta reconstruir ni sustituir el JAR de Photon. Para cambiar código/funciones del mod sí se necesita una versión nueva del mod.
 
 Límites de validación del lado del servidor en `FxPackSync`: hasta 32 packs por manifiesto, 64 MiB por pack, 128 MiB de transferencia total, 256 MiB expandidos por ZIP y 20 000 entradas. El código rechaza rutas ZIP sospechosas y verifica los hashes.
+
+## Port de comportamiento de 26.3
+
+Estado: primera tanda mergeada/abierta en PR #9, con candado de CI propio.
+
+### Portado: modos de vida Loop y PingPong
+
+Antes una partícula sólo podía vivir una vez: su edad normalizada `T` subía de 0 a 1 y moría. Ahora
+`ParticleConfig.lifetimeMode` elige:
+
+- **Once** — lo de siempre; un archivo sin modo lee `Once`, así nada viejo cambia.
+- **Loop** — `T` vuelve a 0 al cumplir cada vida; la partícula no muere de edad.
+- **PingPong** — `T` va de 0 a 1 y vuelve; sirve para curvas cuyos extremos no coinciden.
+
+Una partícula cíclica muere cuando **su emisor se apaga**: termina el ciclo en el que está y sostiene
+el último valor. `ParticleLifetime` calcula todo desde la edad, sin estado guardado, así que una
+partícula recargada cae en la misma fase.
+
+### Portado: salida de clip `Drain`
+
+`Clip.exitMode` (`Cut` / `Drain`). Con `Cut` (lo de siempre, y el valor por defecto) el objeto se detiene
+en el instante en que su clip termina. Con `Drain` deja de hacer trabajo nuevo y lo que ya está en
+pantalla termina solo: las partículas en vuelo envejecen y los emisores cierran su ciclo. Es la
+diferencia entre un efecto que **termina** y un efecto que **desaparece**.
+
+Se elige en el editor: clic derecho en el clip → **Exit**, o en el configurador del clip. Sólo se
+guarda en el NBT cuando vale `Drain`, así un proyecto sin tocar se guarda igual que antes.
+
+### No portado (y por qué)
+
+- **Transparencia order-independent / dos puntos de render libres** (`PhotonOit`, `PhotonFrameSeams`):
+  dependen de `RenderPipeline` y `GpuDevice` de Minecraft 26.3. No existen en 1.20.1.
+- **`parallel_bake` / `PhotonBakeWork`**: trabajo en hilos sobre la API de render nueva.
+- **Instancing por GPU por defecto, adaptación automática de GLSL, Iris 1.11.7**: atados a versiones de
+  loader/shader distintas a las de este port.
+
+### Límites
+
+CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`), no apariencia. Que un
+`PingPong` se vea bien en un efecto concreto, y que `Drain` dé la sensación buscada, sigue necesitando
+la prueba de Alex en juego.
 
 ## Audio
 
