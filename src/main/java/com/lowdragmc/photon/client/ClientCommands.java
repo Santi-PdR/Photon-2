@@ -113,51 +113,9 @@ public class ClientCommands {
                                     return 1;
                                 }))
                         .then(Commands.literal("convert").requires(source -> source.hasPermission(2))
-                                .executes(context -> {
-                                    // every legacy folder Photon knows about, then the whole report: how many were
-                                    // converted, which were skipped and why, and where it looked. A bare count left
-                                    // "the list is not complete" unanswerable.
-                                    var report = FXCompat.convertAllFX();
-                                    feedback("photon 1 -> 2 conversion");
-                                    report.lines().forEach(ClientCommands::feedback);
-                                    if (report.converted() > 0) {
-                                        feedback("Reload resources with F3+T to see them in the effect list.");
-                                    }
-                                    return 1;
-                                })
-                                .then(Commands.literal("status")
-                                        .executes(context -> {
-                                            // "did it work?" without converting anything: the folders read, the fx each
-                                            // of them holds, and where the effects would land
-                                            feedback("photon 1 -> 2 conversion status");
-                                            var destination = PhotonPaths.getAssetsDir().toPath().resolve("photon/fx");
-                                            for (var root : FXCompat.legacyRoots()) {
-                                                var present = java.nio.file.Files.isDirectory(root);
-                                                feedback("  " + root + (present ? "" : "  (missing)"));
-                                                if (!present) continue;
-                                                try (var paths = java.nio.file.Files.walk(root)) {
-                                                    var effects = paths.filter(java.nio.file.Files::isRegularFile)
-                                                            .filter(path -> path.getFileName().toString().endsWith(".fx"))
-                                                            .toList();
-                                                    feedback("    " + effects.size() + " .fx file(s)");
-                                                    for (var effect : effects) {
-                                                        var target = destination.resolve(root.relativize(effect));
-                                                        feedback("    " + effect.getFileName() + (java.nio.file.Files.exists(target)
-                                                                ? "  -> converted already" : "  -> would convert"));
-                                                    }
-                                                } catch (java.io.IOException e) {
-                                                    feedback("    unreadable: " + e.getMessage());
-                                                }
-                                            }
-                                            return 1;
-                                        }))
-                        .then(createLiteral("textures")
-                                .executes(context -> {
-                                    // why a texture does not show: where Photon looks, what it found there, and what
-                                    // the ids in the loaded effects actually resolve to
-                                    com.lowdragmc.photon.client.fx.LooseTextures.reportTexturesTo(ClientCommands::feedback);
-                                    return 1;
-                                })),
+                                .executes(context -> convertLegacyFx())
+                                .then(Commands.literal("status").executes(context -> legacyFxStatus())))
+                        .then(createLiteral("textures").executes(context -> textureStatus())),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be
                 // characterised by loading it and running "status".
@@ -219,6 +177,52 @@ public class ClientCommands {
         }
         PhotonPostFX.setTestEffect(path, weight);
         feedback("photonfx: testing '" + text + "' at weight " + weight + " (stop with /photonfx clear)");
+        return 1;
+    }
+
+    /**
+     * Every legacy folder Photon knows about, converted with a full report: how many were converted, which were
+     * skipped and why, and where it looked. A bare count left "the list is not complete" unanswerable.
+     */
+    private static int convertLegacyFx() {
+        var report = FXCompat.convertAllFX();
+        feedback("photon 1 -> 2 conversion");
+        report.lines().forEach(ClientCommands::feedback);
+        if (report.converted() > 0) {
+            feedback("Reload resources with F3+T to see them in the effect list.");
+        }
+        return 1;
+    }
+
+    /** "Did it work?" without converting anything: the folders read, the fx each holds, and where they would land. */
+    private static int legacyFxStatus() {
+        feedback("photon 1 -> 2 conversion status");
+        var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
+        for (var root : FXCompat.legacyRoots()) {
+            var present = java.nio.file.Files.isDirectory(root);
+            feedback("  " + root + (present ? "" : "  (missing)"));
+            if (!present) continue;
+            try (var paths = java.nio.file.Files.walk(root)) {
+                var effects = paths.filter(java.nio.file.Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".fx"))
+                        .toList();
+                feedback("    " + effects.size() + " .fx file(s)");
+                for (var effect : effects) {
+                    // by file name: that is where the conversion puts it, flat
+                    var target = destination.resolve(effect.getFileName().toString());
+                    feedback("    " + effect.getFileName() + (java.nio.file.Files.exists(target)
+                            ? "  -> converted already" : "  -> would convert"));
+                }
+            } catch (java.io.IOException e) {
+                feedback("    unreadable: " + e.getMessage());
+            }
+        }
+        return 1;
+    }
+
+    /** Why an effect's image does not show: the roots searched, the namespaces found, and each id's status. */
+    private static int textureStatus() {
+        com.lowdragmc.photon.client.fx.LooseTextures.reportTexturesTo(ClientCommands::feedback);
         return 1;
     }
 
