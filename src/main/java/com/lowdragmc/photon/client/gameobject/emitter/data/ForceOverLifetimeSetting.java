@@ -1,0 +1,87 @@
+package com.lowdragmc.photon.client.gameobject.emitter.data;
+
+import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSelector;
+import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.TransformRef;
+import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
+import com.lowdragmc.photon.client.gameobject.RuntimeValue;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.*;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.Curve;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfig;
+import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
+import com.lowdragmc.photon.client.gameobject.particle.IParticle;
+import org.joml.Vector3f;
+import lombok.Getter;
+import lombok.Setter;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
+
+/**
+ * Pure-data force-over-lifetime config; value-use behaviour lives on the co-located {@link Runtime}.
+ *
+ * @author KilaBash
+ * @date 2023/5/30
+ */
+@OnlyIn(Dist.CLIENT)
+@Setter
+@Getter
+public class ForceOverLifetimeSetting extends ToggleGroup {
+
+    @Configurable(name = "ForceOverLifetimeSetting.force", tips = "photon.emitter.config.forceOverLifetime.force")
+    @NumberFunction3Config(common = @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "force")))
+    protected NumberFunction3 force = new NumberFunction3(0, 0, 0);
+
+    /** The space the force vector is expressed in. @see ValueSpace */
+    @Setter
+    @Getter
+    @Configurable(name = "ForceOverLifetimeSetting.simulationSpace", tips = "photon.emitter.config.forceOverLifetime.space")
+    @ConfigSelector(subConfiguratorBuilder = "buildSpaceConfigurator")
+    protected ValueSpace simulationSpace = ValueSpace.Local;
+    @Persisted
+    public final TransformRef customSpace = new TransformRef();
+
+    public Runtime createRuntime() {
+        return new Runtime(this);
+    }
+
+    private void buildSpaceConfigurator(ValueSpace space, ConfiguratorGroup group) {
+        if (space == ValueSpace.Custom) {
+            group.addConfigurator(CustomSpace.configurator("ParticleConfig.customSpace", customSpace,
+                    "photon.emitter.config.valueCustomSpace.tips"));
+        }
+    }
+
+    public static class Runtime {
+        private final ForceOverLifetimeSetting config;
+        public final RuntimeValue<Boolean> enable;
+        public final RuntimeValue<NumberFunction3> force;
+
+        public Runtime(ForceOverLifetimeSetting config) {
+            this.config = config;
+            this.enable = new RuntimeValue<>(config::isEnable);
+            this.force = new RuntimeValue<>(() -> config.force);
+        }
+
+        public boolean isEnable() {
+            return enable.get();
+        }
+
+        public ValueSpace getSimulationSpace() {
+            return config.simulationSpace;
+        }
+
+        public TransformRef getCustomSpace() {
+            return config.customSpace;
+        }
+
+        public Vector3f getForce(IParticle particle) {
+            return force.get().get(particle.getT(), () -> particle.getMemRandom(this)).mul(0.05f);
+        }
+
+        public void clear() {
+            enable.clear();
+            force.clear();
+        }
+    }
+}
