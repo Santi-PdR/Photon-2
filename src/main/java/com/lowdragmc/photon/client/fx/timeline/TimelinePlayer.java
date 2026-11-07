@@ -243,6 +243,14 @@ public class TimelinePlayer {
     }
 
     /**
+     * The effect is being stopped, without force: play the timeline's release section out instead of cutting at
+     * once. False when there is none (the caller then stops the timeline as usual). Ported from 26.3.
+     */
+    public boolean beginWindDown() {
+        return !stopped && !isFinished() && clock.beginWindDown();
+    }
+
+    /**
      * Per-frame pass (driven from the always-on root's frame update): re-applies the animation tracks at
      * the current fractional master time ({@code lastEvalTime + partialTicks}) so transform animation is
      * smooth between ticks instead of stepping 20×/s. {@code partialTicks} is 0 while paused (the editor
