@@ -337,7 +337,21 @@ jobs:
           echo "::group::last 60 lines"
           tail -n 60 "$log"
           echo "::endgroup::"
-          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | head -n 20 | \
+          # the 25 lines before Photon's own first failure: the reason is almost never in the exception line itself
+          awk '/IllegalStateException|PhotonFXEditorSmokeTest/ && !done {for (i = 1; i <= 25 && i <= n; i++) print buf[i]; done = 1}
+               {buf[n % 25] = $0; n++}' "$log" | \
+            while IFS= read -r line; do echo "::error title=context::$line"; done
+          # our own failures first: the log's first Exception is usually the headless narrator or netty, and
+          # publishing that noise hid the smoke assertion that actually stopped the run
+          grep -E 'IllegalStateException|photon.*(failed|Failed)|\[smoke\].*(fail|error)' "$log" \
+            | grep -vE 'flite|Narrator|netty|Unsafe|Native library' | head -n 10 | \
+            while IFS= read -r line; do echo "::error title=smoke::$line"; done
+          # then the stack frames that name our code, which is what locates the failing check
+          grep -oE 'at com\.lowdragmc[^(]*\([^)]*\)' "$log" | head -n 10 | \
+            while IFS= read -r line; do echo "::error title=frame::$line"; done
+          # and only then the generic sweep, so it can never crowd the above out
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" \
+            | grep -vE 'flite|Narrator|netty|Unsafe|Native library' | head -n 10 | \
             while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
