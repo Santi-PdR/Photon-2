@@ -95,6 +95,9 @@ public class SceneView extends View implements FXSceneOptions {
     private boolean isSceneLoaded = false;
     /** Coalesced seek target (-1 = none): scrub/edit streams request here, flushed once per frame. */
     private long pendingSimulateTarget = -1;
+    /** When the editor was mounted, so the first drawn frame can report what the player waited for. */
+    private long mountedAt = 0;
+    private boolean firstFrameReported = false;
 
     public SceneView(FXEditor fxEditor) {
         super("editor.scene", Icons.CAMERA);
@@ -114,6 +117,7 @@ public class SceneView extends View implements FXSceneOptions {
                 .createScene(level)
                 .setTickWorld(true)
                 .useCacheBuffer();
+        mountedAt = System.nanoTime();
         this.addChild(sceneEditor);
         this.addChild(fxObjectInfoView);
         this.addChild(fxObjectAnimationView);
@@ -159,6 +163,12 @@ public class SceneView extends View implements FXSceneOptions {
 
     @Override
     public void drawContents(@NotNull GUIContext context) {
+        // the visible scene is where the open actually lands: report it once, with the tree already laid out
+        if (!firstFrameReported && mountedAt != 0 && fxEditor.getModularUI() != null) {
+            firstFrameReported = true;
+            Photon.LOGGER.info("[editor-open] first scene frame after {} ms (scene tree laid out and drawn)",
+                    (System.nanoTime() - mountedAt) / 1_000_000.0);
+        }
         // flush before the children draw so the seek result is visible this frame
         flushPendingSimulate();
         // keep the floating panels pinned to their anchor corner when the scene is resized

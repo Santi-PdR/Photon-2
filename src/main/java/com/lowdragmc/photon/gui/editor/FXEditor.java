@@ -7,6 +7,7 @@ import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.utils.Transfo
 import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import com.lowdragmc.photon.gui.editor.view.FXTimelineView;
@@ -35,6 +36,9 @@ public class FXEditor extends Editor {
     public FXRuntime runtime;
 
     public FXEditor() {
+        // the opening cost is reported once per editor: the parts below are built in this constructor, and a
+        // slow open is only diagnosable if each one's share is named in the log
+        var openedAt = System.nanoTime();
         this.icon.style(style -> style.backgroundTexture(ICON));
         this.leftWindow.getLeftTop().addView(hierarchyView);
         this.centerWindow.getLeftTop().addView(sceneView);
@@ -45,6 +49,8 @@ public class FXEditor extends Editor {
         addEventListener("keyDown", this::onEditorKeyDown);
         // follow sources that were exported again or whose pack was rewritten
         addEventListener(UIEvents.TICK, e -> instances.tick());
+        Photon.LOGGER.info("[editor-open] FXEditor built in {} ms (hierarchy, scene, timeline, instances)",
+                (System.nanoTime() - openedAt) / 1_000_000.0);
     }
 
     @Override

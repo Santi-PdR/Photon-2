@@ -55,11 +55,16 @@ public class ClientCommands {
                     var minecraft = Minecraft.getInstance();
                     var entityPlayer = minecraft.player;
                     if (entityPlayer == null) return 0;
+                    // the whole open is timed: EditorWindow.open builds a new editor (or restores a minimised
+                    // one), UI.of mounts it, and the screen is what the player waits for
+                    var startedAt = System.nanoTime();
                     var ui = new ModularUI(UI.of(EditorWindow.open(FXEditor.WINDOW_ID, FXEditor::new).setId("fx_editor")))
                             .shouldCloseOnEsc(false)
                             .shouldCloseOnKeyInventory(false);
                     var screen = new ModularUIScreen(ui, Component.empty());
                     minecraft.setScreen(screen);
+                    com.lowdragmc.photon.Photon.LOGGER.info("[editor-open] /photon_editor -> screen in {} ms (window + UI mount)",
+                            (System.nanoTime() - startedAt) / 1_000_000.0);
                     return 1;
                 }),
                 // post-effect smoke test: keeps requesting the effect every frame until "clear".
