@@ -156,6 +156,25 @@ El editor sólo obedece las secciones durante la reproducción en vivo; al arras
 (replay desde 0) se recorre la timeline en orden, sin bucles ni saltos, que es lo que uno espera al
 buscar un momento concreto.
 
+### Arreglado: el buscador de efectos sólo mostraba lo ya elegido
+
+Segunda vez que Alex reporta lo mismo ("lo de las partículas y la lista de fx siguen igual"). La lista de
+candidatos ya estaba bien — se lee en vivo y tiene todos los ids. El fallo estaba en el **widget** de
+búsqueda que Photon lleva dentro (LDLib 2.2.39): al abrirse hacía la búsqueda con el texto que el campo
+todavía tenía, que es el nombre del valor **ya elegido**. Resultado: un desplegable de una sola línea (o
+vacío la primera vez), y al teclear se **añadía** al nombre viejo, así que la búsqueda quedaba en
+`nombreElegidoX` y no encontraba nada. Parecía que el buscador "no hacía nada".
+
+LDLib lo arregló en su 2.2.39.8, que aquí no se puede usar porque la que se empaqueta va fijada al port.
+`SearchComponentMixin` trae ese mismo arreglo: al abrir, repite la búsqueda en vacío y deja el nombre viejo
+**seleccionado**, de modo que la primera tecla lo reemplaza. Con eso quedan arreglados a la vez todos los
+selectores que usan ese widget: id del sub-emisor, id de la instancia FX, entradas de material, bloques y
+entidades de las opciones de colisión.
+
+Además salió un bug propio al probarlo: la migración de los defaults antiguos de bloom comparaba **por
+valor** en trabajo diferido, así que arrastrar el slider y pasar exactamente por `1.0` devolvía la
+intensidad a `0.18`. Ahora esa migración corre una sola vez, al arrancar.
+
 ### No portado (y por qué)
 
 - **Transparencia order-independent / dos puntos de render libres** (`PhotonOit`, `PhotonFrameSeams`):
@@ -167,7 +186,7 @@ buscar un momento concreto.
 ### Límites
 
 CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`, `[sections-smoke]`,
-`[release-section-smoke]`, `[sections-save-smoke]`), no apariencia. Que un `PingPong` se vea bien en un
+`[release-section-smoke]`, `[sections-save-smoke]`, `[search-box-smoke]`), no apariencia. Que un `PingPong` se vea bien en un
 efecto concreto, que `Drain` dé la sensación buscada y que una despedida dure lo que tiene que durar
 sigue necesitando la prueba de Alex en juego.
 
