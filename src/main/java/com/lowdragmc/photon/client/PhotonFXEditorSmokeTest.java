@@ -248,11 +248,14 @@ public final class PhotonFXEditorSmokeTest {
         slider.setUnmountedTrackWidth(100f);
         var x0 = slider.getContentX();
         var width = 100f;
+        Photon.LOGGER.info("[slider-drag-smoke] track origin={} width={} min={} max={} start={}",
+                x0, width, min, max, slider.getValue());
         var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
         try {
             // a press at the left end is an instant set, not a "grab the handle" that needs a second press
             dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
             var atPress = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
+            Photon.LOGGER.info("[slider-drag-smoke] after press: value={} dragging={}", atPress, slider.isDragging());
             if (Math.abs(atPress - min) > 0.02) {
                 throw new IllegalStateException("A press on the track did not set the value to the minimum: " + atPress);
             }
