@@ -400,6 +400,8 @@
   "photon.is_shape_visible": "is shape outline visible",
   "photon.is_cull_visible": "is cull box visible",
   "photon.is_bloom_visible": "Bloom / glow preview (B)",
+  "photon.configuration.bloom_intensity_in_scene": "Bloom intensity (scene bar)",
+  "photon.configuration.bloom_intensity_in_scene.tooltip": "Drag to strengthen or soften the bloom halo without opening the config. Writes the same value as Bloom Intensity (0 to 2); the shipped default is unchanged.",
   "editor.scene_mode": "scene mode",
   "scene_mode.platform": "platform",
   "scene_mode.real_world": "real world",

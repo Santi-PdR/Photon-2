@@ -41,6 +41,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -171,6 +172,62 @@ public final class PhotonFXEditorSmokeTest {
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
                     previousFramebuffer);
             com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+    }
+
+    /**
+     * Prove the two editor entry points that were reported broken: the fx picker lists effect ids (a list that
+     * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes the config
+     * without changing the shipped default.
+     */
+    private static void verifyFxPickerAndBloomControl() {
+        var fxIds = com.lowdragmc.photon.client.fx.FXHelper.listAllFX();
+        var found = new ArrayList<String>();
+        com.lowdragmc.photon.client.fx.FXHelper.searchFX("", found::add);
+        var withClearEntry = found.size() == fxIds.size() + 1 && found.get(0).isEmpty();
+        var readLive = new ArrayList<String>();
+        com.lowdragmc.photon.client.fx.FXHelper.listAllFX()
+                .forEach(fx -> readLive.add(fx.toString()));
+        if (!withClearEntry || !found.subList(1, found.size()).equals(readLive)) {
+            throw new IllegalStateException("The fx picker's search did not list every loadable effect: "
+                    + found.size() + " entries for " + fxIds.size() + " effects");
+        }
+        if (!fxIds.isEmpty()) {
+            // and a query narrows the same list: the first effect's own path must find it
+            var filtered = new ArrayList<String>();
+            com.lowdragmc.photon.client.fx.FXHelper.searchFX(fxIds.get(0).getPath(), filtered::add, false);
+            if (!filtered.contains(fxIds.get(0).toString())) {
+                throw new IllegalStateException("The fx picker's search did not match an effect by path: "
+                        + fxIds.get(0) + " in " + filtered);
+            }
+        }
+        Photon.LOGGER.info("[fx-picker-smoke] the fx search lists every loadable effect ({} ids) and a fresh search reads the live list",
+                fxIds.size());
+
+        var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
+        var shippedDefault = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
+        var written = com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.current();
+        if (Math.abs(written - shippedDefault.floatValue()) > 0.0001f) {
+            throw new IllegalStateException("The bloom control shows " + written + " instead of the config value " + shippedDefault);
+        }
+        if (control.slider.getMinValue() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MIN
+                || control.slider.getMaxValue() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MAX) {
+            throw new IllegalStateException("The bloom control's slider does not span the config's range");
+        }
+        Photon.LOGGER.info("[bloom-control-smoke] the scene bar's bloom control reads the live intensity ({}) and spans 0..2",
+                written);
+
+        // the control writes through to the config the renderer reads, and leaves nothing behind
+        var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
+        try {
+            control.slider.setValue(0.7f);
+            var applied = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
+            if (Math.abs(applied - 0.7) > 0.0001) {
+                throw new IllegalStateException("Dragging the bloom control wrote " + applied + " instead of 0.7");
+            }
+            Photon.LOGGER.info("[bloom-control-smoke] dragging the scene bar's bloom slider writes bloom_intensity={}", applied);
+        } finally {
+            com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
         }
     }
 
@@ -448,6 +505,7 @@ public final class PhotonFXEditorSmokeTest {
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
                 verifyBloomDefaults();
+                verifyFxPickerAndBloomControl();
                 bloomSmokeLogged = true;
             }
             // A slow software renderer may process multiple client ticks before drawing a frame.

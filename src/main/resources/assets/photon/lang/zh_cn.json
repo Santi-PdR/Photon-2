@@ -403,6 +403,8 @@
   "photon.is_shape_visible": "形状轮廓是否可见",
   "photon.is_cull_visible": "剔除框是否可见",
   "photon.is_bloom_visible": "泛光是否可见",
+  "photon.configuration.bloom_intensity_in_scene": "泛光强度（场景栏）",
+  "photon.configuration.bloom_intensity_in_scene.tooltip": "无需打开配置即可拖动增强或减弱泛光；写入与“泛光强度”相同的数值（0 到 2），默认值不变。",
   "editor.scene_mode": "场景模式",
   "scene_mode.platform": "平台",
   "scene_mode.real_world": "真实世界",

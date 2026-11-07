@@ -20,7 +20,7 @@ The source adapts the Minecraft APIs, Forge networking and shader integration, r
 
 ## FX packs, models, shaders and bloom
 
-See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) for the folder layout, custom resource rules, and where to turn on Bloom. For the port's technical and testing history, see [Photon 2 Forge port context](docs/Photon2-Port-Context.md).
+See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) for the folder layout, custom resource rules, and where to turn on Bloom. For a plain-language walkthrough of `.fxpack` files and how a server ships FX updates to every player automatically, see the [FX pack and server distribution guide](docs/Photon2-FXPack-Guia-Servidor.md). For the port's technical and testing history, see [Photon 2 Forge port context](docs/Photon2-Port-Context.md). For a single-document handover covering the whole project (architecture, fixes, CI, releases and pending work), see the [full project context](docs/Photon2-Contexto-Completo.md).
 
 ## License
 

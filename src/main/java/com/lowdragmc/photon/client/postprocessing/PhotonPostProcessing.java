@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.postprocessing;
 
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
@@ -75,8 +76,11 @@ public class PhotonPostProcessing {
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
+        // Nothing prepared (no build ran this frame): hand the frame back untouched rather than
+        // indexing an empty mip chain.
+        if (MIPS.isEmpty() || HIGH_LIGHT == null || OUTPUT == null) return srcTarget;
         renderBloom(srcTarget);
-        return OUTPUT;
+        return OUTPUT == null ? srcTarget : OUTPUT;
     }
 
     private static HDRTarget resize(@Nullable HDRTarget target, int width, int height) {
@@ -89,6 +93,18 @@ public class PhotonPostProcessing {
         }
 
         var brightPassShader = PhotonShaders.getBrightPassShader();
+        // A missing program means the pass has nothing to read OR write: getUpSamplingShader()'s
+        // targets are derived from this chain, so continuing would bind null samplers and leave the
+        // caller with a black or shredded frame. Skip the whole effect instead (photon:slash and any
+        // other uninstalled shader still let the FX draw through the fallback material).
+        if (brightPassShader == null || PhotonShaders.getDownSamplingShader() == null
+                || PhotonShaders.getUpSamplingShader() == null
+                || PhotonShaders.getBloomFinalScatterPassShader() == null) {
+            if (Platform.isDevEnv() && GL.getCapabilities().GL_KHR_debug) {
+                GL46.glPopDebugGroup();
+            }
+            return;
+        }
 //        var separableBlur = PhotonShaders.getSeparableBlurShader();
 //        var combinePassShader = PhotonConfig.INSTANCE.bloomMode.get() == PhotonConfig.BloomMode.ADD ?
 //                PhotonShaders.getBloomAddPassShader() : PhotonShaders.getBloomScatterPassShader();
@@ -102,6 +118,25 @@ public class PhotonPostProcessing {
 
         brightPassShader.setSampler("inputSampler", srcTarget);
         brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
+        // Scene mask: bloom only what this build ADDED to the frame, not the frame itself.
+        //
+        // On the in-place path DRAW_TARGET is a working copy of the frame plus the FX drawn on top
+        // of it, and the frame Photon was handed is still untouched at this point (the write-back
+        // happens after this chain). Comparing the two therefore isolates the FX. That matters
+        // because at the shipped threshold the sky, the sun, clouds and lit terrain cross the cut on
+        // their own: adding their blurred copy over the whole screen is what made bloom read as a
+        // distortion instead of a glow around the effects.
+        //
+        // The other paths hand us a standalone FX layer (transparent accumulator) or the frame
+        // itself, where there is nothing to compare against, so the mask stays neutral there.
+        var sceneTarget = UISurface.currentTarget();
+        int sceneTexture = sceneTarget.getColorTextureId();
+        int srcTexture = srcTarget.getColorTextureId();
+        boolean maskable = RenderPassPipeline.isSceneBackedBuild()
+                && sceneTexture != 0 && sceneTexture != srcTexture
+                && sceneTarget.width == srcTarget.width && sceneTarget.height == srcTarget.height;
+        brightPassShader.setSampler("sceneSampler", maskable ? sceneTexture : srcTexture);
+        brightPassShader.safeGetUniform("SceneMask").set(maskable ? 1f : 0f);
         blitShader(brightPassShader, HIGH_LIGHT, false);
 
         // down-sampling
