@@ -73,7 +73,7 @@ public class ContinuousSlider extends UIElement {
         // what keeps a slider from sticking when the movie ends off the bar
         addEventListener(UIEvents.TICK, event -> {
             if (!dragging) return;
-            if (!isMouseDown(0)) {
+            if (!isDragButtonHeld()) {
                 dragging = false;
                 return;
             }
@@ -134,10 +134,10 @@ public class ContinuousSlider extends UIElement {
         setValue(this.value, false);
     }
 
-    /** Whether the drag's button is still held, so a release outside this element still ends the drag. */
-    private boolean isMouseDown(int button) {
+    /** Whether the left button is still held, so a release outside this element still ends the drag. */
+    private boolean isDragButtonHeld() {
         var mui = getModularUI();
-        return mui != null && mui.getLastMouseDownButton() == button;
+        return mui != null && mui.getLastMouseDownButton() == 0;
     }
 
     /** The pointer's screen position, or this element's origin when it is not mounted yet. */
