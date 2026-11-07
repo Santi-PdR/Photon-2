@@ -264,6 +264,28 @@ public final class PhotonFXEditorSmokeTest {
             Photon.LOGGER.info("[loose-texture-smoke] found {} in a folder no pack mounts and copied it to the workspace",
                     id);
 
+            // the other half of Alex's report: the id names one namespace, the artist's files sit under another (or
+            // under no assets folder at all). The lookup is path-agnostic, so the name alone has to be enough.
+            var strayId = new ResourceLocation("cursedfate_stray", "textures/particle/stray_probe.png");
+            var strayFile = looseRoot.resolve("delivered").resolve("stray_probe.png");
+            var strayAdopted = assets.resolve(strayId.getNamespace()).resolve(strayId.getPath());
+            try {
+                Files.createDirectories(strayFile.getParent());
+                Files.write(strayFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                if (!com.lowdragmc.photon.client.fx.LooseTextures.resolve(strayId).equals(strayId)
+                        || !Files.isRegularFile(strayAdopted)) {
+                    throw new IllegalStateException("A texture whose files sit under another namespace was not found: "
+                            + strayId);
+                }
+                Photon.LOGGER.info("[loose-texture-smoke] found {} outside any assets folder", strayId);
+            } finally {
+                Files.deleteIfExists(strayAdopted);
+                Files.deleteIfExists(strayFile);
+                Files.deleteIfExists(strayFile.getParent());
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+            }
+
             // the converter's destination is what the picker reads: a flat assets/photon/fx, never fx_old/ inside it
             var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
             if (!destination.equals(assets.resolve("photon/fx"))) {

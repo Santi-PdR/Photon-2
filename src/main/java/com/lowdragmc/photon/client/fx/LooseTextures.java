@@ -124,17 +124,46 @@ public final class LooseTextures {
         return id;
     }
 
-    /** The file that serves {@code id} in a loose assets folder, or null. */
+    /**
+     * The file that serves {@code id} in a loose assets folder, or null.
+     * <p>
+     * Path-agnostic on purpose. A converted Photon 1 effect keeps the texture id it was authored with, and those ids
+     * are not obliged to match the folder the artist actually delivered: {@code cursedfate:textures/particle/glow.png}
+     * may live under {@code assets/othername/}, or next to the {@code .fx} with no {@code assets} folder at all. So the
+     * search is: the id's own path under its namespace, then that path under <em>any</em> namespace on disk, then the
+     * bare file name anywhere in the roots.
+     */
     @Nullable
     public static Path find(ResourceLocation id) {
-        var folder = namespaceFolder(id.getNamespace());
-        if (folder == null) return null;
-        // the id's path verbatim first: assets/<ns>/textures/particle/glow.png
-        var direct = folder.resolve(id.getPath());
-        if (Files.isRegularFile(direct)) return direct;
-        // then by file name anywhere under the namespace, which is what a hand-made folder usually looks like
         var name = Path.of(id.getPath()).getFileName().toString();
-        try (Stream<Path> files = Files.walk(folder, 6)) {
+        var folder = namespaceFolder(id.getNamespace());
+        if (folder != null) {
+            // the id's path verbatim first: assets/<ns>/textures/particle/glow.png
+            var direct = folder.resolve(id.getPath());
+            if (Files.isRegularFile(direct)) return direct;
+            // then by file name anywhere under the namespace, which is what a hand-made folder usually looks like
+            var loose = byFileName(folder, name, 6);
+            if (loose != null) return loose;
+        }
+        // the same path under a namespace the author never declared as the id's
+        for (var other : buildIndex().values()) {
+            if (other.equals(folder)) continue;
+            var direct = other.resolve(id.getPath());
+            if (Files.isRegularFile(direct)) return direct;
+        }
+        // last resort: the file name anywhere in the roots Photon knows about, which is the "it is in my pack folder"
+        // case this whole class exists for
+        for (var root : roots()) {
+            var loose = byFileName(root, name, 5);
+            if (loose != null) return loose;
+        }
+        return null;
+    }
+
+    /** The first file called {@code name} under {@code folder}, at most {@code depth} levels down. */
+    @Nullable
+    private static Path byFileName(Path folder, String name, int depth) {
+        try (Stream<Path> files = Files.walk(folder, depth)) {
             return files.filter(path -> path.getFileName() != null
                             && path.getFileName().toString().equals(name)
                             && Files.isRegularFile(path))

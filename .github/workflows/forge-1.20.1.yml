@@ -182,6 +182,7 @@ jobs:
           grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[photon1-conversion-report-smoke] a second pass reported' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[loose-texture-smoke] found cursedfate_probe:textures/particle/loose_probe.png' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[loose-texture-smoke] found cursedfate_stray:textures/particle/stray_probe.png' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 editor project import
         shell: bash
