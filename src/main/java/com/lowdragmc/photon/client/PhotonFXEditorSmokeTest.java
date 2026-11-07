@@ -317,6 +317,100 @@ public final class PhotonFXEditorSmokeTest {
         verifyLooseTextureLookup();
         verifyCyclicLifetimes();
         verifySections();
+        verifySectionCommand();
+    }
+
+    /**
+     * {@code /photon fx section ...} is the only way to steer a playing effect from in game, so it is checked end to
+     * end: the command is built by the server command tree, the packet survives encoding (that is what travels to the
+     * client), and the decoded packet moves a real clock between its sections. Encoding and decoding are where a
+     * network command breaks, and a broken one fails silently: the command answers "done" and nothing moves.
+     */
+    private static void verifySectionCommand() {
+        // the subcommand is part of the tree: /photon fx section entity <targets> jump <name> [location]
+        var photon = com.lowdragmc.photon.ServerCommands.createServerCommands().get(0);
+        if (!"photon".equals(photon.getLiteral())) {
+            throw new IllegalStateException("The server command root is not /photon: " + photon.getLiteral());
+        }
+        var fx = photon.getChild("fx");
+        if (fx == null || fx.getChild("section") == null) {
+            throw new IllegalStateException("/photon fx section is not registered");
+        }
+        var entity = fx.getChild("section").getChild("entity");
+        var jump = entity == null ? null : entity.getChild("jump");
+        if (jump == null || jump.getChild("section") == null) {
+            throw new IllegalStateException("/photon fx section entity jump <section> is not registered");
+        }
+        var block = fx.getChild("section").getChild("block");
+        if (block == null || block.getChild("release") == null || block.getChild("advance") == null) {
+            throw new IllegalStateException("/photon fx section block advance/release are not registered");
+        }
+        // block release takes an optional trailing location
+        if (block.getChild("release").getChild("location") == null) {
+            throw new IllegalStateException("/photon fx section block release [location] is not registered");
+        }
+
+        // a packet as the server builds it, through the wire and back
+        var packetType = com.lowdragmc.photon.command.EffectSectionCommand.Action.JUMP;
+        var sent = new com.lowdragmc.photon.command.EffectSectionCommand();
+        setCommandField(sent, "action", packetType);
+        setCommandField(sent, "section", "loop");
+        var buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        sent.encode(buf);
+        var received = com.lowdragmc.photon.command.EffectSectionCommand.decodePacket(buf);
+        if (readCommandField(received, "action") != packetType
+                || !"loop".equals(readCommandField(received, "section"))) {
+            throw new IllegalStateException("A section command did not survive being encoded: action="
+                    + readCommandField(received, "action") + ", section=" + readCommandField(received, "section"));
+        }
+
+        // and it does something: the same clock the timeline uses, with two named stretches
+        var clock = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("intro", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("loop", 10)
+                        .repeat(com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)), 20, null, true);
+        clock.begin(null);
+        if (!"intro".equals(clock.current())) {
+            throw new IllegalStateException("The clock did not start in its first section");
+        }
+        // jump: from the next tick on, the loop section plays
+        if (!received.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
+            throw new IllegalStateException("A jump command was refused by a clock that has the section");
+        }
+        clock.applyPendingJump();
+        if (!"loop".equals(clock.current())) {
+            throw new IllegalStateException("The jump command did not move the clock into 'loop': "
+                    + clock.current());
+        }
+        // a name the effect does not have changes nothing, and says so
+        setCommandField(sent, "section", "does_not_exist");
+        if (sent.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
+            throw new IllegalStateException("A jump to a section that does not exist was reported as done");
+        }
+        Photon.LOGGER.info("[section-command-smoke] /photon fx section is registered and a jump command "
+                + "moves a playing timeline into the named section");
+    }
+
+    /** Set a private field of a packet, the way the server command fills it in. */
+    private static void setCommandField(Object packet, String name, Object value) {
+        try {
+            var field = packet.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(packet, value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not set EffectSectionCommand." + name, e);
+        }
+    }
+
+    /** Read a private field of a packet, the way the client handler reads it. */
+    private static Object readCommandField(Object packet, String name) {
+        try {
+            var field = packet.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(packet);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not read EffectSectionCommand." + name, e);
+        }
     }
 
     /**

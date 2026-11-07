@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           log="$RUNNER_TEMP/photon-client.log"
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -181,6 +181,10 @@ jobs:
         run: |
           grep -Fq '[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[drain-exit-smoke] a draining clip survives saving and an older project still reads as Cut' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the section command
+        shell: bash
+        run: grep -Fq '[section-command-smoke] /photon fx section is registered and a jump command moves a playing timeline into the named section' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require search pickers to open on the whole catalogue
         shell: bash

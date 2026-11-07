@@ -187,11 +187,19 @@ public class FXRuntime implements IScene {
         emit(effect, 0);
     }
 
+    public void emit(IEffectExecutor effect, int delay) {
+        emit(effect, delay, null);
+    }
+
     /**
      * Start playback with a start delay (in ticks). Every object is emitted once up front; the
      * timeline only gates active/visibility and restarts objects via the {@link TimelinePlayer}.
+     * <p>
+     * {@code startSection} starts the timeline at the beginning of a named section instead of 0, which is what makes
+     * one effect usable as "start / loop / end": a combat effect can begin straight in its looping part. Null or an
+     * unknown name starts at 0, as before. Ported from Photon 26.3.
      */
-    public void emit(IEffectExecutor effect, int delay) {
+    public void emit(IEffectExecutor effect, int delay, @Nullable String startSection) {
         emitted = true;
         destroyed = false;
         releasing = false;
@@ -209,7 +217,7 @@ public class FXRuntime implements IScene {
             // set after emit: emit() resets the object, which zeroes its delay
             fxObject.setDelay(delay);
         }
-        timelinePlayer.begin(effect);
+        timelinePlayer.begin(effect, startSection);
     }
 
     /**
