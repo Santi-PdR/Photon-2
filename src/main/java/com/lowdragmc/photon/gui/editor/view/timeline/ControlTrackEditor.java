@@ -138,6 +138,16 @@ public class ControlTrackEditor extends ClipTrackEditor {
                     }
                 })
         );
+        // what happens when this clip stops covering the object: stop it dead, or let what is on screen finish
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
+                "photon.gui.editor.timeline.edit_clip.exit_mode", clip::exitMode,
+                v -> { clip.exitMode(v); ctx.refreshPreview(); }, clip.exitMode(), true,
+                List.of(Clip.ExitMode.CUT, Clip.ExitMode.DRAIN),
+                mode -> mode == Clip.ExitMode.DRAIN
+                        ? "photon.gui.editor.timeline.edit_clip.exit_mode.drain"
+                        : "photon.gui.editor.timeline.edit_clip.exit_mode.cut",
+                (mode, subGroup) -> { })
+        );
     }
 
     @Override
