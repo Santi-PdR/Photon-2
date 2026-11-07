@@ -39,6 +39,8 @@ public final class FxPackWatcher {
     private static int reloads;
     private static int reloadWindowTicks;
     private static boolean reloadPending;
+    /** The first scan only records what is already there: those packs were mounted at startup. */
+    private static boolean baselined;
 
     private FxPackWatcher() {
     }
@@ -58,6 +60,18 @@ public final class FxPackWatcher {
         }
         var current = new HashMap<String, Long>(entries.length);
         boolean addedOrChanged = false;
+        if (!baselined) {
+            // a pack that existed when the game started was mounted by the boot-time pack scan; treating it as new
+            // would reload the resources a second after launch for no reason
+            for (var entry : entries) {
+                if (!entry.getName().startsWith("server-")) current.put(entry.getName(), entry.length());
+            }
+            SIZES.clear();
+            SIZES.putAll(current);
+            STABLE.putAll(current);
+            baselined = true;
+            return;
+        }
         for (var entry : entries) {
             var name = entry.getName();
             // server-delivered packs are managed by the sync session, which reloads by itself
@@ -112,10 +126,14 @@ public final class FxPackWatcher {
         }));
     }
 
-    /** Forget what was seen, e.g. after the folder was emptied by the game itself. */
+    /**
+     * Forget what was seen, e.g. before the game writes a pack itself. The next scan re-baselines silently: a file that
+     * is already on disk when this is called is not something to reload for.
+     */
     public static void reset() {
         SIZES.clear();
         STABLE.clear();
         ticks = 0;
+        baselined = false;
     }
 }
