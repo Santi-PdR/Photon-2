@@ -261,10 +261,10 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Loop did not wrap back to the same phase: " + loopHalf + " then "
                     + loopWrapped);
         }
-        // ping-pong: the second cycle runs backwards
+        // ping-pong: out during the first cycle, back down during the second, out again on the third
         var out = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 5, lifetime);
-        var back = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 15, lifetime);
-        var returned = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 25, lifetime);
+        var back = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 25, lifetime);
+        var returned = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 45, lifetime);
         if (Math.abs(out - 0.25f) > 1e-4 || Math.abs(back - 0.75f) > 1e-4 || Math.abs(returned - 0.25f) > 1e-4) {
             throw new IllegalStateException("PingPong did not go out and back: " + out + ", " + back + ", " + returned);
         }
