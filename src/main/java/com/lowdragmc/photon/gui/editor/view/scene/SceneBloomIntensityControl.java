@@ -4,13 +4,11 @@ import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Horizontal;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Vertical;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
-import com.lowdragmc.lowdraglib2.gui.ui.elements.Scroller;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonIcons;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -24,14 +22,19 @@ import java.util.Locale;
  * the slider follows the config screen and a config reload. Dragging it makes the same edit the config screen
  * makes — the shipped default (and the config file's own default) is never touched, only the value the author
  * picks. Bloom stays on/off through the toggle beside it; this only changes how strong the halo is.
+ * <p>
+ * The slider is a {@link ContinuousSlider}, not a {@code Scroller}: a slider is dragged from anywhere on its
+ * track and follows the pointer, which is what a scrollbar-shaped control never did here.
  */
 @OnlyIn(Dist.CLIENT)
 public class SceneBloomIntensityControl extends UIElement {
     /** The slider's span, kept in step with {@code bloom_intensity}'s {@code defineInRange(0, 2)}. */
     public static final float MIN = 0f;
     public static final float MAX = 2f;
+    /** Two decimals, the readout's resolution; the slider snaps to it so the two never disagree. */
+    public static final float STEP = 0.01f;
 
-    public final Scroller.Horizontal slider = new Scroller.Horizontal();
+    public final ContinuousSlider slider = new ContinuousSlider(MIN, MAX, current());
     public final Label readout = new Label();
 
     public SceneBloomIntensityControl() {
@@ -45,14 +48,10 @@ public class SceneBloomIntensityControl extends UIElement {
                 "photon.configuration.bloom_intensity_in_scene",
                 "photon.configuration.bloom_intensity_in_scene.tooltip"));
 
-        // the bar itself is the handle, with no arrows, like the scene-range scroller beside it
-        slider.headButton.setDisplay(false);
-        slider.tailButton.setDisplay(false);
-        slider.setRange(MIN, MAX).setScrollBarSize(10);
-        slider.setValue(current(), false);
-        slider.setOnValueChanged(this::setIntensity);
+        slider.step(STEP).onValueChanged(this::setIntensity);
         slider.layout(layout -> {
             layout.heightPercent(100);
+            layout.width(40);
             layout.flex(1);
         });
         // the whole control carries the tooltip; the slider is what the pointer actually lands on
@@ -68,15 +67,19 @@ public class SceneBloomIntensityControl extends UIElement {
             layout.heightPercent(100);
             layout.width(20);
         });
-        readout.setText(readoutText(current()));
+        readout.setText(readoutText(slider.getValue()));
 
         addEventListener(UIEvents.TICK, event -> {
-            if (slider.isDragging()) return;
+            // while the pointer holds it, the slider is the truth: writing the config back would fight the drag
+            if (slider.isDragging()) {
+                readout.setText(readoutText(slider.getValue()));
+                return;
+            }
             var value = current();
-            if (Math.abs(slider.getValue() - value) > 0.0005f) {
+            if (Math.abs(slider.getValue() - value) > STEP / 2f) {
                 slider.setValue(value, false);
             }
-            readout.setText(readoutText(value));
+            readout.setText(readoutText(slider.getValue()));
         });
 
         var icon = new UIElement().layout(layout -> {
@@ -95,12 +98,12 @@ public class SceneBloomIntensityControl extends UIElement {
     }
 
     private void setIntensity(float value) {
-        var clamped = Mth.clamp(value, MIN, MAX);
-        PhotonConfig.INSTANCE.bloomIntensity.set((double) clamped);
-        readout.setText(readoutText(clamped));
+        PhotonConfig.INSTANCE.bloomIntensity.set((double) value);
+        readout.setText(readoutText(value));
     }
 
-    private static Component readoutText(float value) {
+    /** The text the readout shows, exposed so the smoke test can assert on it. */
+    public static Component readoutText(float value) {
         // two decimals: the useful resolution of a 0..2 halo strength
         return Component.literal(String.format(Locale.ROOT, "%.2f", value));
     }

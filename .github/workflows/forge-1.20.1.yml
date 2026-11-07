@@ -44,6 +44,22 @@ jobs:
           path: ${{ runner.temp }}/photon-build.log
           if-no-files-found: ignore
 
+      # Artifact downloads and raw job logs are unreachable from some environments (the blob storage
+      # refuses them); check-run annotations are not, so a failed compile says what broke right there.
+      - name: Publish compile errors as annotations
+        if: failure()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/photon-build.log"
+          [ -f "$log" ] || exit 0
+          # first the compiler's own errors, then whatever the log ended on: a failure that is not a
+          # javac error (a test, a plugin) still has to be readable without the log
+          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed' "$log" \
+            | head -n 25 | while IFS= read -r line; do echo "::error title=build::$line"; done
+          echo "::group::last 25 log lines"
+          tail -n 25 "$log"
+          echo "::endgroup::"
+
       - name: Verify packaged Photon mixin config and refmap
         shell: bash
         run: |
@@ -113,7 +129,7 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true -Dphoton.serverFxPackSyncSmoke=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
-          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$log_file" && grep -Fq '[fx-picker-smoke] the fx search lists every loadable effect' "$log_file" && grep -Fq '[bloom-control-smoke] dragging the scene bar' "$log_file" && grep -Fq '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector' "$log_file" && grep -Fq '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap' "$log_file" && grep -Fq '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals' "$log_file" && grep -Fq '[editor-assets-smoke] loaded Photon workspace assets and Photon 1/2 legacy assets' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-loader-compat] registered neoforge:obj using Forge' "$log_file" && grep -Fq '[obj-model-smoke] parsed neoforge:obj through Forge and built' "$log_file" && grep -Fq '[fxproj-editor-smoke] opened v3 managed-list project and previewed' "$log_file" && grep -Fq '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes' "$log_file" && grep -Fq '[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize' "$log_file" && grep -Fq '[shader-compat-smoke] compiled two-argument fog shader and instanced variant' "$log_file" && grep -Fq '[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
+          if grep -Fq 'Photon shader graph nodes loaded:' "$log_file" && grep -Fq 'Sound engine started' "$log_file" && grep -Fq 'ParticleEngineAccessor' "$log_file" && grep -Fq 'photon.mixins.json' "$log_file" && grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$log_file" && grep -Fq '[fx-picker-smoke] the fx search lists every loadable effect' "$log_file" && grep -Fq '[bloom-control-smoke] dragging the scene bar' "$log_file" && grep -Fq '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously' "$log_file" && grep -Fq '[editor-open] FXEditor built in' "$log_file" && grep -Fq '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector' "$log_file" && grep -Fq '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap' "$log_file" && grep -Fq '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours' "$log_file" && grep -Fq '[fxproj-smoke] loaded synthetic .fxproj with burst' "$log_file" && grep -Fq '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields' "$log_file" && grep -Fq '[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals' "$log_file" && grep -Fq '[editor-assets-smoke] loaded Photon workspace assets and Photon 1/2 legacy assets' "$log_file" && grep -Fq '[mixin-smoke] ParticleEngine accessor path is callable' "$log_file" && grep -Fq '[obj-loader-compat] registered neoforge:obj using Forge' "$log_file" && grep -Fq '[obj-model-smoke] parsed neoforge:obj through Forge and built' "$log_file" && grep -Fq '[fxproj-editor-smoke] opened v3 managed-list project and previewed' "$log_file" && grep -Fq '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes' "$log_file" && grep -Fq '[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize' "$log_file" && grep -Fq '[shader-compat-smoke] compiled two-argument fog shader and instanced variant' "$log_file" && grep -Fq '[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded' "$log_file" && ! grep -E -q 'FATAL|MixinApplyError|InvalidInjectionException|ClassCastException' "$log_file" && ! grep -Fq 'Failed to recompile shader' "$log_file" && ! grep -Fq 'Failed to load model' "$log_file"; then
             grep -E '\[.*smoke\]|\[obj-loader-compat\]' "$log_file" || true
             echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
             exit 0
@@ -122,6 +138,21 @@ jobs:
           echo "Forge client exited with status $result before Photon and Minecraft reached the ready state." >&2
           exit 1
 
+
+      # the gate below is one long chain: a single missing marker fails it without saying which, so the
+      # markers this change added are reported one by one first
+      - name: Report the slider and editor-open markers
+        if: always()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/photon-client.log"
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]'; do
+            if grep -Fq "$marker" "$log"; then
+              echo "::notice title=marker present::$marker"
+            else
+              echo "::error title=marker missing::$marker"
+            fi
+          done
 
       - name: Require server FX pack download and automatic resource reload
         shell: bash
@@ -288,6 +319,23 @@ jobs:
           if changed < 10:
               raise SystemExit('Particle was alive but did not visibly change the editor scene')
           PY
+
+      # the same reason as the build's: the client log is where a failed smoke test says why, and the
+      # artifact holding it may be unreachable, so its smoke lines and its exception are annotated too
+      - name: Publish client smoke failures as annotations
+        if: failure()
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/photon-client.log"
+          [ -f "$log" ] || exit 0
+          echo "::group::smoke markers"
+          grep -E '\[[a-z0-9-]+smoke\]' "$log" | tail -n 40 || true
+          echo "::endgroup::"
+          echo "::group::last 60 lines"
+          tail -n 60 "$log"
+          echo "::endgroup::"
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | head -n 20 | \
+            while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
         if: always()
