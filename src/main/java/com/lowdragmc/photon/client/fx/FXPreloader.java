@@ -115,6 +115,33 @@ public final class FXPreloader {
         return RENDER_JOBS.size();
     }
 
+    /**
+     * Every texture id an effect names, collected without loading, preparing or drawing anything. This is what a
+     * {@code /photon_client textures} answer needs: which images the effect asks for, so each one can be checked
+     * against the packs and the loose folders.
+     */
+    public static Set<ResourceLocation> texturesOf(FX fx) {
+        var collected = new HashSet<ResourceLocation>();
+        walk(fx, new Sink() {
+            @Override
+            public void texture(ResourceLocation location) {
+                collected.add(location);
+            }
+
+            @Override
+            public void render(Runnable job) {
+                // collecting only: a diagnose must not compile shaders or upload anything
+            }
+
+            @Override
+            public void fx(ResourceLocation fxLocation) {
+                var nested = FXHelper.getFX(fxLocation);
+                if (nested != null && nested != fx) collected.addAll(texturesOf(nested));
+            }
+        });
+        return collected;
+    }
+
     private static void walk(FX fx, Sink sink) {
         var animated = new HashMap<UUID, Set<String>>();
         var timelines = new ArrayList<Timeline>();

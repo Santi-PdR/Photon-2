@@ -6,6 +6,8 @@ import com.lowdragmc.photon.client.light.ShadowMode;
 import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
+
 public class PhotonConfig {
     /** The most lights that cast shadows in a frame; the renderer sizes its visibility maps by it. */
     public static final int MAX_SHADOWED_LIGHTS = 32;
@@ -71,6 +73,14 @@ public class PhotonConfig {
     public final ForgeConfigSpec.ConfigValue<Integer> volumetricSamples;
     public final ForgeConfigSpec.ConfigValue<Boolean> volumetricWithShaderPacks;
 
+    /**
+     * Extra folders to look in for an effect's images (and {@code .fx} assets), each read as
+     * {@code <folder>/assets/<namespace>/...}. This is the escape hatch for an author whose content lives outside the
+     * game directory — a modpack workspace, another drive, an unzipped pack kept anywhere. Leave empty and Photon still
+     * searches the game directory, the Photon workspace and the installed resource packs.
+     */
+    public final ForgeConfigSpec.ConfigValue<List<? extends String>> extraAssetRoots;
+
     /** Off = collision-enabled emitters always update serially (for mods whose blocks break when read off-thread). */
     public final ForgeConfigSpec.ConfigValue<Boolean> collisionParallel;
     public final ForgeConfigSpec.ConfigValue<Integer> collisionSectionCacheLimit;
@@ -121,6 +131,13 @@ public class PhotonConfig {
                 .defineInRange("volumetric_forward_scattering", 0.3, 0.0, 0.9);
         volumetricSamples = light(builder, "volumetric_samples").defineInRange("volumetric_samples", 4, 1, 16);
         volumetricWithShaderPacks = light(builder, "volumetric_with_shader_packs").define("volumetric_with_shader_packs", true);
+        builder.pop();
+
+        builder.push("assets");
+        extraAssetRoots = builder
+                .comment("Folders searched for effect assets outside the game directory, each read as <folder>/assets/<namespace>/...",
+                        "Example: C:/Users/you/curseforge/minecraft/Instances/cursedfate/kubejs/assets")
+                .defineListAllowEmpty("extra_roots", List.of(), entry -> entry instanceof String);
         builder.pop();
 
         builder.push("collision");

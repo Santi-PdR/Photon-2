@@ -143,13 +143,15 @@ public class TextureMaterial extends ShaderInstanceMaterial {
 
     @Override
     public void preload(MaterialContext context, PreloadContext preload) {
-        preload.texture(texture);
+        preload.texture(com.lowdragmc.photon.client.fx.LooseTextures.resolve(texture));
         super.preload(context, preload);
     }
 
     @Override
     public void setupUniform(MaterialContext context) {
-        RenderSystem.setShaderTexture(0, texture);
+        // the id the effect names may not be served by any pack (the author's folder was never registered): bind
+        // the copy the workspace adopted, so the particles draw their image instead of the missing checkerboard
+        RenderSystem.setShaderTexture(0, com.lowdragmc.photon.client.fx.LooseTextures.resolve(texture));
         var shader = getShader(context);
         shader.safeGetUniform("DiscardThreshold").set(discardThreshold);
         // the preview thumbnail drops the intensity so a bright emissive material doesn't blow it out
@@ -174,13 +176,27 @@ public class TextureMaterial extends ShaderInstanceMaterial {
                         new Button().setText("ldlib.gui.editor.tips.select_image").setOnClick(e -> {
                             var mui = e.currentElement.getModularUI();
                             if (mui == null) return;
+                            // opens where the player's content actually is: the workspace, but a folder the
+                            // author keeps elsewhere can be browsed to, and the picked file is copied in
                             Dialog.showFileDialog("ldlib.gui.editor.tips.select_image", PhotonPaths.getDataDir(), true, Dialog.suffixFilter(".png"), r -> {
-                                if (r != null && r.isFile()) {
-                                    var location = getTextureFromFile(r);
-                                    if (location == null) return;
-                                    texture = location;
-                                    configurator.notifyChanges();
+                                if (r == null || !r.isFile()) return;
+                                var location = getTextureFromFile(r);
+                                if (location == null) {
+                                    // silence here read as "the button does nothing": say why the pick was refused
+                                    var player = net.minecraft.client.Minecraft.getInstance().player;
+                                    if (player != null) player.displayClientMessage(
+                                            net.minecraft.network.chat.Component.literal("Photon: " + r.getName()
+                                                    + " is not inside an assets/<namespace>/ folder, so it has no resource id; "
+                                                    + "put it under photon/assets/<namespace>/textures/... and pick it again"),
+                                            false);
+                                    com.lowdragmc.photon.Photon.LOGGER.warn("photon: refused texture {} ({})", r, location);
+                                    return;
                                 }
+                                texture = location;
+                                configurator.notifyChanges();
+                                // a picked file from outside the packs is adopted at once, so the preview and the
+                                // next draw both see it without waiting for a reload
+                                com.lowdragmc.photon.client.fx.LooseTextures.resolve(location);
                             }).show(mui.ui.rootElement);
                         }).layout(layout -> layout.alignSelf(AlignItems.CENTER))
                 ));

@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           log="$RUNNER_TEMP/photon-client.log"
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -178,7 +178,11 @@ jobs:
 
       - name: Require Photon 1 effect conversion
         shell: bash
-        run: grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
+        run: |
+          grep -Fq '[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-conversion-report-smoke] a second pass reported' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[loose-texture-smoke] found cursedfate_probe:textures/particle/loose_probe.png' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[loose-texture-smoke] found cursedfate_stray:textures/particle/stray_probe.png' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 editor project import
         shell: bash
@@ -334,8 +338,24 @@ jobs:
           echo "::group::last 60 lines"
           tail -n 60 "$log"
           echo "::endgroup::"
-          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | head -n 20 | \
-            while IFS= read -r line; do echo "::error title=client::$line"; done
+          echo "::group::noise filter"
+          echo "The headless client always logs a narrator and a netty failure; neither stops the run."
+          echo "::endgroup::"
+          # Our own assertion first: the log's first Exception is narrator/netty noise, and publishing that
+          # instead of the smoke failure is why a red run used to say nothing about what broke.
+          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator' | head -n 4 | \
+            while IFS= read -r line; do echo "::error title=smoke assertion::$line"; done
+          # Then one flattened window: the 25 lines of our own logging before the first line that names the
+          # test, which is where the reason for the failure always is.
+          hit=$(grep -nE 'PhotonFXEditorSmokeTest|IllegalStateException' "$log" | head -n 1 | cut -d: -f1)
+          if [ -n "$hit" ]; then
+            from=$(( hit > 25 ? hit - 25 : 1 ))
+            sed -n "${from},$(( hit + 4 ))p" "$log" | tr '\n' '|' | head -c 2500 | \
+              while IFS= read -r line; do echo "::error title=log window::$line"; done
+          fi
+          # Finally the generic sweep, filtered, as a last resort.
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
+            | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
         if: always()

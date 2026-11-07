@@ -63,7 +63,7 @@ public class ClientCommands {
                             .shouldCloseOnKeyInventory(false);
                     var screen = new ModularUIScreen(ui, Component.empty());
                     minecraft.setScreen(screen);
-                    com.lowdragmc.photon.Photon.LOGGER.info("[editor-open] /photon_editor -> screen in {} ms (window + UI mount)",
+                    Photon.LOGGER.info("[editor-open] /photon_editor -> screen in {} ms (window + UI mount)",
                             (System.nanoTime() - startedAt) / 1_000_000.0);
                     return 1;
                 }),
@@ -113,26 +113,11 @@ public class ClientCommands {
                                     return 1;
                                 }))
                         .then(Commands.literal("convert").requires(source -> source.hasPermission(2))
-                                .executes(context -> {
-                                    if (Minecraft.getInstance().player != null) {
-                                        Minecraft.getInstance().player.sendSystemMessage(
-                                                Component.literal("trying to convert photon 1 fx under the ")
-                                                        .append(Component.literal("[photon/assets/photon/fx_old]")
-                                                                .withStyle(style -> style.withColor(0xff008000)
-                                                                        .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_FILE,
-                                                                                new java.io.File(PhotonPaths.getAssetsDir(), "photon/fx_old").getAbsolutePath())))
-                                                        )
-                                                        .append(Component.literal(" folder"))
-                                        );
-                                    }
-                                    var converted = FXCompat.convertFX();
-                                    if (Minecraft.getInstance().player != null) {
-                                        Minecraft.getInstance().player.sendSystemMessage(
-                                                Component.literal("Converted " + converted + " Photon 1 effect(s); reload resources with F3+T. Existing files were preserved.")
-                                        );
-                                    }
-                                    return 1;
-                                })),
+                                .executes(context -> convertLegacyFx())
+                                .then(Commands.literal("status").executes(context -> legacyFxStatus())))
+                        .then(createLiteral("textures").executes(context -> textureStatus()))
+                        .then(createLiteral("reload").executes(context -> reloadResources("requested")))
+                        .then(createLiteral("fxpacks").executes(context -> refreshServerPacks())),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be
                 // characterised by loading it and running "status".
@@ -194,6 +179,94 @@ public class ClientCommands {
         }
         PhotonPostFX.setTestEffect(path, weight);
         feedback("photonfx: testing '" + text + "' at weight " + weight + " (stop with /photonfx clear)");
+        return 1;
+    }
+
+    /**
+     * Every legacy folder Photon knows about, converted with a full report: how many were converted, which were
+     * skipped and why, and where it looked. A bare count left "the list is not complete" unanswerable.
+     */
+    private static int convertLegacyFx() {
+        var report = FXCompat.convertAllFX();
+        feedback("photon 1 -> 2 conversion");
+        report.lines().forEach(ClientCommands::feedback);
+        if (report.converted() > 0) {
+            // no F3+T needed: the new files only become listable when the packs are re-read, so ask for that
+            // reload here instead of making the player remember a key combination
+            reloadResources("converted " + report.converted() + " effect(s)");
+        }
+        return 1;
+    }
+
+    /**
+     * Re-read the resource packs, the same thing F3+T does, and say when it finished. Everything that mounts packs
+     * (the fx folder, {@code photon/fxpacks}, the ldlib trees) only rescans on this, which is why "drop a file and
+     * play it" never worked without a manual refresh.
+     */
+    private static int reloadResources(String reason) {
+        feedback("photon: reloading resources (" + reason + ") ...");
+        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                Minecraft.getInstance().execute(() -> {
+                    if (failure != null) {
+                        Photon.LOGGER.error("photon: resource reload failed", failure);
+                        feedback("photon: reload failed: " + failure.getMessage());
+                        return;
+                    }
+                    FXHelper.clearCache();
+                    com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                    // the same work the F3+T path does, so nothing is left for the player to redo by hand
+                    com.lowdragmc.photon.client.fx.FXPreloader.onResourcesReloaded();
+                    feedback("photon: resources reloaded, the effect list is up to date");
+                }));
+        return 1;
+    }
+
+    /** "Did it work?" without converting anything: the folders read, the fx each holds, and where they would land. */
+    private static int legacyFxStatus() {
+        feedback("photon 1 -> 2 conversion status");
+        var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
+        for (var root : FXCompat.legacyRoots()) {
+            var present = java.nio.file.Files.isDirectory(root);
+            feedback("  " + root + (present ? "" : "  (missing)"));
+            if (!present) continue;
+            try (var paths = java.nio.file.Files.walk(root)) {
+                var effects = paths.filter(java.nio.file.Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".fx"))
+                        .toList();
+                feedback("    " + effects.size() + " .fx file(s)");
+                for (var effect : effects) {
+                    // by file name: that is where the conversion puts it, flat
+                    var target = destination.resolve(effect.getFileName().toString());
+                    feedback("    " + effect.getFileName() + (java.nio.file.Files.exists(target)
+                            ? "  -> converted already" : "  -> would convert"));
+                }
+            } catch (java.io.IOException e) {
+                feedback("    unreadable: " + e.getMessage());
+            }
+        }
+        return 1;
+    }
+
+    /** Why an effect's image does not show: the roots searched, the namespaces found, and each id's status. */
+    private static int textureStatus() {
+        com.lowdragmc.photon.client.fx.LooseTextures.reportTexturesTo(ClientCommands::feedback);
+        return 1;
+    }
+
+    /**
+     * "El server subió un efecto nuevo y yo ya estoy dentro": ask the server for the current pack list. It answers
+     * with the same manifest it sends at login, anything already downloaded is skipped by hash, and the download
+     * reloads the resources by itself when it finishes.
+     */
+    private static int refreshServerPacks() {
+        var connection = Minecraft.getInstance().getConnection();
+        if (connection == null) {
+            feedback("photon: not connected to a server");
+            return 0;
+        }
+        feedback("photon: asking the server for its FX packs ...");
+        com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(
+                com.lowdragmc.photon.network.FxPackSync.refreshRequest());
         return 1;
     }
 

@@ -19,6 +19,24 @@ public class PhotonCommonListeners {
         }
     }
 
+    /**
+     * Login is not the only moment a player can learn about a new pack: a dimension change or a respawn reloads
+     * nothing on the client, but it is a fresh level, and it is the cheapest place to re-offer the list.
+     */
+    @SubscribeEvent
+    public static void onPlayerChangeDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            com.lowdragmc.photon.network.FxPackSync.onPlayerJoinLevel(player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            com.lowdragmc.photon.network.FxPackSync.onPlayerJoinLevel(player);
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {

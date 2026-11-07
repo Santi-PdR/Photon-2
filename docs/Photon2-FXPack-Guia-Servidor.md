@@ -68,8 +68,13 @@ prioridad lo tapa ("shadowed") o si hay que recargar recursos ("not mounted" →
 
 1. Copia el `.fxpack` dentro de `<instancia>/photon/fxpacks/`.
    - Si el archivo lo hizo el mismo juego, seguramente ya está ahí.
-2. Recarga recursos: **F3+T** (o salir y entrar).
-3. Ya está. No se toca `mods/`, no se toca `config/`.
+2. Espera un segundo. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete nuevo o
+   reemplazado (avisa en el log: `fxpacks: detected new pack ...` y luego `reloading resources
+   automatically`).
+3. Si querés forzarlo, `/photon_client reload` hace exactamente lo mismo que **F3+T**, sin salir del
+   juego ni buscar la tecla.
+
+No se toca `mods/`, no se toca `config/`.
 
 Notas útiles:
 
@@ -103,10 +108,16 @@ Photon ya trae ese circuito hecho. Funciona así:
    ```
 
    Sólo se leen archivos que terminen en `.fxpack` y que estén directamente en esa carpeta
-   (no en subcarpetas del servidor).
+   (no en subcarpetas del servidor). El servidor **no** necesita recargar nada a mano: el hash se
+   calcula al leer el archivo, y cada jugador que entra recibe el anuncio.
 
-3. Reinicia o cambia el archivo y pide a los jugadores que **vuelvan a entrar**. Photon anuncia los
-   paquetes al jugador en el momento del login.
+3. Cuando quieras que los que **ya están conectados** lo reciban, no hace falta reiniciar el servidor
+   ni pedirles que salgan: corre `/photon fxpacks` en la consola o como operador. El servidor vuelve
+   a escanear la carpeta y reenvía la lista a todos los jugadores online. Cada cliente compara hashes,
+   descarga sólo lo que le falta y **recarga los recursos solo** al terminar
+   (`Server Photon FX packs are ready`). No hay que salir y volver a entrar.
+
+   Ese comando necesita el mod en el servidor y permiso de nivel 2 (operador o consola).
 
 ### 4.2 Qué pasa cuando un jugador entra
 
@@ -147,8 +158,9 @@ lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparec
   sólo su interior.
 - **No** dejes el `.fxpack` en el servidor "para que lo vean los jugadores" sin Photon en el
   servidor: sin el mod, el servidor no anuncia nada y nada se descarga.
-- Los jugadores **conectados** no reciben en caliente un paquete nuevo: el anuncio es en el login.
-  Cambia el archivo y pídeles reconectar (o reinicia el servidor).
+- Los jugadores **conectados** no reciben un paquete nuevo solos: el anuncio sale en el login, al
+  cambiar de dimensión, al reaparecer, o cuando alguien corre `/photon fxpacks` (servidor) o
+  `/photon_client fxpacks` (cliente). Reconectar sigue funcionando y es lo más simple si son muchos.
 
 ### 4.5 Comprobaciones rápidas
 
@@ -194,8 +206,19 @@ no código; Photon en el cliente es quien lo dibuja.
 **¿Los jugadores pueden usar sus propios FX?** Sí: sus paquetes en su `photon/fxpacks/` conviven con
 los del servidor.
 
-**¿Puedo actualizar un paquete mientras el servidor está encendido?** Sí, el siguiente jugador que
-entre recibe la versión nueva; los que ya están dentro, al reconectar.
+**¿Puedo actualizar un paquete mientras el servidor está encendido?** Sí. El siguiente jugador que
+entre recibe la versión nueva solo; para los que ya están dentro, `/photon fxpacks` desde la consola
+(o que el jugador escriba `/photon_client fxpacks`) les vuelve a ofrecer la lista sin reconectar.
+
+**¿Y si el jugador no quiere esperar al comando del admin?** `/photon_client fxpacks` en su cliente
+pide la lista al servidor en ese momento. Es el mismo camino que usa el login, así que sólo baja lo
+que le falta.
+
+**¿Cuándo hay que apretar F3+T entonces?** Casi nunca. Photon recarga solo en estos cuatro casos:
+un `.fxpack` que aparece o cambia en `photon/fxpacks/`, un paquete que llega del servidor, una
+exportación desde el editor, y una conversión de Photon 1 a 2 (`/photon_client convert`). El atajo
+manual sigue existiendo (`/photon_client reload` o F3+T) por si editás archivos fuera del juego
+—por ejemplo a mano dentro de `photon/assets/`— y querés verlo al instante.
 
 **¿Y si mi servidor usa un proxy (BungeeCord/Velocity)?** Photon anuncia desde el servidor de Forge;
 coloca los paquetes en el `photon/fxpacks/` de **cada** servidor que los use.

@@ -231,6 +231,97 @@ public final class PhotonFXEditorSmokeTest {
         }
 
         verifySliderDragsContinuously();
+        verifyLooseTextureLookup();
+    }
+
+    /**
+     * What Alex kept hitting: an effect names {@code cursedfate:textures/...} but no pack serves it, because the folder
+     * was dropped somewhere that was never registered, and the particles draw the purple checkerboard. The lookup must
+     * find the file in an assets tree on disk and copy it into the workspace so the id resolves from then on.
+     */
+    private static void verifyLooseTextureLookup() {
+        var assets = com.lowdragmc.photon.client.util.PhotonPaths.getAssetsDir().toPath();
+        var id = new ResourceLocation("cursedfate_probe", "textures/particle/loose_probe.png");
+        // a file outside any mounted pack: "the author's folder", in the same shape the game reads
+        var looseRoot = assets.resolve("loose_probe_root");
+        var looseFile = looseRoot.resolve("assets").resolve(id.getNamespace()).resolve(id.getPath());
+        var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
+        try {
+            Files.createDirectories(looseFile.getParent());
+            Files.write(looseFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+            com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+
+            var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
+            if (folder == null || !Files.isRegularFile(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
+                throw new IllegalStateException("The loose texture lookup did not find " + id + " in " + looseRoot
+                        + "; indexed namespace folder was " + folder);
+            }
+            var resolved = com.lowdragmc.photon.client.fx.LooseTextures.resolve(id);
+            if (!resolved.equals(id) || !Files.isRegularFile(adopted)) {
+                throw new IllegalStateException("Resolving " + id + " did not adopt the loose file into "
+                        + adopted + " (got " + resolved + ")");
+            }
+            Photon.LOGGER.info("[loose-texture-smoke] found {} in a folder no pack mounts and copied it to the workspace",
+                    id);
+
+            // the other half of Alex's report: the id names one namespace, the artist's files sit under another (or
+            // under no assets folder at all). The lookup is path-agnostic, so the name alone has to be enough.
+            var strayId = new ResourceLocation("cursedfate_stray", "textures/particle/stray_probe.png");
+            var strayFile = looseRoot.resolve("delivered").resolve("stray_probe.png");
+            var strayAdopted = assets.resolve(strayId.getNamespace()).resolve(strayId.getPath());
+            try {
+                Files.createDirectories(strayFile.getParent());
+                Files.write(strayFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                if (!com.lowdragmc.photon.client.fx.LooseTextures.resolve(strayId).equals(strayId)
+                        || !Files.isRegularFile(strayAdopted)) {
+                    throw new IllegalStateException("A texture whose files sit under another namespace was not found: "
+                            + strayId);
+                }
+                Photon.LOGGER.info("[loose-texture-smoke] found {} outside any assets folder", strayId);
+            } finally {
+                Files.deleteIfExists(strayAdopted);
+                Files.deleteIfExists(strayFile);
+                Files.deleteIfExists(strayFile.getParent());
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+            }
+
+            // the converter's destination is what the picker reads: a flat assets/photon/fx, never fx_old/ inside it
+            var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
+            if (!destination.equals(assets.resolve("photon/fx"))) {
+                throw new IllegalStateException("Converted effects do not land in assets/photon/fx: " + destination);
+            }
+            var source = Files.createTempDirectory("photon1-flat-conversion");
+            var nested = source.resolve("fx_old");
+            Files.createDirectories(nested);
+            var legacy = new CompoundTag();
+            legacy.put("emitters", new ListTag());
+            try (var output = Files.newOutputStream(nested.resolve("matrix.fx"))) {
+                NbtIo.writeCompressed(legacy, output);
+            }
+            var tempDestination = Files.createTempDirectory("photon2-converted");
+            var report = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(nested, tempDestination);
+            if (report.converted() != 1 || !Files.isRegularFile(tempDestination.resolve("matrix.fx"))
+                    || Files.exists(tempDestination.resolve("fx_old"))) {
+                throw new IllegalStateException("Conversion kept the legacy folder inside the id: "
+                        + report.lines());
+            }
+            Photon.LOGGER.info("[loose-texture-smoke] conversion flattens fx_old into the effect folder");
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("Loose texture lookup fixture failed", failure);
+        } finally {
+            try {
+                Files.deleteIfExists(adopted);
+                Files.deleteIfExists(looseFile);
+                Files.deleteIfExists(looseFile.getParent());
+                Files.deleteIfExists(looseRoot.resolve("assets").resolve(id.getNamespace()));
+                Files.deleteIfExists(looseRoot.resolve("assets"));
+                Files.deleteIfExists(looseRoot);
+                com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+            } catch (java.io.IOException ignored) {
+                // leftovers in a temp tree are harmless
+            }
+        }
     }
 
     /**
@@ -261,13 +352,19 @@ public final class PhotonFXEditorSmokeTest {
             }
             // then the drag: each move must be written, monotonically, without releasing and pressing again
             var seen = new ArrayList<Double>();
+            var widget = new ArrayList<Double>();
             for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
                 dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
+                // both sides: the widget's own value says whether the drag followed the pointer, the config says
+                // whether that value reached the renderer. Reporting only one of them cannot tell a stuck slider
+                // from a write that something reverted.
+                widget.add((double) slider.getValue());
                 seen.add(com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get());
             }
             for (var i = 1; i < seen.size(); i++) {
-                if (seen.get(i) <= seen.get(i - 1)) {
-                    throw new IllegalStateException("The slider did not keep up with the drag: " + seen);
+                if (seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
+                    throw new IllegalStateException("The slider did not keep up with the drag: config=" + seen
+                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width + ")");
                 }
             }
             // the config holds the value: reading it back is what a slider that only redraws itself would fail
@@ -1912,13 +2009,15 @@ public final class PhotonFXEditorSmokeTest {
         try (var output = Files.newOutputStream(source.resolve("nested/test.fx"))) {
             NbtIo.writeCompressed(legacy, output);
         }
-        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 1
-                || !Files.isRegularFile(dest.resolve("nested/test.fx")))
-            throw new IllegalStateException("Photon 1 converter did not preserve nested effect paths");
-        var firstExport = Files.readAllBytes(dest.resolve("nested/test.fx"));
-        if (com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest) != 0
-                || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("nested/test.fx"))))
-            throw new IllegalStateException("Photon 1 converter overwrote an existing effect");
+        // flattened on purpose: a nested target would become photon:nested/test, an id the picker never asks for
+        var conversion = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (conversion.converted() != 1 || !Files.isRegularFile(dest.resolve("test.fx")))
+            throw new IllegalStateException("Photon 1 converter did not flatten the effect into assets/photon/fx");
+        var firstExport = Files.readAllBytes(dest.resolve("test.fx"));
+        var second = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (second.converted() != 0 || second.skipped().isEmpty()
+                || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
+            throw new IllegalStateException("Photon 1 converter overwrote an existing effect or hid the skip");
         var oldBurst = new CompoundTag();
         oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
         oldBurst.putFloat("probability", 0.75f);
@@ -1986,6 +2085,8 @@ public final class PhotonFXEditorSmokeTest {
                 || mappedGradient.getCompound("data").getCompound("gradientColor0").getList("rgb", Tag.TAG_FLOAT).size() != 8
                 || mappedGradient.getCompound("data").getCompound("gradientColor1").getList("rgb", Tag.TAG_FLOAT).size() != 8)
             throw new IllegalStateException("Photon 1 random gradients were not preserved");
+        // a skipped file is reported by name, not swallowed: "converted everything and nothing appears" needs an answer
+        Photon.LOGGER.info("[photon1-conversion-report-smoke] a second pass reported {} skip(s)", second.skipped().size());
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
     }
 
