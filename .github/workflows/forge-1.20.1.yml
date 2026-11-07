@@ -52,9 +52,13 @@ jobs:
         run: |
           log="$RUNNER_TEMP/photon-build.log"
           [ -f "$log" ] || exit 0
-          grep -E '\.java:[0-9]+: (error|warning: \[.*\])|^e: |error: ' "$log" | head -n 40 | \
-            sed -E 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g' | \
-            while IFS= read -r line; do echo "::error title=compile::$line"; done
+          # first the compiler's own errors, then whatever the log ended on: a failure that is not a
+          # javac error (a test, a plugin) still has to be readable without the log
+          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed' "$log" \
+            | head -n 25 | while IFS= read -r line; do echo "::error title=build::$line"; done
+          echo "::group::last 25 log lines"
+          tail -n 25 "$log"
+          echo "::endgroup::"
 
       - name: Verify packaged Photon mixin config and refmap
         shell: bash
