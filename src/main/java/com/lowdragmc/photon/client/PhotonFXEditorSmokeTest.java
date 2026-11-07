@@ -332,21 +332,22 @@ public final class PhotonFXEditorSmokeTest {
         if (!"photon".equals(photon.getLiteral())) {
             throw new IllegalStateException("The server command root is not /photon: " + photon.getLiteral());
         }
-        var fx = photon.getChild("fx");
-        if (fx == null || fx.getChild("section") == null) {
+        var fx = literal(photon, "fx");
+        if (fx == null || literal(fx, "section") == null) {
             throw new IllegalStateException("/photon fx section is not registered");
         }
-        var entity = fx.getChild("section").getChild("entity");
-        var jump = entity == null ? null : entity.getChild("jump");
-        if (jump == null || jump.getChild("section") == null) {
+        var sectionNode = literal(fx, "section");
+        var entity = literal(sectionNode, "entity");
+        var jump = entity == null ? null : literal(entity, "jump");
+        if (jump == null || literal(jump, "section") == null) {
             throw new IllegalStateException("/photon fx section entity jump <section> is not registered");
         }
-        var block = fx.getChild("section").getChild("block");
-        if (block == null || block.getChild("release") == null || block.getChild("advance") == null) {
+        var block = literal(sectionNode, "block");
+        if (block == null || literal(block, "release") == null || literal(block, "advance") == null) {
             throw new IllegalStateException("/photon fx section block advance/release are not registered");
         }
         // block release takes an optional trailing location
-        if (block.getChild("release").getChild("location") == null) {
+        if (argument(literal(block, "release"), "location") == null) {
             throw new IllegalStateException("/photon fx section block release [location] is not registered");
         }
 
@@ -389,6 +390,30 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[section-command-smoke] /photon fx section is registered and a jump command "
                 + "moves a playing timeline into the named section");
+    }
+
+    /** The literal child {@code name} of a command node, or null. */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<?> literal(Object node, String name) {
+        if (!(node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder)) return null;
+        for (var child : builder.getArguments()) {
+            if (child instanceof com.mojang.brigadier.builder.LiteralArgumentBuilder<?> literal
+                    && name.equals(literal.getLiteral())) {
+                return literal;
+            }
+        }
+        return null;
+    }
+
+    /** The argument child named {@code name} of a command node, or null (arguments are named, not literal). */
+    private static Object argument(Object node, String name) {
+        if (!(node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder)) return null;
+        for (var child : builder.getArguments()) {
+            if (child instanceof com.mojang.brigadier.builder.RequiredArgumentBuilder<?, ?> argument
+                    && name.equals(argument.getName())) {
+                return argument;
+            }
+        }
+        return null;
     }
 
     /** Set a private field of a packet, the way the server command fills it in. */
