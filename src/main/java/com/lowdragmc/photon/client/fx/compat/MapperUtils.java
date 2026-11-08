@@ -420,7 +420,16 @@ public class MapperUtils {
 
     public static CompoundTag mapTransformTag(CompoundTag transformTag){
         CompoundTag newTransformTag = new CompoundTag();
-        newTransformTag.put("_childrenId", new ListTag());
+        // Preserve authored sibling order. Dropping this list causes converted effects with layered
+        // children to be rearranged when LDLib rebuilds their hierarchy.
+        ListTag children = new ListTag();
+        if (transformTag.get("_childrenId") instanceof ListTag oldChildren) {
+            for (var child : oldChildren) {
+                var id = readTransformUuid(child, null);
+                if (id != null) children.add(StringTag.valueOf(id.toString()));
+            }
+        }
+        newTransformTag.put("_childrenId", children);
         // Photon 1 leaves _parentId out for root-level emitters. A missing id is also valid in
         // older projects; the Photon 2 scene assigns that object a fresh identity on import.
         newTransformTag.putString("_parentId", readTransformUuid(transformTag.get("_parentId"), new UUID(0L, 0L)).toString());

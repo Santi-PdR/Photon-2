@@ -2461,6 +2461,34 @@ public final class PhotonFXEditorSmokeTest {
         if (sparseFx.getFxData().objects().size() != 1) {
             throw new IllegalStateException("A Photon 1 effect without localRotation did not load");
         }
+        // Parent references and explicit sibling order must survive a complete conversion and runtime copy.
+        var parentId = java.util.UUID.randomUUID();
+        var firstId = java.util.UUID.randomUUID();
+        var secondId = java.util.UUID.randomUUID();
+        var hierarchy = legacy.copy();
+        var hierarchyObjects = hierarchy.getCompound("fx").getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
+        var parentTransform = hierarchyObjects.getCompound(0).getCompound("transform");
+        parentTransform.put("id", net.minecraft.nbt.NbtUtils.createUUID(parentId));
+        parentTransform.remove("_parentId");
+        var childOrder = new ListTag();
+        childOrder.add(net.minecraft.nbt.NbtUtils.createUUID(secondId));
+        childOrder.add(net.minecraft.nbt.NbtUtils.createUUID(firstId));
+        parentTransform.put("_childrenId", childOrder);
+        for (var id : new java.util.UUID[]{firstId, secondId}) {
+            var child = empty.copy();
+            child.getCompound("transform").put("id", net.minecraft.nbt.NbtUtils.createUUID(id));
+            child.getCompound("transform").put("_parentId", net.minecraft.nbt.NbtUtils.createUUID(parentId));
+            hierarchyObjects.add(child);
+        }
+        var hierarchyFx = new com.lowdragmc.photon.client.fx.FX();
+        hierarchyFx.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(hierarchy));
+        var hierarchyRuntime = hierarchyFx.createRuntime();
+        var parentObject = hierarchyRuntime.objects.get(parentId);
+        if (parentObject == null || !parentObject.transform().children().stream().map(t -> t.id()).toList()
+                .equals(java.util.List.of(secondId, firstId))) {
+            throw new IllegalStateException("Photon 1 parent hierarchy or explicit child order was not retained");
+        }
         var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
