@@ -2666,6 +2666,28 @@ public final class PhotonFXEditorSmokeTest {
         if (delayedBeam.getAgeF() != 0.5f || delayedTrail.getAgeF() != 0.5f)
             throw new IllegalStateException("Beam or trail did not advance after its fractional start delay");
         delayedBeam.remove(true); delayedTrail.remove(true);
+        var delayedLegacyTag = new CompoundTag();
+        delayedLegacyTag.putInt("startDelay", 2); delayedLegacyTag.putInt("duration", 1);
+        delayedLegacyTag.putBoolean("looping", false);
+        delayedLegacyTag.putString("_type", "beam");
+        var decodedBeam = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(delayedLegacyTag));
+        delayedLegacyTag.putString("_type", "trail");
+        var decodedTrail = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailEmitter(delayedLegacyTag));
+        if (!(decodedBeam instanceof com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter importedBeam)
+                || !(decodedTrail instanceof TrailEmitter importedTrail))
+            throw new IllegalStateException("Delayed legacy beam/trail did not deserialize");
+        for (var imported : java.util.List.of(importedBeam, importedTrail)) {
+            imported.setLevel(Minecraft.getInstance().level);
+            imported.reset();
+            for (int i = 0; i < 2; i++) imported.updateTick(1f);
+            if (!imported.isAlive() || imported.getAgeF() != 0)
+                throw new IllegalStateException("Imported beam or trail expired during start delay");
+            imported.updateTick(0.5f);
+            if (imported.getAgeF() != 0.5f) throw new IllegalStateException("Imported beam/trail did not start after delay");
+            imported.remove(true);
+        }
         // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
         var flat = new CompoundTag();
         flat.putString("_type", "particle");
