@@ -188,19 +188,24 @@ public final class PhotonFXEditorSmokeTest {
      * catalogue), given a selected value, and opened. Without the fix the dialog holds that one entry; with it, both.
      */
     private static void verifySearchBoxOpensOnTheWholeCatalogue() {
-        var queried = new ArrayList<String>();
-        var candidateCount = new int[]{0};
+        var queried = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var candidateCount = new java.util.concurrent.atomic.AtomicInteger();
+        var searchDone = new java.util.concurrent.CountDownLatch(1);
         var configurator = new com.lowdragmc.lowdraglib2.configurator.ui.SearchComponentConfigurator<>(
                 "catalogue", () -> "photon:chosen", value -> { }, "photon:chosen", false,
                 (word, handler) -> {
                     queried.add(word == null ? "<null>" : word);
-                    candidateCount[0] = 0;
+                    int matched = 0;
                     for (var candidate : java.util.List.of("photon:chosen", "photon:other")) {
                         if (Thread.currentThread().isInterrupted()) return;
                         if (candidate.contains(word == null ? "" : word)) {
                             handler.accept(candidate);
-                            candidateCount[0]++;
+                            matched++;
                         }
+                    }
+                    if ((word == null || word.isEmpty()) && matched == 2) {
+                        candidateCount.set(matched);
+                        searchDone.countDown();
                     }
                 },
                 value -> value,
@@ -213,8 +218,14 @@ public final class PhotonFXEditorSmokeTest {
         // What show() does, minus the dialog (there is no screen to add it to in a headless run): the box runs its
         // search and the candidates are pulled in by the search engine, which is asynchronous.
         box.show();
-        waitForSearch(candidateCount, 2, "opening the box searched '" + queried + "' and collected only "
-                + candidateCount[0] + " of 2 effects");
+        try {
+            if (!searchDone.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Opening the box searched " + queried + " but did not collect both effects");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the picker search", e);
+        }
         // and the fix asks for the whole catalogue, not for the value already chosen
         if (!queried.contains("")) {
             throw new IllegalStateException("Opening the search box never searched the whole catalogue, only "
@@ -227,22 +238,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("The chosen name was left unselected, so typing would append to it");
         }
         Photon.LOGGER.info("[search-box-smoke] opening a picker with a value already chosen lists the whole "
-                + "catalogue ({}) and selects the old name so typing replaces it", candidateCount[0]);
-    }
-
-    /** Wait for the asynchronous search to hand over at least {@code expected} candidates (a few client ticks). */
-    private static void waitForSearch(int[] count, int expected, String message) {
-        for (int i = 0; i < 100 && count[0] < expected; i++) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        if (count[0] < expected) {
-            throw new IllegalStateException(message);
-        }
+                + "catalogue ({}) and selects the old name so typing replaces it", candidateCount.get());
     }
 
     /** Read a private field of a library widget (the test drives the real widget, not a copy of it). */
