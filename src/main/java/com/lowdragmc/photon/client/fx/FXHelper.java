@@ -226,7 +226,7 @@ public class FXHelper {
         }
     }
 
-    private static CompoundTag readNbt(java.io.InputStream input) throws IOException {
+    public static CompoundTag readNbt(java.io.InputStream input) throws IOException {
         var buffered = new PushbackInputStream(input, 2);
         int first = buffered.read();
         int second = buffered.read();

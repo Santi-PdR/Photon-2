@@ -2628,6 +2628,11 @@ public final class PhotonFXEditorSmokeTest {
         if (second.converted() != 0 || second.skipped().isEmpty()
                 || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
             throw new IllegalStateException("Photon 1 converter overwrote an existing effect or hid the skip");
+        NbtIo.write(legacy, source.resolve("raw.fx").toFile());
+        var rawConversion = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (rawConversion.converted() != 1 || !Files.isRegularFile(dest.resolve("raw.fx"))) {
+            throw new IllegalStateException("The converter rejected an uncompressed Photon 1 effect");
+        }
         // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
         var flat = new CompoundTag();
         flat.putString("_type", "particle");

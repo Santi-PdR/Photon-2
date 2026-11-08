@@ -139,7 +139,8 @@ public class FXCompat {
                     }
                     CompoundTag photon1FX;
                     try (var input = java.nio.file.Files.newInputStream(path)) {
-                        photon1FX = NbtIo.readCompressed(input);
+                        // The loader accepts both Photon 1's gzip exports and raw NBT; conversion must too.
+                        photon1FX = FXHelper.readNbt(input);
                     }
                     if (!isLegacyEffect(photon1FX)) {
                         var reason = path.getFileName() + ": not a Photon 1 effect";
