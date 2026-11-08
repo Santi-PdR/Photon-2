@@ -34,7 +34,10 @@ public class TrailEmitterMapper implements Mapper {
         newTrailConfigTag.put("renderer", MapperUtils.mapRendererTag(trailConfigTag.getCompound("renderer"),trailConfigTag));
         newTrailConfigTag.putByte("smoothInterpolation",  trailConfigTag.getByte("smoothInterpolation"));
         newTrailConfigTag.putByte("looping", trailConfigTag.getByte("looping"));
-
+        MapperUtils.retainPresentFields(newTrailConfigTag, trailConfigTag);
+        if (trailConfigTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newTrailConfigTag.contains("renderer")) {
+            newTrailConfigTag.put("renderer", MapperUtils.mapRendererTag(trailConfigTag.getCompound("renderer"), trailConfigTag));
+        }
         return  newTrailConfigTag;
     }
 }

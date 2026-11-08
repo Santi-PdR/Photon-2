@@ -391,6 +391,8 @@ public class MapperUtils {
         newRendererTag.put("modelPivot", pivot);
         newRendererTag.putString("vertexSortingMode", "NONE");
 
+        retainPresentFields(newRendererTag, renderTag, "orderInLayer", "useGPUInstance", "modelPivot", "vertexSortingMode");
+        if (configTag.contains("material", Tag.TAG_COMPOUND)) newRendererTag.put("materials", materialsTag);
         return newRendererTag;
     }
 
@@ -416,6 +418,14 @@ public class MapperUtils {
         }
 
         return newUVTag;
+    }
+
+    /** Do not turn omitted legacy fields into explicit zero/empty values; the decoder owns their defaults. */
+    public static void retainPresentFields(CompoundTag mapped, CompoundTag source, String... synthesized) {
+        var always = java.util.Set.of(synthesized);
+        for (var key : java.util.List.copyOf(mapped.getAllKeys())) {
+            if (!source.contains(key) && !always.contains(key)) mapped.remove(key);
+        }
     }
 
     /** Photon 1 emitter version 0 stored its config directly on the object, before the config wrapper existed. */

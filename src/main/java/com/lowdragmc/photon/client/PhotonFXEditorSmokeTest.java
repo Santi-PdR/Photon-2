@@ -2644,6 +2644,16 @@ public final class PhotonFXEditorSmokeTest {
                 || flatBeam.getInt("duration") != 42 || flatBeam.getInt("startDelay") != 8) {
             throw new IllegalStateException("Photon 1 flat v0 emitter configuration was lost");
         }
+        // Actually decode a sparse v0 particle emitter: omitted fields must retain the real defaults.
+        var sparseFlat = flat.copy();
+        sparseFlat.remove("startDelay"); // particle delay was a number function, unlike beam/trail
+        var decodedFlat = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat));
+        if (!(decodedFlat instanceof ParticleEmitter sparseParticle)
+                || sparseParticle.config.getDuration() != 42 || sparseParticle.config.getMaxParticles() != 137
+                || sparseParticle.config.getStartLifetime().get(0f, () -> 0f).intValue() != 100) {
+            throw new IllegalStateException("Sparse Photon 1 particle emitter did not load with its defaults");
+        }
         var nested = new CompoundTag();
         nested.putString("_type", "particle");
         nested.putInt("_version", 2);

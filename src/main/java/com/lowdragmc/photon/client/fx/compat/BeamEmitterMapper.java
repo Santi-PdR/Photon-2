@@ -36,7 +36,10 @@ public class BeamEmitterMapper implements Mapper{
         newBeamConfigTag.put("emitRate", MapperUtils.mapTypedValue(configTag.getCompound("emitRate"), false));
 
         newBeamConfigTag.putString("raycastBlockMode", "VISUAL");
-
+        MapperUtils.retainPresentFields(newBeamConfigTag, configTag, "raycastBlockMode");
+        if (configTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newBeamConfigTag.contains("renderer")) {
+            newBeamConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
+        }
         return newBeamConfigTag;
     }
 }
