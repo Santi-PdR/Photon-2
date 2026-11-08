@@ -364,10 +364,9 @@ public class MapperUtils {
     public static CompoundTag mapLightTag(CompoundTag lightTag){
         CompoundTag newLightTag = new CompoundTag();
         newLightTag.putByte("_enable", lightTag.getByte("enable"));
-        if(newLightTag.getByte("_enable") == 1){
-            newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
-            newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
-        }
+        newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
+        newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
+
         retainPresentFields(newLightTag, lightTag, "_enable");
         return newLightTag;
     }
@@ -413,8 +412,7 @@ public class MapperUtils {
     public static CompoundTag mapCullTag(CompoundTag cullTag){
         CompoundTag newCullTag = new CompoundTag();
         newCullTag.putByte("_enable", cullTag.getByte("enable"));
-        if (newCullTag.getByte("_enable") == 1 &&
-                (cullTag.contains("from", Tag.TAG_COMPOUND) || cullTag.contains("to", Tag.TAG_COMPOUND))) {
+        if (cullTag.contains("from", Tag.TAG_COMPOUND) || cullTag.contains("to", Tag.TAG_COMPOUND)) {
             // Photon 2 persists an AABB under cullBox; its codec stores min/max vectors.
             var box = new CompoundTag();
             var from = cullTag.contains("from", Tag.TAG_COMPOUND) ? mapCoordsDouble(cullTag.get("from")) : constantCoords(-0.5);
@@ -435,13 +433,12 @@ public class MapperUtils {
     public static CompoundTag mapUVTag(CompoundTag uvTag){
         CompoundTag newUVTag = new CompoundTag();
         newUVTag.putByte("_enable", uvTag.getByte("enable"));
-        if(newUVTag.getByte("_enable") == 1){
-            newUVTag.putIntArray("tiles", new int[]{uvTag.getCompound("tiles").getInt("a"), uvTag.getCompound("tiles").getInt("b")});
-            newUVTag.put("startFrame", MapperUtils.mapTypedValue(uvTag.getCompound("startFrame"), false));
-            newUVTag.putFloat("cycle",  uvTag.getFloat("cycle"));
-            newUVTag.putString("animation",  uvTag.getString("animation"));
-            newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
-        }
+        newUVTag.putIntArray("tiles", new int[]{uvTag.getCompound("tiles").getInt("a"), uvTag.getCompound("tiles").getInt("b")});
+        newUVTag.put("startFrame", MapperUtils.mapTypedValue(uvTag.getCompound("startFrame"), false));
+        newUVTag.putFloat("cycle",  uvTag.getFloat("cycle"));
+        newUVTag.putString("animation",  uvTag.getString("animation"));
+        newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
+
 
         retainPresentFields(newUVTag, uvTag, "_enable");
         return newUVTag;

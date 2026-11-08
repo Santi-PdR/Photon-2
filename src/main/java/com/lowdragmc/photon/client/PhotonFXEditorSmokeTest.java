@@ -2871,6 +2871,42 @@ public final class PhotonFXEditorSmokeTest {
                 || decodedSub.getEmitters().get(0).getEvent() != SubEmittersSetting.Event.Birth
                 || !decodedSub.getEmitters().get(0).isLegacyTickGate())
             throw new IllegalStateException("Sparse Photon 1 sub-emitter defaults or event gating were not retained");
+        // Disabled Photon 1 modules still serialize authored values: preserve those values for
+        // later editor activation and timeline overrides, including nested modules and lists.
+        var disabledLegacy = sparseFlat.copy();
+        var disabledPhysics = new CompoundTag(); disabledPhysics.putBoolean("enable", false);
+        var gravity = count.copy(); gravity.putFloat("number", 2.5f); disabledPhysics.put("gravity", gravity);
+        disabledLegacy.put("physics", disabledPhysics);
+        var disabledSize = scalarOverLife.copy(); disabledSize.putBoolean("enable", false);
+        disabledLegacy.put("sizeOverLifetime", disabledSize);
+        var disabledUV = new CompoundTag(); disabledUV.putBoolean("enable", false); disabledUV.putFloat("cycle", 3f);
+        var oldTiles = new CompoundTag(); oldTiles.putInt("a", 4); oldTiles.putInt("b", 2); disabledUV.put("tiles", oldTiles);
+        disabledLegacy.put("uvAnimation", disabledUV);
+        var disabledCull = oldCull.copy(); disabledCull.putBoolean("enable", false);
+        var disabledRenderer = new CompoundTag(); disabledRenderer.put("cull", disabledCull);
+        disabledLegacy.put("renderer", disabledRenderer);
+        var disabledSub = sub.copy(); disabledSub.putBoolean("enable", false); disabledLegacy.put("subEmitters", disabledSub);
+        var importedDisabled = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(disabledLegacy));
+        if (!(importedDisabled instanceof ParticleEmitter disabledEmitter))
+            throw new IllegalStateException("Disabled-module legacy emitter did not deserialize");
+        var disabledReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(disabledEmitter.serializeWrapper());
+        if (!(disabledReload instanceof ParticleEmitter retained)
+                || retained.config.physics.isEnable() || retained.config.physics.getGravity().get(0f, () -> 0f).floatValue() != 2.5f
+                || retained.config.sizeOverLifetime.isEnable()
+                || !retained.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f))
+                || retained.config.uvAnimation.isEnable() || retained.config.uvAnimation.getCycle() != 3f
+                || !retained.config.uvAnimation.getTiles().equals(new org.joml.Vector2i(4, 2))
+                || retained.config.renderer.getCull().isEnable()
+                || !retained.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3))
+                || retained.config.subEmitters.isEnable() || retained.config.subEmitters.getEmitters().size() != 1
+                || retained.config.subEmitters.getEmitters().get(0).getTickInterval() != 512)
+            throw new IllegalStateException("Disabled Photon 1 module settings did not survive import and reload");
+        var nestedRemap = new CompoundTag(); nestedRemap.putBoolean("enable", false); nestedRemap.put("remapCurve", count.copy());
+        var disabledNoise = new CompoundTag(); disabledNoise.putBoolean("enable", false); disabledNoise.put("remap", nestedRemap);
+        if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(disabledNoise)
+                .getCompound("remap").contains("remapCurve"))
+            throw new IllegalStateException("Disabled nested noise remap lost its curve");
         var parentEmitter = new ParticleEmitter();
         parentEmitter.setLevel(Minecraft.getInstance().level);
         var parentParticle = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(parentEmitter, parentEmitter.config);
