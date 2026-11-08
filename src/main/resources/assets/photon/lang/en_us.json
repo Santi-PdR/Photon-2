@@ -86,6 +86,8 @@
   "photon.gui.editor.timeline.insert_time": "Insert time (seconds)",
   "photon.gui.editor.timeline.add_marker": "Add marker",
   "photon.gui.editor.timeline.section.add": "Add section here",
+  "photon.gui.editor.timeline.section.rename": "Rename section",
+  "photon.gui.editor.timeline.section.move": "Move section (ticks)",
   "photon.gui.editor.timeline.section.repeat": "Repeat count (0 = forever)",
   "photon.gui.editor.timeline.section.linear": "Then: next section",
   "photon.gui.editor.timeline.section.end": "Then: end timeline",

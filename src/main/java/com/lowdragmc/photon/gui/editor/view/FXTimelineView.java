@@ -655,6 +655,8 @@ public class FXTimelineView extends View implements TimelineContext {
         menu.leaf("photon.gui.editor.timeline.section.add", () -> addSection(timeline, tick));
         if (section != null) {
             menu.branch(Component.literal(section.name()), actions -> {
+                actions.leaf("photon.gui.editor.timeline.section.rename", () -> renameSection(timeline, section));
+                actions.leaf("photon.gui.editor.timeline.section.move", () -> moveSection(timeline, section));
                 actions.leaf("photon.gui.editor.timeline.section.repeat", () -> editSectionRepeat(section));
                 actions.leaf("photon.gui.editor.timeline.section.linear", () -> setSectionExit(section, TimelineSection.Then.LINEAR, ""));
                 actions.leaf("photon.gui.editor.timeline.section.end", () -> setSectionExit(section, TimelineSection.Then.END, ""));
@@ -689,11 +691,10 @@ public class FXTimelineView extends View implements TimelineContext {
 
     private void addSection(Timeline timeline, double tick) {
         // Empty or duplicate sections are skipped by the runtime. Reject them at creation instead.
-        if (tick >= timeline.getDuration() || timeline.sections().stream().anyMatch(s -> s.start() == tick)) return;
+        if (!validSectionStart(timeline, null, tick)) return;
         Dialog.stringEditorDialog("photon.gui.editor.timeline.section.add", "section",
                 name -> validSectionName(timeline, name), name -> {
-                    if (!validSectionName(timeline, name) || tick >= timeline.getDuration()
-                            || timeline.sections().stream().anyMatch(s -> s.start() == tick)) return;
+                    if (!validSectionName(timeline, name) || !validSectionStart(timeline, null, tick)) return;
                     var section = new TimelineSection(name, tick);
                     pushEdit("photon.gui.editor.timeline.section.add",
                             () -> timeline.sections().add(section), () -> timeline.sections().remove(section));
@@ -704,6 +705,52 @@ public class FXTimelineView extends View implements TimelineContext {
     public static boolean validSectionName(Timeline timeline, String name) {
         return name != null && !name.isBlank() && name.equals(name.trim())
                 && timeline.sections().stream().noneMatch(s -> s.name().equals(name));
+    }
+
+    /** A section must start within the content and cannot share a boundary with another section. */
+    public static boolean validSectionStart(Timeline timeline, @Nullable TimelineSection moving, double tick) {
+        return Double.isFinite(tick) && tick >= 0 && tick < timeline.getDuration()
+                && timeline.sections().stream().noneMatch(s -> s != moving && s.start() == tick);
+    }
+
+    private void renameSection(Timeline timeline, TimelineSection section) {
+        Dialog.stringEditorDialog("photon.gui.editor.timeline.section.rename", section.name(),
+                name -> name.equals(section.name()) || validSectionName(timeline, name), name -> {
+                    if (!timeline.sections().contains(section) || name.equals(section.name())
+                            || !validSectionName(timeline, name)) return;
+                    var before = section.name();
+                    var references = timeline.sections().stream().filter(s -> s.target().equals(before)).toList();
+                    var isRelease = before.equals(timeline.releaseSection());
+                    pushEdit("photon.gui.editor.timeline.section.rename", () -> {
+                        section.name(name);
+                        references.forEach(s -> s.target(name));
+                        if (isRelease) timeline.releaseSection(name);
+                    }, () -> {
+                        section.name(before);
+                        references.forEach(s -> s.target(before));
+                        if (isRelease) timeline.releaseSection(before);
+                    });
+                }).show(fxEditor);
+    }
+
+    private void moveSection(Timeline timeline, TimelineSection section) {
+        Dialog.stringEditorDialog("photon.gui.editor.timeline.section.move", Double.toString(section.start()),
+                value -> validSectionStartText(timeline, section, value), value -> {
+                    if (!timeline.sections().contains(section) || !validSectionStartText(timeline, section, value)) return;
+                    var before = section.start();
+                    var after = Double.parseDouble(value);
+                    if (before == after) return;
+                    pushEdit("photon.gui.editor.timeline.section.move", () -> section.start(after),
+                            () -> section.start(before));
+                }).show(fxEditor);
+    }
+
+    private static boolean validSectionStartText(Timeline timeline, TimelineSection section, String value) {
+        try {
+            return validSectionStart(timeline, section, Double.parseDouble(value));
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private void editSectionRepeat(TimelineSection section) {

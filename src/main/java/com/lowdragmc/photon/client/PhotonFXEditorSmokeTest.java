@@ -585,6 +585,18 @@ public final class PhotonFXEditorSmokeTest {
                 || !com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, "outro")) {
             throw new IllegalStateException("The section editor accepted an empty/duplicate name or rejected a new one");
         }
+        var lengthTrack = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        lengthTrack.clips().add(new com.lowdragmc.photon.client.fx.timeline.Clip(0, 20, 1f));
+        reloaded.tracks().add(lengthTrack);
+        var moving = reloaded.sections().get(1);
+        if (!com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 10)
+                || !com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 12.5)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 0)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 20)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, -1)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, Double.NaN)) {
+            throw new IllegalStateException("The section editor accepted an invalid or duplicate boundary");
+        }
         // a project written before sections existed has no key at all and must load with none
         var legacy = tag.copy();
         legacy.remove("sections");
