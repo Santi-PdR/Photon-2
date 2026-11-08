@@ -9,10 +9,11 @@ on:
     branches:
       - port/forge-1.20.1-2.2.9
       - port/forge-1.20.1-sync-sound
+      - arena/747b04a3-photon-2
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -399,3 +400,24 @@ jobs:
           retention-days: 14
 
 
+      # Actions artifacts are ZIP downloads. A prerelease attaches the actual JAR so players can
+      # download it directly; publish only this session's branch and only after every test passed.
+      - name: Publish direct-download preview JAR
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*-all.jar' -print)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "Expected exactly one distributable JAR, found ${#jars[@]}" >&2
+            exit 1
+          fi
+          tag="preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "${jars[0]}" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Photon Forge 1.20.1 preview ${GITHUB_SHA:0:7}" \
+            --notes "Test build from commit $GITHUB_SHA. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
+          printf '### Direct JAR download\n\n[Download %s](https://github.com/%s/releases/download/%s/%s)\n' \
+            "$(basename "${jars[0]}")" "$GITHUB_REPOSITORY" "$tag" "$(basename "${jars[0]}")" >> "$GITHUB_STEP_SUMMARY"
