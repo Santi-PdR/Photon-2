@@ -9,6 +9,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.ReadOnlyManaged;
+import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.Constant;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
@@ -62,6 +63,10 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     @Configurable(name = "EmissionSetting.emissionMode", tips = "photon.emitter.config.emission.emissionMode")
     protected Mode emissionMode = Mode.Exacting;
 
+    /** Imported Photon 1 effects sample the rate on integer ages, including age zero. */
+    @Persisted
+    protected boolean legacyTickEmission;
+
     @Configurable(name = "EmissionSetting.bursts", tips = "photon.emitter.config.emission.bursts")
     @ConfigList(configuratorMethod = "buildBurstConfigurator", addDefaultMethod = "addDefaultBurst")
     @ReadOnlyManaged(serializeMethod = "burstsSerialize", deserializeMethod = "burstsDeserialize")
@@ -98,6 +103,22 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
             var t = particleEmitter.getT();
             var timeValue = emissionRate.get().get(randomSource, t).floatValue();
             var distanceValue = distanceRate.get().get(randomSource, t).floatValue();
+            if (config.legacyTickEmission) {
+                int number = 0;
+                // FXObject sub-steps are at most one tick; use a half-open window so a
+                // fractional-rate timeline does not fire the same integer tick twice.
+                int tick = (int) Math.ceil(ageStart);
+                if (tick < ageEnd) {
+                    number = (int) timeValue;
+                    float fraction = timeValue - number;
+                    if (config.emissionMode == Mode.Exacting) {
+                        if (fraction > 0 && tick % (int) (1 / fraction) == 0) number++;
+                    } else if (randomSource.nextFloat() < fraction) {
+                        number++;
+                    }
+                }
+                return number + distanceAndBursts(particleEmitter, randomSource, t, distanceValue, ageStart, ageEnd);
+            }
             // time-based rate: accumulate rate*dt, emit whole particles, carry the remainder
             var acc = particleEmitter.getEmissionRateAccum() + timeValue * dt;
             if (config.emissionMode == Mode.Random) {
@@ -125,7 +146,8 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
             }
 
             var duration = particleEmitter.getLifetime();
-            var looping = particleEmitter.isLooping() && duration > 0;
+            // Photon 1 passes its unbounded age to bursts, even for looping emitters.
+            var looping = !config.legacyTickEmission && particleEmitter.isLooping() && duration > 0;
             for (var bust : config.bursts) {
                 var count = bust.count.get(randomSource, t).intValue();
                 if (looping) {

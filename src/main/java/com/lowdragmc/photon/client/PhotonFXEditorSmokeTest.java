@@ -2747,6 +2747,46 @@ public final class PhotonFXEditorSmokeTest {
                 || NumberFunction.deserializeWrapper(random.serializeWrapper()).get(0f, () -> 0.75f).intValue() != 1) {
             throw new IllegalStateException("Photon 1 inclusive integer random range was lost during conversion, copy or save");
         }
+        // Photon 1 sampled at ages 0,3,6 for an exact rate of 0.3. This matters for
+        // short effects that end before a fractional accumulator reaches one particle.
+        var cadenceInput = oldEmission.copy();
+        var slowRate = oldRate.copy(); slowRate.putFloat("number", 0.3f);
+        cadenceInput.put("emissionRate", slowRate);
+        cadenceInput.put("bursts", new ListTag());
+        var cadence = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        cadence.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(cadenceInput));
+        var cadenceRuntime = cadence.createRuntime();
+        for (int age = 0; age < 7; age++) {
+            emissionEmitter.setAge(age);
+            int actual = cadenceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+            if (actual != (age % 3 == 0 ? 1 : 0))
+                throw new IllegalStateException("Photon 1 exact emission cadence changed at age " + age + ": " + actual);
+        }
+        var nativeEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        nativeEmission.setEmissionRate(NumberFunction.constant(0.3f));
+        emissionEmitter.setAge(0);
+        if (nativeEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 0)
+            throw new IllegalStateException("Native Photon 2 emission cadence was changed by legacy compatibility");
+        var cadenceReloaded = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        cadenceReloaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                cadence.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        emissionEmitter.setAge(0);
+        if (cadenceReloaded.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 1)
+            throw new IllegalStateException("Photon 1 emission cadence was lost on save and reload");
+        var onceBurst = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        onceBurst.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(oldEmission));
+        emissionEmitter.config.setDuration(2);
+        emissionEmitter.config.setLooping(true);
+        emissionEmitter.setAge(0);
+        var onceRuntime = onceBurst.createRuntime();
+        int firstBurst = onceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+        emissionEmitter.setAge(2);
+        int secondBurst = onceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+        if (firstBurst != 7 || secondBurst != 0)
+            throw new IllegalStateException("A one-shot Photon 1 burst incorrectly repeated after the emitter loop");
+        emissionEmitter.setAge(0);
         var randomBurst = immediate.copy(); randomBurst.put("count", oldRandom);
         var randomBursts = new ListTag(); randomBursts.add(randomBurst);
         var randomEmission = oldEmission.copy(); randomEmission.put("bursts", randomBursts);

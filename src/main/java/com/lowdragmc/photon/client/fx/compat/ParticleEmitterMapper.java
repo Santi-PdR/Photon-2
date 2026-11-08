@@ -66,7 +66,7 @@ public class ParticleEmitterMapper implements Mapper{
         newConfigTag.put("lights", MapperUtils.mapLightTag(configTag.getCompound("lights")));
         newConfigTag.put("colorBySpeed", mapColorBSTag(configTag.getCompound("colorBySpeed")));
 
-        MapperUtils.retainPresentFields(newConfigTag, configTag, "prewarm", "additionalGPUDataSetting");
+        MapperUtils.retainPresentFields(newConfigTag, configTag, "prewarm", "additionalGPUDataSetting", "emission");
         // Photon 1 stored material beside the renderer, not inside it.
         if (configTag.contains("material", Tag.TAG_COMPOUND) && !newConfigTag.contains("renderer")) {
             newConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
@@ -174,7 +174,8 @@ public class ParticleEmitterMapper implements Mapper{
         dRData.putInt("number", 0);
         distanceRate.put("data",  dRData);
         newEmissionTag.put("distanceRate", distanceRate);
-        MapperUtils.retainPresentFields(newEmissionTag, emissionTag, "distanceRate");
+        newEmissionTag.putBoolean("legacyTickEmission", true);
+        MapperUtils.retainPresentFields(newEmissionTag, emissionTag, "distanceRate", "legacyTickEmission");
         return  newEmissionTag;
 
     }
