@@ -168,7 +168,7 @@ public class BeamEmitter extends Emitter {
 
     @Override
     public int getParticleAmount() {
-        return beamParticle.isAlive() ? 1 : 0;
+        return beamParticle != null && beamParticle.isAlive() ? 1 : 0;
     }
 
     @Override
@@ -209,9 +209,11 @@ public class BeamEmitter extends Emitter {
 
     @Override
     protected void update(float dt) {
-        if (beamParticle.isAlive()) {
+        if (beamParticle != null && beamParticle.isAlive()) {
+            boolean delayed = beamParticle.getDelay() > 0;
             beamParticle.updateTick(dt);
-            if(beamParticle.getDelay() > 0) { age = 0; ageF = 0; }
+            // Start delay belongs before the emitter duration, not inside it.
+            if (delayed) return;
         } else {
             remove();
         }
@@ -246,7 +248,7 @@ public class BeamEmitter extends Emitter {
     }
 
     public void prepareRenderPass(RenderPassPipeline buffer) {
-        if (isVisible()) {
+        if (isVisible() && beamParticle != null) {
             buffer.pipeQueue(effectiveRenderPass(), Collections.singleton(beamParticle));
         }
     }
@@ -265,7 +267,7 @@ public class BeamEmitter extends Emitter {
     @Override
     public void remove(boolean force) {
         super.remove(force);
-        beamParticle.setRemoved(true);
+        if (beamParticle != null) beamParticle.setRemoved(true);
         if (force && runtime != null) {
             runtime.clearRenderOverride(); // free the per-instance override pass's GL on force removal
         }

@@ -2643,6 +2643,29 @@ public final class PhotonFXEditorSmokeTest {
         var configuredEmitter = new ParticleEmitter(suppliedConfig);
         if (configuredEmitter.config != suppliedConfig || configuredEmitter.getLifetime() != 37)
             throw new IllegalStateException("ParticleEmitter did not initialize from its supplied config");
+        // Delayed beam/trail emitters must not spend their short visible duration waiting.
+        var freshBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        var freshTrail = new TrailEmitter();
+        if (freshBeam.getParticleAmount() != 0 || freshTrail.getParticleAmount() != 0)
+            throw new IllegalStateException("Uninitialized beam/trail reports a particle");
+        freshBeam.remove(true); freshTrail.remove(true); // safe before reset/emission
+        var beamConfig = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamConfig();
+        beamConfig.setStartDelay(2); beamConfig.setDuration(1); beamConfig.setLooping(false);
+        var delayedBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter(beamConfig);
+        var trailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        trailConfig.setStartDelay(2); trailConfig.setDuration(1); trailConfig.setLooping(false);
+        var delayedTrail = new TrailEmitter(trailConfig);
+        delayedBeam.setLevel(Minecraft.getInstance().level); delayedTrail.setLevel(Minecraft.getInstance().level);
+        delayedBeam.reset(); delayedTrail.reset();
+        for (int i = 0; i < 4; i++) {
+            delayedBeam.updateTick(0.5f); delayedTrail.updateTick(0.5f);
+            if (!delayedBeam.isAlive() || !delayedTrail.isAlive() || delayedBeam.getAgeF() != 0 || delayedTrail.getAgeF() != 0)
+                throw new IllegalStateException("A delayed beam or trail consumed its duration before starting");
+        }
+        delayedBeam.updateTick(0.5f); delayedTrail.updateTick(0.5f);
+        if (delayedBeam.getAgeF() != 0.5f || delayedTrail.getAgeF() != 0.5f)
+            throw new IllegalStateException("Beam or trail did not advance after its fractional start delay");
+        delayedBeam.remove(true); delayedTrail.remove(true);
         // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
         var flat = new CompoundTag();
         flat.putString("_type", "particle");
