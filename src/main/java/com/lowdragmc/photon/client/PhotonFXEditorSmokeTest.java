@@ -717,6 +717,23 @@ public final class PhotonFXEditorSmokeTest {
             // No resource reload has occurred: rendering must upload the PNG directly rather than cache
             // Minecraft's missing texture for a namespace the pack manager has never seen.
             var manager = Minecraft.getInstance().getTextureManager();
+            // Photon 1 custom shader samplers used to bypass TextureMaterial's loose-file path.
+            var custom = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+            var shaderData = new CompoundTag();
+            var samplers = new CompoundTag();
+            var sampler = new CompoundTag();
+            sampler.putString("type", "texture");
+            sampler.putString("resource", id.toString());
+            samplers.put("Sampler0", sampler);
+            shaderData.put("samplers", samplers);
+            var materialData = new CompoundTag();
+            materialData.put("shaderData", shaderData);
+            custom.deserializeAdditionalNBT(materialData, com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+            custom.getShader(MaterialContext.NORMAL);
+            if (custom.isCompiledError()
+                    || !(manager.getTexture(id, null) instanceof net.minecraft.client.renderer.texture.DynamicTexture)) {
+                throw new IllegalStateException("A custom shader sampler could not use the loose texture: " + id);
+            }
             if (!com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(id).equals(id)
                     || !(manager.getTexture(id, null) instanceof net.minecraft.client.renderer.texture.DynamicTexture)) {
                 throw new IllegalStateException("The copied texture was not usable before a resource reload: " + id);

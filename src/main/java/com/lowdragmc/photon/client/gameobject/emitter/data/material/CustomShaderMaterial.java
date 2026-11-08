@@ -415,6 +415,16 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
         if (shaderHolder == null) {
             return PhotonShaders.getHDRParticleShader();
         }
+        // LDLib binds saved custom-shader samplers directly through TextureManager. Unlike
+        // TextureMaterial that path did not adopt loose Photon 1 PNGs before binding them.
+        // Read the live assignments so textures changed in the editor are also resolved.
+        var samplerCache = ((com.lowdragmc.photon.core.mixins.accessor.LDShaderHolderAccessor) shaderHolder)
+                .photon$getSamplerCache();
+        for (var sampler : samplerCache.values()) {
+            if (sampler instanceof ResourceLocation texture) {
+                com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture);
+            }
+        }
         var defines = context.getShaderDefines();
         LDShaderInstance shader;
         if (defines.isEmpty()) {
