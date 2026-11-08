@@ -14,7 +14,7 @@ public class ParticleEmitterMapper implements Mapper{
         dataTag.putString("name", emitterTag.getString("name"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapConfigTag(emitterTag.getCompound("config")));
+        dataTag.put("config", mapConfigTag(MapperUtils.legacyEmitterConfig(emitterTag)));
         newEmitterTag.put("data", dataTag);
 
 

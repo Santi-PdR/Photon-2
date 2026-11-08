@@ -13,7 +13,7 @@ public class BeamEmitterMapper implements Mapper{
         dataTag.putString("name", emitterTag.getString("name"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapBeamConfig(emitterTag.getCompound("config")));
+        dataTag.put("config", mapBeamConfig(MapperUtils.legacyEmitterConfig(emitterTag)));
 
         newEmitterTag.put("data", dataTag);
 

@@ -418,6 +418,11 @@ public class MapperUtils {
         return newUVTag;
     }
 
+    /** Photon 1 emitter version 0 stored its config directly on the object, before the config wrapper existed. */
+    public static CompoundTag legacyEmitterConfig(CompoundTag emitter) {
+        return emitter.contains("config", Tag.TAG_COMPOUND) ? emitter.getCompound("config") : emitter;
+    }
+
     public static CompoundTag mapTransformTag(CompoundTag transformTag){
         CompoundTag newTransformTag = new CompoundTag();
         // Preserve authored sibling order. Dropping this list causes converted effects with layered

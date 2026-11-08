@@ -2612,6 +2612,30 @@ public final class PhotonFXEditorSmokeTest {
         if (second.converted() != 0 || second.skipped().isEmpty()
                 || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
             throw new IllegalStateException("Photon 1 converter overwrote an existing effect or hid the skip");
+        // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
+        var flat = new CompoundTag();
+        flat.putString("_type", "particle");
+        flat.putInt("duration", 42);
+        flat.putInt("maxParticles", 137);
+        flat.putInt("time", 19);
+        flat.putInt("startDelay", 8);
+        flat.put("end", new CompoundTag());
+        var flatParticle = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(flat).getCompound("data").getCompound("config");
+        var flatTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailEmitter(flat).getCompound("data").getCompound("config");
+        var flatBeam = com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(flat).getCompound("data").getCompound("config");
+        if (flatParticle.getInt("duration") != 42 || flatParticle.getInt("maxParticles") != 137
+                || flatTrail.getInt("duration") != 42 || flatTrail.getInt("time") != 19
+                || flatBeam.getInt("duration") != 42 || flatBeam.getInt("startDelay") != 8) {
+            throw new IllegalStateException("Photon 1 flat v0 emitter configuration was lost");
+        }
+        var nested = new CompoundTag();
+        nested.putString("_type", "particle");
+        nested.putInt("_version", 2);
+        nested.put("config", flat.copy());
+        if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(nested)
+                .getCompound("data").getCompound("config").equals(flatParticle)) {
+            throw new IllegalStateException("Photon 1 flat and nested emitter configurations differ");
+        }
         var oldBurst = new CompoundTag();
         oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
         oldBurst.putFloat("probability", 0.75f);
@@ -2624,6 +2648,25 @@ public final class PhotonFXEditorSmokeTest {
         if (mappedBursts.getInt("uid") != 1 || burst.getInt("time") != 4 || burst.getInt("cycles") != 3
                 || burst.getCompound("count").getCompound("data").getFloat("number") != 7)
             throw new IllegalStateException("Photon 1 burst was lost during conversion");
+        // Decode the managed list and execute it, rather than checking only the converted tag shape.
+        var immediate = oldBurst.copy();
+        immediate.putInt("time", 0);
+        immediate.putInt("cycles", 1);
+        immediate.putFloat("probability", 1f);
+        var immediateBursts = new ListTag(); immediateBursts.add(immediate);
+        var oldRate = new CompoundTag(); oldRate.putString("_type", "Constant"); oldRate.putFloat("number", 0f);
+        var oldEmission = new CompoundTag();
+        oldEmission.put("bursts", immediateBursts);
+        oldEmission.put("emissionRate", oldRate);
+        oldEmission.putString("emissionMode", "Exacting");
+        var emissionConfig = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        emissionConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(oldEmission));
+        var emissionEmitter = new ParticleEmitter();
+        if (emissionConfig.getBursts().size() != 1 || emissionConfig.createRuntime()
+                .getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 7) {
+            throw new IllegalStateException("A converted Photon 1 burst did not emit its particles");
+        }
         var enabled = new CompoundTag(); enabled.putByte("enable", (byte) 1);
         if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapForceOTTag(enabled).contains("force", Tag.TAG_LIST)
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(enabled).contains("frequency")
