@@ -392,8 +392,14 @@ public final class PhotonFXEditorSmokeTest {
                 + "moves a playing timeline into the named section");
     }
 
-    /** The raw child nodes of a command node (Brigadier keeps them under a Set). */
+    /**
+     * The child nodes of a command node. A node that has been built (what the tree hands back once a literal is
+     * found) exposes {@code getChildren()}; a builder that has not been built yet exposes its arguments.
+     */
     private static java.util.List<com.mojang.brigadier.tree.CommandNode<?>> children(Object node) {
+        if (node instanceof com.mojang.brigadier.tree.CommandNode<?> built) {
+            return java.util.List.copyOf(built.getChildren());
+        }
         if (node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder) {
             return java.util.List.copyOf(builder.getArguments());
         }
