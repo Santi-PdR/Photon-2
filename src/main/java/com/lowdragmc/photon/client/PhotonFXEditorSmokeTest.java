@@ -770,7 +770,9 @@ public final class PhotonFXEditorSmokeTest {
             dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
             var atPress = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
             if (Math.abs(atPress - min) > 0.02) {
-                throw new IllegalStateException("A press on the track did not set the value to the minimum: " + atPress);
+                throw new IllegalStateException("A press on the track did not set the value to the minimum: config="
+                        + atPress + " widget=" + slider.getValue() + ", dragging=" + slider.isDragging()
+                        + ", " + describeConfigFile());
             }
             if (!slider.isDragging()) {
                 throw new IllegalStateException("A press on the track did not start a drag");
