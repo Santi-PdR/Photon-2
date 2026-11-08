@@ -337,18 +337,23 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("/photon fx section is not registered");
         }
         var sectionNode = literal(fx, "section");
-        var entity = literal(sectionNode, "entity");
-        var jump = entity == null ? null : literal(entity, "jump");
+        // the target is an argument (any entities / a block position), and the actions hang off it
+        var entity = sectionNode == null ? null : literal(sectionNode, "entity");
+        var targets = entity == null ? null : argument(entity, "entities");
+        var jump = targets == null ? null : literal(targets, "jump");
         // the section name is an argument, not a literal
         if (jump == null || argument(jump, "section") == null) {
             throw new IllegalStateException("/photon fx section entity jump <section> is not registered");
         }
-        var block = literal(sectionNode, "block");
-        if (block == null || literal(block, "release") == null || literal(block, "advance") == null) {
+        var block = sectionNode == null ? null : literal(sectionNode, "block");
+        var pos = block == null ? null : argument(block, "pos");
+        var advance = pos == null ? null : literal(pos, "advance");
+        var release = pos == null ? null : literal(pos, "release");
+        if (advance == null || release == null) {
             throw new IllegalStateException("/photon fx section block advance/release are not registered");
         }
-        // block release takes an optional trailing location
-        if (argument(literal(block, "release"), "location") == null) {
+        // the two unnamed actions take an optional trailing location
+        if (argument(release, "location") == null || argument(advance, "location") == null) {
             throw new IllegalStateException("/photon fx section block release [location] is not registered");
         }
 
