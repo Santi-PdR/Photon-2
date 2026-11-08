@@ -2355,7 +2355,8 @@ public final class PhotonFXEditorSmokeTest {
     private static void verifyPhoton1Compatibility() throws Exception {
         var sparseTransform = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTransformTag(new CompoundTag());
         if (!com.lowdragmc.photon.client.fx.FXRuntime.ROOT_UUID.toString().equals(sparseTransform.getString("_parentId"))
-                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).size() != 3
+                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).size() != 4
+                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f
                 || sparseTransform.getList("localScale", Tag.TAG_FLOAT).size() != 3
                 || sparseTransform.getList("localPosition", Tag.TAG_FLOAT).size() != 3) {
             throw new IllegalStateException("Sparse Photon 1 transform fields were not safely defaulted");
@@ -2427,6 +2428,17 @@ public final class PhotonFXEditorSmokeTest {
         legacySubEffects.put("spark", main.copy());
         definition.put("subFXs", legacySubEffects);
         legacy.put("fx", definition);
+        // Real legacy exports can omit rotation. Exercise the decoder, not only the converted NBT's shape:
+        // a three-float default cannot be decoded as LDLib2's quaternion and makes the entire effect fail.
+        var missingRotation = legacy.copy();
+        missingRotation.getCompound("fx").getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND)
+                .getCompound(0).getCompound("transform").remove("localRotation");
+        var sparseFx = new com.lowdragmc.photon.client.fx.FX();
+        sparseFx.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(missingRotation));
+        if (sparseFx.getFxData().objects().size() != 1) {
+            throw new IllegalStateException("A Photon 1 effect without localRotation did not load");
+        }
         var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))

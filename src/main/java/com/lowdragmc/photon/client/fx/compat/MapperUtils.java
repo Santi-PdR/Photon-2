@@ -425,7 +425,7 @@ public class MapperUtils {
         // older projects; the Photon 2 scene assigns that object a fresh identity on import.
         newTransformTag.putString("_parentId", readTransformUuid(transformTag.get("_parentId"), new UUID(0L, 0L)).toString());
         newTransformTag.putString("id", readTransformUuid(transformTag.get("id"), UUID.randomUUID()).toString());
-        newTransformTag.put("localRotation", mapTransformCoords(transformTag.get("localRotation"), 0, 0, 0));
+        newTransformTag.put("localRotation", mapTransformRotation(transformTag.get("localRotation")));
         newTransformTag.put("localScale", mapTransformCoords(transformTag.get("localScale"), 1, 1, 1));
         newTransformTag.put("localPosition", mapTransformCoords(transformTag.get("localPosition"), 0, 0, 0));
 
@@ -444,6 +444,25 @@ public class MapperUtils {
             }
         }
         return fallback;
+    }
+
+    /** LDLib2's quaternion codec requires four components, even for an absent legacy rotation. */
+    private static ListTag mapTransformRotation(Tag tag) {
+        var rotation = new ListTag();
+        if (tag instanceof CompoundTag coords) {
+            rotation.add(FloatTag.valueOf(coords.getFloat("x")));
+            rotation.add(FloatTag.valueOf(coords.getFloat("y")));
+            rotation.add(FloatTag.valueOf(coords.getFloat("z")));
+            rotation.add(FloatTag.valueOf(coords.contains("w", Tag.TAG_ANY_NUMERIC) ? coords.getFloat("w") : 1f));
+        } else if (tag instanceof ListTag values && values.size() == 4 && values.getElementType() == Tag.TAG_FLOAT) {
+            return values.copy();
+        } else {
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.valueOf(1f));
+        }
+        return rotation;
     }
 
     private static ListTag mapTransformCoords(Tag tag, float x, float y, float z) {
