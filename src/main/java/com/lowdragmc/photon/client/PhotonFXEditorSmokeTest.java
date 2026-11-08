@@ -2716,8 +2716,8 @@ public final class PhotonFXEditorSmokeTest {
         var oldFrom = new CompoundTag(); oldFrom.putFloat("x", -8); oldFrom.putFloat("y", -4); oldFrom.putFloat("z", -2);
         var oldTo = new CompoundTag(); oldTo.putFloat("x", 12); oldTo.putFloat("y", 6); oldTo.putFloat("z", 3);
         var oldCull = new CompoundTag(); oldCull.putBoolean("enable", true); oldCull.put("from", oldFrom); oldCull.put("to", oldTo);
-        var oldRenderer = new CompoundTag(); oldRenderer.put("cull", oldCull);
-        var renderLegacy = sparseFlat.copy(); renderLegacy.put("renderer", oldRenderer);
+        var legacyCullRenderer = new CompoundTag(); legacyCullRenderer.put("cull", oldCull);
+        var renderLegacy = sparseFlat.copy(); renderLegacy.put("renderer", legacyCullRenderer);
         renderLegacy.put("material", new CompoundTag());
         renderLegacy.put("uvAnimation", enabledModule.copy());
         renderLegacy.put("lights", enabledModule.copy());
