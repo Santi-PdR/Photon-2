@@ -2624,6 +2624,10 @@ public final class PhotonFXEditorSmokeTest {
         if (conversion.converted() != 1 || !Files.isRegularFile(dest.resolve("test.fx")))
             throw new IllegalStateException("Photon 1 converter did not flatten the effect into assets/photon/fx");
         var firstExport = Files.readAllBytes(dest.resolve("test.fx"));
+        try (var outputs = Files.list(dest)) {
+            if (outputs.anyMatch(path -> path.getFileName().toString().startsWith(".photon-convert-")))
+                throw new IllegalStateException("Completed Photon 1 conversion left a temporary file behind");
+        }
         var second = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
         if (second.converted() != 0 || second.skipped().isEmpty()
                 || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
@@ -2734,6 +2738,15 @@ public final class PhotonFXEditorSmokeTest {
         }
         var sparseCull = enabledModule.copy();
         com.lowdragmc.photon.client.fx.compat.MapperUtils.mapCullTag(sparseCull); // omitted bounds must not throw
+        var sheet = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.Animation.WholeSheet;
+        var rowMode = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.Animation.SingleRow;
+        var uvZero = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(0, 0), sheet, 3, 0);
+        var uvNormal = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(4, 2), sheet, 5, 0);
+        var uvNegative = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(4, 2), rowMode, -1, 0);
+        var uvLarge = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(65536, 65536), sheet, 7, 0);
+        if (!uvZero.equals(new org.joml.Vector4f(0, 0, 1, 1)) || !uvNormal.equals(new org.joml.Vector4f(0.25f, 0.5f, 0.5f, 1f))
+                || !uvNegative.equals(new org.joml.Vector4f(0.75f, 0, 1, 0.5f)) || !Float.isFinite(uvLarge.x))
+            throw new IllegalStateException("UV sheet coordinates failed for malformed, large or wrapped tile counts");
         var nested = new CompoundTag();
         nested.putString("_type", "particle");
         nested.putInt("_version", 2);
