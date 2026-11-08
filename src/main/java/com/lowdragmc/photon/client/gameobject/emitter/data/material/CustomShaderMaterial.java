@@ -72,6 +72,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public final GradientTexture gradientTexture = new GradientTexture(MAX_SAMPLING, MAX_SAMPLER);
     @Nullable
     private LDShaderHolder shaderHolder;
+    // Keep authored data even when the external shader is missing or cannot compile.
+    @Nullable
+    private CompoundTag unavailableShaderData;
     private boolean declaredSceneColor;
     private boolean declaredSceneDepth;
     private Cleaner.Cleanable shaderCleanable;
@@ -95,7 +98,10 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     }
 
     public void setShader(ResourceLocation shaderLocation) {
-        if (!Objects.equals(this.shaderLocation, shaderLocation)) legacyHdrUniforms.clear();
+        if (!Objects.equals(this.shaderLocation, shaderLocation)) {
+            legacyHdrUniforms.clear();
+            unavailableShaderData = null;
+        }
         this.shaderLocation = shaderLocation;
         recompile();
     }
@@ -116,7 +122,9 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     @Override
     public Tag serializeAdditionalNBT(HolderLookup.@NotNull Provider provider) {
         var shaderData = new CompoundTag();
-        if (shaderHolder != null) {
+        if (unavailableShaderData != null) {
+            shaderData.put("shaderData", unavailableShaderData.copy());
+        } else if (shaderHolder != null) {
             shaderData.put("shaderData", authoredShaderData(provider));
         }
         if (!uniformOverrides.isEmpty()) {
@@ -140,6 +148,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
     public void deserializeAdditionalNBT(Tag tag, HolderLookup.@NotNull Provider provider) {
         uniformOverrides.clear();
         legacyHdrUniforms.clear();
+        unavailableShaderData = tag instanceof CompoundTag material && material.contains("shaderData", Tag.TAG_COMPOUND)
+                ? material.getCompound("shaderData").copy() : null;
         if (tag instanceof CompoundTag materialData) {
             var names = materialData.getList("legacyHdrUniforms", Tag.TAG_STRING);
             for (int i = 0; i < names.size(); i++) legacyHdrUniforms.add(names.getString(i));
@@ -160,6 +170,7 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 && materialData.contains("shaderData", Tag.TAG_COMPOUND)) {
             var shaderData = materialData.getCompound("shaderData");
             shaderHolder.deserializeNBT(provider, shaderData);
+            unavailableShaderData = null;
             // Older LDLib material files contain a sampler map, but lack the later HDR metadata.
             // LDShaderHolder can restore uniforms present in the base program itself. A uniform
             // used only by an instanced variant is absent there, so keep its authored value until

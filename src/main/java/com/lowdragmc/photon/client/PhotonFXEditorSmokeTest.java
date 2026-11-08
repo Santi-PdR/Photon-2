@@ -1678,6 +1678,17 @@ public final class PhotonFXEditorSmokeTest {
         holderData.put("uniforms", legacyUniforms);
         holderData.put("samplers", new CompoundTag());
         legacyData.put("shaderData", holderData);
+        var missingShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/intentionally_missing"));
+        var missingData = legacyData.copy();
+        var sampler = new CompoundTag();
+        sampler.putString("type", "texture");
+        sampler.putString("resource", "example:textures/particle/spark.png");
+        missingData.getCompound("shaderData").getCompound("samplers").put("Sampler0", sampler);
+        missingShader.deserializeAdditionalNBT(missingData, provider);
+        var savedMissing = (CompoundTag) missingShader.serializeAdditionalNBT(provider);
+        if (!missingShader.isCompiledError() || !savedMissing.getCompound("shaderData").equals(missingData.getCompound("shaderData"))) {
+            throw new IllegalStateException("Saving a missing shader discarded its uniforms or samplers");
+        }
         legacyMaterial.deserializeAdditionalNBT(legacyData, provider);
         if (legacyMaterial.getShader(MaterialContext.NORMAL).getUniform("LegacyVariantOnly") != null) {
             throw new IllegalStateException("Legacy variant-only uniform unexpectedly exists in the base shader");
