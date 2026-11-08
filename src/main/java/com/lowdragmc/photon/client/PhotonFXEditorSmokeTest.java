@@ -2794,7 +2794,7 @@ public final class PhotonFXEditorSmokeTest {
                 com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(sparseEmissionTag));
         if (sparseEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 51)
             throw new IllegalStateException("Sparse legacy burst lost its default count or exact emission rate");
-        var hugeBurst = immediate.copy(); hugeBurst.putInt("cycles", 0);
+        var hugeBurst = immediate.copy(); hugeBurst.putInt("cycles", 0); hugeBurst.putInt("interval", 1);
         var singleCount = count.copy(); singleCount.putFloat("number", 1); hugeBurst.put("count", singleCount);
         var hugeBursts = new ListTag(); hugeBursts.add(hugeBurst);
         var hugeTag = oldEmission.copy(); hugeTag.put("bursts", hugeBursts);
