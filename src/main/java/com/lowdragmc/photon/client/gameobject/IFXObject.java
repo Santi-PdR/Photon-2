@@ -48,7 +48,29 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
 
     @Nullable
     static IFXObject deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null);
+        return CODEC.parse(NbtOps.INSTANCE, fixOldIdentityRotation(tag)).result().orElse(null);
+    }
+
+    /**
+     * An earlier Photon 1 converter saved an absent rotation as [0,0,0] rather than the four-component
+     * identity quaternion. Those already-converted files are marked current, so the versioned datafixer
+     * cannot repair them. Fix only that exact identity shape on a copy, at the common object decoder used
+     * by effects, nested effects and projects; never rewrite the author's file or guess nonzero rotations.
+     */
+    private static Tag fixOldIdentityRotation(Tag tag) {
+        if (!(tag instanceof CompoundTag wrapper) || !wrapper.contains("data", Tag.TAG_COMPOUND)) return tag;
+        var data = wrapper.getCompound("data");
+        if (!data.contains("transform", Tag.TAG_COMPOUND)) return tag;
+        var transform = data.getCompound("transform");
+        if (!transform.contains("localRotation", Tag.TAG_LIST)) return tag;
+        var rotation = transform.getList("localRotation", Tag.TAG_FLOAT);
+        if (rotation.size() != 3 || rotation.getFloat(0) != 0f || rotation.getFloat(1) != 0f
+                || rotation.getFloat(2) != 0f) return tag;
+        var fixed = wrapper.copy();
+        var quaternion = rotation.copy();
+        quaternion.add(net.minecraft.nbt.FloatTag.valueOf(1f));
+        fixed.getCompound("data").getCompound("transform").put("localRotation", quaternion);
+        return fixed;
     }
 
     default IGuiTexture getIcon() {

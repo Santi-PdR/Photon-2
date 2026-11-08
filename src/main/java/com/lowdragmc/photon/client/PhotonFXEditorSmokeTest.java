@@ -2465,6 +2465,34 @@ public final class PhotonFXEditorSmokeTest {
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
             throw new IllegalStateException("Photon 1 effect wrapper was not converted without modifying the source");
+        // An older converter already wrote these files as current-version FX, with [0,0,0] rotations.
+        // Loading must repair root and nested objects without modifying the saved source tag.
+        var alreadyConverted = mapped.copy();
+        var oldRotation = new ListTag();
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        alreadyConverted.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0)
+                .getCompound("data").getCompound("transform").put("localRotation", oldRotation.copy());
+        alreadyConverted.getCompound("legacySubFXs").getCompound("spark").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data")
+                .getCompound("transform").put("localRotation", oldRotation.copy());
+        var oldSnapshot = alreadyConverted.copy();
+        var restoredConverted = new com.lowdragmc.photon.client.fx.FX();
+        restoredConverted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(alreadyConverted));
+        if (restoredConverted.getFxData().objects().size() != 1
+                || restoredConverted.getLegacySubFXs().get("spark").getFxData().objects().size() != 1
+                || !alreadyConverted.equals(oldSnapshot)) {
+            throw new IllegalStateException("An already-converted legacy FX or nested effect did not load safely");
+        }
+        var projectData = new CompoundTag();
+        projectData.put("fx", alreadyConverted.copy());
+        var restoredProject = new com.lowdragmc.photon.gui.editor.FXProject();
+        restoredProject.deserializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), projectData);
+        if (restoredProject.getFx().getFxData().objects().size() != 1) {
+            throw new IllegalStateException("An already-converted Photon 1 project did not load");
+        }
         var marker = Minecraft.getInstance().getResourceManager().getResource(
                 new ResourceLocation("photon_legacy_probe", "textures/marker.txt")).orElseThrow(
                 () -> new IllegalStateException("Photon 1 editor assets were not mounted"));
