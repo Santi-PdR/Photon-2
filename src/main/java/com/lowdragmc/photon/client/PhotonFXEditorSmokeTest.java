@@ -313,8 +313,8 @@ public final class PhotonFXEditorSmokeTest {
             com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
         }
 
-        verifySliderDragsContinuously();
         verifyLooseTextureLookup();
+        verifySliderDragsContinuously();
         verifyCyclicLifetimes();
         verifySections();
         verifySectionCommand();
