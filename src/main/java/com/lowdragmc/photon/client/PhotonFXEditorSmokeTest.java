@@ -2816,7 +2816,7 @@ public final class PhotonFXEditorSmokeTest {
         nativeBoundary.config.setDuration(1);
         nativeBoundary.config.setLooping(false);
         nativeBoundary.update(1f);
-        if (nativeBoundary.isEmitting())
+        if (!nativeBoundary.isRemoved())
             throw new IllegalStateException("Photon 2 emitter duration changed with legacy compatibility");
         var cadenceInput = oldEmission.copy();
         var slowRate = oldRate.copy(); slowRate.putFloat("number", 0.3f);
