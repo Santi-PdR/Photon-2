@@ -783,8 +783,13 @@ public final class PhotonFXEditorSmokeTest {
             }
             for (var i = 1; i < seen.size(); i++) {
                 if (seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
+                    // Diagnose both halves of this: the widget's own value tells a stuck slider apart from a
+                    // write that something took away again. A value that is exactly the config's default, at a
+                    // position that moves between runs, is the config file being reloaded mid-drag.
                     throw new IllegalStateException("The slider did not keep up with the drag: config=" + seen
-                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width + ")");
+                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width
+                            + ", bloom default=" + com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.getDefault()
+                            + ", " + describeConfigFile() + ")");
                 }
             }
             // the config holds the value: reading it back is what a slider that only redraws itself would fail
@@ -800,6 +805,22 @@ public final class PhotonFXEditorSmokeTest {
             }
         } finally {
             com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
+        }
+    }
+
+    /** Whether the config file is, right now, in the middle of being rewritten or reloaded. */
+    private static String describeConfigFile() {
+        try {
+            var path = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("photon-client.toml");
+            if (!java.nio.file.Files.isRegularFile(path)) return "no config file at " + path;
+            var text = java.nio.file.Files.readString(path);
+            var line = text.lines().filter(l -> l.startsWith("bloom_intensity"))
+                    .findFirst().orElse("<bloom_intensity missing>");
+            return "file " + path.getFileName() + " (" + text.length() + " chars) says " + line
+                    + ", watcher threads=" + Thread.getAllStackTraces().keySet().stream()
+                    .filter(t -> t.getName().startsWith("config-file-watcher")).count();
+        } catch (Exception e) {
+            return "config file unreadable: " + e;
         }
     }
 
