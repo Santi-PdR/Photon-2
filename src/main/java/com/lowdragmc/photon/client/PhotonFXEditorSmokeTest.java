@@ -2815,7 +2815,7 @@ public final class PhotonFXEditorSmokeTest {
         nativeBoundary.setLevel(Minecraft.getInstance().level);
         nativeBoundary.config.setDuration(1);
         nativeBoundary.config.setLooping(false);
-        nativeBoundary.config.emission.setEnable(false);
+        nativeBoundary.config.emission.setEmissionRate(NumberFunction.constant(0));
         nativeBoundary.update(1f);
         if (nativeBoundary.isAlive())
             throw new IllegalStateException("Photon 2 emitter duration changed with legacy compatibility");
