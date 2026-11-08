@@ -597,6 +597,14 @@ public final class PhotonFXEditorSmokeTest {
                 || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, Double.NaN)) {
             throw new IllegalStateException("The section editor accepted an invalid or duplicate boundary");
         }
+        if (!com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 12.6)
+                || moving.start() != 13
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 0)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 20)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, Double.NaN)
+                || moving.start() != 13) {
+            throw new IllegalStateException("Dragging a section did not snap to ticks or rejected boundaries moved it");
+        }
         // a project written before sections existed has no key at all and must load with none
         var legacy = tag.copy();
         legacy.remove("sections");

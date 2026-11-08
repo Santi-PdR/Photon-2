@@ -88,6 +88,7 @@
   "photon.gui.editor.timeline.section.add": "Add section here",
   "photon.gui.editor.timeline.section.rename": "Rename section",
   "photon.gui.editor.timeline.section.move": "Move section (ticks)",
+  "photon.gui.editor.timeline.section.ruler_tip": "Drag to scrub. Right-click for sections. Shift-drag a section boundary to move it.",
   "photon.gui.editor.timeline.section.repeat": "Repeat count (0 = forever)",
   "photon.gui.editor.timeline.section.linear": "Then: next section",
   "photon.gui.editor.timeline.section.end": "Then: end timeline",

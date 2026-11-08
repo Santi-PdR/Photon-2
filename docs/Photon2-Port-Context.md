@@ -196,7 +196,8 @@ Lo que **todavía no hay** de las secciones, dicho claro:
   sobre contenido para crear una sección y clic derecho cerca de su marca morada para configurar sus
   repeticiones (0 = indefinido), salida, salto y despedida, renombrarla, moverla introduciendo el tick o
   eliminarla. Al renombrar se actualizan los saltos y la despedida que la referencian. Para verla en ejecución
-  hay que reiniciar la previsualización; los cambios son deshacibles. No se pueden arrastrar todavía;
+  hay que reiniciar la previsualización; los cambios son deshacibles. También se puede mover un inicio con
+  Mayús + arrastrar su marca en la regla; se ajusta a ticks enteros y no acepta inicios duplicados;
 - la despedida se reproduce en la timeline del efecto, no en las timelines internas de un efecto
   anidado (un `.fx` dentro de otro): esas se siguen cortando como antes.
 

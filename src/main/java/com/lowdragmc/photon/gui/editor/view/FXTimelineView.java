@@ -153,6 +153,11 @@ public class FXTimelineView extends View implements TimelineContext {
     private Marker dragMarker;
     private double dragMarkerOrigin;
     private double dragMarkerGrabOffset;
+    /** Shift-dragging a section boundary on the ruler; plain dragging still scrubs. */
+    @Nullable private TimelineSection dragSection;
+    @Nullable private Timeline dragSectionTimeline;
+    private double dragSectionOrigin;
+    private double dragSectionGrabOffset;
     /** Lane element per track (recorded each rebuild) so a screen-Y maps to a destination row. */
     private final Map<Track, UIElement> laneViews = new java.util.LinkedHashMap<>();
 
@@ -437,12 +442,36 @@ public class FXTimelineView extends View implements TimelineContext {
         ruler.setId("timeline.ruler").layout(layout -> {
             layout.widthPercent(100);
             layout.height(RULER_HEIGHT);
-        }).setOverflowVisible(false).style(style -> style.backgroundTexture(this::drawRuler))
-                .addEventListener(UIEvents.MOUSE_DOWN, e -> {
-                    if (e.button == 0) { e.currentElement.startDrag(null, null); scrubTo(e); }
-                    else if (e.button == 1) { openRulerMenu(e.x, e.y); e.stopPropagation(); }
+        }).setOverflowVisible(false).style(style -> {
+            style.backgroundTexture(this::drawRuler);
+            style.tooltips("photon.gui.editor.timeline.section.ruler_tip");
+        }).addEventListener(UIEvents.MOUSE_DOWN, e -> {
+                    if (e.button == 0) {
+                        var runtime = fxEditor.runtime;
+                        var timeline = runtime == null ? null : runtime.fxData.timeline();
+                        var section = timeline != null && e.isShiftDown() ? sectionAt(e.x, timeline) : null;
+                        if (section != null) {
+                            dragSection = section;
+                            dragSectionTimeline = timeline;
+                            dragSectionOrigin = section.start();
+                            dragSectionGrabOffset = xToTick(e.x) - section.start();
+                            e.currentElement.startDrag(null, null);
+                            e.stopPropagation();
+                        } else {
+                            e.currentElement.startDrag(null, null);
+                            scrubTo(e);
+                        }
+                    } else if (e.button == 1) { openRulerMenu(e.x, e.y); e.stopPropagation(); }
                 })
-                .addEventListener(UIEvents.DRAG_SOURCE_UPDATE, this::scrubTo)
+                .addEventListener(UIEvents.DRAG_SOURCE_UPDATE, e -> {
+                    if (dragSection == null) { scrubTo(e); return; }
+                    var timeline = dragSectionTimeline;
+                    if (timeline == null || fxEditor.runtime == null || fxEditor.runtime.fxData.timeline() != timeline
+                            || !timeline.sections().contains(dragSection)) return;
+                    dragSectionTo(timeline, dragSection, xToTick(e.x) - dragSectionGrabOffset);
+                    e.stopPropagation();
+                })
+                .addEventListener(UIEvents.DRAG_END, e -> finishSectionDrag())
                 .addEventListener(UIEvents.MOUSE_WHEEL, this::onZoom);
         setupMarkerStrip();
         rightScroller.setId("timeline.lanes");
@@ -677,6 +706,26 @@ public class FXTimelineView extends View implements TimelineContext {
         fxEditor.openMenu(x, y, menu);
     }
 
+    private void finishSectionDrag() {
+        var section = dragSection;
+        var timeline = dragSectionTimeline;
+        var before = dragSectionOrigin;
+        dragSection = null;
+        dragSectionTimeline = null;
+        if (section == null || timeline == null) return;
+        // Do not commit an edit to a project that was closed or replaced during the gesture.
+        if (fxEditor.runtime == null || fxEditor.runtime.fxData.timeline() != timeline
+                || !timeline.sections().contains(section)) {
+            section.start(before);
+            return;
+        }
+        var after = section.start();
+        if (after != before) {
+            pushApplied("photon.gui.editor.timeline.section.move", () -> section.start(after),
+                    () -> section.start(before));
+        }
+    }
+
     @Nullable
     private TimelineSection sectionAt(float x, Timeline timeline) {
         TimelineSection nearest = null;
@@ -711,6 +760,15 @@ public class FXTimelineView extends View implements TimelineContext {
     public static boolean validSectionStart(Timeline timeline, @Nullable TimelineSection moving, double tick) {
         return Double.isFinite(tick) && tick >= 0 && tick < timeline.getDuration()
                 && timeline.sections().stream().noneMatch(s -> s != moving && s.start() == tick);
+    }
+
+    /** Update a dragged boundary at whole-tick resolution, retaining its last valid position on invalid input. */
+    public static boolean dragSectionTo(Timeline timeline, TimelineSection section, double rawTick) {
+        if (!Double.isFinite(rawTick) || !timeline.sections().contains(section)) return false;
+        var tick = (double) Math.round(rawTick);
+        if (!validSectionStart(timeline, section, tick)) return false;
+        section.start(tick);
+        return true;
     }
 
     private void renameSection(Timeline timeline, TimelineSection section) {
