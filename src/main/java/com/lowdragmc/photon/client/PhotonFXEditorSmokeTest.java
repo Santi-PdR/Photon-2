@@ -578,6 +578,13 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Sections did not survive saving: " + reloaded.sections().size()
                     + " section(s), release '" + reloaded.releaseSection() + "', now=" + reloaded.releaseNow());
         }
+        // The editor must not offer names that the runtime cannot distinguish in jump/release requests.
+        if (com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, "intro")
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, " ")
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, " new ")
+                || !com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, "outro")) {
+            throw new IllegalStateException("The section editor accepted an empty/duplicate name or rejected a new one");
+        }
         // a project written before sections existed has no key at all and must load with none
         var legacy = tag.copy();
         legacy.remove("sections");

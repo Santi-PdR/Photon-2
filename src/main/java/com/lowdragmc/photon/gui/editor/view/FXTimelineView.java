@@ -37,6 +37,7 @@ import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.Marker;
 import com.lowdragmc.photon.client.fx.timeline.SignalTrack;
 import com.lowdragmc.photon.client.fx.timeline.Timeline;
+import com.lowdragmc.photon.client.fx.timeline.TimelineSection;
 import com.lowdragmc.photon.client.fx.timeline.Track;
 import com.lowdragmc.photon.client.fx.timeline.TrackGroup;
 import com.lowdragmc.photon.client.gameobject.FXInstanceObject;
@@ -649,7 +650,108 @@ public class FXTimelineView extends View implements TimelineContext {
         var menu = TreeBuilder.Menu.start();
         menu.leaf("photon.gui.editor.timeline.insert_time", () -> openInsertTimeDialog(tick));
         menu.leaf("photon.gui.editor.timeline.add_marker", () -> addMarker(tick));
+        var timeline = fxEditor.runtime.fxData.timeline();
+        var section = sectionAt(x, timeline);
+        menu.leaf("photon.gui.editor.timeline.section.add", () -> addSection(timeline, tick));
+        if (section != null) {
+            menu.branch(Component.literal(section.name()), actions -> {
+                actions.leaf("photon.gui.editor.timeline.section.repeat", () -> editSectionRepeat(section));
+                actions.leaf("photon.gui.editor.timeline.section.linear", () -> setSectionExit(section, TimelineSection.Then.LINEAR, ""));
+                actions.leaf("photon.gui.editor.timeline.section.end", () -> setSectionExit(section, TimelineSection.Then.END, ""));
+                actions.leaf("photon.gui.editor.timeline.section.goto", () -> editSectionTarget(timeline, section));
+                actions.leaf("photon.gui.editor.timeline.section.release", () -> setReleaseSection(timeline, section.name()));
+                actions.leaf("photon.gui.editor.timeline.section.remove", () -> removeSection(timeline, section));
+            });
+        }
+        if (timeline.releaseSection() != null) {
+            menu.leaf("photon.gui.editor.timeline.section.clear_release", () -> setReleaseSection(timeline, null));
+            menu.leaf(timeline.releaseNow() ? "photon.gui.editor.timeline.section.release_at_seam"
+                    : "photon.gui.editor.timeline.section.release_immediately", () -> {
+                var before = timeline.releaseNow();
+                pushEdit("photon.gui.editor.timeline.section.release_timing",
+                        () -> timeline.releaseNow(!before), () -> timeline.releaseNow(before));
+            });
+        }
         fxEditor.openMenu(x, y, menu);
+    }
+
+    @Nullable
+    private TimelineSection sectionAt(float x, Timeline timeline) {
+        TimelineSection nearest = null;
+        var distance = SNAP_PX;
+        for (var section : timeline.sections()) {
+            var sx = originX() + (float) ((section.start() - scrollTicks) * scale);
+            var d = Math.abs(sx - x);
+            if (d <= distance) { distance = d; nearest = section; }
+        }
+        return nearest;
+    }
+
+    private void addSection(Timeline timeline, double tick) {
+        // Empty or duplicate sections are skipped by the runtime. Reject them at creation instead.
+        if (tick >= timeline.getDuration() || timeline.sections().stream().anyMatch(s -> s.start() == tick)) return;
+        Dialog.stringEditorDialog("photon.gui.editor.timeline.section.add", "section",
+                name -> validSectionName(timeline, name), name -> {
+                    if (!validSectionName(timeline, name) || tick >= timeline.getDuration()
+                            || timeline.sections().stream().anyMatch(s -> s.start() == tick)) return;
+                    var section = new TimelineSection(name, tick);
+                    pushEdit("photon.gui.editor.timeline.section.add",
+                            () -> timeline.sections().add(section), () -> timeline.sections().remove(section));
+                }).show(fxEditor);
+    }
+
+    /** Names must be unique and non-empty so jump/release requests unambiguously find a section. */
+    public static boolean validSectionName(Timeline timeline, String name) {
+        return name != null && !name.isBlank() && name.equals(name.trim())
+                && timeline.sections().stream().noneMatch(s -> s.name().equals(name));
+    }
+
+    private void editSectionRepeat(TimelineSection section) {
+        Dialog.stringEditorDialog("photon.gui.editor.timeline.section.repeat", Integer.toString(section.repeat()),
+                value -> { try { return Integer.parseInt(value) >= 0; } catch (NumberFormatException e) { return false; } },
+                value -> {
+                    int next;
+                    try { next = Integer.parseInt(value); } catch (NumberFormatException e) { return; }
+                    if (next < 0) return;
+                    var before = section.repeat();
+                    pushEdit("photon.gui.editor.timeline.section.repeat", () -> section.repeat(next), () -> section.repeat(before));
+                }).show(fxEditor);
+    }
+
+    private void setSectionExit(TimelineSection section, TimelineSection.Then next, String target) {
+        var oldThen = section.then();
+        var oldTarget = section.target();
+        pushEdit("photon.gui.editor.timeline.section.exit",
+                () -> section.then(next).target(target), () -> section.then(oldThen).target(oldTarget));
+    }
+
+    private void editSectionTarget(Timeline timeline, TimelineSection section) {
+        Dialog.stringEditorDialog("photon.gui.editor.timeline.section.goto", section.target(),
+                name -> timeline.sections().stream().anyMatch(s -> s.name().equals(name)),
+                name -> {
+                    if (timeline.sections().stream().anyMatch(s -> s.name().equals(name)))
+                        setSectionExit(section, TimelineSection.Then.GOTO, name);
+                }).show(fxEditor);
+    }
+
+    private void setReleaseSection(Timeline timeline, @Nullable String name) {
+        var before = timeline.releaseSection();
+        pushEdit("photon.gui.editor.timeline.section.release", () -> timeline.releaseSection(name),
+                () -> timeline.releaseSection(before));
+    }
+
+    private void removeSection(Timeline timeline, TimelineSection section) {
+        var index = timeline.sections().indexOf(section);
+        if (index < 0) return;
+        var release = timeline.releaseSection();
+        // Keep any GOTO references intact so undo restores them; unresolved targets are ignored by SectionClock.
+        pushEdit("photon.gui.editor.timeline.section.remove", () -> {
+            timeline.sections().remove(section);
+            if (section.name().equals(timeline.releaseSection())) timeline.releaseSection(null);
+        }, () -> {
+            timeline.sections().add(Math.min(index, timeline.sections().size()), section);
+            timeline.releaseSection(release);
+        });
     }
 
     /** Prompt for an amount of time (seconds) to ripple-insert at {@code atTick}. */
@@ -813,6 +915,17 @@ public class FXTimelineView extends View implements TimelineContext {
             }
         }
         drawContentExtent(graphics, x, y, width, height);
+        if (fxEditor.runtime != null) {
+            for (var section : fxEditor.runtime.fxData.timeline().sections()) {
+                var sx = origin + (float) ((section.start() - scrollTicks) * scale);
+                if (sx < x || sx >= x + width) continue;
+                DrawerHelper.drawSolidRect(graphics, sx, y, 2, height, ColorPattern.PURPLE.color);
+                var label = section.name();
+                if (rulerLabelFits(label, sx + 3, x, width)) {
+                    DrawerHelper.drawText(graphics, label, sx + 3, y + 3, 1f, ColorPattern.WHITE.color);
+                }
+            }
+        }
         drawPlayhead(graphics, x, y, width, height, partialTick);
     }
 
