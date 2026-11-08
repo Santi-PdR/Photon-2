@@ -53,6 +53,9 @@ public final class LooseTextures {
     private static final Object MISSING = new Object();
     /** Namespaces already copied into the workspace, so a miss is not retried every draw. */
     private static final Set<String> COPIED = new LinkedHashSet<>();
+    /** Temporary GPU textures for copied files whose namespace is not mounted yet. Render thread only. */
+    private static final Map<ResourceLocation, net.minecraft.client.renderer.texture.DynamicTexture> TEMP_TEXTURES = new HashMap<>();
+    private static final Set<ResourceLocation> FAILED_UPLOADS = new LinkedHashSet<>();
     /** Namespace → folder that holds {@code assets/<namespace>}. */
     private static Map<String, Path> index = Map.of();
     private static int searchesSinceRebuild = 0;
@@ -64,6 +67,7 @@ public final class LooseTextures {
     public static void invalidate() {
         RESOLVED.clear();
         COPIED.clear();
+        FAILED_UPLOADS.clear();
         index = Map.of();
         searchesSinceRebuild = 0;
     }
@@ -96,6 +100,45 @@ public final class LooseTextures {
             RESOLVED.put(key, MISSING);
             return id;
         }
+    }
+
+    /**
+     * Bindable id for the render thread. A newly copied namespace is not visible to the current pack manager until
+     * reload, so register the copied image directly in TextureManager while retaining the original resource id.
+     * Once a mounted pack can serve it, discard only our own temporary texture so pack priority works again.
+     */
+    public static ResourceLocation resolveForRender(ResourceLocation id) {
+        if (id == null || BUILTIN.contains(id.getNamespace())) return id;
+        com.mojang.blaze3d.systems.RenderSystem.assertOnRenderThread();
+        var wasServed = packServes(id);
+        resolve(id); // also adopts a loose file for later reloads and FX pack export
+        var manager = Minecraft.getInstance().getTextureManager();
+        var existing = TEMP_TEXTURES.get(id);
+        if (packServes(id)) {
+            // A just-adopted file can become visible immediately under an already mounted namespace, but
+            // a previous lookup may have cached the missing texture under this id.
+            if (!wasServed && existing == null) manager.release(id);
+            if (existing != null) {
+                if (manager.getTexture(id, null) == existing) manager.release(id);
+                TEMP_TEXTURES.remove(id);
+            }
+            return id;
+        }
+        if (existing != null && manager.getTexture(id, null) == existing) return id;
+        TEMP_TEXTURES.remove(id);
+        if (FAILED_UPLOADS.contains(id)) return id;
+        var target = PhotonPaths.getAssetsDir().toPath().resolve(id.getNamespace()).resolve(id.getPath());
+        if (!Files.isRegularFile(target)) return id;
+        try (var input = Files.newInputStream(target)) {
+            var image = com.mojang.blaze3d.platform.NativeImage.read(input);
+            var texture = new net.minecraft.client.renderer.texture.DynamicTexture(image);
+            manager.register(id, texture);
+            TEMP_TEXTURES.put(id, texture);
+        } catch (Exception failure) {
+            FAILED_UPLOADS.add(id);
+            Photon.LOGGER.warn("photon: could not upload loose texture {} from {}", id, target, failure);
+        }
+        return id;
     }
 
     /** Whether any mounted pack already answers for this id, which needs no search at all. */

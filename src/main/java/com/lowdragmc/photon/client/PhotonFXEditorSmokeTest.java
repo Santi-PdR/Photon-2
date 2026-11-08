@@ -692,7 +692,8 @@ public final class PhotonFXEditorSmokeTest {
         var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
         try {
             Files.createDirectories(looseFile.getParent());
-            Files.write(looseFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+            Files.write(looseFile, java.util.Base64.getDecoder().decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4r2DwHwAFwAJPDlQtOgAAAABJRU5ErkJggg=="));
             com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
 
             var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
@@ -704,6 +705,18 @@ public final class PhotonFXEditorSmokeTest {
             if (!resolved.equals(id) || !Files.isRegularFile(adopted)) {
                 throw new IllegalStateException("Resolving " + id + " did not adopt the loose file into "
                         + adopted + " (got " + resolved + ")");
+            }
+            // No resource reload has occurred: rendering must upload the PNG directly rather than cache
+            // Minecraft's missing texture for a namespace the pack manager has never seen.
+            var manager = Minecraft.getInstance().getTextureManager();
+            if (!com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(id).equals(id)
+                    || !(manager.getTexture(id, null) instanceof net.minecraft.client.renderer.texture.DynamicTexture)) {
+                throw new IllegalStateException("The copied texture was not usable before a resource reload: " + id);
+            }
+            var uploaded = manager.getTexture(id, null);
+            com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(id);
+            if (manager.getTexture(id, null) != uploaded) {
+                throw new IllegalStateException("The loose texture was uploaded again on every frame: " + id);
             }
             Photon.LOGGER.info("[loose-texture-smoke] found {} in a folder no pack mounts and copied it to the workspace",
                     id);
@@ -754,6 +767,7 @@ public final class PhotonFXEditorSmokeTest {
         } catch (java.io.IOException failure) {
             throw new IllegalStateException("Loose texture lookup fixture failed", failure);
         } finally {
+            Minecraft.getInstance().getTextureManager().release(id);
             try {
                 Files.deleteIfExists(adopted);
                 Files.deleteIfExists(looseFile);
