@@ -52,6 +52,15 @@ public final class FXDiagnostics {
                         .append(" looping=").append(particle.config.isLooping())
                         .append(" maxParticles=").append(particle.config.getMaxParticles())
                         .append(" bursts=").append(particle.config.emission.getBursts().size()).append('\n');
+                if (hasConstantZeroSize(particle)) {
+                    var warning = "constant start size is zero on every axis; particles may be invisible (unless overridden)";
+                    report.append("Warning: ").append(warning).append('\n');
+                    Photon.LOGGER.warn("[fx-diagnostic] fx={} object={} {}", label, object.getName(), warning);
+                }
+                if (particle.config.getSimulationSpace() == null) {
+                    report.append("Warning: simulation space is null or unrecognized\n");
+                    Photon.LOGGER.warn("[fx-diagnostic] fx={} object={} simulation space is null or unrecognized", label, object.getName());
+                }
             }
             try {
                 var tag = object.serializeWrapper();
@@ -62,6 +71,18 @@ public final class FXDiagnostics {
             report.append('\n');
         }
         write(key, report.toString());
+    }
+
+    /** Conservative signal only: an animation or runtime override may still make the size nonzero. */
+    public static boolean hasConstantZeroSize(ParticleEmitter particle) {
+        var size = particle.config.getStartSize();
+        if (size == null) return false;
+        return isConstantZero(size.x) && isConstantZero(size.y) && isConstantZero(size.z);
+    }
+
+    private static boolean isConstantZero(com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction value) {
+        return value instanceof com.lowdragmc.photon.client.gameobject.emitter.data.number.Constant constant
+                && constant.getNumber() != null && constant.getNumber().doubleValue() == 0d;
     }
 
     /** Reports a known load or decoding error. The saved NBT is limited and is never used to modify the source. */

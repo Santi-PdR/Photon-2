@@ -96,6 +96,7 @@ public class ParticleEmitterMapper implements Mapper{
             newRotationTag.put("pitch", MapperUtils.mapTypedValue(rotationTag.getCompound("pitch"), false));
             newRotationTag.put("yaw", MapperUtils.mapTypedValue(rotationTag.getCompound("yaw"), false));
         }
+        MapperUtils.retainPresentFields(newRotationTag, rotationTag, "_enable");
         return newRotationTag;
     }
 
@@ -105,7 +106,8 @@ public class ParticleEmitterMapper implements Mapper{
         if(newColorTag.getByte("_enable") == 1){
             newColorTag.put("color", MapperUtils.mapTypedValue(colorTag.getCompound("color"), false));
         }
-            return newColorTag;
+            MapperUtils.retainPresentFields(newColorTag, colorTag, "_enable");
+        return newColorTag;
 
     }
 
@@ -129,6 +131,7 @@ public class ParticleEmitterMapper implements Mapper{
             newForceOTTag.putString("simulationSpace", forceOTTag.getString("simulationSpace"));
             newForceOTTag.put("force", MapperUtils.mapTyped3Vec(forceOTTag.getCompound("force"), null, false));
         }
+        MapperUtils.retainPresentFields(newForceOTTag, forceOTTag, "_enable");
         return newForceOTTag;
     }
 
@@ -145,11 +148,13 @@ public class ParticleEmitterMapper implements Mapper{
             if(remap.getByte("_enable") == 1){
                 remap.put("remapCurve", MapperUtils.mapTypedValue(noiseTag.getCompound("remap").getCompound("remapCurve"), false));
             }
+            MapperUtils.retainPresentFields(remap, noiseTag.getCompound("remap"), "_enable");
             newNoiseTag.put("remap", remap);
             newNoiseTag.putString("quality",  noiseTag.getString("quality"));
             newNoiseTag.putFloat("frequency",   noiseTag.getFloat("frequency"));
         }
 
+        MapperUtils.retainPresentFields(newNoiseTag, noiseTag, "_enable");
         return newNoiseTag;
     }
 
@@ -158,13 +163,14 @@ public class ParticleEmitterMapper implements Mapper{
         newPhysicsTag.putByte("_enable", physicsTag.getByte("enable"));
         if(newPhysicsTag.getByte("_enable") == 1){
             newPhysicsTag.putByte("hasCollision",  physicsTag.getByte("hasCollision"));
-            newPhysicsTag.putByte("removeWhenCollided",  physicsTag.getByte("removeWhenCollided"));
+            newPhysicsTag.putByte("removedWhenCollided", physicsTag.getByte("removedWhenCollided"));
             newPhysicsTag.put("friction", MapperUtils.mapTypedValue(physicsTag.getCompound("friction"), false));
             newPhysicsTag.put("gravity", MapperUtils.mapTypedValue(physicsTag.getCompound("gravity"), false));
             newPhysicsTag.put("bounceSpreadRate", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceSpreadRate"), false));
             newPhysicsTag.put("bounceRate", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceRate"), false));
             newPhysicsTag.put("bounceChance", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceChance"), false));
         }
+        MapperUtils.retainPresentFields(newPhysicsTag, physicsTag, "_enable");
         return newPhysicsTag;
     }
 
@@ -203,6 +209,7 @@ public class ParticleEmitterMapper implements Mapper{
             newSizeBySpeedTag.put("size", MapperUtils.mapTyped3Vec(sizeBySpeedTag.getCompound("size"), null, false));
         }
 
+        MapperUtils.retainPresentFields(newSizeBySpeedTag, sizeBySpeedTag, "_enable");
         return newSizeBySpeedTag;
     }
 
@@ -218,6 +225,7 @@ public class ParticleEmitterMapper implements Mapper{
 
         }
 
+        MapperUtils.retainPresentFields(newVelocityOTTag, velocityOTTag, "_enable");
         return newVelocityOTTag;
     }
 
@@ -231,6 +239,7 @@ public class ParticleEmitterMapper implements Mapper{
 
         }
 
+        MapperUtils.retainPresentFields(newRotationOLTTag, rotationOLTTag, "_enable");
         return newRotationOLTTag;
     }
 
@@ -241,6 +250,7 @@ public class ParticleEmitterMapper implements Mapper{
         newShapeTag.put("position",  MapperUtils.mapTyped3Vec(shapeTag.getCompound("position"), null, false));
         newShapeTag.put("shape", MapperUtils.mapShape(shapeTag.getCompound("shape")));
 
+        MapperUtils.retainPresentFields(newShapeTag, shapeTag);
         return newShapeTag;
     }
 
@@ -261,6 +271,7 @@ public class ParticleEmitterMapper implements Mapper{
         newTrailsTag.put("config", TrailEmitterMapper.mapTrailConfig(trailsTag.getCompound("config")));
         newTrailsTag.put("araConfig", buildAraConfig());
 
+        MapperUtils.retainPresentFields(newTrailsTag, trailsTag, "_enable", "araConfig");
         return newTrailsTag;
     }
 
@@ -338,6 +349,7 @@ public class ParticleEmitterMapper implements Mapper{
             newInheritVelTag.putString("mode",  inheritVelTag.getString("mode"));
         }
 
+        MapperUtils.retainPresentFields(newInheritVelTag, inheritVelTag, "_enable");
         return newInheritVelTag;
     }
 
@@ -349,6 +361,7 @@ public class ParticleEmitterMapper implements Mapper{
             newLTETag.put("speedRange", lteTag.getCompound("speedRange"));
         }
 
+        MapperUtils.retainPresentFields(newLTETag, lteTag, "_enable");
         return newLTETag;
     }
 
@@ -392,6 +405,7 @@ public class ParticleEmitterMapper implements Mapper{
             newColorTag.put("speedRange",  colorTag.getCompound("speedRange"));
             newColorTag.put("color", MapperUtils.mapTypedValue(colorTag.getCompound("color"), false));
         }
+        MapperUtils.retainPresentFields(newColorTag, colorTag, "_enable");
         return  newColorTag;
     }
 

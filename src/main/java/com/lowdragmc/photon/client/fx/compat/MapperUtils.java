@@ -356,7 +356,7 @@ public class MapperUtils {
         newMaterialTag.putByte("depthTest", materialTag.getByte("depthTest"));
         newMaterialTag.put("blendMode", materialTag.getCompound("blendMode"));
         newMaterialTag.put("material",  mapTypedValue(materialTag.getCompound("material"), false));
-
+        retainPresentFields(newMaterialTag, materialTag);
         return newMaterialTag;
     }
 
@@ -368,6 +368,7 @@ public class MapperUtils {
             newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
             newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
         }
+        retainPresentFields(newLightTag, lightTag, "_enable");
         return newLightTag;
     }
 
@@ -412,11 +413,23 @@ public class MapperUtils {
     public static CompoundTag mapCullTag(CompoundTag cullTag){
         CompoundTag newCullTag = new CompoundTag();
         newCullTag.putByte("_enable", cullTag.getByte("enable"));
-        if(newCullTag.getByte("_enable") == 1){
-            newCullTag.put("min", MapperUtils.mapCoordsDouble(cullTag.get("from")));
-            newCullTag.put("max", MapperUtils.mapCoordsDouble(cullTag.get("to")));
+        if (newCullTag.getByte("_enable") == 1 &&
+                (cullTag.contains("from", Tag.TAG_COMPOUND) || cullTag.contains("to", Tag.TAG_COMPOUND))) {
+            // Photon 2 persists an AABB under cullBox; its codec stores min/max vectors.
+            var box = new CompoundTag();
+            var from = cullTag.contains("from", Tag.TAG_COMPOUND) ? mapCoordsDouble(cullTag.get("from")) : constantCoords(-0.5);
+            var to = cullTag.contains("to", Tag.TAG_COMPOUND) ? mapCoordsDouble(cullTag.get("to")) : constantCoords(0.5);
+            box.put("min", from);
+            box.put("max", to);
+            newCullTag.put("cullBox", box);
         }
         return newCullTag;
+    }
+
+    private static ListTag constantCoords(double value) {
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(DoubleTag.valueOf(value));
+        return result;
     }
 
     public static CompoundTag mapUVTag(CompoundTag uvTag){
@@ -430,6 +443,7 @@ public class MapperUtils {
             newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
         }
 
+        retainPresentFields(newUVTag, uvTag, "_enable");
         return newUVTag;
     }
 

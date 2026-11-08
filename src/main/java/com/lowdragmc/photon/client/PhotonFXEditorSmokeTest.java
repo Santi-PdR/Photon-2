@@ -2685,6 +2685,55 @@ public final class PhotonFXEditorSmokeTest {
         if (!(scalarReloaded instanceof ParticleEmitter reloadedScalar)
                 || !reloadedScalar.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f)))
             throw new IllegalStateException("Converted scalar start size did not survive saving and reloading");
+        var sizeWarningEmitter = new ParticleEmitter();
+        sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 0, 0));
+        if (!com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))
+            throw new IllegalStateException("All-zero constant particle size was not diagnosed");
+        sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 1, 0));
+        if (com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))
+            throw new IllegalStateException("Nonzero particle size was incorrectly diagnosed as all-zero");
+        // Sparse enabled modules must not turn missing 1-valued defaults into zero.
+        var sparseModules = sparseFlat.copy();
+        var enabledModule = new CompoundTag(); enabledModule.putBoolean("enable", true);
+        for (var name : java.util.List.of("velocityOverLifetime", "sizeBySpeed", "noise", "inheritVelocity"))
+            sparseModules.put(name, enabledModule.copy());
+        var sparsePhysics = enabledModule.copy(); sparsePhysics.putBoolean("removedWhenCollided", true);
+        sparseModules.put("physics", sparsePhysics);
+        sparseModules.put("shape", new CompoundTag());
+        var modulesObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseModules));
+        if (!(modulesObject instanceof ParticleEmitter modules)
+                || modules.config.velocityOverLifetime.getSpeedModifier().get(0f, () -> 0f).floatValue() != 1f
+                || modules.config.velocityOverLifetime.getOrbitalMode() == null
+                || !modules.config.sizeBySpeed.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(1f))
+                || !modules.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1f))
+                || Math.abs(modules.config.noise.getPosition().x.get(0f, () -> 0f).floatValue() - 0.1f) > 0.0001f
+                || modules.config.noise.getFrequency() != 1f
+                || modules.config.inheritVelocity.getMultiply().get(0f, () -> 0f).floatValue() != 1f
+                || !modules.config.physics.isRemovedWhenCollided()) {
+            throw new IllegalStateException("Sparse legacy modules lost defaults or collision-removal flag");
+        }
+        var oldFrom = new CompoundTag(); oldFrom.putFloat("x", -8); oldFrom.putFloat("y", -4); oldFrom.putFloat("z", -2);
+        var oldTo = new CompoundTag(); oldTo.putFloat("x", 12); oldTo.putFloat("y", 6); oldTo.putFloat("z", 3);
+        var oldCull = new CompoundTag(); oldCull.putBoolean("enable", true); oldCull.put("from", oldFrom); oldCull.put("to", oldTo);
+        var oldRenderer = new CompoundTag(); oldRenderer.put("cull", oldCull);
+        var renderLegacy = sparseFlat.copy(); renderLegacy.put("renderer", oldRenderer);
+        renderLegacy.put("material", new CompoundTag());
+        renderLegacy.put("uvAnimation", enabledModule.copy());
+        renderLegacy.put("lights", enabledModule.copy());
+        var renderObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(renderLegacy));
+        if (!(renderObject instanceof ParticleEmitter renderEmitter)
+                || !renderEmitter.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3))
+                || renderEmitter.config.uvAnimation.getCycle() != 1f
+                || renderEmitter.config.uvAnimation.getTiles().x != 1 || renderEmitter.config.uvAnimation.getTiles().y != 1
+                || renderEmitter.config.renderer.getMaterials().isEmpty()
+                || !renderEmitter.config.renderer.getMaterials().get(0).isDepthTest()
+                || !renderEmitter.config.renderer.getMaterials().get(0).isCull()) {
+            throw new IllegalStateException("Legacy cull bounds or sparse renderer defaults were lost");
+        }
+        var sparseCull = enabledModule.copy();
+        com.lowdragmc.photon.client.fx.compat.MapperUtils.mapCullTag(sparseCull); // omitted bounds must not throw
         var nested = new CompoundTag();
         nested.putString("_type", "particle");
         nested.putInt("_version", 2);
