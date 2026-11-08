@@ -400,10 +400,14 @@ jobs:
           retention-days: 14
 
 
-      # Actions artifacts are ZIP downloads. A prerelease attaches the actual JAR so players can
-      # download it directly; publish only this session's branch and only after every test passed.
+      # Actions artifacts are ZIP downloads. Attach the JAR after a successful run on this
+      # session branch, whether it was triggered by a push or its same-repository PR.
       - name: Publish direct-download preview JAR
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2'
+        if: >-
+          success() &&
+          ((github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2') ||
+           (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.head.ref == 'arena/747b04a3-photon-2'))
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
