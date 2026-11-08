@@ -13,7 +13,7 @@ public class BeamEmitterMapper implements Mapper{
         dataTag.putString("name", emitterTag.getString("name"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapBeamConfig(emitterTag.getCompound("config")));
+        dataTag.put("config", mapBeamConfig(MapperUtils.legacyEmitterConfig(emitterTag)));
 
         newEmitterTag.put("data", dataTag);
 
@@ -36,7 +36,10 @@ public class BeamEmitterMapper implements Mapper{
         newBeamConfigTag.put("emitRate", MapperUtils.mapTypedValue(configTag.getCompound("emitRate"), false));
 
         newBeamConfigTag.putString("raycastBlockMode", "VISUAL");
-
+        MapperUtils.retainPresentFields(newBeamConfigTag, configTag, "raycastBlockMode");
+        if (configTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newBeamConfigTag.contains("renderer")) {
+            newBeamConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
+        }
         return newBeamConfigTag;
     }
 }
