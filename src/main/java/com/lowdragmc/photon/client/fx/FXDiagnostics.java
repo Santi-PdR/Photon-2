@@ -40,6 +40,14 @@ public final class FXDiagnostics {
                 .append("\nExecutor: ").append(executor.getClass().getName())
                 .append("\nDelay ticks: ").append(delay).append("\nObjects: ").append(data.objects().size())
                 .append("\nA playback request does not prove the effect was visible.\n");
+        if (location != null) {
+            try {
+                report.append("\nResource origins:\n");
+                for (var line : FXSourceReport.describe(location)) report.append(line).append('\n');
+            } catch (Exception e) {
+                report.append("Could not inspect FX resource origins: ").append(e).append('\n');
+            }
+        }
         int count = 0;
         for (var object : data.objects()) {
             if (count++ >= MAX_OBJECTS || report.length() >= MAX_CHARS) break;

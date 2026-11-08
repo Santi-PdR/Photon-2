@@ -259,6 +259,22 @@ public final class PhotonFXEditorSmokeTest {
      */
     private static void verifyFxPickerAndBloomControl() {
         var fxIds = com.lowdragmc.photon.client.fx.FXHelper.listAllFX();
+        var exampleId = new net.minecraft.resources.ResourceLocation("photon", "nested/example");
+        var fakeRoot = java.nio.file.Path.of("test-game");
+        if (!com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "fxpack/legacy-ldlib", exampleId)
+                .equals(fakeRoot.resolve("ldlib/assets/photon/fx/nested/example.fx"))
+                || !com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "fxpack/editor-ldlib2", exampleId)
+                .equals(fakeRoot.resolve("ldlib2/assets/photon/fx/nested/example.fx"))
+                || !com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "photon/workspace", exampleId)
+                .equals(fakeRoot.resolve("photon/assets/photon/fx/nested/example.fx"))
+                || com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "mod_resources", exampleId) != null)
+            throw new IllegalStateException("FX source report attributed a pack to the wrong path");
+        if (!fxIds.isEmpty()) {
+            var id = fxIds.get(0);
+            var source = Minecraft.getInstance().getResourceManager().getResource(com.lowdragmc.photon.client.fx.FXHelper.fileLocation(id)).orElseThrow();
+            if (com.lowdragmc.photon.client.fx.FXSourceReport.describe(id).stream().noneMatch(line -> line.equals("Selected pack: " + source.sourcePackId())))
+                throw new IllegalStateException("FX source report omitted the selected resource pack");
+        }
         var found = new ArrayList<String>();
         com.lowdragmc.photon.client.fx.FXHelper.searchFX("", found::add);
         var withClearEntry = found.size() == fxIds.size() + 1 && found.get(0).isEmpty();
