@@ -335,7 +335,7 @@ public class ParticleEmitter extends Emitter {
         this(new ParticleConfig());
     }
 
-    protected ParticleEmitter(ParticleConfig config) {
+    public ParticleEmitter(ParticleConfig config) {
         this.config = config;
     }
 

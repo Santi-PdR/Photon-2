@@ -2633,6 +2633,12 @@ public final class PhotonFXEditorSmokeTest {
         if (rawConversion.converted() != 1 || !Files.isRegularFile(dest.resolve("raw.fx"))) {
             throw new IllegalStateException("The converter rejected an uncompressed Photon 1 effect");
         }
+        // Upstream exposes construction from an existing config for integrations.
+        var suppliedConfig = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig();
+        suppliedConfig.setDuration(37);
+        var configuredEmitter = new ParticleEmitter(suppliedConfig);
+        if (configuredEmitter.config != suppliedConfig || configuredEmitter.getLifetime() != 37)
+            throw new IllegalStateException("ParticleEmitter did not initialize from its supplied config");
         // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
         var flat = new CompoundTag();
         flat.putString("_type", "particle");
