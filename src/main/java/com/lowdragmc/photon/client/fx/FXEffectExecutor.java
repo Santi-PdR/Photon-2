@@ -55,6 +55,16 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
         this.level = level;
     }
 
+    /** Include failures constructing a runtime, before it can reach the common emit diagnostics. */
+    protected FXRuntime createDiagnosedRuntime() {
+        try {
+            return fx.createRuntime();
+        } catch (RuntimeException error) {
+            FXDiagnostics.failure(fx.getFxLocation(), "runtime-create", "Could not create the effect runtime", null, error);
+            throw error;
+        }
+    }
+
     /** Fire {@link #onFinished} exactly once (re-armed by the next {@code start()}). */
     protected void notifyFinished() {
         if (!finishedNotified && runtime != null) {

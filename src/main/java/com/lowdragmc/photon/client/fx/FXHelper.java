@@ -221,6 +221,7 @@ public class FXHelper {
             return tag;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
+            FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation, null, e);
             return null;
         }
     }
@@ -253,9 +254,16 @@ public class FXHelper {
             var fx = new FX();
             fx.setFxLocation(fxLocation);
             fx.deserializeNBT(Platform.getFrozenRegistry(), tag);
+            var expected = tag.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).size();
+            var loaded = fx.getFxData().objects().size();
+            if (loaded < expected && !com.lowdragmc.photon.client.fx.instance.InstanceBaker.hasInstances(tag.getCompound("fxData"))) {
+                FXDiagnostics.failure(fxLocation, "decode", "Loaded " + loaded + " of " + expected
+                        + " objects; see preceding object decode messages", tag, null);
+            }
             return fx;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {}", fxLocation, e);
+            FXDiagnostics.failure(fxLocation, "decode", "Effect deserialization threw an exception", tag, e);
             return null;
         }
     }

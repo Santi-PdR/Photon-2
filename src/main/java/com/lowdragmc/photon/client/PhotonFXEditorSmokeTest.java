@@ -699,6 +699,22 @@ public final class PhotonFXEditorSmokeTest {
         var looseFile = looseRoot.resolve("assets").resolve(id.getNamespace()).resolve(id.getPath());
         var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
         try {
+            var badData = new CompoundTag();
+            var badObjects = new ListTag();
+            var badObject = new CompoundTag();
+            badObject.putString("type", "diagnostic_missing_type");
+            badObject.put("data", new CompoundTag());
+            badObjects.add(badObject);
+            badData.put("fxObjects", badObjects);
+            new com.lowdragmc.photon.client.fx.FXData().deserializeNBT(
+                    com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), badData);
+            var diagnosticKey = "failure-unknown-object-decode-diagnostic_missing_type-";
+            var diagnosticFile = com.lowdragmc.lowdraglib2.Platform.getGamePath().resolve("photon/diagnostics")
+                    .resolve("fx-" + Integer.toUnsignedString(diagnosticKey.hashCode(), 16) + ".txt");
+            if (!Files.isRegularFile(diagnosticFile) || !Files.readString(diagnosticFile).contains("diagnostic_missing_type")) {
+                throw new IllegalStateException("A rejected FX object did not produce a diagnostic dump");
+            }
+            Files.delete(diagnosticFile);
             // An incomplete workspace namespace must not mask the same namespace in another tree.
             Files.createDirectories(assets.resolve(id.getNamespace()));
             Files.createDirectories(looseFile.getParent());

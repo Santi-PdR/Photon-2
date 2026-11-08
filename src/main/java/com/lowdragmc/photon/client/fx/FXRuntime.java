@@ -200,6 +200,11 @@ public class FXRuntime implements IScene {
      * unknown name starts at 0, as before. Ported from Photon 26.3.
      */
     public void emit(IEffectExecutor effect, int delay, @Nullable String startSection) {
+        try {
+            FXDiagnostics.playback(fxData, effect, delay);
+        } catch (Exception diagnosticError) {
+            Photon.LOGGER.warn("[fx-diagnostic] could not capture playback report", diagnosticError);
+        }
         emitted = true;
         destroyed = false;
         releasing = false;
@@ -213,9 +218,15 @@ public class FXRuntime implements IScene {
             fxRoot.setLastHostTick(host.tickCount());
         }
         for (var fxObject : objects.values()) {
-            fxObject.emit(effect);
-            // set after emit: emit() resets the object, which zeroes its delay
-            fxObject.setDelay(delay);
+            try {
+                fxObject.emit(effect);
+                // set after emit: emit() resets the object, which zeroes its delay
+                fxObject.setDelay(delay);
+            } catch (RuntimeException error) {
+                var location = effect instanceof FXEffectExecutor executor ? executor.getFx().getFxLocation() : null;
+                FXDiagnostics.failure(location, "emit", "object " + fxObject.getName() + " (" + fxObject.id() + ") failed", null, error);
+                throw error;
+            }
         }
         timelinePlayer.begin(effect, startSection);
     }

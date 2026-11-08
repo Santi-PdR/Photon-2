@@ -48,7 +48,11 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
 
     @Nullable
     static IFXObject deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, fixOldIdentityRotation(tag)).result().orElse(null);
+        var result = CODEC.parse(NbtOps.INSTANCE, fixOldIdentityRotation(tag));
+        result.error().ifPresent(error -> com.lowdragmc.photon.Photon.LOGGER.warn(
+                "[fx-diagnostic] could not decode FX object type={}: {}",
+                tag instanceof CompoundTag compound ? compound.getString("type") : "unknown", error.message()));
+        return result.result().orElse(null);
     }
 
     /**
