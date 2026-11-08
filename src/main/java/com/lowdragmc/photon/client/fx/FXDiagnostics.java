@@ -33,6 +33,9 @@ public final class FXDiagnostics {
         var key = "play-" + label + "-" + data.objects().stream().map(o -> o.id().toString()).toList().hashCode();
         Photon.LOGGER.info("[fx-diagnostic] playback requested: fx={} executor={} objects={} delay={}; visibility not verified",
                 label, executor.getClass().getSimpleName(), data.objects().size(), delay);
+        // Effects with sub-emitters can start hundreds of runtimes per second. Check the same
+        // write throttle before serializing NBT, not after doing the expensive work each time.
+        if (!captureAllowed(key)) return;
         var report = new StringBuilder("Photon playback diagnostic\nFX: ").append(label)
                 .append("\nExecutor: ").append(executor.getClass().getName())
                 .append("\nDelay ticks: ").append(delay).append("\nObjects: ").append(data.objects().size())
@@ -84,6 +87,12 @@ public final class FXDiagnostics {
         int remaining = Math.max(0, MAX_CHARS - report.length());
         report.append(text, 0, Math.min(text.length(), remaining));
         if (text.length() > remaining) report.append("\n[truncated]\n");
+    }
+
+    private static synchronized boolean captureAllowed(String key) {
+        var previous = LAST_WRITE.get(key);
+        return (previous != null || LAST_WRITE.size() < MAX_REPORTS)
+                && (previous == null || System.currentTimeMillis() - previous >= 5000);
     }
 
     private static synchronized void write(String key, String text) {
