@@ -2735,6 +2735,33 @@ public final class PhotonFXEditorSmokeTest {
                 .getString("resource").equals("minecraft:textures/particle/flame.png")
                 || restoredUniform == null || Math.abs(restoredUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f)
             throw new IllegalStateException("Converted Photon 1 shader sampler or variant uniform did not survive deserialization");
+        // Photon 1's integer RandomConstant draws inclusively: [0,1] must sometimes emit 1,
+        // rather than a decimal in [0,1) that is always truncated to zero by the burst.
+        var oldRandom = new CompoundTag();
+        oldRandom.putString("_type", "RandomConstant");
+        oldRandom.putInt("a", 0); oldRandom.putInt("b", 1);
+        oldRandom.putBoolean("isDecimals", false);
+        var random = NumberFunction.deserializeWrapper(com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldRandom, false));
+        if (random.get(0f, () -> 0.25f).intValue() != 0 || random.get(0f, () -> 0.75f).intValue() != 1
+                || random.copy().get(0f, () -> 0.75f).intValue() != 1
+                || NumberFunction.deserializeWrapper(random.serializeWrapper()).get(0f, () -> 0.75f).intValue() != 1) {
+            throw new IllegalStateException("Photon 1 inclusive integer random range was lost during conversion, copy or save");
+        }
+        var randomBurst = immediate.copy(); randomBurst.put("count", oldRandom);
+        var randomBursts = new ListTag(); randomBursts.add(randomBurst);
+        var randomEmission = oldEmission.copy(); randomEmission.put("bursts", randomBursts);
+        var convertedEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        convertedEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(randomEmission));
+        var randomSource = net.minecraft.util.RandomSource.create(9821L);
+        var emissionRuntime = convertedEmission.createRuntime();
+        int emitted = 0;
+        for (int i = 0; i < 128; i++) emitted += emissionRuntime.getEmissionCount(emissionEmitter, randomSource);
+        if (emitted == 0 || emitted == 128) throw new IllegalStateException("Converted [0,1] burst did not produce both outcomes: " + emitted);
+        oldRandom.putBoolean("isDecimals", true);
+        var decimalRandom = NumberFunction.deserializeWrapper(com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldRandom, false));
+        if (Math.abs(decimalRandom.get(0f, () -> 0.75f).floatValue() - 0.75f) > 0.0001f)
+            throw new IllegalStateException("Photon 1 decimal random range was changed to integer");
         var oldCurve = new CompoundTag(); oldCurve.putString("_type", "RandomCurve");
         oldCurve.putByte("lockControlPoint", (byte) 0); oldCurve.putFloat("lower", 0.3f); oldCurve.putFloat("upper", 0.8f);
         var mappedCurve = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldCurve, false);

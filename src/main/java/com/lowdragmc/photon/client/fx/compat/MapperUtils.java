@@ -85,6 +85,11 @@ public class MapperUtils {
             case "RandomConstant":
                 if (typedValueTag.contains("a")) dataTag.put("a", typedValueTag.get("a").copy());
                 if (typedValueTag.contains("b")) dataTag.put("b", typedValueTag.get("b").copy());
+                // Photon 1 explicitly persisted whether this is a decimal range. Its integer
+                // sampling includes the upper endpoint; dropping this made [0,1] bursts always 0.
+                if (typedValueTag.contains("isDecimals", Tag.TAG_BYTE) && !typedValueTag.getBoolean("isDecimals")) {
+                    dataTag.putBoolean("legacyIntegerInclusive", true);
+                }
                 newTypedValueTag.putString("type", "random_constant");
                 break;
             case "Gradient":
