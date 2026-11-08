@@ -2887,17 +2887,17 @@ public final class PhotonFXEditorSmokeTest {
         if (!(importedDisabled instanceof ParticleEmitter disabledEmitter))
             throw new IllegalStateException("Disabled-module legacy emitter did not deserialize");
         var disabledReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(disabledEmitter.serializeWrapper());
-        if (!(disabledReload instanceof ParticleEmitter retained)
-                || retained.config.physics.isEnable() || retained.config.physics.getGravity().get(0f, () -> 0f).floatValue() != 2.5f
-                || retained.config.sizeOverLifetime.isEnable()
-                || !retained.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f))
-                || retained.config.uvAnimation.isEnable() || retained.config.uvAnimation.getCycle() != 3f
-                || !retained.config.uvAnimation.getTiles().equals(new org.joml.Vector2i(4, 2))
-                || retained.config.renderer.getCull().isEnable()
-                || !retained.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3))
-                || retained.config.subEmitters.isEnable() || retained.config.subEmitters.getEmitters().size() != 1
-                || retained.config.subEmitters.getEmitters().get(0).getTickInterval() != 512)
-            throw new IllegalStateException("Disabled Photon 1 module settings did not survive import and reload");
+        if (!(disabledReload instanceof ParticleEmitter retained)) throw new IllegalStateException("Disabled-module emitter did not reload");
+        if (retained.config.physics.isEnable() || retained.config.physics.getGravity().get(0f, () -> 0f).floatValue() != 2.5f)
+            throw new IllegalStateException("Disabled legacy physics did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("physics"));
+        if (retained.config.sizeOverLifetime.isEnable() || !retained.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f)))
+            throw new IllegalStateException("Disabled legacy size did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("sizeOverLifetime"));
+        if (retained.config.uvAnimation.isEnable() || retained.config.uvAnimation.getCycle() != 3f || !retained.config.uvAnimation.getTiles().equals(new org.joml.Vector2i(4, 2)))
+            throw new IllegalStateException("Disabled legacy UV did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("uvAnimation"));
+        if (retained.config.renderer.getCull().isEnable() || !retained.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3)))
+            throw new IllegalStateException("Disabled legacy cull bounds did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("renderer"));
+        if (retained.config.subEmitters.isEnable() || retained.config.subEmitters.getEmitters().size() != 1 || retained.config.subEmitters.getEmitters().get(0).getTickInterval() != 512)
+            throw new IllegalStateException("Disabled legacy sub-emitters did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("subEmitters"));
         var nestedRemap = new CompoundTag(); nestedRemap.putBoolean("enable", false); nestedRemap.put("remapCurve", count.copy());
         var disabledNoise = new CompoundTag(); disabledNoise.putBoolean("enable", false); disabledNoise.put("remap", nestedRemap);
         if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(disabledNoise)
