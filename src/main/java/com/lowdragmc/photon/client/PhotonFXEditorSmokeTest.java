@@ -2774,6 +2774,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("A converted Photon 1 burst did not emit its particles");
         }
         var enabled = new CompoundTag(); enabled.putByte("enable", (byte) 1);
+        enabled.put("force", new CompoundTag()); enabled.putFloat("frequency", 2f); enabled.put("gravity", oldRate.copy());
         if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapForceOTTag(enabled).contains("force", Tag.TAG_LIST)
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(enabled).contains("frequency")
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapPhysicsTag(enabled).contains("gravity"))
