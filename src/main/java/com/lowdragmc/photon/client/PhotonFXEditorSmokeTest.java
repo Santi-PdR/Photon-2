@@ -2659,6 +2659,26 @@ public final class PhotonFXEditorSmokeTest {
                 || sparseParticle.config.getStartLifetime().get(0f, () -> 0f).intValue() != 100) {
             throw new IllegalStateException("Sparse Photon 1 particle emitter did not load with its defaults");
         }
+        // Photon 1's older format stored scalar startSize and sizeOverLifetime.scale.
+        // Decode them as real runtime config, not just converted NBT.
+        var scalarLegacy = sparseFlat.copy();
+        var scalarSize = new CompoundTag(); scalarSize.putString("_type", "Constant"); scalarSize.putFloat("number", 3.5f);
+        scalarLegacy.put("startSize", scalarSize);
+        var scale = new CompoundTag(); scale.putString("_type", "Constant"); scale.putFloat("number", 0.4f);
+        var scalarOverLife = new CompoundTag(); scalarOverLife.putBoolean("enable", true); scalarOverLife.put("scale", scale);
+        scalarLegacy.put("sizeOverLifetime", scalarOverLife);
+        var scalarDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(scalarLegacy));
+        if (!(scalarDecoded instanceof ParticleEmitter scalarEmitter)
+                || !scalarEmitter.config.getSimulationSpace().name().equals("World")
+                || !scalarEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f))
+                || !scalarEmitter.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f))) {
+            throw new IllegalStateException("Old scalar size or world simulation space was lost during Photon 1 conversion");
+        }
+        var scalarReloaded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(scalarEmitter.serializeWrapper());
+        if (!(scalarReloaded instanceof ParticleEmitter reloadedScalar)
+                || !reloadedScalar.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f)))
+            throw new IllegalStateException("Converted scalar start size did not survive saving and reloading");
         var nested = new CompoundTag();
         nested.putString("_type", "particle");
         nested.putInt("_version", 2);

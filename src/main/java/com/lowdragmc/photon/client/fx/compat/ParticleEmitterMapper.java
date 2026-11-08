@@ -67,6 +67,17 @@ public class ParticleEmitterMapper implements Mapper{
         newConfigTag.put("colorBySpeed", mapColorBSTag(configTag.getCompound("colorBySpeed")));
 
         MapperUtils.retainPresentFields(newConfigTag, configTag, "prewarm", "additionalGPUDataSetting", "emission");
+        // Early Photon 1 stored a single start-size function before simulationSpace existed.
+        // Its own deserializer expands that function to all axes and defaults to World space.
+        var oldStartSize = configTag.getCompound("startSize");
+        if (!configTag.contains("simulationSpace") && oldStartSize.contains("_type", Tag.TAG_STRING)) {
+            newConfigTag.putString("simulationSpace", "World");
+            newConfigTag.put("startSize", MapperUtils.mapUniformTyped3Vec(oldStartSize, true));
+            if (configTag.contains("startRotation", Tag.TAG_COMPOUND)) {
+                newConfigTag.put("startRotation", MapperUtils.mapTyped3Vec(configTag.getCompound("startRotation"),
+                        new String[]{"z", "y", "x"}, false));
+            }
+        }
         // Photon 1 stored material beside the renderer, not inside it.
         if (configTag.contains("material", Tag.TAG_COMPOUND) && !newConfigTag.contains("renderer")) {
             newConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
@@ -102,7 +113,11 @@ public class ParticleEmitterMapper implements Mapper{
         CompoundTag newSizeOverLifeTimeTag = new CompoundTag();
         newSizeOverLifeTimeTag.putByte("_enable", sizeOverLifeTimeTag.getByte("enable"));
         if(newSizeOverLifeTimeTag.getByte("_enable") == 1){
-            newSizeOverLifeTimeTag.put("size", MapperUtils.mapTyped3Vec(sizeOverLifeTimeTag.getCompound("size"), null, false));
+            if (sizeOverLifeTimeTag.contains("scale", Tag.TAG_COMPOUND)) {
+                newSizeOverLifeTimeTag.put("size", MapperUtils.mapUniformTyped3Vec(sizeOverLifeTimeTag.getCompound("scale"), false));
+            } else if (sizeOverLifeTimeTag.contains("size", Tag.TAG_COMPOUND)) {
+                newSizeOverLifeTimeTag.put("size", MapperUtils.mapTyped3Vec(sizeOverLifeTimeTag.getCompound("size"), null, false));
+            }
         }
         return newSizeOverLifeTimeTag;
     }

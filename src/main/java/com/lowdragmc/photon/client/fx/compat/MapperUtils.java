@@ -56,6 +56,14 @@ public class MapperUtils {
 
 
 
+    /** Expand an old scalar function into independently serialized X, Y and Z functions. */
+    public static ListTag mapUniformTyped3Vec(CompoundTag value, boolean floatToDouble) {
+        var mapped = mapTypedValue(value, floatToDouble);
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(mapped.copy());
+        return result;
+    }
+
     public static CompoundTag mapTypedValue(CompoundTag typedValueTag,  boolean floatToDouble){
         CompoundTag newTypedValueTag = new CompoundTag();
         newTypedValueTag.putString("type", typedValueTag.getString("_type").toLowerCase());
