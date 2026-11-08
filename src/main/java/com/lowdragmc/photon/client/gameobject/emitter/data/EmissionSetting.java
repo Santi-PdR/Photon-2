@@ -176,15 +176,17 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
             var number = 0;
             // Legacy or edited NBT can bypass the configurator's minimum of one.
             // Match the original Photon and avoid a non-advancing trigger loop.
+            if (!Float.isFinite(start) || !Float.isFinite(end) || end <= start) return 0;
             int interval = Math.max(1, bust.interval);
-            int firstK = (int) Math.ceil((start - bust.time) / interval);
-            if (firstK < 0) firstK = 0;
-            for (int k = firstK; ; k++) {
+            double first = Math.max(0, Math.ceil(((double) start - bust.time) / interval));
+            // A float age can exceed the representable trigger index; never wrap k back to negative.
+            if (first >= Long.MAX_VALUE) return 0;
+            long firstK = (long) first;
+            for (long k = firstK; k < Long.MAX_VALUE; k++) {
                 if (bust.cycles > 0 && k >= bust.cycles) break;
-                float triggerAge = (long) bust.time + (long) k * interval;
-                if (triggerAge < start) continue;
+                double triggerAge = (double) bust.time + (double) k * interval;
                 if (triggerAge >= end) break;
-                if (randomSource.nextFloat() < bust.probability) {
+                if (triggerAge >= start && randomSource.nextFloat() < bust.probability) {
                     number += count;
                 }
             }

@@ -219,6 +219,7 @@ public class TileParticle implements IParticle {
             // interpolating the stored t would run past the end of a cycle between ticks
             return ParticleLifetime.t(mode, age + partialTicks, getLifetime(), endAge);
         }
+        if (config.emission.isLegacyTickEmission()) return t + partialTicks / getLifetime();
         return Mth.clamp(t + partialTicks / getLifetime(), 0, 1);
     }
 
@@ -483,6 +484,20 @@ public class TileParticle implements IParticle {
         }
 
         var mode = lifetimeMode();
+        if (lifetime > 0 && config.emission.isLegacyTickEmission() && mode == ParticleLifetime.Mode.Once) {
+            // Photon 1 increments age, fires Death, then performs the final update using the
+            // previous progress; Tick fires after the update and progress is stored last.
+            boolean dies = lifetime > 0 && age >= lifetime;
+            age += dt;
+            if (dies) {
+                setRemoved(true);
+                if (runtime.subEmitters.isEnable()) runtime.subEmitters.triggerEvent(this, SubEmittersSetting.Event.Death);
+            }
+            update(dt);
+            if (runtime.subEmitters.isEnable()) runtime.subEmitters.triggerTickEvent(this, dt);
+            if (lifetime > 0) t = age / lifetime;
+            return;
+        }
         var cyclic = mode.cyclic() && lifetime > 0;
         // what never dies of age ends with its emitter winding down: an infinite particle now, a cyclic one at the end
         // of the cycle it is in, so a Loop/PingPong particle stops instead of living forever

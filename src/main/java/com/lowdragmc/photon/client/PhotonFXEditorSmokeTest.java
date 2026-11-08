@@ -2786,6 +2786,26 @@ public final class PhotonFXEditorSmokeTest {
                 .getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 7) {
             throw new IllegalStateException("A converted Photon 1 burst did not emit its particles");
         }
+        // Omitted count uses Photon 1's default of 50, rather than an invalid empty function.
+        var sparseBursts = new ListTag(); sparseBursts.add(new CompoundTag());
+        var sparseEmissionTag = new CompoundTag(); sparseEmissionTag.put("bursts", sparseBursts);
+        var sparseEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        sparseEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(sparseEmissionTag));
+        if (sparseEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 51)
+            throw new IllegalStateException("Sparse legacy burst lost its default count or exact emission rate");
+        var hugeBurst = immediate.copy(); hugeBurst.putInt("cycles", 0);
+        var singleCount = count.copy(); singleCount.putFloat("number", 1); hugeBurst.put("count", singleCount);
+        var hugeBursts = new ListTag(); hugeBursts.add(hugeBurst);
+        var hugeTag = oldEmission.copy(); hugeTag.put("bursts", hugeBursts);
+        var zeroRate = oldRate.copy(); zeroRate.putFloat("number", 0); hugeTag.put("emissionRate", zeroRate);
+        var hugeEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        hugeEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(hugeTag));
+        emissionEmitter.setAge(Integer.MAX_VALUE);
+        if (hugeEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource(), 256f) != 256)
+            throw new IllegalStateException("Large-age infinite bursts overflowed or fired the wrong number of times");
+        emissionEmitter.setAge(0);
         var enabled = new CompoundTag(); enabled.putByte("enable", (byte) 1);
         enabled.put("force", new CompoundTag()); enabled.putFloat("frequency", 2f); enabled.put("gravity", oldRate.copy());
         if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapForceOTTag(enabled).contains("force", Tag.TAG_LIST)
@@ -2900,6 +2920,23 @@ public final class PhotonFXEditorSmokeTest {
         if (boundary.getParticleAmount() != 0)
             throw new IllegalStateException("Legacy boundary particles did not drain after their lifetime");
         boundary.remove(true);
+        var lifetimeOwner = new ParticleEmitter();
+        lifetimeOwner.setLevel(Minecraft.getInstance().level);
+        lifetimeOwner.config.emission.setLegacyTickEmission(true);
+        var oldLife = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(lifetimeOwner, lifetimeOwner.config);
+        oldLife.setLifetime(1);
+        oldLife.updateTick(1f);
+        if (oldLife.isRemoved() || oldLife.getAge() != 1 || oldLife.getT(0) != 1f)
+            throw new IllegalStateException("Legacy particle died before its final Photon 1 tick");
+        oldLife.updateTick(1f);
+        if (!oldLife.isRemoved() || oldLife.getAge() != 2 || oldLife.getT(0) != 2f)
+            throw new IllegalStateException("Legacy particle did not complete its Photon 1 final tick");
+        var nativeOwner = new ParticleEmitter(); nativeOwner.setLevel(Minecraft.getInstance().level);
+        var nativeLife = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(nativeOwner, nativeOwner.config);
+        nativeLife.setLifetime(1);
+        nativeLife.updateTick(1f); nativeLife.updateTick(1f);
+        if (!nativeLife.isRemoved() || nativeLife.getT(0) != 1f)
+            throw new IllegalStateException("Native Photon 2 particle lifetime changed with legacy compatibility");
         var nativeBoundary = new ParticleEmitter();
         nativeBoundary.setLevel(Minecraft.getInstance().level);
         nativeBoundary.config.setDuration(1);

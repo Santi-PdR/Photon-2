@@ -183,7 +183,9 @@ public class ParticleEmitterMapper implements Mapper{
         for (Tag item : emissionTag.getList("bursts", Tag.TAG_COMPOUND)) {
             var oldBurst = (CompoundTag) item;
             var burst = oldBurst.copy();
-            burst.put("count", MapperUtils.mapTypedValue(oldBurst.getCompound("count"), false));
+            if (oldBurst.contains("count", Tag.TAG_COMPOUND)) {
+                burst.put("count", MapperUtils.mapTypedValue(oldBurst.getCompound("count"), false));
+            }
             payload.add(burst);
         }
         bursts.put("payload", payload);
