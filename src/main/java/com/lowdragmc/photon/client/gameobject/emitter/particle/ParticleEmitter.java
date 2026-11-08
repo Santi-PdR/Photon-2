@@ -868,6 +868,19 @@ public class ParticleEmitter extends Emitter {
     }
 
     @Override
+    protected boolean wrapsProgress() {
+        // Photon 1 wrapped emitter progress even for a non-looping emitter's last tick.
+        return config.emission.isLegacyTickEmission() || super.wrapsProgress();
+    }
+
+    @Override
+    protected boolean hasReachedEnd() {
+        // Photon 1 emitted at age == duration before its post-update removal. Keep that
+        // final tick for imported effects (not for Photon 2's existing duration semantics).
+        return config.emission.isLegacyTickEmission() ? ageF > getLifetime() : super.hasReachedEnd();
+    }
+
+    @Override
     public void update(float dt) {
         if (!hasFirstUpdate) {
             hasFirstUpdate = true;
@@ -997,6 +1010,11 @@ public class ParticleEmitter extends Emitter {
     /** Emission order of the next particle; orders what particle updates defer. */
     public int nextParticleSerial() {
         return particleSerial++;
+    }
+
+    @Override
+    public void inheritDuration(int duration) {
+        runtime().duration.set(duration);
     }
 
     @Override

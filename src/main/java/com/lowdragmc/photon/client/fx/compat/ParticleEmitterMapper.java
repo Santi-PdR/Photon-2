@@ -364,7 +364,9 @@ public class ParticleEmitterMapper implements Mapper{
         newSubEmitterTag.putByte("inheritDuration",  subEmitterTag.getByte("inheritDuration"));
         newSubEmitterTag.putString("event", subEmitterTag.getString("event"));
         newSubEmitterTag.putString("legacySubFXName", subEmitterTag.getString("emitter"));
-
+        newSubEmitterTag.putBoolean("legacyTickGate", true);
+        // Sparse entries inherit the same defaults as a newly created Photon 1 sub-emitter.
+        MapperUtils.retainPresentFields(newSubEmitterTag, subEmitterTag, "legacySubFXName", "legacyTickGate");
         return newSubEmitterTag;
     }
 

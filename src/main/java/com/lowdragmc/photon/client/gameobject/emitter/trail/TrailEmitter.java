@@ -172,6 +172,11 @@ public class TrailEmitter extends Emitter {
     //////////////////////////////////////
 
     @Override
+    public void inheritDuration(int duration) {
+        runtime().duration.set(duration);
+    }
+
+    @Override
     public int getLifetime() {
         return runtime().duration.get();
     }

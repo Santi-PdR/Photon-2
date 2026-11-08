@@ -2710,6 +2710,40 @@ public final class PhotonFXEditorSmokeTest {
         if (mappedSub.getInt("uid") != 1 || mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("tickInterval") != 512
                 || !mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getString("legacySubFXName").equals("spark"))
             throw new IllegalStateException("Photon 1 sub-emitter list or interval was lost during conversion");
+        var decodedSub = new SubEmittersSetting();
+        decodedSub.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapSubEmittersTag(sub));
+        if (decodedSub.getEmitters().size() != 1 || decodedSub.getEmitters().get(0).getTickInterval() != 512
+                || decodedSub.getEmitters().get(0).getEvent() != SubEmittersSetting.Event.Birth
+                || !decodedSub.getEmitters().get(0).isLegacyTickGate())
+            throw new IllegalStateException("Sparse Photon 1 sub-emitter defaults or event gating were not retained");
+        var parentEmitter = new ParticleEmitter();
+        parentEmitter.setLevel(Minecraft.getInstance().level);
+        var parentParticle = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(parentEmitter, parentEmitter.config);
+        parentParticle.setAge(4f);
+        parentParticle.setLifetime(12);
+        var spawned = new com.lowdragmc.photon.client.fx.FX();
+        spawned.getFxData().objects().add(new ParticleEmitter());
+        spawned.getFxData().objects().add(new TrailEmitter());
+        spawned.getFxData().objects().add(new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter());
+        var spawnedRuntime = spawned.createRuntime();
+        com.lowdragmc.photon.client.fx.IEffectExecutor testExecutor = () -> Minecraft.getInstance().level;
+        spawnedRuntime.emit(testExecutor);
+        var inherit = decodedSub.getEmitters().get(0);
+        inherit.setInheritLifetime(true);
+        inherit.setInheritDuration(true);
+        inherit.applyInheritance(spawnedRuntime, parentParticle);
+        for (var value : spawnedRuntime.objects.values()) {
+            if (value instanceof com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter child
+                    && (child.getAge() != 4 || child.self().getLifetime() != 12
+                    || Math.abs(child.getT() - 4f / 12f) > 0.0001f)) {
+                throw new IllegalStateException("Sub-emitter inherited age or duration did not reach its runtime: " + child);
+            }
+        }
+        // A per-instance override must not edit the shared definition.
+        if (((ParticleEmitter) spawned.getFxData().objects().get(0)).config.getDuration() == 12)
+            throw new IllegalStateException("Sub-emitter inheritance mutated its shared FX definition");
+        spawnedRuntime.destroy(true);
         var oldShader = new CompoundTag(); oldShader.putString("_type", "CustomShaderMaterial");
         oldShader.putString("shader", "photon:ci/tornado_smoke");
         var oldUniform = new CompoundTag();
@@ -2749,6 +2783,41 @@ public final class PhotonFXEditorSmokeTest {
         }
         // Photon 1 sampled at ages 0,3,6 for an exact rate of 0.3. This matters for
         // short effects that end before a fractional accumulator reaches one particle.
+        // A burst exactly on Photon 1's duration tick must run before the emitter is removed.
+        // Decode an actual legacy object, copy it as a runtime would, and advance real particles.
+        var boundaryBurst = immediate.copy(); boundaryBurst.putInt("time", 1);
+        var boundaryBursts = new ListTag(); boundaryBursts.add(boundaryBurst);
+        var boundaryEmission = oldEmission.copy(); boundaryEmission.put("bursts", boundaryBursts);
+        var boundaryLegacy = new CompoundTag();
+        boundaryLegacy.putString("_type", "particle");
+        boundaryLegacy.putInt("duration", 1);
+        boundaryLegacy.putBoolean("looping", false);
+        var boundaryLife = new CompoundTag(); boundaryLife.putString("_type", "Constant"); boundaryLife.putInt("number", 2);
+        boundaryLegacy.put("startLifetime", boundaryLife);
+        boundaryLegacy.put("emission", boundaryEmission);
+        var boundaryObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(boundaryLegacy));
+        if (!(boundaryObject instanceof ParticleEmitter convertedBoundary))
+            throw new IllegalStateException("Legacy boundary emitter did not decode");
+        var boundary = (ParticleEmitter) convertedBoundary.copy(false);
+        boundary.setLevel(Minecraft.getInstance().level);
+        boundary.update(1f);
+        if (boundary.getParticleAmount() != 0 || boundary.getAge() != 1 || boundary.getT() != 0f)
+            throw new IllegalStateException("Boundary emitter emitted, aged or sampled progress incorrectly before its burst");
+        boundary.update(1f);
+        if (boundary.getParticleAmount() != 7)
+            throw new IllegalStateException("Photon 1 burst on the final duration tick did not emit: " + boundary.getParticleAmount());
+        for (int i = 0; i < 4; i++) boundary.update(1f);
+        if (boundary.getParticleAmount() != 0)
+            throw new IllegalStateException("Legacy boundary particles did not drain after their lifetime");
+        boundary.remove(true);
+        var nativeBoundary = new ParticleEmitter();
+        nativeBoundary.setLevel(Minecraft.getInstance().level);
+        nativeBoundary.config.setDuration(1);
+        nativeBoundary.config.setLooping(false);
+        nativeBoundary.update(1f);
+        if (nativeBoundary.isEmitting())
+            throw new IllegalStateException("Photon 2 emitter duration changed with legacy compatibility");
         var cadenceInput = oldEmission.copy();
         var slowRate = oldRate.copy(); slowRate.putFloat("number", 0.3f);
         cadenceInput.put("emissionRate", slowRate);
