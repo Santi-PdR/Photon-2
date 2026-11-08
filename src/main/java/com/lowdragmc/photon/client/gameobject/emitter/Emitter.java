@@ -151,9 +151,10 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
     }
 
     public float getT(float partialTicks) {
-        if (this.lifetime > 0){
-            if (!isLooping()) return net.minecraft.util.Mth.clamp(t + partialTicks / this.lifetime, 0f, 1f);
-            return t + partialTicks / this.lifetime;
+        int duration = getLifetime();
+        if (duration > 0) {
+            float progress = t + partialTicks / duration;
+            return wrapsProgress() ? progress : net.minecraft.util.Mth.clamp(progress, 0f, 1f);
         }
         return 0;
     }

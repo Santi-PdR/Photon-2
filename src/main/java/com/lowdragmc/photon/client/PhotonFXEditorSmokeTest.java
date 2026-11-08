@@ -2845,7 +2845,8 @@ public final class PhotonFXEditorSmokeTest {
         for (var value : spawnedRuntime.objects.values()) {
             if (value instanceof com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter child
                     && (child.getAge() != 4 || child.self().getLifetime() != 12
-                    || Math.abs(child.getT() - 4f / 12f) > 0.0001f)) {
+                    || Math.abs(child.getT() - 4f / 12f) > 0.0001f
+                    || Math.abs(child.getT(0.5f) - 4.5f / 12f) > 0.0001f)) {
                 throw new IllegalStateException("Sub-emitter inherited age or duration did not reach its runtime: " + child);
             }
         }
