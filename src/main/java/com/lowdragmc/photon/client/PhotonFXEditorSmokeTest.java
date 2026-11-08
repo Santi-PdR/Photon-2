@@ -699,13 +699,15 @@ public final class PhotonFXEditorSmokeTest {
         var looseFile = looseRoot.resolve("assets").resolve(id.getNamespace()).resolve(id.getPath());
         var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
         try {
+            // An incomplete workspace namespace must not mask the same namespace in another tree.
+            Files.createDirectories(assets.resolve(id.getNamespace()));
             Files.createDirectories(looseFile.getParent());
             Files.write(looseFile, java.util.Base64.getDecoder().decode(
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4r2DwHwAFwAJPDlQtOgAAAABJRU5ErkJggg=="));
             com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
 
             var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
-            if (folder == null || !Files.isRegularFile(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
+            if (folder == null || !looseFile.equals(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
                 throw new IllegalStateException("The loose texture lookup did not find " + id + " in " + looseRoot
                         + "; indexed namespace folder was " + folder);
             }

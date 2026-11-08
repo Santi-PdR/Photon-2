@@ -180,12 +180,15 @@ public final class LooseTextures {
     public static Path find(ResourceLocation id) {
         var name = Path.of(id.getPath()).getFileName().toString();
         var folder = namespaceFolder(id.getNamespace());
-        if (folder != null) {
-            // the id's path verbatim first: assets/<ns>/textures/particle/glow.png
-            var direct = folder.resolve(id.getPath());
+        // A namespace can occur in several roots. The workspace may contain only some of its
+        // images, so its presence must not hide an exact match in an older editor tree or pack.
+        var matchingFolders = namespaceFolders(id.getNamespace());
+        for (var matching : matchingFolders) {
+            var direct = matching.resolve(id.getPath());
             if (Files.isRegularFile(direct)) return direct;
-            // then by file name anywhere under the namespace, which is what a hand-made folder usually looks like
-            var loose = byFileName(folder, name, 6);
+        }
+        for (var matching : matchingFolders) {
+            var loose = byFileName(matching, name, 6);
             if (loose != null) return loose;
         }
         // the same path under a namespace the author never declared as the id's
@@ -201,6 +204,24 @@ public final class LooseTextures {
             if (loose != null) return loose;
         }
         return null;
+    }
+
+    /** Every occurrence of a namespace, in root priority order, not only the first indexed one. */
+    private static List<Path> namespaceFolders(String namespace) {
+        var found = new LinkedHashSet<Path>();
+        for (var root : roots()) {
+            var direct = root.resolve("assets").resolve(namespace);
+            if (Files.isDirectory(direct)) found.add(direct);
+            try (Stream<Path> children = Files.list(root)) {
+                children.filter(Files::isDirectory).forEach(child -> {
+                    var nested = child.resolve("assets").resolve(namespace);
+                    if (Files.isDirectory(nested)) found.add(nested);
+                });
+            } catch (IOException ignored) {
+                // A missing or unreadable search root contributes no folders.
+            }
+        }
+        return List.copyOf(found);
     }
 
     /** The first file called {@code name} under {@code folder}, at most {@code depth} levels down. */
