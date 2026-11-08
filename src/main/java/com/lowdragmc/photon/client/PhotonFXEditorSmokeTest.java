@@ -339,7 +339,8 @@ public final class PhotonFXEditorSmokeTest {
         var sectionNode = literal(fx, "section");
         var entity = literal(sectionNode, "entity");
         var jump = entity == null ? null : literal(entity, "jump");
-        if (jump == null || literal(jump, "section") == null) {
+        // the section name is an argument, not a literal
+        if (jump == null || argument(jump, "section") == null) {
             throw new IllegalStateException("/photon fx section entity jump <section> is not registered");
         }
         var block = literal(sectionNode, "block");
