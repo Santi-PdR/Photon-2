@@ -35,6 +35,29 @@ public class TrailEmitterMapper implements Mapper {
         newTrailConfigTag.putByte("smoothInterpolation",  trailConfigTag.getByte("smoothInterpolation"));
         newTrailConfigTag.putByte("looping", trailConfigTag.getByte("looping"));
         MapperUtils.retainPresentFields(newTrailConfigTag, trailConfigTag);
+        // Photon 1 migrates older trail configs (without smoothInterpolation) on load. It divides
+        // constant widths by ten; for Curve it changes editor bounds only, not lower/upper, which
+        // are what actually determine the sampled width. Do this once during import, including
+        // particle-attached trails, without mutating or repeatedly scaling a saved Photon 2 file.
+        if (!trailConfigTag.contains("smoothInterpolation")) {
+            if (!trailConfigTag.contains("widthOverTrail", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                var width = new CompoundTag();
+                width.putString("type", "constant");
+                var data = new CompoundTag();
+                data.putFloat("number", 0.02f);
+                width.put("data", data);
+                newTrailConfigTag.put("widthOverTrail", width);
+            } else {
+                var width = newTrailConfigTag.getCompound("widthOverTrail");
+                var data = width.getCompound("data");
+                if ("constant".equals(width.getString("type"))) {
+                    data.putFloat("number", data.getFloat("number") / 10f);
+                } else if ("curve".equals(width.getString("type"))) {
+                    if (data.contains("min")) data.putFloat("min", data.getFloat("min") / 10f);
+                    if (data.contains("max")) data.putFloat("max", data.getFloat("max") / 10f);
+                }
+            }
+        }
         MapperUtils.applyLegacyBloomLight(newTrailConfigTag, trailConfigTag);
         if (trailConfigTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newTrailConfigTag.contains("renderer")) {
             newTrailConfigTag.put("renderer", MapperUtils.mapRendererTag(trailConfigTag.getCompound("renderer"), trailConfigTag));

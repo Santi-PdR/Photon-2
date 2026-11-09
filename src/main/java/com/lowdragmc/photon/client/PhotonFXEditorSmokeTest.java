@@ -2521,6 +2521,46 @@ public final class PhotonFXEditorSmokeTest {
         if (com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(delayedEmitter).getInt("startDelay") != 300
                 || com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamConfig(delayedEmitter).getInt("startDelay") != 300)
             throw new IllegalStateException("Photon 1 trail or beam delay was lost");
+        // Photon 1's pre-smoothing trail reader scales Constant widths, including the default,
+        // but does not scale curve output bounds or RandomConstant widths.
+        var oldTrail = new CompoundTag();
+        var oldWidth = new CompoundTag();
+        oldWidth.putString("_type", "Constant"); oldWidth.putInt("number", 2);
+        oldTrail.put("widthOverTrail", oldWidth);
+        var migratedTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(oldTrail);
+        var loadedTrailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        loadedTrailConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), migratedTrail);
+        if (Math.abs(loadedTrailConfig.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 0.2f) > 0.0001f
+                || oldWidth.getInt("number") != 2)
+            throw new IllegalStateException("Old constant trail width was not migrated without changing its source");
+        var reloadedTrailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        reloadedTrailConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                loadedTrailConfig.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        if (Math.abs(reloadedTrailConfig.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 0.2f) > 0.0001f)
+            throw new IllegalStateException("Old trail width was scaled twice after Photon 2 save/reload");
+        oldTrail.putBoolean("smoothInterpolation", false);
+        var modernWidth = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(oldTrail);
+        if (modernWidth.getCompound("widthOverTrail").getCompound("data").getInt("number") != 2)
+            throw new IllegalStateException("Modern Photon 1 trail width was incorrectly scaled");
+        var attachedTrail = new CompoundTag();
+        var oldAttachedConfig = new CompoundTag(); oldAttachedConfig.put("widthOverTrail", oldWidth.copy());
+        attachedTrail.put("config", oldAttachedConfig);
+        var attachedWidth = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapTrailsTag(attachedTrail)
+                .getCompound("config").getCompound("widthOverTrail").getCompound("data").getFloat("number");
+        if (Math.abs(attachedWidth - 0.2f) > 0.0001f)
+            throw new IllegalStateException("Particle-attached old trail width was not migrated");
+        var sparseTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(new CompoundTag());
+        if (Math.abs(sparseTrail.getCompound("widthOverTrail").getCompound("data").getFloat("number") - 0.02f) > 0.0001f)
+            throw new IllegalStateException("Old sparse trail lost the Photon 1 migrated default");
+        var oldCurveWidth = new CompoundTag(); oldCurveWidth.putString("_type", "Curve");
+        oldCurveWidth.putFloat("min", 0); oldCurveWidth.putFloat("max", 10);
+        oldCurveWidth.putFloat("lower", 1); oldCurveWidth.putFloat("upper", 2);
+        var curveTrail = new CompoundTag(); curveTrail.put("widthOverTrail", oldCurveWidth);
+        var curveData = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(curveTrail)
+                .getCompound("widthOverTrail").getCompound("data");
+        if (curveData.getFloat("max") != 1f || curveData.getFloat("lower") != 1f || curveData.getFloat("upper") != 2f)
+            throw new IllegalStateException("Old trail curve migration changed its sampled output bounds");
+        Photon.LOGGER.info("[photon1-old-trail-smoke] migrated legacy constant widths exactly once and preserved curve output");
         var oldAtlas = new CompoundTag();
         oldAtlas.putString("_type", "BlockTextureSheetMaterial");
         oldAtlas.putString("texture", "minecraft:textures/atlas/blocks.png");

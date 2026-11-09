@@ -177,6 +177,7 @@ jobs:
         run: |
           grep -Fq '[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-old-trail-smoke] migrated legacy constant widths exactly once and preserved curve output' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require visible bloom from ordinary FX colors
         shell: bash
