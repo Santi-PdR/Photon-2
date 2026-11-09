@@ -21,6 +21,11 @@ public class TrailEmitterMapper implements Mapper {
     }
 
     public static CompoundTag mapTrailConfig(CompoundTag trailConfigTag){
+        return mapTrailConfig(trailConfigTag, 0.2f);
+    }
+
+    /** Particle-attached Photon 1 trails start with width 0.5, unlike standalone trails (0.2). */
+    public static CompoundTag mapTrailConfig(CompoundTag trailConfigTag, float oldDefaultWidth){
         CompoundTag newTrailConfigTag = new CompoundTag();
         newTrailConfigTag.putInt("startDelay", trailConfigTag.getInt("startDelay"));
         newTrailConfigTag.put("lights", MapperUtils.mapLightTag(trailConfigTag.getCompound("lights")));
@@ -44,7 +49,7 @@ public class TrailEmitterMapper implements Mapper {
                 var width = new CompoundTag();
                 width.putString("type", "constant");
                 var data = new CompoundTag();
-                data.putFloat("number", 0.02f);
+                data.putFloat("number", oldDefaultWidth / 10f);
                 width.put("data", data);
                 newTrailConfigTag.put("widthOverTrail", width);
             } else {

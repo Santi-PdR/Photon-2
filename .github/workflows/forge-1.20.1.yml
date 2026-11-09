@@ -179,6 +179,7 @@ jobs:
           grep -Fq '[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[photon1-old-trail-smoke] migrated legacy constant widths exactly once and preserved curve output' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[photon1-raw-shape-smoke] restored pre-NumberFunction3 shape transforms through save and reload' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-flat-trail-smoke] restored flat trail material, parameters and nested override' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require visible bloom from ordinary FX colors
         shell: bash

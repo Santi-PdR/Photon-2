@@ -2549,6 +2549,46 @@ public final class PhotonFXEditorSmokeTest {
                 .getCompound("config").getCompound("widthOverTrail").getCompound("data").getFloat("number");
         if (Math.abs(attachedWidth - 0.2f) > 0.0001f)
             throw new IllegalStateException("Particle-attached old trail width was not migrated");
+        var nestedSparse = new CompoundTag(); nestedSparse.put("config", new CompoundTag());
+        var attachedDefault = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapTrailsTag(nestedSparse)
+                .getCompound("config").getCompound("widthOverTrail").getCompound("data").getFloat("number");
+        if (Math.abs(attachedDefault - 0.05f) > 0.0001f)
+            throw new IllegalStateException("Attached old trail lost its own 0.5 width default");
+        // The still older TrailsSetting format stores material and trail values next to ratio,
+        // optionally overriding a nested config. Its flat width must not be divided by ten.
+        var flatTrails = new CompoundTag(); flatTrails.putBoolean("enable", true);
+        var flatMaterial = new CompoundTag(); var flatTexture = new CompoundTag();
+        flatTexture.putString("_type", "TextureMaterial");
+        flatTexture.putString("texture", "minecraft:textures/block/stone.png");
+        flatTexture.putFloat("discardThreshold", 0.01f); flatMaterial.put("material", flatTexture);
+        flatMaterial.putBoolean("depthTest", false); flatTrails.put("material", flatMaterial);
+        var flatWidth = new CompoundTag(); flatWidth.putString("_type", "Constant"); flatWidth.putFloat("number", 3f);
+        flatTrails.put("widthOverTrail", flatWidth);
+        var flatColor = new CompoundTag(); flatColor.putString("_type", "Color"); flatColor.putInt("number", 0xff123456);
+        flatTrails.put("colorOverTrail", flatColor);
+        flatTrails.putString("uvMode", "Tile"); flatTrails.putFloat("minimumVertexDistance", 0.25f);
+        flatTrails.put("config", oldAttachedConfig.copy());
+        var flatTrailParticleTag = new CompoundTag(); flatTrailParticleTag.putString("_type", "particle"); flatTrailParticleTag.put("trails", flatTrails);
+        var flatObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(flatTrailParticleTag));
+        if (!(flatObject instanceof ParticleEmitter flatTrailEmitter))
+            throw new IllegalStateException("Flat Photon 1 trail did not deserialize");
+        var trailCfg = flatTrailEmitter.config.trails.config;
+        if (!flatTrailEmitter.config.trails.isEnable()
+                || Math.abs(trailCfg.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 3f) > 0.0001f
+                || trailCfg.getColorOverTrail().get(0f, () -> 0.5f).intValue() != 0xff123456
+                || !trailCfg.getUvMode().name().equals("Tile") || Math.abs(trailCfg.getMinVertexDistance() - 0.25f) > 0.0001f
+                || trailCfg.renderer.getMaterials().size() != 1
+                || trailCfg.renderer.getMaterials().get(0).isDepthTest()
+                || !(trailCfg.renderer.getMaterials().get(0).getMaterial() instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial flatTex)
+                || !flatTex.getTexture().equals(new ResourceLocation("minecraft:textures/block/stone.png")))
+            throw new IllegalStateException("Flat legacy attached trail lost material, width, color, UV or distance");
+        var flatReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(flatTrailEmitter.serializeWrapper());
+        if (!(flatReload instanceof ParticleEmitter flatAgain)
+                || Math.abs(flatAgain.config.trails.config.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 3f) > 0.0001f
+                || flatAgain.config.trails.config.renderer.getMaterials().size() != 1)
+            throw new IllegalStateException("Flat legacy trail did not survive save and reload");
+        Photon.LOGGER.info("[photon1-flat-trail-smoke] restored flat trail material, parameters and nested override");
         var sparseTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(new CompoundTag());
         if (Math.abs(sparseTrail.getCompound("widthOverTrail").getCompound("data").getFloat("number") - 0.02f) > 0.0001f)
             throw new IllegalStateException("Old sparse trail lost the Photon 1 migrated default");

@@ -279,10 +279,33 @@ public class ParticleEmitterMapper implements Mapper{
         newTrailsTag.put("colorOverLifetime", MapperUtils.mapTypedValue(trailsTag.getCompound("colorOverLifetime"), false));
         newTrailsTag.put("lifetime", MapperUtils.mapTypedValue(trailsTag.getCompound("lifetime"), false));
 
-        newTrailsTag.put("config", TrailEmitterMapper.mapTrailConfig(trailsTag.getCompound("config")));
+        newTrailsTag.put("config", TrailEmitterMapper.mapTrailConfig(trailsTag.getCompound("config"), 0.5f));
         newTrailsTag.put("araConfig", buildAraConfig());
 
         MapperUtils.retainPresentFields(newTrailsTag, trailsTag, "_enable", "araConfig");
+        if (trailsTag.contains("material", Tag.TAG_COMPOUND)) {
+            // Before TrailConfig was nested, these settings lived directly on TrailsSetting.
+            // Photon 1 applied them AFTER reading any nested config, so flat fields win and
+            // their width must not receive the nested TrailConfig's older-width migration.
+            var config = newTrailsTag.contains("config", Tag.TAG_COMPOUND)
+                    ? newTrailsTag.getCompound("config") : new CompoundTag();
+            for (var field : java.util.List.of("widthOverTrail", "colorOverTrail")) {
+                if (trailsTag.contains(field, Tag.TAG_COMPOUND))
+                    config.put(field, MapperUtils.mapTypedValue(trailsTag.getCompound(field), false));
+            }
+            if (trailsTag.contains("uvMode", Tag.TAG_STRING)) config.putString("uvMode", trailsTag.getString("uvMode"));
+            config.putFloat("minVertexDistance", trailsTag.getFloat("minimumVertexDistance"));
+            var renderer = config.contains("renderer", Tag.TAG_COMPOUND)
+                    ? config.getCompound("renderer") : new CompoundTag();
+            var materials = new CompoundTag();
+            var payload = new ListTag();
+            payload.add(MapperUtils.mapMaterial(trailsTag.getCompound("material")));
+            materials.put("payload", payload);
+            materials.putInt("uid", 1);
+            renderer.put("materials", materials);
+            config.put("renderer", renderer);
+            newTrailsTag.put("config", config);
+        }
         return newTrailsTag;
     }
 
