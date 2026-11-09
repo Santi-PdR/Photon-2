@@ -1,7 +1,10 @@
 package com.lowdragmc.photon.client.fx.compat;
 
+import com.lowdragmc.photon.Photon;
 import net.minecraft.nbt.*;
 import net.minecraft.world.phys.Vec2;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,6 +59,14 @@ public class MapperUtils {
 
 
 
+    /** Expand an old scalar function into independently serialized X, Y and Z functions. */
+    public static ListTag mapUniformTyped3Vec(CompoundTag value, boolean floatToDouble) {
+        var mapped = mapTypedValue(value, floatToDouble);
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(mapped.copy());
+        return result;
+    }
+
     public static CompoundTag mapTypedValue(CompoundTag typedValueTag,  boolean floatToDouble){
         CompoundTag newTypedValueTag = new CompoundTag();
         newTypedValueTag.putString("type", typedValueTag.getString("_type").toLowerCase());
@@ -85,6 +96,11 @@ public class MapperUtils {
             case "RandomConstant":
                 if (typedValueTag.contains("a")) dataTag.put("a", typedValueTag.get("a").copy());
                 if (typedValueTag.contains("b")) dataTag.put("b", typedValueTag.get("b").copy());
+                // Photon 1 explicitly persisted whether this is a decimal range. Its integer
+                // sampling includes the upper endpoint; dropping this made [0,1] bursts always 0.
+                if (typedValueTag.contains("isDecimals", Tag.TAG_BYTE) && !typedValueTag.getBoolean("isDecimals")) {
+                    dataTag.putBoolean("legacyIntegerInclusive", true);
+                }
                 newTypedValueTag.putString("type", "random_constant");
                 break;
             case "Gradient":
@@ -341,9 +357,17 @@ public class MapperUtils {
         newMaterialTag.putByte("cull", materialTag.getByte("cull"));
         newMaterialTag.putByte("depthMask", materialTag.getByte("depthMask"));
         newMaterialTag.putByte("depthTest", materialTag.getByte("depthTest"));
-        newMaterialTag.put("blendMode", materialTag.getCompound("blendMode"));
+        var blend = materialTag.getCompound("blendMode").copy();
+        // Photon 1 used mixed-case names for these OpenGL equations; Photon 2 renamed them.
+        switch (blend.getString("blendFunc")) {
+            case "sub" -> blend.putString("blendFunc", "SUB");
+            case "REVERSE_sub" -> blend.putString("blendFunc", "REVERSE_SUB");
+        }
+        newMaterialTag.put("blendMode", blend);
         newMaterialTag.put("material",  mapTypedValue(materialTag.getCompound("material"), false));
-
+        // Photon 1 authored blend on the slot. Photon 2 follows the material when this is omitted.
+        newMaterialTag.putString("renderStateSource", "CUSTOM");
+        retainPresentFields(newMaterialTag, materialTag, "renderStateSource");
         return newMaterialTag;
     }
 
@@ -351,13 +375,23 @@ public class MapperUtils {
     public static CompoundTag mapLightTag(CompoundTag lightTag){
         CompoundTag newLightTag = new CompoundTag();
         newLightTag.putByte("_enable", lightTag.getByte("enable"));
-        if(newLightTag.getByte("_enable") == 1){
-            newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
-            newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
-        }
+        newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
+        newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
+
+        retainPresentFields(newLightTag, lightTag, "_enable");
         return newLightTag;
     }
 
+
+    /** Photon 1 rendered bloom emitters at full brightness even when fixed lights were disabled.
+     * This preserves the light behavior, not the old bloom post-processing or bloom color. */
+    public static void applyLegacyBloomLight(CompoundTag mappedConfig, CompoundTag legacyConfig) {
+        if (!legacyConfig.getCompound("renderer").getBoolean("bloomEffect")) return;
+        var lights = mappedConfig.contains("lights", Tag.TAG_COMPOUND)
+                ? mappedConfig.getCompound("lights") : mapLightTag(legacyConfig.getCompound("lights"));
+        lights.putBoolean("legacyBloomFullBright", true);
+        mappedConfig.put("lights", lights);
+    }
 
     public static CompoundTag mapRendererTag(CompoundTag renderTag, CompoundTag configTag){
         CompoundTag newRendererTag = new CompoundTag();
@@ -391,41 +425,257 @@ public class MapperUtils {
         newRendererTag.put("modelPivot", pivot);
         newRendererTag.putString("vertexSortingMode", "NONE");
 
+        retainPresentFields(newRendererTag, renderTag, "orderInLayer", "useGPUInstance", "modelPivot", "vertexSortingMode");
+        if (configTag.contains("material", Tag.TAG_COMPOUND)) newRendererTag.put("materials", materialsTag);
         return newRendererTag;
     }
 
     public static CompoundTag mapCullTag(CompoundTag cullTag){
         CompoundTag newCullTag = new CompoundTag();
         newCullTag.putByte("_enable", cullTag.getByte("enable"));
-        if(newCullTag.getByte("_enable") == 1){
-            newCullTag.put("min", MapperUtils.mapCoordsDouble(cullTag.get("from")));
-            newCullTag.put("max", MapperUtils.mapCoordsDouble(cullTag.get("to")));
+        if (cullTag.contains("from", Tag.TAG_COMPOUND) || cullTag.contains("to", Tag.TAG_COMPOUND)) {
+            // Photon 2 persists an AABB under cullBox; its codec stores min/max vectors.
+            var box = new CompoundTag();
+            var from = cullTag.contains("from", Tag.TAG_COMPOUND) ? mapCoordsDouble(cullTag.get("from")) : constantCoords(-0.5);
+            var to = cullTag.contains("to", Tag.TAG_COMPOUND) ? mapCoordsDouble(cullTag.get("to")) : constantCoords(0.5);
+            box.put("min", from);
+            box.put("max", to);
+            newCullTag.put("cullBox", box);
         }
         return newCullTag;
+    }
+
+    private static ListTag constantCoords(double value) {
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(DoubleTag.valueOf(value));
+        return result;
     }
 
     public static CompoundTag mapUVTag(CompoundTag uvTag){
         CompoundTag newUVTag = new CompoundTag();
         newUVTag.putByte("_enable", uvTag.getByte("enable"));
-        if(newUVTag.getByte("_enable") == 1){
-            newUVTag.putIntArray("tiles", new int[]{uvTag.getCompound("tiles").getInt("a"), uvTag.getCompound("tiles").getInt("b")});
-            newUVTag.put("startFrame", MapperUtils.mapTypedValue(uvTag.getCompound("startFrame"), false));
-            newUVTag.putFloat("cycle",  uvTag.getFloat("cycle"));
-            newUVTag.putString("animation",  uvTag.getString("animation"));
-            newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
-        }
+        newUVTag.putIntArray("tiles", new int[]{uvTag.getCompound("tiles").getInt("a"), uvTag.getCompound("tiles").getInt("b")});
+        newUVTag.put("startFrame", MapperUtils.mapTypedValue(uvTag.getCompound("startFrame"), false));
+        newUVTag.putFloat("cycle",  uvTag.getFloat("cycle"));
+        newUVTag.putString("animation",  uvTag.getString("animation"));
+        newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
 
+
+        retainPresentFields(newUVTag, uvTag, "_enable");
         return newUVTag;
+    }
+
+    /** Do not turn omitted legacy fields into explicit zero/empty values; the decoder owns their defaults. */
+    public static void retainPresentFields(CompoundTag mapped, CompoundTag source, String... synthesized) {
+        var always = java.util.Set.of(synthesized);
+        for (var key : java.util.List.copyOf(mapped.getAllKeys())) {
+            if (!source.contains(key) && !always.contains(key)) mapped.remove(key);
+        }
+    }
+
+    /** Photon 1 emitter version 0 stored its config directly on the object, before the config wrapper existed. */
+    public static CompoundTag legacyEmitterConfig(CompoundTag emitter) {
+        return emitter.contains("config", Tag.TAG_COMPOUND) ? emitter.getCompound("config") : emitter;
+    }
+
+    private static final java.util.Set<String> NUMBER_FUNCTION_TYPES = java.util.Set.of(
+            "constant", "color", "random_constant", "random_color", "curve", "random_curve",
+            "gradient", "random_gradient");
+    private static final java.util.Set<String> MATERIAL_TYPES = java.util.Set.of(
+            "texture", "custom_shader", "block_atlas");
+    /**
+     * Repair already-converted Photon 2 files that still carry Photon 1 codec names or shapes.
+     * Unrecognized number-function types decode as constant 0, which makes particles invisible.
+     * Never modifies the author's saved tag: callers must copy first, or use {@link #repairLegacyCodecs}.
+     */
+    public static Tag repairLegacyCodecs(Tag tag) {
+        if (!needsLegacyCodecRepair(tag)) return tag;
+        try {
+            var copy = tag.copy();
+            return normalizeLegacyCodecs(copy) ? copy : tag;
+        } catch (Throwable failure) {
+            Photon.LOGGER.warn("[fx-diagnostic] leftover Photon 1 codec repair failed; loading the original tag", failure);
+            return tag;
+        }
+    }
+
+    private static boolean needsLegacyCodecRepair(Tag tag) {
+        if (tag instanceof CompoundTag compound) {
+            if (compound.contains("_type", Tag.TAG_STRING)) return true;
+            if (compound.contains("type", Tag.TAG_STRING)) {
+                var type = compound.getString("type");
+                if (!type.equals(aliasLegacyType(type, compound))) return true;
+                if (!compound.contains("data", Tag.TAG_COMPOUND)
+                        && !compound.contains("resource", Tag.TAG_STRING)
+                        && (NUMBER_FUNCTION_TYPES.contains(type) || MATERIAL_TYPES.contains(type))
+                        && hasUnwrappedPayload(compound)) return true;
+            }
+            if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
+                return true;
+            }
+            if (asNumberFunction3List(compound) != null) return true;
+            for (var key : compound.getAllKeys()) {
+                if (needsLegacyCodecRepair(compound.get(key))) return true;
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var entry : list) if (needsLegacyCodecRepair(entry)) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasUnwrappedPayload(CompoundTag compound) {
+        return compound.contains("number") || compound.contains("texture", Tag.TAG_STRING)
+                || compound.contains("shader", Tag.TAG_STRING) || compound.contains("curves")
+                || (compound.contains("min") && compound.contains("max"))
+                || (compound.contains("a") && compound.contains("b"));
+    }
+
+    private static boolean normalizeLegacyCodecs(Tag tag) {
+        boolean changed = false;
+        if (tag instanceof CompoundTag compound) {
+            changed |= rewriteLegacyTypeName(compound, "type");
+            changed |= rewriteLegacyTypeName(compound, "_type");
+            if (!compound.contains("type", Tag.TAG_STRING) && compound.contains("_type", Tag.TAG_STRING)) {
+                compound.putString("type", aliasLegacyType(compound.getString("_type"), compound));
+                changed = true;
+            }
+            changed |= wrapLegacyTypedPayload(compound);
+            for (var key : java.util.List.copyOf(compound.getAllKeys())) {
+                var child = compound.get(key);
+                if (child instanceof CompoundTag nested) {
+                    changed |= normalizeLegacyCodecs(nested);
+                    var axes = asNumberFunction3List(nested);
+                    if (axes != null) {
+                        compound.put(key, axes);
+                        changed = true;
+                    }
+                } else if (child instanceof ListTag list) {
+                    changed |= normalizeLegacyCodecs(list);
+                }
+            }
+            if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
+                compound.remove("simulationSpace");
+                changed = true;
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var entry : list) changed |= normalizeLegacyCodecs(entry);
+        }
+        return changed;
+    }
+
+    private static boolean rewriteLegacyTypeName(CompoundTag compound, String key) {
+        if (!compound.contains(key, Tag.TAG_STRING)) return false;
+        var original = compound.getString(key);
+        var aliased = aliasLegacyType(original, compound);
+        if (aliased.equals(original)) return false;
+        compound.putString(key, aliased);
+        return true;
+    }
+
+    static String aliasLegacyType(String type, CompoundTag compound) {
+        return switch (type) {
+            case "Constant" -> "constant";
+            case "Color" -> "color";
+            case "RandomConstant" -> "random_constant";
+            case "RandomColor" -> "random_color";
+            case "Curve" -> "curve";
+            case "RandomCurve" -> "random_curve";
+            case "Gradient" -> "gradient";
+            case "RandomGradient" -> "random_gradient";
+            case "TextureMaterial" -> "texture";
+            case "CustomShaderMaterial" -> "custom_shader";
+            case "BlockTextureSheetMaterial" -> "block_atlas";
+            case "particle", "Particle" -> looksLikeFxObject(compound) ? "particle_emitter" : type;
+            case "beam", "Beam" -> looksLikeFxObject(compound) ? "beam_emitter" : type;
+            case "trail", "Trail" -> looksLikeFxObject(compound) ? "trail_emitter" : type;
+            case "Circle" -> "circle";
+            case "Cone" -> "cone";
+            case "Sphere" -> "sphere";
+            case "Box" -> "box";
+            case "Cylinder" -> "cylinder";
+            case "Dot" -> "dot";
+            case "Function" -> "function";
+            case "Mesh" -> "mesh";
+            default -> type;
+        };
+    }
+
+    private static boolean looksLikeFxObject(CompoundTag compound) {
+        if (compound.contains("transform") || compound.contains("config")) return true;
+        if (!compound.contains("data", Tag.TAG_COMPOUND)) return false;
+        var data = compound.getCompound("data");
+        return data.contains("transform") || data.contains("config") || data.contains("name");
+    }
+
+    /**
+     * Photon 1 stored the payload next to {@code _type}. Photon 2 codecs read {@code data}.
+     * Do not wrap sampler-like tags that already use {@code resource} at the top level,
+     * or current Photon 2 tags that already use {@code data}.
+     */
+    private static boolean wrapLegacyTypedPayload(CompoundTag compound) {
+        if (compound.contains("data", Tag.TAG_COMPOUND) || compound.contains("resource", Tag.TAG_STRING)) {
+            return false;
+        }
+        var rawType = compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type");
+        var type = aliasLegacyType(rawType, compound);
+        if (!NUMBER_FUNCTION_TYPES.contains(type) && !MATERIAL_TYPES.contains(type)) return false;
+        boolean looksPhoton1 = compound.contains("_type", Tag.TAG_STRING)
+                || !rawType.equals(type)
+                || compound.contains("number")
+                || (MATERIAL_TYPES.contains(type) && compound.contains("texture", Tag.TAG_STRING))
+                || compound.contains("shader", Tag.TAG_STRING)
+                || compound.contains("curves")
+                || (compound.contains("min") && compound.contains("max"));
+        if (!looksPhoton1) return false;
+        var data = new CompoundTag();
+        for (var key : java.util.List.copyOf(compound.getAllKeys())) {
+            if ("type".equals(key) || "_type".equals(key)) continue;
+            data.put(key, compound.get(key));
+            compound.remove(key);
+        }
+        if (data.isEmpty()) return false;
+        compound.put("data", data);
+        return true;
+    }
+
+    private static boolean isNumberFunctionCompound(CompoundTag tag) {
+        var type = aliasLegacyType(tag.contains("type", Tag.TAG_STRING) ? tag.getString("type") : tag.getString("_type"), tag);
+        return NUMBER_FUNCTION_TYPES.contains(type);
+    }
+
+    @Nullable
+    private static ListTag asNumberFunction3List(CompoundTag tag) {
+        if (!tag.contains("x", Tag.TAG_COMPOUND) || !tag.contains("y", Tag.TAG_COMPOUND)
+                || !tag.contains("z", Tag.TAG_COMPOUND)) return null;
+        var x = tag.getCompound("x");
+        var y = tag.getCompound("y");
+        var z = tag.getCompound("z");
+        if (!isNumberFunctionCompound(x) || !isNumberFunctionCompound(y) || !isNumberFunctionCompound(z)) return null;
+        var list = new ListTag();
+        list.add(x);
+        list.add(y);
+        list.add(z);
+        return list;
     }
 
     public static CompoundTag mapTransformTag(CompoundTag transformTag){
         CompoundTag newTransformTag = new CompoundTag();
-        newTransformTag.put("_childrenId", new ListTag());
+        // Preserve authored sibling order. Dropping this list causes converted effects with layered
+        // children to be rearranged when LDLib rebuilds their hierarchy.
+        ListTag children = new ListTag();
+        if (transformTag.get("_childrenId") instanceof ListTag oldChildren) {
+            for (var child : oldChildren) {
+                var id = readTransformUuid(child, null);
+                if (id != null) children.add(StringTag.valueOf(id.toString()));
+            }
+        }
+        newTransformTag.put("_childrenId", children);
         // Photon 1 leaves _parentId out for root-level emitters. A missing id is also valid in
         // older projects; the Photon 2 scene assigns that object a fresh identity on import.
         newTransformTag.putString("_parentId", readTransformUuid(transformTag.get("_parentId"), new UUID(0L, 0L)).toString());
         newTransformTag.putString("id", readTransformUuid(transformTag.get("id"), UUID.randomUUID()).toString());
-        newTransformTag.put("localRotation", mapTransformCoords(transformTag.get("localRotation"), 0, 0, 0));
+        newTransformTag.put("localRotation", mapTransformRotation(transformTag.get("localRotation")));
         newTransformTag.put("localScale", mapTransformCoords(transformTag.get("localScale"), 1, 1, 1));
         newTransformTag.put("localPosition", mapTransformCoords(transformTag.get("localPosition"), 0, 0, 0));
 
@@ -444,6 +694,25 @@ public class MapperUtils {
             }
         }
         return fallback;
+    }
+
+    /** LDLib2's quaternion codec requires four components, even for an absent legacy rotation. */
+    private static ListTag mapTransformRotation(Tag tag) {
+        var rotation = new ListTag();
+        if (tag instanceof CompoundTag coords) {
+            rotation.add(FloatTag.valueOf(coords.getFloat("x")));
+            rotation.add(FloatTag.valueOf(coords.getFloat("y")));
+            rotation.add(FloatTag.valueOf(coords.getFloat("z")));
+            rotation.add(FloatTag.valueOf(coords.contains("w", Tag.TAG_ANY_NUMERIC) ? coords.getFloat("w") : 1f));
+        } else if (tag instanceof ListTag values && values.size() == 4 && values.getElementType() == Tag.TAG_FLOAT) {
+            return values.copy();
+        } else {
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.ZERO);
+            rotation.add(FloatTag.valueOf(1f));
+        }
+        return rotation;
     }
 
     private static ListTag mapTransformCoords(Tag tag, float x, float y, float z) {
