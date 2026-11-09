@@ -95,19 +95,23 @@ public class EntityEffectExecutor extends FXEffectExecutor {
 
     @Override
     public void start() {
-        if (!entity.isAlive()) return;
+        if (!entity.isAlive()) {
+            FXDiagnostics.failure(fx.getFxLocation(), "start", "Entity is not alive; playback was not started", null, null);
+            return;
+        }
 
         var effects = CACHE.computeIfAbsent(entity, p -> new ArrayList<>());
         if (shouldSkipStart(effects)) {
+            com.lowdragmc.photon.Photon.LOGGER.info("[fx-diagnostic] fx={} start skipped: equivalent effect already active and allowMulti=false", fx.getFxLocation());
             return;
         }
         resetFinishedNotification();
-        this.runtime = fx.createRuntime();
+        this.runtime = createDiagnosedRuntime();
         var root = this.runtime.getRoot();
         root.updatePos(entity.getEyePosition().toVector3f().add(offset.x, offset.y, offset.z));
         root.updateRotation(rotation);
         root.updateScale(scale);
-        this.runtime.emit(this, delay);
+        this.runtime.emit(this, delay, startSection);
         effects.add(this);
     }
 }
