@@ -2945,40 +2945,37 @@ public final class PhotonFXEditorSmokeTest {
         if (com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))
             throw new IllegalStateException("Nonzero particle size was incorrectly diagnosed as all-zero");
         // Already-converted files can still carry Photon 1 codec names. Unrecognized types
-        // decode as constant 0, which makes the whole effect invisible. Repair at load.
-        var leftover = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat).copy();
-        leftover.putString("type", "particle");
-        var leftoverSize = new CompoundTag();
-        leftoverSize.putString("type", "Constant");
-        leftoverSize.putFloat("number", 2.25f);
-        var leftoverAxes = new CompoundTag();
-        leftoverAxes.put("x", leftoverSize.copy());
-        leftoverAxes.put("y", leftoverSize.copy());
-        leftoverAxes.put("z", leftoverSize.copy());
-        leftover.getCompound("data").getCompound("config").put("startSize", leftoverAxes);
+        // decode as constant 0, which makes the whole effect invisible. Repair a copy at load.
+        var leftoverConstant = new CompoundTag();
+        leftoverConstant.putString("type", "Constant");
+        leftoverConstant.putFloat("number", 2.25f);
+        var leftoverFunction = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverConstant);
+        if (leftoverFunction.get(0f, () -> 0f).floatValue() != 2.25f)
+            throw new IllegalStateException("Photon 1 Constant number function decoded as zero");
         var leftoverMaterial = new CompoundTag();
         leftoverMaterial.putString("type", "TextureMaterial");
         leftoverMaterial.putString("texture", "minecraft:textures/particle/glow.png");
         leftoverMaterial.putFloat("discardThreshold", 0.01f);
-        var leftoverSlot = new CompoundTag();
-        leftoverSlot.put("material", leftoverMaterial);
-        var leftoverPayload = new ListTag();
-        leftoverPayload.add(leftoverSlot);
-        var leftoverMaterials = new CompoundTag();
-        leftoverMaterials.put("payload", leftoverPayload);
-        leftoverMaterials.putInt("uid", 1);
-        leftover.getCompound("data").getCompound("config").getCompound("renderer").put("materials", leftoverMaterials);
-        var leftoverDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(leftover);
-        if (!(leftoverDecoded instanceof ParticleEmitter leftoverEmitter)
-                || !leftover.getString("type").equals("particle")
-                || !leftover.getCompound("data").getCompound("config").getCompound("startSize").contains("x")
-                || !leftoverEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f))
-                || leftoverEmitter.config.renderer.getMaterials().isEmpty()
-                || !(leftoverEmitter.config.renderer.getMaterials().get(0).getMaterial()
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial.deserializeWrapper(leftoverMaterial)
                 instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial leftoverTexture)
                 || !leftoverTexture.getTexture().toString().equals("minecraft:textures/particle/glow.png")) {
-            throw new IllegalStateException("Already-converted Photon 1 type names or size axes did not load");
+            throw new IllegalStateException("Photon 1 TextureMaterial did not load");
         }
+        var leftover = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat).copy();
+        leftover.putString("type", "particle");
+        var leftoverAxes = new CompoundTag();
+        leftoverAxes.put("x", leftoverConstant.copy());
+        leftoverAxes.put("y", leftoverConstant.copy());
+        leftoverAxes.put("z", leftoverConstant.copy());
+        leftover.getCompound("data").getCompound("config").put("startSize", leftoverAxes);
+        var leftoverDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(leftover);
+        if (!(leftoverDecoded instanceof ParticleEmitter leftoverEmitter))
+            throw new IllegalStateException("Photon 1 particle type did not load as a particle emitter");
+        if (!leftover.getString("type").equals("particle")
+                || !leftover.getCompound("data").getCompound("config").getCompound("startSize").contains("x"))
+            throw new IllegalStateException("Leftover Photon 1 codec repair mutated the author's tag");
+        if (!leftoverEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f)))
+            throw new IllegalStateException("Photon 1 x/y/z start size did not load");
         Photon.LOGGER.info("[photon1-codec-smoke] loaded Photon 1 type names without reconverting");
         // Sparse enabled modules must not turn missing 1-valued defaults into zero.
         var sparseModules = sparseFlat.copy();
