@@ -483,10 +483,6 @@ public class MapperUtils {
             "gradient", "random_gradient");
     private static final java.util.Set<String> MATERIAL_TYPES = java.util.Set.of(
             "texture", "custom_shader", "block_atlas");
-    private static final java.util.Set<String> NUMBER_FUNCTION3_FIELDS = java.util.Set.of(
-            "startSize", "startRotation", "force", "linear", "orbital", "offset", "size",
-            "position", "rotation", "scale");
-
     /**
      * Repair already-converted Photon 2 files that still carry Photon 1 codec names or shapes.
      * Unrecognized number-function types decode as constant 0, which makes particles invisible.
@@ -519,10 +515,7 @@ public class MapperUtils {
             }
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
-                var child = compound.get(key);
-                if (NUMBER_FUNCTION3_FIELDS.contains(key) && child instanceof CompoundTag nested
-                        && isNumberFunctionCompound(nested)) return true;
-                if (needsLegacyCodecRepair(child)) return true;
+                if (needsLegacyCodecRepair(compound.get(key))) return true;
             }
         } else if (tag instanceof ListTag list) {
             for (var entry : list) if (needsLegacyCodecRepair(entry)) return true;
@@ -555,9 +548,6 @@ public class MapperUtils {
                     if (axes != null) {
                         compound.put(key, axes);
                         changed = true;
-                    } else if (NUMBER_FUNCTION3_FIELDS.contains(key) && isNumberFunctionCompound(nested)) {
-                        compound.put(key, mapUniformTyped3VecFromMapped(nested));
-                        changed = true;
                     }
                 } else if (child instanceof ListTag list) {
                     changed |= normalizeLegacyCodecs(list);
@@ -571,12 +561,6 @@ public class MapperUtils {
             for (var entry : list) changed |= normalizeLegacyCodecs(entry);
         }
         return changed;
-    }
-
-    private static ListTag mapUniformTyped3VecFromMapped(CompoundTag value) {
-        var result = new ListTag();
-        for (int i = 0; i < 3; i++) result.add(value.copy());
-        return result;
     }
 
     private static boolean rewriteLegacyTypeName(CompoundTag compound, String key) {
