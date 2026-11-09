@@ -2849,6 +2849,34 @@ public final class PhotonFXEditorSmokeTest {
                 || sparseParticle.config.getStartLifetime().get(0f, () -> 0f).intValue() != 100) {
             throw new IllegalStateException("Sparse Photon 1 particle emitter did not load with its defaults");
         }
+        // Before NumberFunction3, shape vectors were compounds of raw doubles. The Photon 1
+        // reader upgrades all three vectors when position.x is a double.
+        var oldShapeEmitter = sparseFlat.copy();
+        var oldShape = new CompoundTag();
+        var oldShapePos = new CompoundTag(); oldShapePos.putDouble("x", 2.5); oldShapePos.putDouble("y", -3); oldShapePos.putDouble("z", 4);
+        var oldShapeRot = new CompoundTag(); oldShapeRot.putDouble("x", 10); oldShapeRot.putDouble("y", 20); oldShapeRot.putDouble("z", 30);
+        var oldShapeScale = new CompoundTag(); oldShapeScale.putDouble("x", 1); oldShapeScale.putDouble("y", 2); oldShapeScale.putDouble("z", 3);
+        oldShape.put("position", oldShapePos); oldShape.put("rotation", oldShapeRot); oldShape.put("scale", oldShapeScale);
+        oldShapeEmitter.put("shape", oldShape);
+        var migratedShape = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(oldShapeEmitter));
+        if (!(migratedShape instanceof ParticleEmitter shapeEmitter)
+                || !shapeEmitter.config.shape.getPosition().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.5f, -3, 4))
+                || !shapeEmitter.config.shape.getRotation().get(0f, () -> 0f).equals(new org.joml.Vector3f(10, 20, 30))
+                || !shapeEmitter.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1, 2, 3))
+                || oldShapePos.getDouble("x") != 2.5) {
+            throw new IllegalStateException("Photon 1 raw-double shape vectors were not imported intact");
+        }
+        var shapeReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(shapeEmitter.serializeWrapper());
+        if (!(shapeReload instanceof ParticleEmitter shapeAgain)
+                || !shapeAgain.config.shape.getPosition().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.5f, -3, 4))
+                || !shapeAgain.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1, 2, 3)))
+            throw new IllegalStateException("Imported old shape vectors did not survive a Photon 2 roundtrip");
+        var missingVectors = new CompoundTag(); missingVectors.put("position", oldShapePos.copy());
+        var mappedMissing = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapShapeTag(missingVectors);
+        if (mappedMissing.getList("scale", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 0)
+            throw new IllegalStateException("Old sparse shape vector did not follow Photon 1's zero default");
+        Photon.LOGGER.info("[photon1-raw-shape-smoke] restored pre-NumberFunction3 shape transforms through save and reload");
         // Photon 1's older format stored scalar startSize and sizeOverLifetime.scale.
         // Decode them as real runtime config, not just converted NBT.
         var scalarLegacy = sparseFlat.copy();

@@ -245,6 +245,24 @@ public class ParticleEmitterMapper implements Mapper{
         newShapeTag.put("shape", MapperUtils.mapShape(shapeTag.getCompound("shape")));
 
         MapperUtils.retainPresentFields(newShapeTag, shapeTag);
+        // Photon 1's ShapeSetting reader recognizes the pre-NumberFunction3 vector format by
+        // position.x being a double and reads all three vectors as raw doubles, even if one is
+        // missing. Mapping those numeric tags as typed compounds instead produced invalid functions.
+        if (shapeTag.getCompound("position").contains("x", Tag.TAG_DOUBLE)) {
+            for (var field : java.util.List.of("position", "rotation", "scale")) {
+                var source = shapeTag.getCompound(field);
+                var values = new ListTag();
+                for (var axis : java.util.List.of("x", "y", "z")) {
+                    var constant = new CompoundTag();
+                    constant.putString("type", "constant");
+                    var data = new CompoundTag();
+                    data.putDouble("number", source.getDouble(axis));
+                    constant.put("data", data);
+                    values.add(constant);
+                }
+                newShapeTag.put(field, values);
+            }
+        }
         return newShapeTag;
     }
 
