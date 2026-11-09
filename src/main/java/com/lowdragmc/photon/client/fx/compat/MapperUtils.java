@@ -354,7 +354,13 @@ public class MapperUtils {
         newMaterialTag.putByte("cull", materialTag.getByte("cull"));
         newMaterialTag.putByte("depthMask", materialTag.getByte("depthMask"));
         newMaterialTag.putByte("depthTest", materialTag.getByte("depthTest"));
-        newMaterialTag.put("blendMode", materialTag.getCompound("blendMode"));
+        var blend = materialTag.getCompound("blendMode").copy();
+        // Photon 1 used mixed-case names for these OpenGL equations; Photon 2 renamed them.
+        switch (blend.getString("blendFunc")) {
+            case "sub" -> blend.putString("blendFunc", "SUB");
+            case "REVERSE_sub" -> blend.putString("blendFunc", "REVERSE_SUB");
+        }
+        newMaterialTag.put("blendMode", blend);
         newMaterialTag.put("material",  mapTypedValue(materialTag.getCompound("material"), false));
         retainPresentFields(newMaterialTag, materialTag);
         return newMaterialTag;

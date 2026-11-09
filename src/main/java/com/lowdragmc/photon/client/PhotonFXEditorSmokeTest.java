@@ -108,6 +108,34 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 
+    private static void verifyLegacyBlendSafety() {
+        for (var pair : java.util.Map.of("sub", "SUB", "REVERSE_sub", "REVERSE_SUB").entrySet()) {
+            var material = new net.minecraft.nbt.CompoundTag();
+            var blend = new net.minecraft.nbt.CompoundTag();
+            blend.putString("blendFunc", pair.getKey());
+            material.put("blendMode", blend);
+            var mapped = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapMaterial(material);
+            if (!mapped.getCompound("blendMode").getString("blendFunc").equals(pair.getValue())
+                    || !material.getCompound("blendMode").getString("blendFunc").equals(pair.getKey())) {
+                throw new IllegalStateException("Legacy blend conversion lost or mutated " + pair.getKey());
+            }
+        }
+        var mode = new com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode();
+        mode.setBlendFunc(null);
+        mode.setSrcColorFactor(null);
+        mode.setDstColorFactor(null);
+        mode.setSrcAlphaFactor(null);
+        mode.setDstAlphaFactor(null);
+        if (mode.getBlendFunc() != com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode.BlendFuc.ADD
+                || mode.getSrcColorFactor() == null || mode.getDstColorFactor() == null
+                || mode.getSrcAlphaFactor() == null || mode.getDstAlphaFactor() == null) {
+            throw new IllegalStateException("Invalid blend fallback failed");
+        }
+        com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan.isLayerSafe(mode);
+        mode.apply();
+        Photon.LOGGER.info("[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe");
+    }
+
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
         var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
@@ -1213,6 +1241,7 @@ public final class PhotonFXEditorSmokeTest {
             // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
+                verifyLegacyBlendSafety();
                 verifyBloomDefaults();
                 verifyFxPickerAndBloomControl();
                 bloomSmokeLogged = true;
