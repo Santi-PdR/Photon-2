@@ -172,6 +172,12 @@ jobs:
         shell: bash
         run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require legacy blend and scene-masked bloom safety
+        shell: bash
+        run: |
+          grep -Fq '[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require visible bloom from ordinary FX colors
         shell: bash
         run: grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$RUNNER_TEMP/photon-client.log"

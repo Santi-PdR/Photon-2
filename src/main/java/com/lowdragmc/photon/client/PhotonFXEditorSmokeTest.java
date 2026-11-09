@@ -136,6 +136,50 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe");
     }
 
+    /** Exercise the scene-masked bright pass with a bright sky and a small copy mismatch. */
+    private static void verifyBloomSceneMask() {
+        int framebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var scene = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 64, 64, false);
+        var input = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 64, 64, false);
+        var output = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 32, 32, false);
+        try {
+            scene.setClearColor(0.6f, 0.6f, 0.6f, 1); scene.clear(Minecraft.ON_OSX);
+            input.setClearColor(0.62f, 0.62f, 0.62f, 1); input.clear(Minecraft.ON_OSX);
+            input.bindWrite(false);
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+            org.lwjgl.opengl.GL11.glScissor(24, 24, 16, 16);
+            org.lwjgl.opengl.GL11.glClearColor(1f, 0.6f, 0.6f, 1);
+            org.lwjgl.opengl.GL11.glClear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT);
+            org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+            var shader = com.lowdragmc.photon.client.PhotonShaders.getBrightPassShader();
+            if (shader == null) throw new IllegalStateException("Missing bloom bright pass shader");
+            com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+            com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+            shader.setSampler("inputSampler", input);
+            shader.setSampler("sceneSampler", scene);
+            shader.safeGetUniform("Threshold").set(0.5f);
+            shader.safeGetUniform("Knee").set(0.1f);
+            shader.safeGetUniform("SceneMask").set(1f);
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.blitShader(shader, output, false);
+            output.bindWrite(false);
+            var pixel = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            org.lwjgl.opengl.GL11.glReadPixels(4, 4, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (pixel.get(0) > 0.03f) throw new IllegalStateException("Tiny scene mismatch amplified into a bright halo: " + pixel.get(0));
+            org.lwjgl.opengl.GL11.glReadPixels(16, 16, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (pixel.get(0) < 0.15f || pixel.get(1) > 0.03f)
+                throw new IllegalStateException("Scene mask lost or recoloured real FX contribution: " + pixel.get(0) + "," + pixel.get(1));
+            Photon.LOGGER.info("[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives");
+        } finally {
+            scene.destroyBuffers(); input.destroyBuffers(); output.destroyBuffers();
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER, framebuffer);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+    }
+
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
         var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
@@ -1242,6 +1286,7 @@ public final class PhotonFXEditorSmokeTest {
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
                 verifyLegacyBlendSafety();
+                verifyBloomSceneMask();
                 verifyBloomDefaults();
                 verifyFxPickerAndBloomControl();
                 bloomSmokeLogged = true;
