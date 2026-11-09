@@ -38,6 +38,7 @@ public class LightOverLifetimeSetting extends ToggleGroup {
 
     /** Photon 1 bloom bypassed world and authored light, making its particles full-bright. */
     @Persisted
+    @Configurable(name = "LightOverLifetimeSetting.legacyBloomFullBright", tips = "photon.emitter.config.lights.legacyBloomFullBright")
     protected boolean legacyBloomFullBright;
 
     public LightOverLifetimeSetting() {

@@ -1,4 +1,8 @@
 {
+  "InheritVelocitySetting.legacyUnscaledVelocity": "Photon 1 velocity inheritance",
+  "photon.emitter.config.inheritVelocity.legacyUnscaledVelocity": "Use the raw emitter velocity as Photon 1 did. Disable to apply the multiplier.",
+  "LightOverLifetimeSetting.legacyBloomFullBright": "Photon 1 bloom full brightness",
+  "photon.emitter.config.lights.legacyBloomFullBright": "Use full brightness for an imported Photon 1 bloom effect. This does not reproduce the original bloom halo.",
   "photon.configuration.title": "Photon Settings",
   "photon.configuration.enable_bloom": "Enable Bloom",
   "photon.configuration.enable_bloom.tooltip": "Turns on bloom globally for Photon FX. The default threshold also catches ordinary bright colors; raise Bloom Threshold to limit bloom to HDR highlights. Increase Bloom Intensity to strengthen the halo.",

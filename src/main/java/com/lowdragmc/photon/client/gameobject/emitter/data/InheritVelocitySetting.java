@@ -41,6 +41,7 @@ public class InheritVelocitySetting extends ToggleGroup {
 
     /** Photon 1's particle runtime used the raw emitter velocity in both inheritance modes. */
     @Persisted
+    @Configurable(name = "InheritVelocitySetting.legacyUnscaledVelocity", tips = "photon.emitter.config.inheritVelocity.legacyUnscaledVelocity")
     protected boolean legacyUnscaledVelocity;
 
     public Runtime createRuntime() {
