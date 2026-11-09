@@ -3,6 +3,8 @@ package com.lowdragmc.photon.client.fx.compat;
 import net.minecraft.nbt.*;
 import net.minecraft.world.phys.Vec2;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -362,7 +364,9 @@ public class MapperUtils {
         }
         newMaterialTag.put("blendMode", blend);
         newMaterialTag.put("material",  mapTypedValue(materialTag.getCompound("material"), false));
-        retainPresentFields(newMaterialTag, materialTag);
+        // Photon 1 authored blend on the slot. Photon 2 follows the material when this is omitted.
+        newMaterialTag.putString("renderStateSource", "CUSTOM");
+        retainPresentFields(newMaterialTag, materialTag, "renderStateSource");
         return newMaterialTag;
     }
 
@@ -471,6 +475,149 @@ public class MapperUtils {
     /** Photon 1 emitter version 0 stored its config directly on the object, before the config wrapper existed. */
     public static CompoundTag legacyEmitterConfig(CompoundTag emitter) {
         return emitter.contains("config", Tag.TAG_COMPOUND) ? emitter.getCompound("config") : emitter;
+    }
+
+    private static final java.util.Set<String> NUMBER_FUNCTION_TYPES = java.util.Set.of(
+            "constant", "color", "random_constant", "random_color", "curve", "random_curve",
+            "gradient", "random_gradient");
+    private static final java.util.Set<String> MATERIAL_TYPES = java.util.Set.of(
+            "texture", "custom_shader", "block_atlas");
+    private static final java.util.Set<String> NUMBER_FUNCTION3_FIELDS = java.util.Set.of(
+            "startSize", "startRotation", "force", "linear", "orbital", "offset", "size",
+            "position", "rotation", "scale");
+
+    /**
+     * Repair already-converted Photon 2 files that still carry Photon 1 codec names or shapes.
+     * Unrecognized number-function types decode as constant 0, which makes particles invisible.
+     * Never modifies the author's saved tag: callers must copy first, or use {@link #repairLegacyCodecs}.
+     */
+    public static Tag repairLegacyCodecs(Tag tag) {
+        var copy = tag.copy();
+        return normalizeLegacyCodecs(copy) ? copy : tag;
+    }
+
+    private static boolean normalizeLegacyCodecs(Tag tag) {
+        boolean changed = false;
+        if (tag instanceof CompoundTag compound) {
+            changed |= rewriteLegacyTypeName(compound, "type");
+            changed |= rewriteLegacyTypeName(compound, "_type");
+            if (!compound.contains("type", Tag.TAG_STRING) && compound.contains("_type", Tag.TAG_STRING)) {
+                compound.putString("type", aliasLegacyType(compound.getString("_type")));
+                changed = true;
+            }
+            changed |= wrapLegacyTypedPayload(compound);
+            for (var key : java.util.List.copyOf(compound.getAllKeys())) {
+                var child = compound.get(key);
+                if (child instanceof CompoundTag nested) {
+                    changed |= normalizeLegacyCodecs(nested);
+                    var axes = asNumberFunction3List(nested);
+                    if (axes != null) {
+                        compound.put(key, axes);
+                        changed = true;
+                    } else if (NUMBER_FUNCTION3_FIELDS.contains(key) && isNumberFunctionCompound(nested)) {
+                        compound.put(key, mapUniformTyped3VecFromMapped(nested));
+                        changed = true;
+                    }
+                } else if (child instanceof ListTag list) {
+                    changed |= normalizeLegacyCodecs(list);
+                }
+            }
+            if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
+                compound.remove("simulationSpace");
+                changed = true;
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var entry : list) changed |= normalizeLegacyCodecs(entry);
+        }
+        return changed;
+    }
+
+    private static ListTag mapUniformTyped3VecFromMapped(CompoundTag value) {
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(value.copy());
+        return result;
+    }
+
+    private static boolean rewriteLegacyTypeName(CompoundTag compound, String key) {
+        if (!compound.contains(key, Tag.TAG_STRING)) return false;
+        var original = compound.getString(key);
+        var aliased = aliasLegacyType(original);
+        if (aliased.equals(original)) return false;
+        compound.putString(key, aliased);
+        return true;
+    }
+
+    static String aliasLegacyType(String type) {
+        return switch (type) {
+            case "Constant" -> "constant";
+            case "Color" -> "color";
+            case "RandomConstant" -> "random_constant";
+            case "RandomColor" -> "random_color";
+            case "Curve" -> "curve";
+            case "RandomCurve" -> "random_curve";
+            case "Gradient" -> "gradient";
+            case "RandomGradient" -> "random_gradient";
+            case "TextureMaterial" -> "texture";
+            case "CustomShaderMaterial" -> "custom_shader";
+            case "BlockTextureSheetMaterial" -> "block_atlas";
+            case "particle" -> "particle_emitter";
+            case "Particle" -> "particle_emitter";
+            case "beam" -> "beam_emitter";
+            case "Beam" -> "beam_emitter";
+            case "trail" -> "trail_emitter";
+            case "Trail" -> "trail_emitter";
+            case "Circle" -> "circle";
+            case "Cone" -> "cone";
+            case "Sphere" -> "sphere";
+            case "Box" -> "box";
+            case "Cylinder" -> "cylinder";
+            case "Dot" -> "dot";
+            case "Function" -> "function";
+            case "Mesh" -> "mesh";
+            default -> type;
+        };
+    }
+
+    /**
+     * Photon 1 stored the payload next to {@code _type}. Photon 2 codecs read {@code data}.
+     * Do not wrap sampler-like tags that already use {@code resource} at the top level.
+     */
+    private static boolean wrapLegacyTypedPayload(CompoundTag compound) {
+        if (compound.contains("data", Tag.TAG_COMPOUND) || compound.contains("resource", Tag.TAG_STRING)) {
+            return false;
+        }
+        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type"));
+        if (!NUMBER_FUNCTION_TYPES.contains(type) && !MATERIAL_TYPES.contains(type)) return false;
+        var data = new CompoundTag();
+        for (var key : java.util.List.copyOf(compound.getAllKeys())) {
+            if ("type".equals(key) || "_type".equals(key)) continue;
+            data.put(key, compound.get(key));
+            compound.remove(key);
+        }
+        if (data.isEmpty()) return false;
+        compound.put("data", data);
+        return true;
+    }
+
+    private static boolean isNumberFunctionCompound(CompoundTag tag) {
+        var type = aliasLegacyType(tag.contains("type", Tag.TAG_STRING) ? tag.getString("type") : tag.getString("_type"));
+        return NUMBER_FUNCTION_TYPES.contains(type);
+    }
+
+    @Nullable
+    private static ListTag asNumberFunction3List(CompoundTag tag) {
+        if (!tag.contains("x", Tag.TAG_COMPOUND) || !tag.contains("y", Tag.TAG_COMPOUND)
+                || !tag.contains("z", Tag.TAG_COMPOUND)) return null;
+        var x = tag.getCompound("x");
+        var y = tag.getCompound("y");
+        var z = tag.getCompound("z");
+        if (!isNumberFunctionCompound(x) || !isNumberFunctionCompound(y) || !isNumberFunctionCompound(z)) return null;
+        var list = new ListTag();
+        list.add(x);
+        list.add(y);
+        list.add(z);
+        return list;
     }
 
     public static CompoundTag mapTransformTag(CompoundTag transformTag){

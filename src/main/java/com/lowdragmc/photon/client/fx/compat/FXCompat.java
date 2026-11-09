@@ -225,21 +225,11 @@ public class FXCompat {
         for (Tag object : fxObjects) {
             CompoundTag fxObject = (CompoundTag) object;
             switch (fxObject.getString("_type")) {
-                case "beam":
-                    fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
-                    break;
-                case "trail":
-                    fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
-                    break;
-                case "particle":
-                    fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
-                    break;
-                case "empty":
-                    fxObj.add(EmptyMapper.mapEmpty(fxObject));
-                    break;
-                default:
-                    Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
-
+                case "beam", "Beam", "beam_emitter" -> fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
+                case "trail", "Trail", "trail_emitter" -> fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
+                case "particle", "Particle", "particle_emitter" -> fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
+                case "empty", "Empty" -> fxObj.add(EmptyMapper.mapEmpty(fxObject));
+                default -> Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
             }
         }
         return fxObj;
