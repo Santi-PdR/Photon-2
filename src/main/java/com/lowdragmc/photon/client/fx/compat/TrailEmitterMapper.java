@@ -13,7 +13,7 @@ public class TrailEmitterMapper implements Mapper {
         dataTag.putString("name", emitterTag.getString("name"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapTrailConfig(emitterTag.getCompound("config")));
+        dataTag.put("config", mapTrailConfig(MapperUtils.legacyEmitterConfig(emitterTag)));
 
         newEmitterTag.put("data", dataTag);
 
@@ -34,7 +34,11 @@ public class TrailEmitterMapper implements Mapper {
         newTrailConfigTag.put("renderer", MapperUtils.mapRendererTag(trailConfigTag.getCompound("renderer"),trailConfigTag));
         newTrailConfigTag.putByte("smoothInterpolation",  trailConfigTag.getByte("smoothInterpolation"));
         newTrailConfigTag.putByte("looping", trailConfigTag.getByte("looping"));
-
+        MapperUtils.retainPresentFields(newTrailConfigTag, trailConfigTag);
+        MapperUtils.applyLegacyBloomLight(newTrailConfigTag, trailConfigTag);
+        if (trailConfigTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newTrailConfigTag.contains("renderer")) {
+            newTrailConfigTag.put("renderer", MapperUtils.mapRendererTag(trailConfigTag.getCompound("renderer"), trailConfigTag));
+        }
         return  newTrailConfigTag;
     }
 }

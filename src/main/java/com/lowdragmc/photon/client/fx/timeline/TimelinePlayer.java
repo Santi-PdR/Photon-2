@@ -38,6 +38,12 @@ public class TimelinePlayer {
     private final Timeline timeline;
     /** Per-object previously-active control clip, used to detect restart (enter/switch) transitions. */
     private final Map<UUID, Clip> lastControlClip = new HashMap<>();
+    /**
+     * Objects that left a draining control clip and still have something to show. They keep ticking (see
+     * {@link TimelineState#resolve(boolean, boolean, boolean, boolean, boolean)}) until what they emitted is gone, so
+     * an effect ends instead of disappearing. Ported from Photon 26.3.
+     */
+    private final Set<UUID> draining = new HashSet<>();
     /** Objects controlled on the previous evaluation, to revert ones that stop being controlled. */
     private final Set<UUID> lastControlled = new HashSet<>();
     /** Objects speed-controlled on the previous evaluation, to revert ones that stop (back to speed 1). */
@@ -47,10 +53,18 @@ public class TimelinePlayer {
     @Nullable
     protected IEffectExecutor effect;
     /**
-     * The master clock, in ticks. <b>Fractional</b>, because a playback can run at a rate other
-     * than 1 ({@link FXRuntime#setRate}); every track samples at a {@code double} time already.
+     * The master clock, in fractional ticks ({@link FXRuntime#setRate}); rebuilt by {@link #begin}.
+     * <p>
+     * A timeline without sections gets a clock with none, which is the plain {@code time += rate} this class always
+     * did. With sections, the same clock decides what happens at a seam (repeat, jump, end) — ported from 26.3.
      */
-    private double localTime = 0;
+    private SectionClock clock = new SectionClock(List.of(), 0, null, true);
+    /** Whether the clock follows sections (repeats, jumps, requests); the editor turns it off for replays. */
+    private boolean followSections = true;
+    @Nullable
+    private SectionClock.JumpListener clockListener;
+    @Nullable
+    private SectionControl sectionControl;
     /** Content end of the current playback, snapshotted from {@link Timeline#getDuration()} in
      *  {@link #begin} (in-world data never changes mid-play; the editor re-begins on every replay). */
     private double duration = 0;
@@ -93,25 +107,62 @@ public class TimelinePlayer {
     }
 
     public double localTime() {
-        return localTime;
+        return clock.time();
+    }
+
+    /** Sections of this timeline, driven from outside (commands, the editor preview). */
+    public SectionControl sections() {
+        if (sectionControl == null) sectionControl = new SectionControl(this);
+        return sectionControl;
+    }
+
+    SectionClock clock() {
+        return clock;
+    }
+
+    /** The editor follows sections only during live playback, so replays and seeks stay in time order. */
+    public void setFollowSections(boolean followSections) {
+        this.followSections = followSections;
+        clock.follow(followSections);
+    }
+
+    /** Hears the clock wrap or jump; the editor uses it to keep its preview clock on timeline time. */
+    public void setClockListener(@Nullable SectionClock.JumpListener clockListener) {
+        this.clockListener = clockListener;
+        if (clock != null) clock.jumpListener(clockListener);
     }
 
     /** Called from {@code FXRuntime.emit} after all objects are emitted; resets the clock. */
     public void begin(IEffectExecutor effect) {
+        begin(effect, null);
+    }
+
+    /** {@link #begin(IEffectExecutor)} from the start of {@code startSection} (null or unknown: from 0). */
+    public void begin(IEffectExecutor effect, @Nullable String startSection) {
         this.effect = effect;
         this.postProcessFrame = Long.MIN_VALUE;
         this.executorAllowsEvents = effect.allowTimelineEvents();
-        this.localTime = 0;
         this.duration = timeline.getDuration();
+        this.clock = new SectionClock(timeline.sections(), duration, timeline.releaseSection(),
+                timeline.releaseNow());
+        if (!clock.skipped().isEmpty()) {
+            warnOnce("sections " + clock.skipped()
+                    + " are empty (sharing a start, or starting at or after the content end) and are left out");
+        }
+        clock.jumpListener(clockListener);
+        clock.follow(followSections);
+        clock.begin(startSection);
         this.stopped = false;
         this.lastSignalTick = -1;
+        this.warned.clear();
         this.lastControlClip.clear();
+        this.draining.clear();
         this.lastControlled.clear();
         this.lastSpeedControlled.clear();
         this.lastAnimated.clear();
         stopAllAudio();
-        // apply the t=0 state before any object ticks (avoids a one-tick artifact)
-        evaluate(0);
+        // apply the starting state before any object ticks (avoids a one-tick artifact)
+        evaluate(clock.time(), true);
     }
 
     /** Advance the master clock by one tick. */
@@ -128,15 +179,29 @@ public class TimelinePlayer {
      * evaluated before {@link #isFinished()} turns true.
      */
     public void tick(float rate) {
+        if (stopped) return;
         frameRate = Float.isFinite(rate) ? Math.max(0f, rate) : 1f;
-        double nextTime = localTime + frameRate;
-        evaluate(localTime);
-        // Evaluate the exact end once when a tick crosses it. Otherwise rates above 1, or a
-        // fractional duration, can finish the playback without ever applying its final state.
-        if (!isStartDelayed() && localTime <= duration && nextTime > duration) {
+        clock.follow(followSections);
+        // a jump requested from outside takes effect now, before anything is evaluated
+        clock.applyPendingJump();
+        // after running into an end, every evaluation is "nothing on": what was on stops, or drains
+        var ending = clock.endPending();
+        evaluate(clock.time(), !ending && !clock.ended());
+        if (ending) clock.markEnded();
+        if (stopped) return;
+        // Every seam passed on the way is handled inside step: a repeating section wraps to its own start, a
+        // "then: end" stops the clock. Without sections this is the plain time += rate.
+        var before = clock.time();
+        clock.step(frameRate);
+        // Evaluate the exact end once when a tick crosses it. Otherwise rates above 1, or a fractional duration, can
+        // finish the playback without ever applying its final state. (A seam that wrapped or ended already did.)
+        if (!isStartDelayed() && before <= duration && clock.time() > duration
+                && !clock.endPending() && !clock.ended()) {
             evaluate(duration);
         }
-        localTime = nextTime;
+        if (clock.capped()) {
+            warnOnce("a tick crossed too many section seams and was cut short: a section is very short for the playback rate");
+        }
     }
 
     /**
@@ -149,7 +214,21 @@ public class TimelinePlayer {
      * in the particle engine for future clips to reactivate/restart them.
      */
     public boolean isFinished() {
-        return isEmpty() || stopped || localTime > duration;
+        return isEmpty() || stopped || clock.ended() || clock.time() > duration;
+    }
+
+    /** Whether {@link #stop()} was called: the playback is over regardless of where the clock is. */
+    public boolean isStopped() {
+        return stopped;
+    }
+
+    /** One message per distinct problem per playback: a clock that complains every tick is worse than silence. */
+    private final Set<String> warned = new HashSet<>();
+
+    private void warnOnce(String message) {
+        if (warned.add(message)) {
+            com.lowdragmc.photon.Photon.LOGGER.warn("photon timeline: {}", message);
+        }
     }
 
     /** The content end (ticks) snapshotted for the current playback; see {@link Timeline#getDuration()}. */
@@ -164,6 +243,14 @@ public class TimelinePlayer {
     }
 
     /**
+     * The effect is being stopped, without force: play the timeline's release section out instead of cutting at
+     * once. False when there is none (the caller then stops the timeline as usual). Ported from 26.3.
+     */
+    public boolean beginWindDown() {
+        return !stopped && !isFinished() && clock.beginWindDown();
+    }
+
+    /**
      * Per-frame pass (driven from the always-on root's frame update): re-applies the animation tracks at
      * the current fractional master time ({@code lastEvalTime + partialTicks}) so transform animation is
      * smooth between ticks instead of stepping 20×/s. {@code partialTicks} is 0 while paused (the editor
@@ -171,7 +258,9 @@ public class TimelinePlayer {
      */
     public void frame(float partialTicks) {
         if (recording()) return; // keep the user's live edits to the recording target
-        applyAnimations(lastEvalTime + partialTicks * frameRate);
+        // a seam that wraps or jumps must not be interpolated through: the frames between two ticks would sample
+        // the time the clock never passes, so they stop just short of it
+        applyAnimations(Math.min(lastEvalTime + partialTicks * frameRate, clock.frameCap()));
     }
 
     /** Submit timeline post effects once per rendered frame, before the scene's particle passes. */
@@ -180,7 +269,7 @@ public class TimelinePlayer {
         long frame = PostFXTargetPool.currentFrame();
         if (postProcessFrame == frame) return;
         postProcessFrame = frame;
-        applyPostProcess(lastEvalTime + partialTicks * frameRate);
+        applyPostProcess(Math.min(lastEvalTime + partialTicks * frameRate, clock.frameCap()));
     }
 
     /** Submit every active post-process clip's effect (weighted by its fade envelope) to the
@@ -225,7 +314,17 @@ public class TimelinePlayer {
     }
 
     private void evaluate(double time) {
+        evaluate(time, true);
+    }
+
+    /**
+     * @param live false for the evaluation that runs at an end (or past it): the timeline has no future content, so
+     *             what was showing stops or drains instead of being gated as if something else were coming
+     */
+    private void evaluate(double time, boolean live) {
         lastEvalTime = time;
+        // a wrap or a jump restarts what has finished, once, right after the seam that caused it
+        var jumped = clock.consumeJumped();
         var leaves = timeline.leafTracks(false);
         var controlled = controlledObjectIds(leaves);
         // revert objects that are no longer controlled (e.g. their track/clip was deleted)
@@ -253,7 +352,8 @@ public class TimelinePlayer {
                 if (track instanceof ActivatorTrack activator) {
                     if (id.equals(activator.targetId())) {
                         hasActivator = true;
-                        if (activator.clipAt(time) != null) {
+                        // not live (the timeline ran into an end): nothing can come on
+                        if (live && activator.clipAt(time) != null) {
                             activatorActive = true;
                         }
                     }
@@ -264,33 +364,57 @@ public class TimelinePlayer {
                             break;
                         }
                     }
-                    if (controlClip == null) {
+                    if (live && controlClip == null) {
                         controlClip = control.clipForObjectAt(id, time);
                     }
                 }
             }
 
-            // control restart: reset + reseed when entering (or switching to) a control clip
+            // control restart: reset + reseed when entering (or switching to) a control clip.
+            // Nothing new starts under something winding down: a clip coming on there is as if it were not there.
             var previous = lastControlClip.get(id);
+            if (controlClip != null && controlClip != previous && object.hasWindingDownAncestor()) {
+                controlClip = null;
+            }
             if (controlClip != previous) {
                 if (controlClip != null) {
+                    draining.remove(id);
                     restart(object, controlClip);
+                } else if (previous != null && previous.exitMode() == Clip.ExitMode.DRAIN) {
+                    // the clip ended and asked to drain: stop new work, let what is on screen finish
+                    windDown(object);
+                    draining.add(id);
                 }
                 lastControlClip.put(id, controlClip);
+            } else if (jumped && controlClip != null && !object.hasWindingDownAncestor()
+                    && (controlClip.seamMode() == Clip.SeamMode.RESTART || !object.isPlaying())) {
+                // on across a wrap or jump: restart what has finished, carry on with what still plays
+                restart(object, controlClip);
+            }
+            if (controlClip == null && draining.contains(id) && !stillShowing(object)) {
+                draining.remove(id);
             }
 
-            var state = TimelineState.resolve(hasActivator, activatorActive, hasControl, controlClip != null);
+            // not live (the timeline ran into an end): nothing new is gated on, and what ended its clip drains
+            var state = live
+                    ? TimelineState.resolve(hasActivator, activatorActive, hasControl, controlClip != null,
+                            draining.contains(id))
+                    : TimelineState.resolve(hasActivator, activatorActive, hasControl, false, true);
             gate(object, state.tick(), state.render());
         }
 
-        applyAnimations(time);
-        applySpeed(leaves, time);
-        if (isStartDelayed()) {
-            stopAllAudio();
-        } else {
-            dispatchSignals(leaves, time);
-            applyAudio(leaves, time);
+        if (live) {
+            applyAnimations(time);
+            applySpeed(leaves, time);
         }
+        dispatchSignals(leaves, time, live);
+        // a listener may have destroyed the effect: nothing after this may start anything
+        if (stopped) return;
+        if (!live || isStartDelayed()) {
+            stopAllAudio();
+            return;
+        }
+        applyAudio(leaves, time);
         // an FX instance this evaluation activated starts its own timeline before anything under it ticks
         if (effect != null) {
             runtime.beginActiveInstances(effect);
@@ -414,19 +538,37 @@ public class TimelinePlayer {
      * live playback by {@link #setSignalDispatch}; the monotonic window + {@link #begin} reset prevent
      * any double-fire (the {@code evaluate(0)} repeat, or a replay seek).
      */
-    private void dispatchSignals(java.util.List<Track> leaves, double time) {
-        if (!signalDispatch() || time <= lastSignalTick) return;
+    private void dispatchSignals(java.util.List<Track> leaves, double time, boolean live) {
+        // The windows closed at a seam are the tail of the pass that just ended. Without them, a signal sitting after
+        // the last evaluated tick of a repeating section would never fire, because the clock wrapped past it.
+        // Drained even when signals are off (the editor), so they cannot pile up.
+        var windows = clock.takeWindows();
+        if (!signalDispatch()) {
+            clock.signalFrom(time);
+            return;
+        }
+        for (var window : windows) {
+            fireSignals(leaves, window.from(), window.to(), window.inclusive());
+        }
+        if (!live || time <= clock.signalFrom()) return;
+        fireSignals(leaves, clock.signalFrom(), time, true);
+        clock.signalFrom(time);
+        lastSignalTick = time;
+    }
+
+    /** Fire every signal in {@code (from, to]} — or {@code (from, to)} when the window excludes its end. */
+    private void fireSignals(java.util.List<Track> leaves, double from, double to, boolean inclusive) {
         for (var track : leaves) {
             if (track.mute() || !(track instanceof SignalTrack signalTrack)) continue;
             var channel = signalTrack.displayName();
             for (var signal : signalTrack.signals()) {
-                if (signal.time() > lastSignalTick && signal.time() <= time) {
-                    if (effect != null) effect.onTimelineSignal(channel, signal.name(), signal.data(), signal.time());
-                    PhotonSignals.fire(effect, channel, signal.name(), signal.data(), signal.time());
+                var t = signal.time();
+                if (t > from && (inclusive ? t <= to : t < to)) {
+                    if (effect != null) effect.onTimelineSignal(channel, signal.name(), signal.data(), t);
+                    PhotonSignals.fire(effect, channel, signal.name(), signal.data(), t);
                 }
             }
         }
-        lastSignalTick = time;
     }
 
     /**
@@ -454,6 +596,23 @@ public class TimelinePlayer {
                 }
             }
         }
+    }
+
+    /**
+     * Stop new work in {@code object}'s subtree and let what is already on screen finish. The gate keeps the object
+     * ticking, so its particles age out and its emitters close their cycle; when nothing shows any more it is left
+     * alone like any other released object.
+     */
+    protected void windDown(FXObject object) {
+        object.windDown();
+    }
+
+    /**
+     * Whether a drained object still has something worth ticking for. A leaf emitter is done when it holds no
+     * particles; a parent is done when nothing under it shows. Cheap, and only consulted for draining objects.
+     */
+    protected boolean stillShowing(FXObject object) {
+        return object.hasVisibleRemnants();
     }
 
     /**

@@ -106,7 +106,7 @@ public class SubEmittersSetting extends ToggleGroup {
                 return; // no whole tick crossed this step (dt <= 1 => at most one crossing)
             }
             for (Emitter candidate : emitters.get()) {
-                if (candidate.event == Event.Tick && newTick % candidate.tickInterval == 0) {
+                if (candidate.event == Event.Tick && newTick % Math.max(1, candidate.tickInterval) == 0) {
                     candidate.spawnEmitter(father);
                 }
             }
@@ -189,6 +189,9 @@ public class SubEmittersSetting extends ToggleGroup {
         @Nullable
         @Persisted
         protected String legacySubFXName;
+        /** Photon 1 applied tickInterval to every event, not just Tick. */
+        @Persisted
+        protected boolean legacyTickGate;
         @Configurable(name = "Emitter.event", tips = "photon.emitter.config.sub_emitters.emitter.event")
         protected Event event = Event.Birth;
         @Configurable(name = "Emitter.emitProbability", tips = "photon.emitter.config.sub_emitters.emitter.emit_probability")
@@ -279,6 +282,7 @@ public class SubEmittersSetting extends ToggleGroup {
         }
 
         public void spawnEmitter(TileParticle father, @Nullable CollisionEvent contact) {
+            if (legacyTickGate && Mth.floor(father.getAge()) % Math.max(1, tickInterval) != 0) return;
             if (fxLocation == null && (legacySubFXName == null || legacySubFXName.isBlank())) {
                 return;
             }
@@ -316,13 +320,21 @@ public class SubEmittersSetting extends ToggleGroup {
                     runtime.root.updateRotation(new Quaternionf().rotationTo(0, 1, 0, normal.x, normal.y, normal.z));
                 }
             }
+            // emit() resets each object and its runtime slots. Apply inheritance afterwards or the
+            // inherited age and duration are immediately erased before the first simulation tick.
+            runtime.emit(father.getEmitter().getEffectExecutor());
+            applyInheritance(runtime, father);
+        }
+
+        /** Apply parent particle properties to this runtime only, after its objects have been reset. */
+        public void applyInheritance(com.lowdragmc.photon.client.fx.FXRuntime runtime, TileParticle father) {
             for (var value : runtime.objects.values()) {
                 if (value instanceof IParticleEmitter particleEmitter) {
+                    if (inheritDuration) {
+                        particleEmitter.inheritDuration(father.getLifetime());
+                    }
                     if (inheritLifetime) {
                         particleEmitter.setAge((int) father.getAge());
-                    }
-                    if (inheritDuration) {
-                        particleEmitter.self().setLifetime(father.getLifetime());
                     }
                     if (inheritColor) {
                         particleEmitter.setRGBAColor(father.getRealColor(0));
@@ -336,7 +348,6 @@ public class SubEmittersSetting extends ToggleGroup {
                     }
                 }
             }
-            runtime.emit(father.getEmitter().getEffectExecutor());
         }
 
         @Override
