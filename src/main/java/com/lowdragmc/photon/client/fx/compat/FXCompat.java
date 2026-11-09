@@ -139,7 +139,8 @@ public class FXCompat {
                     }
                     CompoundTag photon1FX;
                     try (var input = java.nio.file.Files.newInputStream(path)) {
-                        photon1FX = NbtIo.readCompressed(input);
+                        // The loader accepts both Photon 1's gzip exports and raw NBT; conversion must too.
+                        photon1FX = FXHelper.readNbt(input);
                     }
                     if (!isLegacyEffect(photon1FX)) {
                         var reason = path.getFileName() + ": not a Photon 1 effect";
@@ -150,10 +151,7 @@ public class FXCompat {
                     CompoundTag photon2FX = mapEffect(photon1FX);
                     // the mappers emit the current format; stamp it so the datafixer stays a no-op
                     photon2FX.putInt("version", FXProject.VERSION);
-                    Files.createDirectories(target.getParent());
-                    try (var output = Files.newOutputStream(target, java.nio.file.StandardOpenOption.CREATE_NEW)) {
-                        NbtIo.writeCompressed(photon2FX, output);
-                    }
+                    writeConvertedEffect(target, photon2FX);
                     count.getAndIncrement();
                 }
                 catch(Exception e){
@@ -168,6 +166,21 @@ public class FXCompat {
             Photon.LOGGER.error("Failed to read Photon 1 FX directory {}", source, e);
         }
         return new Report(count.get(), List.copyOf(skipped), List.copyOf(failed), List.of(source.toString()));
+    }
+
+    /** Never leave a half-written destination that a later conversion would mistake for a valid effect. */
+    private static void writeConvertedEffect(Path target, CompoundTag data) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path temporary = Files.createTempFile(target.getParent(), ".photon-convert-", ".tmp");
+        try {
+            try (var output = Files.newOutputStream(temporary)) {
+                NbtIo.writeCompressed(data, output);
+            }
+            // Do not replace existing effects, even if another conversion created one in the meantime.
+            Files.move(temporary, target);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     public static boolean isLegacyEffect(CompoundTag tag) {
