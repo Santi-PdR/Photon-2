@@ -115,6 +115,8 @@ jobs:
           cp -a ci-fixtures/real-scan/ldlib2/assets/. run/ldlib2/assets/
           cp -a ci-fixtures/real-tornado/ldlib2/assets/. run/ldlib2/assets/
           cp -a ci-fixtures/real-shield-trail/ldlib2/assets/. run/ldlib2/assets/
+          mkdir -p run/ldlib2/projects
+          find run/ldlib2/assets -maxdepth 1 -name '*.fxproj' -exec mv -t run/ldlib2/projects {} +
           mkdir -p run/photon/fxpacks
           python3 - <<'PY'
           from zipfile import ZIP_DEFLATED, ZipFile

@@ -1385,7 +1385,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 Files.deleteIfExists(projectFile);
-                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScanFile = new File("./ldlib2/projects/scan.fxproj");
                 var realScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
                 editor.loadProject(realScan, realScanFile);
                 if (editor.getCurrentProject() != realScan || editor.runtime == null)
@@ -1422,7 +1422,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realScanSmoke");
-                var realTornadoFile = new File("./ldlib2/assets/tornado.fxproj");
+                var realTornadoFile = new File("./ldlib2/projects/tornado.fxproj");
                 var realTornado = (FXProject) FXProject.TYPE.loadProjectFromFile(realTornadoFile);
                 editor.loadProject(realTornado, realTornadoFile);
                 if (editor.getCurrentProject() != realTornado || editor.runtime == null)
@@ -1470,7 +1470,7 @@ public final class PhotonFXEditorSmokeTest {
                 System.clearProperty("photon.realTornadoSmoke");
                 editor.sceneView.sceneEditor.scene.setCenter(savedSceneCenter);
                 editor.sceneView.sceneEditor.scene.setZoom(savedSceneZoom);
-                var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
+                var realShieldFile = new File("./ldlib2/projects/shield.fxproj");
                 var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
                 editor.loadProject(realShield, realShieldFile);
                 if (editor.getCurrentProject() != realShield || editor.runtime == null)
@@ -1655,7 +1655,7 @@ public final class PhotonFXEditorSmokeTest {
                 }));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realShieldSmoke");
-                var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
+                var realTrailFile = new File("./ldlib2/projects/arrow_trail.fxproj");
                 var realTrail = (FXProject) FXProject.TYPE.loadProjectFromFile(realTrailFile);
                 editor.loadProject(realTrail, realTrailFile);
                 if (editor.getCurrentProject() != realTrail || editor.runtime == null)
@@ -1703,7 +1703,7 @@ public final class PhotonFXEditorSmokeTest {
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realTrailSmoke");
                 minecraft.setScreen(previousScreen);
-                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScanFile = new File("./ldlib2/projects/scan.fxproj");
                 var firstPersonScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
                 minecraft.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
                 System.setProperty("photon.firstPersonSmoke", "true");
@@ -1719,7 +1719,7 @@ public final class PhotonFXEditorSmokeTest {
                 System.clearProperty("photon.firstPersonBillboardSeen");
                 System.clearProperty("photon.firstPersonScanPixels");
                 System.setProperty("photon.firstPersonGpuSmoke", "true");
-                var scanFile = new File("./ldlib2/assets/scan.fxproj");
+                var scanFile = new File("./ldlib2/projects/scan.fxproj");
                 var gpuScan = (FXProject) FXProject.TYPE.loadProjectFromFile(scanFile);
                 gpuScan.getFx().getFxData().objects().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).forEach(emitter -> emitter.config.renderer.setUseGPUInstance(true));

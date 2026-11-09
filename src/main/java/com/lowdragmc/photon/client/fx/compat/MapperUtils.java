@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.fx.compat;
 
+import com.lowdragmc.photon.Photon;
 import net.minecraft.nbt.*;
 import net.minecraft.world.phys.Vec2;
 
@@ -492,8 +493,48 @@ public class MapperUtils {
      * Never modifies the author's saved tag: callers must copy first, or use {@link #repairLegacyCodecs}.
      */
     public static Tag repairLegacyCodecs(Tag tag) {
-        var copy = tag.copy();
-        return normalizeLegacyCodecs(copy) ? copy : tag;
+        if (!needsLegacyCodecRepair(tag)) return tag;
+        try {
+            var copy = tag.copy();
+            return normalizeLegacyCodecs(copy) ? copy : tag;
+        } catch (Throwable failure) {
+            Photon.LOGGER.warn("[fx-diagnostic] leftover Photon 1 codec repair failed; loading the original tag", failure);
+            return tag;
+        }
+    }
+
+    private static boolean needsLegacyCodecRepair(Tag tag) {
+        if (tag instanceof CompoundTag compound) {
+            if (compound.contains("_type", Tag.TAG_STRING)) return true;
+            if (compound.contains("type", Tag.TAG_STRING)) {
+                var type = compound.getString("type");
+                if (!type.equals(aliasLegacyType(type, compound))) return true;
+                if (!compound.contains("data", Tag.TAG_COMPOUND)
+                        && !compound.contains("resource", Tag.TAG_STRING)
+                        && (NUMBER_FUNCTION_TYPES.contains(type) || MATERIAL_TYPES.contains(type))
+                        && hasUnwrappedPayload(compound)) return true;
+            }
+            if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
+                return true;
+            }
+            if (asNumberFunction3List(compound) != null) return true;
+            for (var key : compound.getAllKeys()) {
+                var child = compound.get(key);
+                if (NUMBER_FUNCTION3_FIELDS.contains(key) && child instanceof CompoundTag nested
+                        && isNumberFunctionCompound(nested)) return true;
+                if (needsLegacyCodecRepair(child)) return true;
+            }
+        } else if (tag instanceof ListTag list) {
+            for (var entry : list) if (needsLegacyCodecRepair(entry)) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasUnwrappedPayload(CompoundTag compound) {
+        return compound.contains("number") || compound.contains("texture", Tag.TAG_STRING)
+                || compound.contains("shader", Tag.TAG_STRING) || compound.contains("curves")
+                || (compound.contains("min") && compound.contains("max"))
+                || (compound.contains("a") && compound.contains("b"));
     }
 
     private static boolean normalizeLegacyCodecs(Tag tag) {
@@ -502,7 +543,7 @@ public class MapperUtils {
             changed |= rewriteLegacyTypeName(compound, "type");
             changed |= rewriteLegacyTypeName(compound, "_type");
             if (!compound.contains("type", Tag.TAG_STRING) && compound.contains("_type", Tag.TAG_STRING)) {
-                compound.putString("type", aliasLegacyType(compound.getString("_type")));
+                compound.putString("type", aliasLegacyType(compound.getString("_type"), compound));
                 changed = true;
             }
             changed |= wrapLegacyTypedPayload(compound);
@@ -541,13 +582,13 @@ public class MapperUtils {
     private static boolean rewriteLegacyTypeName(CompoundTag compound, String key) {
         if (!compound.contains(key, Tag.TAG_STRING)) return false;
         var original = compound.getString(key);
-        var aliased = aliasLegacyType(original);
+        var aliased = aliasLegacyType(original, compound);
         if (aliased.equals(original)) return false;
         compound.putString(key, aliased);
         return true;
     }
 
-    static String aliasLegacyType(String type) {
+    static String aliasLegacyType(String type, CompoundTag compound) {
         return switch (type) {
             case "Constant" -> "constant";
             case "Color" -> "color";
@@ -560,12 +601,9 @@ public class MapperUtils {
             case "TextureMaterial" -> "texture";
             case "CustomShaderMaterial" -> "custom_shader";
             case "BlockTextureSheetMaterial" -> "block_atlas";
-            case "particle" -> "particle_emitter";
-            case "Particle" -> "particle_emitter";
-            case "beam" -> "beam_emitter";
-            case "Beam" -> "beam_emitter";
-            case "trail" -> "trail_emitter";
-            case "Trail" -> "trail_emitter";
+            case "particle", "Particle" -> looksLikeFxObject(compound) ? "particle_emitter" : type;
+            case "beam", "Beam" -> looksLikeFxObject(compound) ? "beam_emitter" : type;
+            case "trail", "Trail" -> looksLikeFxObject(compound) ? "trail_emitter" : type;
             case "Circle" -> "circle";
             case "Cone" -> "cone";
             case "Sphere" -> "sphere";
@@ -578,17 +616,34 @@ public class MapperUtils {
         };
     }
 
+    private static boolean looksLikeFxObject(CompoundTag compound) {
+        if (compound.contains("transform") || compound.contains("config")) return true;
+        if (!compound.contains("data", Tag.TAG_COMPOUND)) return false;
+        var data = compound.getCompound("data");
+        return data.contains("transform") || data.contains("config") || data.contains("name");
+    }
+
     /**
      * Photon 1 stored the payload next to {@code _type}. Photon 2 codecs read {@code data}.
-     * Do not wrap sampler-like tags that already use {@code resource} at the top level.
+     * Do not wrap sampler-like tags that already use {@code resource} at the top level,
+     * or current Photon 2 tags that already use {@code data}.
      */
     private static boolean wrapLegacyTypedPayload(CompoundTag compound) {
         if (compound.contains("data", Tag.TAG_COMPOUND) || compound.contains("resource", Tag.TAG_STRING)) {
             return false;
         }
-        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
-                ? compound.getString("type") : compound.getString("_type"));
+        var rawType = compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type");
+        var type = aliasLegacyType(rawType, compound);
         if (!NUMBER_FUNCTION_TYPES.contains(type) && !MATERIAL_TYPES.contains(type)) return false;
+        boolean looksPhoton1 = compound.contains("_type", Tag.TAG_STRING)
+                || !rawType.equals(type)
+                || compound.contains("number")
+                || (MATERIAL_TYPES.contains(type) && compound.contains("texture", Tag.TAG_STRING))
+                || compound.contains("shader", Tag.TAG_STRING)
+                || compound.contains("curves")
+                || (compound.contains("min") && compound.contains("max"));
+        if (!looksPhoton1) return false;
         var data = new CompoundTag();
         for (var key : java.util.List.copyOf(compound.getAllKeys())) {
             if ("type".equals(key) || "_type".equals(key)) continue;
@@ -601,7 +656,7 @@ public class MapperUtils {
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {
-        var type = aliasLegacyType(tag.contains("type", Tag.TAG_STRING) ? tag.getString("type") : tag.getString("_type"));
+        var type = aliasLegacyType(tag.contains("type", Tag.TAG_STRING) ? tag.getString("type") : tag.getString("_type"), tag);
         return NUMBER_FUNCTION_TYPES.contains(type);
     }
 
