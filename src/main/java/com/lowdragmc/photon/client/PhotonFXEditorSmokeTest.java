@@ -2852,12 +2852,12 @@ public final class PhotonFXEditorSmokeTest {
         // Before NumberFunction3, shape vectors were compounds of raw doubles. The Photon 1
         // reader upgrades all three vectors when position.x is a double.
         var oldShapeEmitter = sparseFlat.copy();
-        var oldShape = new CompoundTag();
+        var rawShape = new CompoundTag();
         var oldShapePos = new CompoundTag(); oldShapePos.putDouble("x", 2.5); oldShapePos.putDouble("y", -3); oldShapePos.putDouble("z", 4);
         var oldShapeRot = new CompoundTag(); oldShapeRot.putDouble("x", 10); oldShapeRot.putDouble("y", 20); oldShapeRot.putDouble("z", 30);
         var oldShapeScale = new CompoundTag(); oldShapeScale.putDouble("x", 1); oldShapeScale.putDouble("y", 2); oldShapeScale.putDouble("z", 3);
-        oldShape.put("position", oldShapePos); oldShape.put("rotation", oldShapeRot); oldShape.put("scale", oldShapeScale);
-        oldShapeEmitter.put("shape", oldShape);
+        rawShape.put("position", oldShapePos); rawShape.put("rotation", oldShapeRot); rawShape.put("scale", oldShapeScale);
+        oldShapeEmitter.put("shape", rawShape);
         var migratedShape = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
                 com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(oldShapeEmitter));
         if (!(migratedShape instanceof ParticleEmitter shapeEmitter)
