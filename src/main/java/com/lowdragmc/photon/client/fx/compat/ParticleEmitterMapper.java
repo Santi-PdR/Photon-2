@@ -67,6 +67,7 @@ public class ParticleEmitterMapper implements Mapper{
         newConfigTag.put("colorBySpeed", mapColorBSTag(configTag.getCompound("colorBySpeed")));
 
         MapperUtils.retainPresentFields(newConfigTag, configTag, "prewarm", "additionalGPUDataSetting", "emission");
+        MapperUtils.applyLegacyBloomLight(newConfigTag, configTag);
         // Early Photon 1 stored a single start-size function before simulationSpace existed.
         // Its own deserializer expands that function to all axes and defaults to World space.
         var oldStartSize = configTag.getCompound("startSize");
@@ -340,7 +341,10 @@ public class ParticleEmitterMapper implements Mapper{
         newInheritVelTag.putString("mode",  inheritVelTag.getString("mode"));
 
 
-        MapperUtils.retainPresentFields(newInheritVelTag, inheritVelTag, "_enable");
+        // Although Photon 1 persisted multiply, TileParticle used the emitter's raw velocity
+        // for both INITIAL and CURRENT. Preserve the value for editing, but replay that behavior.
+        newInheritVelTag.putBoolean("legacyUnscaledVelocity", true);
+        MapperUtils.retainPresentFields(newInheritVelTag, inheritVelTag, "_enable", "legacyUnscaledVelocity");
         return newInheritVelTag;
     }
 

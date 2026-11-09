@@ -2690,6 +2690,15 @@ public final class PhotonFXEditorSmokeTest {
         if (!(decodedBeam instanceof com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter importedBeam)
                 || !(decodedTrail instanceof TrailEmitter importedTrail))
             throw new IllegalStateException("Delayed legacy beam/trail did not deserialize");
+        if (!importedBeam.getConfig().getEnd().equals(new org.joml.Vector3f(3, 0, 0)))
+            throw new IllegalStateException("A sparse Photon 1 beam lost its +X default endpoint");
+        var explicitBeamEnd = new CompoundTag(); explicitBeamEnd.putFloat("x", -2); explicitBeamEnd.putFloat("y", 4); explicitBeamEnd.putFloat("z", 8);
+        var explicitBeam = delayedLegacyTag.copy(); explicitBeam.putString("_type", "beam"); explicitBeam.put("end", explicitBeamEnd);
+        var explicitObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(explicitBeam));
+        if (!(explicitObject instanceof com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter explicitEmitter)
+                || !explicitEmitter.getConfig().getEnd().equals(new org.joml.Vector3f(-2, 4, 8)))
+            throw new IllegalStateException("An authored Photon 1 beam endpoint was replaced by the default");
         for (var imported : java.util.List.of(importedBeam, importedTrail)) {
             imported.setLevel(Minecraft.getInstance().level);
             imported.reset();
@@ -2774,6 +2783,31 @@ public final class PhotonFXEditorSmokeTest {
                 || !modules.config.physics.isRemovedWhenCollided()) {
             throw new IllegalStateException("Sparse legacy modules lost defaults or collision-removal flag");
         }
+        // Photon 1 persisted the inheritance multiplier but did not use it in either particle
+        // velocity path. Test converted settings through particle setup, runtime, and reload.
+        for (var inheritanceMode : com.lowdragmc.photon.client.gameobject.emitter.data.InheritVelocitySetting.Mode.values()) {
+            var oldInherit = new CompoundTag(); oldInherit.putBoolean("enable", true);
+            oldInherit.putString("mode", inheritanceMode.name());
+            var multiplier = new CompoundTag(); multiplier.putString("_type", "Constant"); multiplier.putFloat("number", 0.25f);
+            oldInherit.put("multiply", multiplier);
+            var mover = new ParticleEmitter() {
+                @Override public org.joml.Vector3f getVelocity() { return new org.joml.Vector3f(2, 0, 0); }
+            };
+            mover.setLevel(Minecraft.getInstance().level);
+            mover.config.shape.setShape(new com.lowdragmc.photon.client.gameobject.emitter.data.shape.Dot());
+            mover.config.inheritVelocity.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                    com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapInheritVelocity(oldInherit));
+            var savedInheritance = mover.config.inheritVelocity.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+            mover.config.inheritVelocity.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), savedInheritance);
+            var inherited = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(mover, mover.config);
+            if (Math.abs(inherited.getRealVelocity().x - 2f) > 0.0001f
+                    || mover.config.inheritVelocity.getMultiply().get(0f, () -> 0f).floatValue() != 0.25f)
+                throw new IllegalStateException("Photon 1 " + inheritanceMode + " velocity or multiplier was not retained");
+            mover.config.inheritVelocity.setLegacyUnscaledVelocity(false);
+            var nativeParticle = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(mover, mover.config);
+            if (Math.abs(nativeParticle.getRealVelocity().x - 0.5f) > 0.0001f)
+                throw new IllegalStateException("Native " + inheritanceMode + " velocity no longer applies its multiplier");
+        }
         var oldFrom = new CompoundTag(); oldFrom.putFloat("x", -8); oldFrom.putFloat("y", -4); oldFrom.putFloat("z", -2);
         var oldTo = new CompoundTag(); oldTo.putFloat("x", 12); oldTo.putFloat("y", 6); oldTo.putFloat("z", 3);
         var oldCull = new CompoundTag(); oldCull.putBoolean("enable", true); oldCull.put("from", oldFrom); oldCull.put("to", oldTo);
@@ -2793,6 +2827,32 @@ public final class PhotonFXEditorSmokeTest {
                 || !renderEmitter.config.renderer.getMaterials().get(0).isCull()) {
             throw new IllegalStateException("Legacy cull bounds or sparse renderer defaults were lost");
         }
+        // Legacy bloom forces full-bright regardless of the separate authored light group.
+        // Preserve the authored group too; this does not claim to recreate the bloom halo.
+        var bloomSource = new CompoundTag();
+        var bloomRenderer = new CompoundTag(); bloomRenderer.putBoolean("bloomEffect", true);
+        bloomSource.put("renderer", bloomRenderer);
+        var oldLights = new CompoundTag(); oldLights.putBoolean("enable", false);
+        var oldLowLight = new CompoundTag(); oldLowLight.putString("_type", "Constant"); oldLowLight.putInt("number", 3);
+        oldLights.put("blockLight", oldLowLight); bloomSource.put("lights", oldLights);
+        for (var mappedBloom : java.util.List.of(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapConfigTag(bloomSource),
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamConfig(bloomSource),
+                com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(bloomSource))) {
+            var lights = new com.lowdragmc.photon.client.gameobject.emitter.data.LightOverLifetimeSetting();
+            lights.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), mappedBloom.getCompound("lights"));
+            var lightCopy = new com.lowdragmc.photon.client.gameobject.emitter.data.LightOverLifetimeSetting();
+            lightCopy.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                    lights.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+            if (lightCopy.isEnable() || lightCopy.getBlockLight().get(0f, () -> 0f).intValue() != 3
+                    || !lightCopy.createRuntime().isEnable()
+                    || lightCopy.createRuntime().getLight(null, 0f) != net.minecraft.client.renderer.LightTexture.FULL_BRIGHT)
+                throw new IllegalStateException("Photon 1 bloom full-bright or authored light settings were lost");
+        }
+        bloomRenderer.putBoolean("bloomEffect", false);
+        if (com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapConfigTag(bloomSource)
+                .getCompound("lights").getBoolean("legacyBloomFullBright"))
+            throw new IllegalStateException("Non-bloom Photon 1 effect was incorrectly made full-bright");
         var sparseCull = enabledModule.copy();
         com.lowdragmc.photon.client.fx.compat.MapperUtils.mapCullTag(sparseCull); // omitted bounds must not throw
         var sheet = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.Animation.WholeSheet;

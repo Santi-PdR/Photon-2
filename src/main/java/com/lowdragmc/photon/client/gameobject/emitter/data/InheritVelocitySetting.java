@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.Constant;
@@ -38,6 +39,10 @@ public class InheritVelocitySetting extends ToggleGroup {
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "lifetime", yAxis = "speed modifier"))
     protected NumberFunction multiply = NumberFunction.constant(1);
 
+    /** Photon 1's particle runtime used the raw emitter velocity in both inheritance modes. */
+    @Persisted
+    protected boolean legacyUnscaledVelocity;
+
     public Runtime createRuntime() {
         return new Runtime(this);
     }
@@ -64,6 +69,7 @@ public class InheritVelocitySetting extends ToggleGroup {
         }
 
         public Vector3f getVelocity(IParticleEmitter emitter) {
+            if (config.legacyUnscaledVelocity) return emitter.getVelocity();
             // per-EMITTER memRandom (not per-particle): this method has no particle context, so a
             // RandomConstant multiplier samples once per emitter lifetime — known limitation
             return emitter.getVelocity().mul(multiply.get().get(emitter.getT(), () -> emitter.getMemRandom(this)).floatValue());

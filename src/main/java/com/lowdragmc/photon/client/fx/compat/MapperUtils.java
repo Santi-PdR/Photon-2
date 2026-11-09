@@ -372,6 +372,16 @@ public class MapperUtils {
     }
 
 
+    /** Photon 1 rendered bloom emitters at full brightness even when fixed lights were disabled.
+     * This preserves the light behavior, not the old bloom post-processing or bloom color. */
+    public static void applyLegacyBloomLight(CompoundTag mappedConfig, CompoundTag legacyConfig) {
+        if (!legacyConfig.getCompound("renderer").getBoolean("bloomEffect")) return;
+        var lights = mappedConfig.contains("lights", Tag.TAG_COMPOUND)
+                ? mappedConfig.getCompound("lights") : mapLightTag(legacyConfig.getCompound("lights"));
+        lights.putBoolean("legacyBloomFullBright", true);
+        mappedConfig.put("lights", lights);
+    }
+
     public static CompoundTag mapRendererTag(CompoundTag renderTag, CompoundTag configTag){
         CompoundTag newRendererTag = new CompoundTag();
         newRendererTag.putString("renderMode", renderTag.getString("renderMode"));
