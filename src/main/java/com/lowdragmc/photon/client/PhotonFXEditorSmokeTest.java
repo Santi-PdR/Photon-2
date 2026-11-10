@@ -3145,6 +3145,47 @@ public final class PhotonFXEditorSmokeTest {
                 || !"SUB".equals(blendTag.getString("blendFunc"))) {
             throw new IllegalStateException("Photon 1 blendFunc sub was not renamed");
         }
+        var leftoverEmission = new CompoundTag();
+        leftoverEmission.putString("emissionMode", "Exacting");
+        leftoverEmission.put("emissionRate", leftoverConstant.copy());
+        var repairedEmission = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverEmission);
+        if (!(repairedEmission instanceof CompoundTag emissionTag) || leftoverEmission.contains("legacyTickEmission")
+                || !emissionTag.getBoolean("legacyTickEmission")) {
+            throw new IllegalStateException("Photon 1 emission did not keep integer-age sampling");
+        }
+        var leftoverInherit = new CompoundTag();
+        leftoverInherit.putString("mode", "INITIAL");
+        leftoverInherit.put("multiply", leftoverConstant.copy());
+        leftoverInherit.putBoolean("enable", true);
+        var repairedInherit = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverInherit);
+        if (!(repairedInherit instanceof CompoundTag inheritTag) || leftoverInherit.contains("legacyUnscaledVelocity")
+                || !inheritTag.getBoolean("legacyUnscaledVelocity")) {
+            throw new IllegalStateException("Photon 1 inherit-velocity did not keep raw emitter speed");
+        }
+        var leftoverSubList = new CompoundTag();
+        leftoverSubList.putBoolean("enable", true);
+        var leftoverSubEntries = new ListTag();
+        leftoverSubEntries.add(leftoverSub.copy());
+        leftoverSubList.put("emitters", leftoverSubEntries);
+        var repairedSubList = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSubList);
+        if (!(repairedSubList instanceof CompoundTag subListTag) || leftoverSubList.getList("emitters", Tag.TAG_COMPOUND).size() != 1
+                || !"spark".equals(subListTag.getCompound("emitters").getList("payload", Tag.TAG_COMPOUND)
+                .getCompound(0).getString("legacySubFXName"))) {
+            throw new IllegalStateException("Photon 1 sub-emitter list was not wrapped for Photon 2");
+        }
+        var leftoverTransform = new CompoundTag();
+        var leftoverTransformPos = new CompoundTag(); leftoverTransformPos.putFloat("x", 1); leftoverTransformPos.putFloat("y", 2); leftoverTransformPos.putFloat("z", 3);
+        leftoverTransform.put("localPosition", leftoverTransformPos);
+        leftoverTransform.put("localScale", leftoverTransformPos.copy());
+        var leftoverRot = leftoverTransformPos.copy(); leftoverRot.putFloat("w", 1);
+        leftoverTransform.put("localRotation", leftoverRot);
+        var repairedTransform = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransform);
+        if (!(repairedTransform instanceof CompoundTag transformTag) || leftoverTransform.getCompound("localPosition").getFloat("x") != 1
+                || transformTag.getList("localPosition", Tag.TAG_FLOAT).getFloat(0) != 1f
+                || transformTag.getList("localRotation", Tag.TAG_FLOAT).size() != 4
+                || transformTag.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f) {
+            throw new IllegalStateException("Photon 1 transform vectors were not read as float lists");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);

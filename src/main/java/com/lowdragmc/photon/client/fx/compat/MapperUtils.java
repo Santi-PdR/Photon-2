@@ -528,6 +528,14 @@ public class MapperUtils {
                     && !compound.getCompound("lights").getBoolean("legacyBloomFullBright")) return true;
             var blendFunc = compound.contains("blendFunc", Tag.TAG_STRING) ? compound.getString("blendFunc") : "";
             if ("sub".equals(blendFunc) || "REVERSE_sub".equals(blendFunc)) return true;
+            if (compound.contains("emissionMode", Tag.TAG_STRING) && compound.contains("emissionRate", Tag.TAG_COMPOUND)
+                    && !compound.contains("legacyTickEmission")
+                    && isUnwrappedLegacyNumberFunction(compound.getCompound("emissionRate"))) return true;
+            if (isLegacyInheritVelocity(compound) && !compound.contains("legacyUnscaledVelocity")) return true;
+            if (compound.contains("emitters", Tag.TAG_LIST) && isSubEmitterEntry(compound.getList("emitters", Tag.TAG_COMPOUND))) return true;
+            if (compound.contains("localPosition", Tag.TAG_COMPOUND)
+                    && compound.getCompound("localPosition").contains("x", Tag.TAG_ANY_NUMERIC)
+                    && !compound.getCompound("localPosition").contains("type")) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
@@ -574,6 +582,10 @@ public class MapperUtils {
             changed |= rewriteLegacyCullBox(compound);
             changed |= rewriteLegacyBloomLight(compound);
             changed |= rewriteLegacyBlendFunc(compound);
+            changed |= rewriteLegacyTickEmission(compound);
+            changed |= rewriteLegacyInheritVelocity(compound);
+            changed |= rewriteLegacySubEmitterList(compound);
+            changed |= rewriteLegacyTransformCoords(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -873,6 +885,7 @@ public class MapperUtils {
         envelope.put("payload", list.copy());
         envelope.putInt("uid", list.size());
         compound.put("bursts", envelope);
+        if (!compound.contains("legacyTickEmission")) compound.putBoolean("legacyTickEmission", true);
         return true;
     }
 
@@ -968,6 +981,85 @@ public class MapperUtils {
         if (aliased.equals(original)) return false;
         compound.putString("blendFunc", aliased);
         return true;
+    }
+
+    /** Photon 1 sampled emission on integer ages, including age zero. */
+    private static boolean rewriteLegacyTickEmission(CompoundTag compound) {
+        if (!compound.contains("emissionMode", Tag.TAG_STRING) || !compound.contains("emissionRate", Tag.TAG_COMPOUND)
+                || compound.contains("legacyTickEmission")) return false;
+        if (!compound.contains("bursts", Tag.TAG_LIST)
+                && !isUnwrappedLegacyNumberFunction(compound.getCompound("emissionRate"))) return false;
+        compound.putBoolean("legacyTickEmission", true);
+        return true;
+    }
+
+    /** Photon 1 inherited the raw emitter velocity in both CURRENT and INITIAL. */
+    private static boolean rewriteLegacyInheritVelocity(CompoundTag compound) {
+        if (!isLegacyInheritVelocity(compound) || compound.contains("legacyUnscaledVelocity")) return false;
+        compound.putBoolean("legacyUnscaledVelocity", true);
+        return true;
+    }
+
+    private static boolean isLegacyInheritVelocity(CompoundTag compound) {
+        var mode = compound.contains("mode", Tag.TAG_STRING) ? compound.getString("mode") : "";
+        if (!"CURRENT".equals(mode) && !"INITIAL".equals(mode)) return false;
+        if (!compound.contains("multiply", Tag.TAG_COMPOUND)) return false;
+        return isUnwrappedLegacyNumberFunction(compound.getCompound("multiply"))
+                || (compound.contains("enable") && !compound.contains("_enable"));
+    }
+
+    /** Photon 1 wrote sub-emitters as a raw list; Photon 2 managed lists use `{uid, payload}`. */
+    private static boolean rewriteLegacySubEmitterList(CompoundTag compound) {
+        if (!compound.contains("emitters", Tag.TAG_LIST)) return false;
+        var list = compound.getList("emitters", Tag.TAG_COMPOUND);
+        if (!isSubEmitterEntry(list)) return false;
+        var envelope = new CompoundTag();
+        envelope.put("payload", list.copy());
+        envelope.putInt("uid", list.size());
+        compound.put("emitters", envelope);
+        return true;
+    }
+
+    private static boolean isSubEmitterEntry(ListTag list) {
+        if (list.isEmpty()) return false;
+        var first = list.getCompound(0);
+        return first.contains("event") || first.contains("emitter") || first.contains("emitProbability");
+    }
+
+    /** Photon 1 transforms stored x/y/z compounds; LDLib2 reads float lists. */
+    private static boolean rewriteLegacyTransformCoords(CompoundTag compound) {
+        if (!compound.contains("localPosition") && !compound.contains("localScale") && !compound.contains("localRotation"))
+            return false;
+        boolean changed = false;
+        if (compound.contains("localPosition", Tag.TAG_COMPOUND)
+                && compound.getCompound("localPosition").contains("x", Tag.TAG_ANY_NUMERIC)
+                && !compound.getCompound("localPosition").contains("type")) {
+            compound.put("localPosition", mapTransformCoords(compound.get("localPosition"), 0, 0, 0));
+            changed = true;
+        }
+        if (compound.contains("localScale", Tag.TAG_COMPOUND)
+                && compound.getCompound("localScale").contains("x", Tag.TAG_ANY_NUMERIC)
+                && !compound.getCompound("localScale").contains("type")) {
+            compound.put("localScale", mapTransformCoords(compound.get("localScale"), 1, 1, 1));
+            changed = true;
+        }
+        if (compound.contains("localRotation", Tag.TAG_COMPOUND)
+                && compound.getCompound("localRotation").contains("x", Tag.TAG_ANY_NUMERIC)) {
+            compound.put("localRotation", mapTransformRotation(compound.get("localRotation")));
+            changed = true;
+        } else if (compound.contains("localRotation", Tag.TAG_LIST)
+                && compound.getList("localRotation", Tag.TAG_FLOAT).size() == 3) {
+            compound.put("localRotation", mapTransformRotation(compound.get("localRotation")));
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static boolean isUnwrappedLegacyNumberFunction(CompoundTag tag) {
+        if (tag.contains("_type", Tag.TAG_STRING)) return true;
+        var type = tag.contains("type", Tag.TAG_STRING) ? tag.getString("type") : "";
+        if (type.isEmpty()) return false;
+        return !type.equals(type.toLowerCase()) || (!tag.contains("data") && isNumberFunctionCompound(tag));
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {
