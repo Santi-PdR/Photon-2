@@ -429,6 +429,7 @@ public final class PhotonFXEditorSmokeTest {
         verifySections();
         verifySectionCommand();
         verifyDestroyKeepsRemnants();
+        verifyVisibleRemnants();
         verifyParticleDestReuse();
         verifyPoppedOutScreenSize();
     }
@@ -756,6 +757,42 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("An instance outside a runtime has a section control");
         }
         Photon.LOGGER.info("[destroy-remnant-smoke] destroy(false) invalidates the runtime; an FX instance winds down");
+    }
+
+    /**
+     * Drain keeps an object ticking while {@code hasVisibleRemnants()} is true. Particle emitters already
+     * reported leftover particles; beams, trails and lights did not, so a Drain clip cut them off.
+     */
+    private static void verifyVisibleRemnants() {
+        var beam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        beam.reset();
+        if (!beam.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live beam reported no remnants; Drain would cut it off");
+        }
+        var trail = new TrailEmitter();
+        trail.reset();
+        if (!trail.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live trail reported no remnants; Drain would cut it off");
+        }
+        var ara = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        ara.reset();
+        if (!ara.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live AraTrail reported no remnants; Drain would cut it off");
+        }
+        var light = new com.lowdragmc.photon.client.gameobject.light.LightObject();
+        if (!light.hasVisibleRemnants()) {
+            throw new IllegalStateException("A running light reported no remnants; Drain would cut it off");
+        }
+        var fog = new com.lowdragmc.photon.client.gameobject.light.FogVolumeObject();
+        if (!fog.hasVisibleRemnants()) {
+            throw new IllegalStateException("A running fog volume reported no remnants; Drain would cut it off");
+        }
+        light.remove(true);
+        fog.remove(true);
+        if (light.hasVisibleRemnants() || fog.hasVisibleRemnants()) {
+            throw new IllegalStateException("A force-removed light or fog still reported remnants");
+        }
+        Photon.LOGGER.info("[visible-remnants-smoke] beam, trail, AraTrail, light and fog report remnants while live");
     }
 
     /**
