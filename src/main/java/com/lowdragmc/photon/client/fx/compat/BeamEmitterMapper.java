@@ -13,7 +13,7 @@ public class BeamEmitterMapper implements Mapper{
         dataTag.putString("name", emitterTag.getString("name"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapBeamConfig(emitterTag.getCompound("config")));
+        dataTag.put("config", mapBeamConfig(MapperUtils.legacyEmitterConfig(emitterTag)));
 
         newEmitterTag.put("data", dataTag);
 
@@ -36,7 +36,17 @@ public class BeamEmitterMapper implements Mapper{
         newBeamConfigTag.put("emitRate", MapperUtils.mapTypedValue(configTag.getCompound("emitRate"), false));
 
         newBeamConfigTag.putString("raycastBlockMode", "VISUAL");
-
+        MapperUtils.retainPresentFields(newBeamConfigTag, configTag, "raycastBlockMode");
+        MapperUtils.applyLegacyBloomLight(newBeamConfigTag, configTag);
+        if (!configTag.contains("end", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            // Photon 1's sparse BeamConfig defaulted to +X; Photon 2 defaults to -Z.
+            var oldDefaultEnd = new CompoundTag();
+            oldDefaultEnd.putFloat("x", 3f);
+            newBeamConfigTag.put("end", MapperUtils.mapCoords(oldDefaultEnd));
+        }
+        if (configTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newBeamConfigTag.contains("renderer")) {
+            newBeamConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
+        }
         return newBeamConfigTag;
     }
 }

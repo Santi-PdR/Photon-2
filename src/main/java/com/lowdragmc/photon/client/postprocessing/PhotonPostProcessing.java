@@ -78,7 +78,9 @@ public class PhotonPostProcessing {
     public static RenderTarget postTarget(RenderTarget srcTarget) {
         // Nothing prepared (no build ran this frame): hand the frame back untouched rather than
         // indexing an empty mip chain.
-        if (MIPS.isEmpty() || HIGH_LIGHT == null || OUTPUT == null) return srcTarget;
+        if (MIPS.isEmpty() || HIGH_LIGHT == null || OUTPUT == null
+                || PhotonShaders.getBrightPassShader() == null || PhotonShaders.getDownSamplingShader() == null
+                || PhotonShaders.getUpSamplingShader() == null || PhotonShaders.getBloomFinalScatterPassShader() == null) return srcTarget;
         renderBloom(srcTarget);
         return OUTPUT == null ? srcTarget : OUTPUT;
     }
