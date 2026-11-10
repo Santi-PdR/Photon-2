@@ -19,6 +19,9 @@ public final class PhotonIcons {
     public static final IGuiTexture BLOOM = Icons.icon(Photon.MOD_ID, "bloom");
     public static final IGuiTexture LOOP = Icons.icon(Photon.MOD_ID, "loop");
     public static final IGuiTexture TIMELINE_END = Icons.icon(Photon.MOD_ID, "timeline_end");
+    public static final IGuiTexture SECTION_ADVANCE = Icons.icon(Photon.MOD_ID, "section_advance");
+    public static final IGuiTexture SECTION_FOLLOW = Icons.icon(Photon.MOD_ID, "section_follow");
+    public static final IGuiTexture SECTION_RELEASE = Icons.icon(Photon.MOD_ID, "section_release");
     public static final IGuiTexture MARKER = Icons.icon(Photon.MOD_ID, "marker");
     public static final IGuiTexture RECORDING = Icons.icon(Photon.MOD_ID, "recording");
     public static final IGuiTexture PHOTON_PROJECT = Icons.icon(Photon.MOD_ID, "photon_project");
