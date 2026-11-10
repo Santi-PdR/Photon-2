@@ -13,6 +13,7 @@ import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
+import com.lowdragmc.photon.client.fx.FXBloom;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -160,11 +161,15 @@ public class RenderPassPipeline {
 
     public static void beginCollecting(RenderPassPipeline pipeline) {
         collecting = pipeline;
+        FXBloom.beginFrame();
     }
 
     public static void finishCollecting(RenderPassPipeline pipeline) {
         try { pipeline.build(); }
-        finally { if (collecting == pipeline) collecting = null; }
+        finally {
+            if (collecting == pipeline) collecting = null;
+            FXBloom.endFrame();
+        }
     }
 
     @Nullable
