@@ -90,7 +90,8 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
     }
 
     static IMaterial deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(MISSING);
+        return CODEC.parse(NbtOps.INSTANCE, com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(tag))
+                .result().orElse(MISSING);
     }
 
     ShaderInstance begin(MaterialContext context);

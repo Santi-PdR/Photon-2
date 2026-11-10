@@ -23,6 +23,7 @@ import com.lowdragmc.photon.client.collision.CollisionDebug;
 import com.lowdragmc.photon.client.collision.CollisionWorld;
 import com.lowdragmc.photon.client.gameobject.collider.ColliderObject;
 import com.lowdragmc.photon.client.light.DynamicLightManager;
+import com.lowdragmc.photon.client.fx.FXData;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import com.lowdragmc.photon.gui.editor.FXProject;
 import com.lowdragmc.photon.gui.editor.FXProjectEffectExecutor;
@@ -80,7 +81,7 @@ public class SceneView extends View implements FXSceneOptions {
     private SceneMode sceneMode = SceneMode.PLATFORM;
     @Getter @Setter
     private DrawMode drawMode = DrawMode.DRAW;
-    @Getter @Setter
+    /** Fallback when no project is open; the live value is {@link #isBloomEnabled()} on the FX. */
     private boolean bloomEnabled = true;
     @Getter @Setter
     private boolean effectsEnabled = true;
@@ -105,6 +106,8 @@ public class SceneView extends View implements FXSceneOptions {
         this.getLayout().heightPercent(100.0F);
         this.fxEditor = fxEditor;
         effect.setDefinitionSupplier(() -> fxEditor.getCurrentProject() instanceof FXProject project ? project.getFx() : null);
+        effect.setDiagnosticLabel(() -> fxEditor.getCurrentProjectFile() == null
+                ? "unsaved-editor-project" : "editor:" + fxEditor.getCurrentProjectFile().getName());
         level.setParticleManager(particleManager);
         particleManager.setLevel(level);
 
@@ -217,6 +220,25 @@ public class SceneView extends View implements FXSceneOptions {
         } finally {
             PhotonParticleManager.setFastSimulation(false);
         }
+    }
+
+    @Override
+    public boolean isBloomEnabled() {
+        var data = currentFxData();
+        return data != null ? data.bloomEnabled() : bloomEnabled;
+    }
+
+    public void setBloomEnabled(boolean bloomEnabled) {
+        var data = currentFxData();
+        if (data != null) {
+            data.setBloomEnabled(bloomEnabled);
+        } else {
+            this.bloomEnabled = bloomEnabled;
+        }
+    }
+
+    private FXData currentFxData() {
+        return fxEditor.getCurrentProject() instanceof FXProject project ? project.getFx().getFxData() : null;
     }
 
     public void loadScene() {
@@ -376,7 +398,7 @@ public class SceneView extends View implements FXSceneOptions {
                             .build(),
                     // how strong the halo is, right beside what turns it on and off
                     // (the row is reversed, so this lands immediately left of the bloom toggle)
-                    new SceneBloomIntensityControl(),
+                    new SceneBloomIntensityControl(SceneView.this::currentFxData),
                     new SceneToggleBuilder(SceneView.this::isEffectsEnabled,
                             SceneView.this::setEffectsEnabled)
                             .icon(PhotonIcons.SHADER_GRAPH)
