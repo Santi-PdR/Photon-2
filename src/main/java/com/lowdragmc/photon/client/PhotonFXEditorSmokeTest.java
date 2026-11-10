@@ -3186,6 +3186,42 @@ public final class PhotonFXEditorSmokeTest {
                 || transformTag.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f) {
             throw new IllegalStateException("Photon 1 transform vectors were not read as float lists");
         }
+        var leftoverBeamEnd = new CompoundTag(); leftoverBeamEnd.putFloat("x", 1); leftoverBeamEnd.putFloat("y", 2); leftoverBeamEnd.putFloat("z", 3);
+        var leftoverBeam = new CompoundTag();
+        leftoverBeam.put("emitRate", leftoverConstant.copy());
+        leftoverBeam.put("width", leftoverConstant.copy());
+        leftoverBeam.put("color", leftoverConstant.copy());
+        leftoverBeam.put("end", leftoverBeamEnd);
+        var repairedBeam = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBeam);
+        if (!(repairedBeam instanceof CompoundTag beamTag) || leftoverBeam.getCompound("end").getFloat("x") != 1
+                || beamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 1f
+                || beamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 3f) {
+            throw new IllegalStateException("Photon 1 beam end was not read as a float list");
+        }
+        var leftoverBeamSparse = new CompoundTag();
+        leftoverBeamSparse.put("emitRate", leftoverConstant.copy());
+        leftoverBeamSparse.put("width", leftoverConstant.copy());
+        leftoverBeamSparse.put("color", leftoverConstant.copy());
+        var repairedBeamSparse = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBeamSparse);
+        if (!(repairedBeamSparse instanceof CompoundTag sparseBeamTag) || leftoverBeamSparse.contains("end")
+                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 3f
+                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 0f) {
+            throw new IllegalStateException("Photon 1 beam without end did not default to +X");
+        }
+        var leftoverFlatEmitter = new CompoundTag();
+        leftoverFlatEmitter.put("transform", leftoverTransform.copy());
+        leftoverFlatEmitter.put("startLifetime", leftoverConstant.copy());
+        leftoverFlatEmitter.put("emission", leftoverEmission.copy());
+        leftoverFlatEmitter.putString("name", "spark");
+        var repairedFlatEmitter = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverFlatEmitter);
+        if (!(repairedFlatEmitter instanceof CompoundTag flatEmitterTag) || leftoverFlatEmitter.contains("config")
+                || !"spark".equals(flatEmitterTag.getString("name"))
+                || !flatEmitterTag.contains("transform")
+                || !flatEmitterTag.getCompound("config").contains("startLifetime")
+                || !flatEmitterTag.getCompound("config").contains("emission")
+                || !flatEmitterTag.getCompound("config").getCompound("emission").getBoolean("legacyTickEmission")) {
+            throw new IllegalStateException("Photon 1 version-0 emitter config was not nested");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);

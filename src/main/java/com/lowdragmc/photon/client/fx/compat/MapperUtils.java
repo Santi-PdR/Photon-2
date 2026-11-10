@@ -536,6 +536,8 @@ public class MapperUtils {
             if (compound.contains("localPosition", Tag.TAG_COMPOUND)
                     && compound.getCompound("localPosition").contains("x", Tag.TAG_ANY_NUMERIC)
                     && !compound.getCompound("localPosition").contains("type")) return true;
+            if (isFlatEmitterData(compound)) return true;
+            if (isBeamConfig(compound) && needsLegacyBeamEnd(compound)) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
@@ -586,6 +588,8 @@ public class MapperUtils {
             changed |= rewriteLegacyInheritVelocity(compound);
             changed |= rewriteLegacySubEmitterList(compound);
             changed |= rewriteLegacyTransformCoords(compound);
+            changed |= rewriteLegacyEmitterConfig(compound);
+            changed |= rewriteLegacyBeamEnd(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -1053,6 +1057,63 @@ public class MapperUtils {
             changed = true;
         }
         return changed;
+    }
+
+    /**
+     * Photon 1 emitter version 0 stored duration/emission/etc. on the object. Photon 2 nests them
+     * under {@code config}. Already-converted files can still be missing that wrapper.
+     */
+    private static boolean rewriteLegacyEmitterConfig(CompoundTag compound) {
+        if (!isFlatEmitterData(compound)) return false;
+        var config = new CompoundTag();
+        for (var key : java.util.List.copyOf(compound.getAllKeys())) {
+            if (OBJECT_KEYS.contains(key)) continue;
+            config.put(key, compound.get(key).copy());
+            compound.remove(key);
+        }
+        compound.put("config", config);
+        return true;
+    }
+
+    private static final java.util.Set<String> OBJECT_KEYS = java.util.Set.of(
+            "name", "version", "transform", "enabled", "delay",
+            "selfVisible", "selfActive", "selfTimeScale", "selfTimelineVisible");
+
+    private static boolean isFlatEmitterData(CompoundTag compound) {
+        if (!compound.contains("transform") || compound.contains("config")) return false;
+        return (compound.contains("startLifetime") && compound.contains("emission"))
+                || (compound.contains("emitRate") && compound.contains("width") && compound.contains("color"))
+                || (compound.contains("widthOverTrail") && (compound.contains("time") || compound.contains("minVertexDistance")));
+    }
+
+    /** Photon 1 beams stored {@code end} as x/y/z and defaulted to +X; Photon 2 uses a float list defaulting to -Z. */
+    private static boolean rewriteLegacyBeamEnd(CompoundTag compound) {
+        if (!isBeamConfig(compound)) return false;
+        if (compound.contains("end", Tag.TAG_COMPOUND)
+                && compound.getCompound("end").contains("x", Tag.TAG_ANY_NUMERIC)
+                && !compound.getCompound("end").contains("type")) {
+            compound.put("end", mapCoords(compound.getCompound("end")));
+            return true;
+        }
+        if (!compound.contains("end")) {
+            var oldDefault = new CompoundTag();
+            oldDefault.putFloat("x", 3f);
+            compound.put("end", mapCoords(oldDefault));
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isBeamConfig(CompoundTag compound) {
+        return compound.contains("emitRate") && compound.contains("width") && compound.contains("color")
+                && !compound.contains("startLifetime") && !compound.contains("emission");
+    }
+
+    private static boolean needsLegacyBeamEnd(CompoundTag compound) {
+        if (compound.contains("end", Tag.TAG_COMPOUND)
+                && compound.getCompound("end").contains("x", Tag.TAG_ANY_NUMERIC)
+                && !compound.getCompound("end").contains("type")) return true;
+        return !compound.contains("end");
     }
 
     private static boolean isUnwrappedLegacyNumberFunction(CompoundTag tag) {
