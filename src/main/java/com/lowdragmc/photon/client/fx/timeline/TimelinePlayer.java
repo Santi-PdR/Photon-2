@@ -123,7 +123,7 @@ public class TimelinePlayer {
     /** The editor follows sections only during live playback, so replays and seeks stay in time order. */
     public void setFollowSections(boolean followSections) {
         this.followSections = followSections;
-        clock.follow(followSections);
+        clock.follow(followSections());
     }
 
     public boolean isFollowSections() {
@@ -572,6 +572,7 @@ public class TimelinePlayer {
             if (track.mute() || !(track instanceof SignalTrack signalTrack)) continue;
             var channel = signalTrack.displayName();
             for (var signal : signalTrack.signals()) {
+                if (stopped) return;
                 var t = signal.time();
                 if (t > from && (inclusive ? t <= to : t < to)) {
                     if (effect != null) effect.onTimelineSignal(channel, signal.name(), signal.data(), t);

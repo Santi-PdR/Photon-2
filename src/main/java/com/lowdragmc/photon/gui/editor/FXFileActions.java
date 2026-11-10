@@ -310,11 +310,13 @@ public final class FXFileActions {
                 layout.gapAll(4);
             });
             var name = fxId.getPath().substring(fxId.getPath().lastIndexOf('/') + 1);
-            row.addChildren(
-                    // a long id is cut at the buttons and rolls while hovered
-                    new Label().setText(fxId.toString())
-                            .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
-                            .layout(layout -> layout.flex(1).minWidth(0)),
+            // a long id is cut at the buttons, rolls while hovered and reads whole in the tooltip
+            var label = new Label().setText(fxId.toString())
+                    .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
+                    .layout(layout -> layout.flex(1).minWidth(0));
+            label.setOverflowVisible(false);
+            label.style(style -> style.tooltips(Component.literal(fxId.toString())));
+            row.addChildren(label,
                     ResourceDialogs.iconButton(Icons.IMPORT, "photon.manage_fxpack.convert", e ->
                             pickProjectFile(editor, name, projectFile -> {
                                 dialog.close();

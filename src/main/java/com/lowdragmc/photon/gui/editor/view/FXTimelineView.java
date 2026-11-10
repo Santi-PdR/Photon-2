@@ -641,6 +641,9 @@ public class FXTimelineView extends View implements TimelineContext {
         for (var marker : runtime.fxData.timeline().markers()) {
             if (marker != exclude) snapConsider(acc, tick, marker.tick());
         }
+        for (var section : runtime.fxData.timeline().sections()) {
+            if (section != snapExcludedSection) snapConsider(acc, tick, section.start());
+        }
         return acc[0];
     }
 
