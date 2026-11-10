@@ -13,6 +13,8 @@
     "ShaderInstanceMixin",
     "LDLibPayloadRegistryMixin",
     "SearchComponentMixin",
+    "ConfiguratorMixin",
+    "ConfiguratorParserMixin",
     "accessor.FilePackResourcesAccessor",
     "accessor.LDShaderHolderAccessor",
     "accessor.LightTextureAccessor",

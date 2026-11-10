@@ -430,6 +430,7 @@ public final class PhotonFXEditorSmokeTest {
         verifySectionCommand();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
+        verifyInspectorPersistedKeys();
         verifyParticleDestReuse();
         verifyPoppedOutScreenSize();
     }
@@ -793,6 +794,32 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("A force-removed light or fog still reported remnants");
         }
         Photon.LOGGER.info("[visible-remnants-smoke] beam, trail, AraTrail, light and fog report remnants while live");
+    }
+
+    /**
+     * LDLib2 2.2.46.a persistedKey/isPersistedFlat, used to mark FX instance inspector rows.
+     */
+    private static void verifyInspectorPersistedKeys() {
+        try {
+            var name = com.lowdragmc.photon.client.gameobject.FXObject.class.getDeclaredField("name");
+            if (com.lowdragmc.photon.gui.editor.PhotonConfigurators.persistedKey(name) == null) {
+                throw new IllegalStateException("FXObject.name has no persisted key; inspector marks cannot find it");
+            }
+            var transform = com.lowdragmc.photon.client.gameobject.FXObject.class.getDeclaredField("transform");
+            if (!com.lowdragmc.photon.gui.editor.PhotonConfigurators.isPersistedFlat(transform)
+                    && com.lowdragmc.photon.gui.editor.PhotonConfigurators.persistedKey(transform) == null) {
+                throw new IllegalStateException("FXObject.transform is neither flat nor keyed");
+            }
+            var row = new com.lowdragmc.lowdraglib2.configurator.ui.Configurator("row");
+            if (!(row instanceof com.lowdragmc.photon.core.mixins.PhotonConfiguratorExt)) {
+                throw new IllegalStateException("Configurator mixin did not apply; inspector cannot mark overridden rows");
+            }
+            com.lowdragmc.photon.gui.editor.PhotonConfigurators.setOverridden(row, true);
+            com.lowdragmc.photon.gui.editor.PhotonConfigurators.setOverridden(row, false);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("FXObject fields for inspector marks are missing", e);
+        }
+        Photon.LOGGER.info("[inspector-marks-smoke] persisted keys and the 2.2.46.a configurator mixin are in place");
     }
 
     /**
