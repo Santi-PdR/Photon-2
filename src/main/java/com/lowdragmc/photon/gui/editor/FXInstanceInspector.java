@@ -71,7 +71,10 @@ public final class FXInstanceInspector {
     @Nullable
     private static List<String> rowPath(Map<Configurator, List<String>> paths, Configurator clicked) {
         for (UIElement element = clicked; element != null; element = element.getParent()) {
-            if (element instanceof Configurator row && paths.get(row) instanceof List<String> path) return path;
+            if (element instanceof Configurator row) {
+                var path = paths.get(row);
+                if (path != null) return path;
+            }
         }
         return null;
     }
