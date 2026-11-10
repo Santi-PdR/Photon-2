@@ -463,6 +463,9 @@ public class MapperUtils {
     private static final java.util.Set<String> NUMBER_FUNCTION_TYPES = java.util.Set.of(
             "constant", "color", "random_constant", "random_color", "curve", "random_curve",
             "gradient", "random_gradient");
+    /** Photon 1 NumberFunction3Accessor still reads a raw x/y/z float compound for these fields. */
+    private static final java.util.Set<String> NUMBER_FUNCTION3_KEYS = java.util.Set.of(
+            "startSize", "startRotation", "size", "force", "linear", "orbital", "offset");
     private static final java.util.Set<String> MATERIAL_TYPES = java.util.Set.of(
             "texture", "custom_shader", "block_atlas");
     private static final java.util.Set<String> SHAPE_TYPES = java.util.Set.of(
@@ -536,6 +539,7 @@ public class MapperUtils {
             if (compound.contains("localPosition", Tag.TAG_COMPOUND)
                     && compound.getCompound("localPosition").contains("x", Tag.TAG_ANY_NUMERIC)
                     && !compound.getCompound("localPosition").contains("type")) return true;
+            if (isLegacyTransformUuids(compound)) return true;
             if (isFlatEmitterData(compound)) return true;
             if (isBeamConfig(compound) && needsLegacyBeamEnd(compound)) return true;
             if (asNumberFunction3List(compound) != null) return true;
@@ -543,6 +547,8 @@ public class MapperUtils {
                 var child = compound.get(key);
                 if (("startSize".equals(key) || "startRotation".equals(key)) && child instanceof CompoundTag nested
                         && isNumberFunctionCompound(nested)) return true;
+                if (NUMBER_FUNCTION3_KEYS.contains(key) && child instanceof CompoundTag nested
+                        && isNumericVec3(nested)) return true;
                 if (needsLegacyCodecRepair(child)) return true;
             }
         } else if (tag instanceof ListTag list) {
@@ -588,6 +594,7 @@ public class MapperUtils {
             changed |= rewriteLegacyInheritVelocity(compound);
             changed |= rewriteLegacySubEmitterList(compound);
             changed |= rewriteLegacyTransformCoords(compound);
+            changed |= rewriteLegacyTransformUuids(compound);
             changed |= rewriteLegacyEmitterConfig(compound);
             changed |= rewriteLegacyBeamEnd(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
@@ -600,6 +607,9 @@ public class MapperUtils {
                         changed = true;
                     } else if (("startSize".equals(key) || "startRotation".equals(key)) && isNumberFunctionCompound(nested)) {
                         compound.put(key, mapUniformTyped3VecFromMapped(nested));
+                        changed = true;
+                    } else if (NUMBER_FUNCTION3_KEYS.contains(key) && isNumericVec3(nested)) {
+                        compound.put(key, constantsFromNumericVec3(nested));
                         changed = true;
                     }
                 } else if (child instanceof ListTag list) {
@@ -1028,6 +1038,81 @@ public class MapperUtils {
         if (list.isEmpty()) return false;
         var first = list.getCompound(0);
         return first.contains("event") || first.contains("emitter") || first.contains("emitProbability");
+    }
+
+    /**
+     * Photon 1 persisted transform ids as UUID int arrays. LDLib2's UUID codec is a string.
+     * Only rewrite int arrays; native Photon 2 files already store strings.
+     */
+    private static boolean rewriteLegacyTransformUuids(CompoundTag compound) {
+        if (!compound.contains("localPosition") && !compound.contains("localScale")
+                && !compound.contains("localRotation")) return false;
+        boolean changed = false;
+        changed |= rewriteLegacyUuidField(compound, "id");
+        changed |= rewriteLegacyUuidField(compound, "_parentId");
+        if (compound.get("_childrenId") instanceof ListTag oldChildren) {
+            boolean any = false;
+            var children = new ListTag();
+            for (var child : oldChildren) {
+                if (isLegacyUuidTag(child)) {
+                    var id = readTransformUuid(child, null);
+                    if (id != null) {
+                        children.add(StringTag.valueOf(id.toString()));
+                        any = true;
+                        continue;
+                    }
+                }
+                children.add(child.copy());
+            }
+            if (any) {
+                compound.put("_childrenId", children);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static boolean rewriteLegacyUuidField(CompoundTag compound, String key) {
+        var tag = compound.get(key);
+        if (!isLegacyUuidTag(tag)) return false;
+        var id = readTransformUuid(tag, null);
+        if (id == null) return false;
+        compound.putString(key, id.toString());
+        return true;
+    }
+
+    private static boolean isLegacyTransformUuids(CompoundTag compound) {
+        if (!compound.contains("localPosition") && !compound.contains("localScale")
+                && !compound.contains("localRotation")) return false;
+        if (isLegacyUuidTag(compound.get("id")) || isLegacyUuidTag(compound.get("_parentId"))) return true;
+        if (compound.get("_childrenId") instanceof ListTag list) {
+            for (var child : list) if (isLegacyUuidTag(child)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isLegacyUuidTag(Tag tag) {
+        return tag instanceof IntArrayTag array && array.getAsIntArray().length == 4;
+    }
+
+    /** Photon 1 NumberFunction3Accessor still accepts a raw x/y/z float compound. */
+    private static boolean isNumericVec3(CompoundTag tag) {
+        return tag.contains("x", Tag.TAG_ANY_NUMERIC) && tag.contains("y", Tag.TAG_ANY_NUMERIC)
+                && tag.contains("z", Tag.TAG_ANY_NUMERIC) && !tag.contains("type")
+                && !tag.contains("x", Tag.TAG_COMPOUND);
+    }
+
+    private static ListTag constantsFromNumericVec3(CompoundTag source) {
+        var values = new ListTag();
+        for (var axis : java.util.List.of("x", "y", "z")) {
+            var constant = new CompoundTag();
+            constant.putString("type", "constant");
+            var data = new CompoundTag();
+            data.putDouble("number", source.getDouble(axis));
+            constant.put("data", data);
+            values.add(constant);
+        }
+        return values;
     }
 
     /** Photon 1 transforms stored x/y/z compounds; LDLib2 reads float lists. */

@@ -3186,6 +3186,44 @@ public final class PhotonFXEditorSmokeTest {
                 || transformTag.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f) {
             throw new IllegalStateException("Photon 1 transform vectors were not read as float lists");
         }
+        var leftoverUuid = java.util.UUID.fromString("12345678-1234-1234-1234-123456789abc");
+        var leftoverTransformUuid = leftoverTransform.copy();
+        leftoverTransformUuid.put("id", net.minecraft.nbt.NbtUtils.createUUID(leftoverUuid));
+        leftoverTransformUuid.put("_parentId", net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")));
+        var leftoverChildren = new ListTag();
+        leftoverChildren.add(net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002")));
+        leftoverTransformUuid.put("_childrenId", leftoverChildren);
+        var repairedTransformUuid = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransformUuid);
+        if (!(repairedTransformUuid instanceof CompoundTag uuidTag)
+                || !(leftoverTransformUuid.get("id") instanceof net.minecraft.nbt.IntArrayTag)
+                || !leftoverUuid.toString().equals(uuidTag.getString("id"))
+                || !"00000000-0000-0000-0000-000000000001".equals(uuidTag.getString("_parentId"))
+                || !"00000000-0000-0000-0000-000000000002".equals(uuidTag.getList("_childrenId", Tag.TAG_STRING).getString(0))) {
+            throw new IllegalStateException("Photon 1 transform UUID int arrays were not read as strings");
+        }
+        var leftoverTransformUuidLists = new CompoundTag();
+        leftoverTransformUuidLists.put("localPosition", transformTag.get("localPosition").copy());
+        leftoverTransformUuidLists.put("id", net.minecraft.nbt.NbtUtils.createUUID(leftoverUuid));
+        var repairedUuidLists = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransformUuidLists);
+        if (!(repairedUuidLists instanceof CompoundTag uuidListTag)
+                || !(leftoverTransformUuidLists.get("id") instanceof net.minecraft.nbt.IntArrayTag)
+                || !leftoverUuid.toString().equals(uuidListTag.getString("id"))) {
+            throw new IllegalStateException("Photon 1 transform UUID leftover was not repaired on list coords");
+        }
+        var leftoverNf3Floats = new CompoundTag();
+        leftoverNf3Floats.putFloat("x", 2.25f);
+        leftoverNf3Floats.putFloat("y", 3.5f);
+        leftoverNf3Floats.putFloat("z", 4.75f);
+        var leftoverNf3 = new CompoundTag();
+        leftoverNf3.put("startSize", leftoverNf3Floats);
+        leftoverNf3.put("force", leftoverNf3Floats.copy());
+        var repairedNf3 = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverNf3);
+        if (!(repairedNf3 instanceof CompoundTag nf3Tag) || leftoverNf3.getCompound("startSize").getFloat("x") != 2.25f
+                || nf3Tag.getList("startSize", Tag.TAG_COMPOUND).size() != 3
+                || nf3Tag.getList("startSize", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 2.25
+                || nf3Tag.getList("force", Tag.TAG_COMPOUND).getCompound(2).getCompound("data").getDouble("number") != 4.75) {
+            throw new IllegalStateException("Photon 1 NumberFunction3 float x/y/z was not read as constants");
+        }
         var leftoverBeamEnd = new CompoundTag(); leftoverBeamEnd.putFloat("x", 1); leftoverBeamEnd.putFloat("y", 2); leftoverBeamEnd.putFloat("z", 3);
         var leftoverBeam = new CompoundTag();
         leftoverBeam.put("emitRate", leftoverConstant.copy());
