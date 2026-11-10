@@ -38,6 +38,8 @@ public class FXRuntime implements IScene {
     private boolean emitted = false;
     /** Whether {@link #destroy} ran (re-{@link #emit}ting revives the runtime, e.g. editor replay). */
     private boolean destroyed = false;
+    /** Whether a non-forced {@link #destroy} is still playing the timeline's release section. */
+    private boolean releasing;
     /** The particle engine this runtime was emitted into (vanilla or an editor manager); see {@link #isValid()}. */
     @Nullable
     private ParticleTickHost host;
@@ -66,6 +68,10 @@ public class FXRuntime implements IScene {
                 root.setSelfTimeScale(rate);
                 if (!timelinePlayer.isEmpty()) {
                     timelinePlayer.tick(rate);
+                }
+                // the release section played out (or the timeline is empty): now let the remnants finish
+                if (releasing && timelinePlayer.isFinished()) {
+                    windDownAll();
                 }
             });
             // and the per-frame animation pass for smooth (interpolated) transform animation
@@ -181,13 +187,27 @@ public class FXRuntime implements IScene {
         emit(effect, 0);
     }
 
+    public void emit(IEffectExecutor effect, int delay) {
+        emit(effect, delay, null);
+    }
+
     /**
      * Start playback with a start delay (in ticks). Every object is emitted once up front; the
      * timeline only gates active/visibility and restarts objects via the {@link TimelinePlayer}.
+     * <p>
+     * {@code startSection} starts the timeline at the beginning of a named section instead of 0, which is what makes
+     * one effect usable as "start / loop / end": a combat effect can begin straight in its looping part. Null or an
+     * unknown name starts at 0, as before. Ported from Photon 26.3.
      */
-    public void emit(IEffectExecutor effect, int delay) {
+    public void emit(IEffectExecutor effect, int delay, @Nullable String startSection) {
+        try {
+            FXDiagnostics.playback(fxData, effect, delay);
+        } catch (Exception diagnosticError) {
+            Photon.LOGGER.warn("[fx-diagnostic] could not capture playback report", diagnosticError);
+        }
         emitted = true;
         destroyed = false;
+        releasing = false;
         // track the owning engine for isValid(): same resolution as IFXObject.emit's engine pick
         this.host = effect.getLevel() instanceof DummyWorld dummyWorld
                 && dummyWorld.getParticleManager() instanceof ParticleTickHost tickHost
@@ -198,11 +218,17 @@ public class FXRuntime implements IScene {
             fxRoot.setLastHostTick(host.tickCount());
         }
         for (var fxObject : objects.values()) {
-            fxObject.emit(effect);
-            // set after emit: emit() resets the object, which zeroes its delay
-            fxObject.setDelay(delay);
+            try {
+                fxObject.emit(effect);
+                // set after emit: emit() resets the object, which zeroes its delay
+                fxObject.setDelay(delay);
+            } catch (RuntimeException error) {
+                var location = effect instanceof FXEffectExecutor executor ? executor.getFx().getFxLocation() : null;
+                FXDiagnostics.failure(location, "emit", "object " + fxObject.getName() + " (" + fxObject.id() + ") failed", null, error);
+                throw error;
+            }
         }
-        timelinePlayer.begin(effect);
+        timelinePlayer.begin(effect, startSection);
     }
 
     /**
@@ -263,6 +289,11 @@ public class FXRuntime implements IScene {
      * playing. A looping emitter never finishes on its own (destroy it via its executor). A destroyed
      * runtime finishes once its remnants drain (immediately when destroyed with {@code force}).
      */
+    /** Sections of this effect's timeline; the entry point for jumping between them from a command. */
+    public com.lowdragmc.photon.client.fx.timeline.SectionControl sections() {
+        return timelinePlayer.sections();
+    }
+
     public boolean isFinished() {
         return timelinePlayer.isFinished()
                 && objects.values().stream().noneMatch(IFXObject::isPlaying);
@@ -305,11 +336,42 @@ public class FXRuntime implements IScene {
      * plays while remnants drain. A later {@link #emit} revives the runtime (editor replay).
      */
     public void destroy(boolean force) {
-        destroyed = true;
-        timelinePlayer.stop();
-        for (var fxObject : objects.values()) {
-            fxObject.remove(force);
+        if (force) {
+            destroyed = true;
+            releasing = false;
+            timelinePlayer.stop();
+            for (var fxObject : objects.values()) {
+                fxObject.remove(true);
+            }
+            return;
         }
+        // a dead entity's executor calls this every tick
+        if (destroyed) return;
+        destroyed = true;
+        // the timeline has a section to play on the way out: play it, and wind down when it finishes
+        if (timelinePlayer.beginWindDown()) {
+            releasing = true;
+            return;
+        }
+        windDownAll();
+    }
+
+    /** Bring the effect down for good: nothing new starts, what is already out there is left to finish. */
+    private void windDownAll() {
+        releasing = false;
+        timelinePlayer.stop();
+        if (root instanceof FXObject fxRoot) {
+            fxRoot.windDown();
+        } else {
+            for (var fxObject : objects.values()) {
+                fxObject.remove(false);
+            }
+        }
+    }
+
+    /** Whether a non-forced {@link #destroy} is still playing the release section. */
+    public boolean isReleasing() {
+        return releasing;
     }
 
     @Nullable

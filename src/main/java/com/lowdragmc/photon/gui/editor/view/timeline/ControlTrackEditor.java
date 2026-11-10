@@ -138,6 +138,26 @@ public class ControlTrackEditor extends ClipTrackEditor {
                     }
                 })
         );
+        // what happens when this clip stops covering the object: stop it dead, or let what is on screen finish
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
+                "photon.gui.editor.timeline.edit_clip.exit_mode", clip::exitMode,
+                v -> { clip.exitMode(v); ctx.refreshPreview(); }, clip.exitMode(), true,
+                List.of(Clip.ExitMode.CUT, Clip.ExitMode.DRAIN),
+                mode -> mode == Clip.ExitMode.DRAIN
+                        ? "photon.gui.editor.timeline.edit_clip.exit_mode.drain"
+                        : "photon.gui.editor.timeline.edit_clip.exit_mode.cut",
+                (mode, subGroup) -> { })
+        );
+        // what happens when the timeline wraps a repeating section or jumps while this clip is still on
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
+                "photon.gui.editor.timeline.edit_clip.seam_mode", clip::seamMode,
+                v -> { clip.seamMode(v); ctx.refreshPreview(); }, clip.seamMode(), true,
+                List.of(Clip.SeamMode.AUTO, Clip.SeamMode.RESTART),
+                mode -> mode == Clip.SeamMode.RESTART
+                        ? "photon.gui.editor.timeline.edit_clip.seam_mode.restart"
+                        : "photon.gui.editor.timeline.edit_clip.seam_mode.auto",
+                (mode, subGroup) -> { })
+        );
     }
 
     @Override
