@@ -151,6 +151,11 @@ public final class FXData {
                 var fxObject = IFXObject.deserializeWrapper(data);
                 if (fxObject != null) {
                     objects.add(fxObject);
+                } else {
+                    var type = data.getString("type");
+                    var id = data.getCompound("data").getCompound("transform").getString("id");
+                    FXDiagnostics.failure(null, "object-decode-" + type + "-" + id,
+                            "An FX object was discarded; see the codec error in latest.log", data, null);
                 }
             }
         }
