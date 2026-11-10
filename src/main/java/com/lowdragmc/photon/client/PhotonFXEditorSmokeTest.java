@@ -2961,6 +2961,31 @@ public final class PhotonFXEditorSmokeTest {
                 || !leftoverTexture.getTexture().toString().equals("minecraft:textures/particle/glow.png")) {
             throw new IllegalStateException("Photon 1 TextureMaterial did not load");
         }
+        var leftoverGradient = new CompoundTag();
+        leftoverGradient.putString("type", "Gradient");
+        leftoverGradient.put("a", floatList(0f, 1f, 1f, 1f));
+        leftoverGradient.put("r", floatList(0f, 1f, 1f, 1f));
+        leftoverGradient.put("g", floatList(0f, 0f, 1f, 0f));
+        leftoverGradient.put("b", floatList(0f, 0f, 1f, 0f));
+        var leftoverGradientFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverGradient);
+        if (!(leftoverGradientFn instanceof com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Gradient)
+                || leftoverGradient.contains("data")
+                || ((leftoverGradientFn.get(0f, () -> 0f).intValue() >> 16) & 0xff) < 200) {
+            throw new IllegalStateException("Photon 1 Gradient colour channels did not load");
+        }
+        var leftoverRandomGradient = new CompoundTag();
+        leftoverRandomGradient.putString("_type", "RandomGradient");
+        leftoverRandomGradient.put("a", leftoverGradient.copy());
+        leftoverRandomGradient.put("b", leftoverGradient.copy());
+        leftoverRandomGradient.remove("type");
+        leftoverRandomGradient.getCompound("a").remove("type");
+        leftoverRandomGradient.getCompound("b").remove("type");
+        var leftoverRandomFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverRandomGradient);
+        if (!(leftoverRandomFn instanceof com.lowdragmc.photon.client.gameobject.emitter.data.number.color.RandomGradient)
+                || leftoverRandomGradient.contains("data")
+                || leftoverRandomFn.get(0f, () -> 0f).intValue() == 0) {
+            throw new IllegalStateException("Photon 1 RandomGradient colour channels did not load");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);

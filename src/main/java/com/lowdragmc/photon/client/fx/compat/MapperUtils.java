@@ -516,6 +516,7 @@ public class MapperUtils {
             if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
                 return true;
             }
+            if (isPhoton1GradientColor(compound)) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 if (needsLegacyCodecRepair(compound.get(key))) return true;
@@ -543,6 +544,7 @@ public class MapperUtils {
                 changed = true;
             }
             changed |= wrapLegacyTypedPayload(compound);
+            changed |= rewriteLegacyGradientPayload(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -633,6 +635,64 @@ public class MapperUtils {
         if (data.isEmpty()) return false;
         compound.put("data", data);
         return true;
+    }
+
+    /**
+     * Photon 1 Gradient.serializeNBT() was the LDLib1 colour channels ({@code a/r/g/b}).
+     * Photon 2 stores {@code gradientColor}/{@code gradientColor0} with {@code a/rgb}.
+     * Wrapping the old channels under {@code data} without renaming them decodes as an empty
+     * gradient, which makes colour-over-lifetime fully transparent.
+     */
+    private static boolean rewriteLegacyGradientPayload(CompoundTag compound) {
+        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type"), compound);
+        if ("gradient".equals(type)) {
+            var payload = compound.contains("data", Tag.TAG_COMPOUND) ? compound.getCompound("data") : compound;
+            if (payload.contains("gradientColor", Tag.TAG_COMPOUND)
+                    && isPhoton1GradientColor(payload.getCompound("gradientColor"))) {
+                payload.put("gradientColor", convertPhoton1GradientColor(payload.getCompound("gradientColor")));
+                return true;
+            }
+            if (isPhoton1GradientColor(payload)) {
+                var data = new CompoundTag();
+                data.put("gradientColor", convertPhoton1GradientColor(payload));
+                compound.put("data", data);
+                return true;
+            }
+        } else if ("random_gradient".equals(type)) {
+            var payload = compound.contains("data", Tag.TAG_COMPOUND) ? compound.getCompound("data") : compound;
+            if (payload.contains("a", Tag.TAG_COMPOUND) && payload.contains("b", Tag.TAG_COMPOUND)
+                    && !payload.contains("gradientColor0", Tag.TAG_COMPOUND)) {
+                var data = new CompoundTag();
+                data.put("gradientColor0", convertPhoton1GradientColor(payload.getCompound("a")));
+                data.put("gradientColor1", convertPhoton1GradientColor(payload.getCompound("b")));
+                compound.put("data", data);
+                return true;
+            }
+            boolean changed = false;
+            if (payload.contains("gradientColor0", Tag.TAG_COMPOUND)
+                    && isPhoton1GradientColor(payload.getCompound("gradientColor0"))) {
+                payload.put("gradientColor0", convertPhoton1GradientColor(payload.getCompound("gradientColor0")));
+                changed = true;
+            }
+            if (payload.contains("gradientColor1", Tag.TAG_COMPOUND)
+                    && isPhoton1GradientColor(payload.getCompound("gradientColor1"))) {
+                payload.put("gradientColor1", convertPhoton1GradientColor(payload.getCompound("gradientColor1")));
+                changed = true;
+            }
+            return changed;
+        }
+        return false;
+    }
+
+    private static boolean isPhoton1GradientColor(CompoundTag tag) {
+        return tag.contains("r", Tag.TAG_LIST) && tag.contains("g", Tag.TAG_LIST) && tag.contains("b", Tag.TAG_LIST);
+    }
+
+    private static CompoundTag convertPhoton1GradientColor(CompoundTag tag) {
+        if (!isPhoton1GradientColor(tag)) return tag.copy();
+        return gradient(tag.getList("a", Tag.TAG_FLOAT), tag.getList("r", Tag.TAG_FLOAT),
+                tag.getList("g", Tag.TAG_FLOAT), tag.getList("b", Tag.TAG_FLOAT));
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {
