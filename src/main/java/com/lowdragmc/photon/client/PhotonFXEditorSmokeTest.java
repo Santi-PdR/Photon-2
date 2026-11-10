@@ -108,6 +108,78 @@ public final class PhotonFXEditorSmokeTest {
         }
     }
 
+    private static void verifyLegacyBlendSafety() {
+        for (var pair : java.util.Map.of("sub", "SUB", "REVERSE_sub", "REVERSE_SUB").entrySet()) {
+            var material = new net.minecraft.nbt.CompoundTag();
+            var blend = new net.minecraft.nbt.CompoundTag();
+            blend.putString("blendFunc", pair.getKey());
+            material.put("blendMode", blend);
+            var mapped = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapMaterial(material);
+            if (!mapped.getCompound("blendMode").getString("blendFunc").equals(pair.getValue())
+                    || !material.getCompound("blendMode").getString("blendFunc").equals(pair.getKey())) {
+                throw new IllegalStateException("Legacy blend conversion lost or mutated " + pair.getKey());
+            }
+        }
+        var mode = new com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode();
+        mode.setBlendFunc(null);
+        mode.setSrcColorFactor(null);
+        mode.setDstColorFactor(null);
+        mode.setSrcAlphaFactor(null);
+        mode.setDstAlphaFactor(null);
+        if (mode.getBlendFunc() != com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode.BlendFuc.ADD
+                || mode.getSrcColorFactor() == null || mode.getDstColorFactor() == null
+                || mode.getSrcAlphaFactor() == null || mode.getDstAlphaFactor() == null) {
+            throw new IllegalStateException("Invalid blend fallback failed");
+        }
+        com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan.isLayerSafe(mode);
+        mode.apply();
+        Photon.LOGGER.info("[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe");
+    }
+
+    /** Exercise the scene-masked bright pass with a bright sky and a small copy mismatch. */
+    private static void verifyBloomSceneMask() {
+        int framebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var scene = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 64, 64, false);
+        var input = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 64, 64, false);
+        var output = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline.resize(null, 32, 32, false);
+        try {
+            scene.setClearColor(0.6f, 0.6f, 0.6f, 1); scene.clear(Minecraft.ON_OSX);
+            input.setClearColor(0.62f, 0.62f, 0.62f, 1); input.clear(Minecraft.ON_OSX);
+            input.bindWrite(false);
+            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+            org.lwjgl.opengl.GL11.glScissor(24, 24, 16, 16);
+            org.lwjgl.opengl.GL11.glClearColor(1f, 0.6f, 0.6f, 1);
+            org.lwjgl.opengl.GL11.glClear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT);
+            org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
+            var shader = com.lowdragmc.photon.client.PhotonShaders.getBrightPassShader();
+            if (shader == null) throw new IllegalStateException("Missing bloom bright pass shader");
+            com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+            com.mojang.blaze3d.systems.RenderSystem.disableBlend();
+            shader.setSampler("inputSampler", input);
+            shader.setSampler("sceneSampler", scene);
+            shader.safeGetUniform("Threshold").set(0.5f);
+            shader.safeGetUniform("Knee").set(0.1f);
+            shader.safeGetUniform("SceneMask").set(1f);
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.blitShader(shader, output, false);
+            output.bindWrite(false);
+            var pixel = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            org.lwjgl.opengl.GL11.glReadPixels(4, 4, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (pixel.get(0) > 0.03f) throw new IllegalStateException("Tiny scene mismatch amplified into a bright halo: " + pixel.get(0));
+            org.lwjgl.opengl.GL11.glReadPixels(16, 16, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
+            if (pixel.get(0) < 0.15f || pixel.get(1) > 0.03f)
+                throw new IllegalStateException("Scene mask lost or recoloured real FX contribution: " + pixel.get(0) + "," + pixel.get(1));
+            Photon.LOGGER.info("[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives");
+        } finally {
+            scene.destroyBuffers(); input.destroyBuffers(); output.destroyBuffers();
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER, framebuffer);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+    }
+
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
         var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
@@ -122,6 +194,7 @@ public final class PhotonFXEditorSmokeTest {
                     + " built-in Kila materials; expected " + expectedBuiltinKilaMaterials);
         }
         Photon.LOGGER.info("[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector");
+        com.lowdragmc.photon.client.fx.FXBloom.endFrame();
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
@@ -176,12 +249,136 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     /**
+     * A search box that has a value already chosen must still open on the whole catalogue.
+     * <p>
+     * This is the reported symptom: "the particle picker and the fx list are still the same" — the dropdown only
+     * ever showed the value already selected, and typing made it worse because the first keystroke was appended to
+     * that leftover name instead of replacing it. The cause is in the widget itself (LDLib 2.2.39, fixed upstream in
+     * 2.2.39.8): it searches on open with the text the field still holds, which is the current value's name.
+     * {@code SearchComponentMixin} re-runs the search empty and selects the text.
+     * <p>
+     * The box is built the way the editor builds one (a {@code SearchComponentConfigurator} over a two-entry
+     * catalogue), given a selected value, and opened. Without the fix the dialog holds that one entry; with it, both.
+     */
+    private static void verifySearchBoxOpensOnTheWholeCatalogue() {
+        var queried = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var candidateCount = new java.util.concurrent.atomic.AtomicInteger();
+        var searchDone = new java.util.concurrent.CountDownLatch(1);
+        var configurator = new com.lowdragmc.lowdraglib2.configurator.ui.SearchComponentConfigurator<>(
+                "catalogue", () -> "photon:chosen", value -> { }, "photon:chosen", false,
+                (word, handler) -> {
+                    queried.add(word == null ? "<null>" : word);
+                    int matched = 0;
+                    for (var candidate : java.util.List.of("photon:chosen", "photon:other")) {
+                        if (Thread.currentThread().isInterrupted()) return;
+                        if (candidate.contains(word == null ? "" : word)) {
+                            handler.accept(candidate);
+                            matched++;
+                        }
+                    }
+                    if ((word == null || word.isEmpty()) && matched == 2) {
+                        candidateCount.set(matched);
+                        searchDone.countDown();
+                    }
+                },
+                value -> value,
+                com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider.text(
+                        value -> Component.literal(value == null ? "---" : value)));
+        var box = configurator.searchComponent;
+        if (!"photon:chosen".equals(box.getValue())) {
+            throw new IllegalStateException("The search box did not start on the chosen value");
+        }
+        // What show() does, minus the dialog (there is no screen to add it to in a headless run): the box runs its
+        // search and the candidates are pulled in by the search engine, which is asynchronous.
+        box.show();
+        try {
+            if (!searchDone.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Opening the box searched " + queried + " but did not collect both effects");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the picker search", e);
+        }
+        // and the fix asks for the whole catalogue, not for the value already chosen
+        if (!queried.contains("")) {
+            throw new IllegalStateException("Opening the search box never searched the whole catalogue, only "
+                    + queried);
+        }
+        // what the author then types replaces the leftover name instead of being appended to it
+        var field = readField(box, "textField");
+        if (!(field instanceof com.lowdragmc.lowdraglib2.gui.ui.elements.TextField text)
+                || text.getSelectionStart() != 0 || text.getSelectionEnd() != text.getValue().length()) {
+            throw new IllegalStateException("The chosen name was left unselected, so typing would append to it");
+        }
+        Photon.LOGGER.info("[search-box-smoke] opening a picker with a value already chosen lists the whole "
+                + "catalogue ({}) and selects the old name so typing replaces it", candidateCount.get());
+    }
+
+    /** Bloom enable + intensity live on the FX, survive a save, and default the old look when missing. */
+    private static void verifyFxBloomRoundtrip() {
+        var data = new com.lowdragmc.photon.client.fx.FXData();
+        if (!data.bloomEnabled() || Math.abs(data.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A new FX did not default to bloom on at the old intensity");
+        }
+        data.setBloomEnabled(false);
+        data.setBloomIntensity(1.25f);
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var tag = data.serializeNBT(provider);
+        var copy = data.copy(false);
+        if (copy.bloomEnabled() || Math.abs(copy.bloomIntensity() - 1.25f) > 0.0001f) {
+            throw new IllegalStateException("FXData.copy dropped bloom");
+        }
+        var loaded = new com.lowdragmc.photon.client.fx.FXData();
+        loaded.deserializeNBT(provider, tag);
+        if (loaded.bloomEnabled() || Math.abs(loaded.bloomIntensity() - 1.25f) > 0.0001f) {
+            throw new IllegalStateException("FX bloom did not survive save: enabled=" + loaded.bloomEnabled()
+                    + " intensity=" + loaded.bloomIntensity());
+        }
+        var legacy = new com.lowdragmc.photon.client.fx.FXData();
+        legacy.deserializeNBT(provider, new net.minecraft.nbt.CompoundTag());
+        if (!legacy.bloomEnabled() || Math.abs(legacy.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A file without bloom keys did not keep the old look");
+        }
+        Photon.LOGGER.info("[fx-bloom-smoke] enable+intensity are saved on the FX and default on at {}",
+                com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY);
+    }
+
+    /** Read a private field of a library widget (the test drives the real widget, not a copy of it). */
+    private static Object readField(Object owner, String name) {
+        try {
+            var field = owner.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(owner);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not read " + owner.getClass().getSimpleName() + "." + name, e);
+        }
+    }
+
+    /**
      * Prove the two editor entry points that were reported broken: the fx picker lists effect ids (a list that
-     * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes the config
-     * without changing the shipped default.
+     * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes this FX's
+     * intensity, not a client-wide config.
      */
     private static void verifyFxPickerAndBloomControl() {
         var fxIds = com.lowdragmc.photon.client.fx.FXHelper.listAllFX();
+        var exampleId = new net.minecraft.resources.ResourceLocation("photon", "nested/example");
+        var fakeRoot = java.nio.file.Path.of("test-game");
+        if (!com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "fxpack/legacy-ldlib", exampleId)
+                .equals(fakeRoot.resolve("ldlib/assets/photon/fx/nested/example.fx"))
+                || !com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "fxpack/editor-ldlib2", exampleId)
+                .equals(fakeRoot.resolve("ldlib2/assets/photon/fx/nested/example.fx"))
+                || !com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "photon/workspace", exampleId)
+                .equals(fakeRoot.resolve("photon/assets/photon/fx/nested/example.fx"))
+                || com.lowdragmc.photon.client.fx.FXSourceReport.knownFile(fakeRoot, "mod_resources", exampleId) != null)
+            throw new IllegalStateException("FX source report attributed a pack to the wrong path");
+        if (!fxIds.isEmpty()) {
+            var id = fxIds.get(0);
+            var source = Minecraft.getInstance().getResourceManager().getResource(com.lowdragmc.photon.client.fx.FXHelper.fileLocation(id)).orElseThrow();
+            if (com.lowdragmc.photon.client.fx.FXSourceReport.describe(id).stream().noneMatch(line -> line.equals("Selected pack: " + source.sourcePackId())))
+                throw new IllegalStateException("FX source report omitted the selected resource pack");
+        }
         var found = new ArrayList<String>();
         com.lowdragmc.photon.client.fx.FXHelper.searchFX("", found::add);
         var withClearEntry = found.size() == fxIds.size() + 1 && found.get(0).isEmpty();
@@ -204,34 +401,529 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[fx-picker-smoke] the fx search lists every loadable effect ({} ids) and a fresh search reads the live list",
                 fxIds.size());
 
+        verifySearchBoxOpensOnTheWholeCatalogue();
+        verifyFxBloomRoundtrip();
+
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
-        var shippedDefault = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-        var written = com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.current();
-        if (Math.abs(written - shippedDefault.floatValue()) > 0.0001f) {
-            throw new IllegalStateException("The bloom control shows " + written + " instead of the config value " + shippedDefault);
+        var written = control.current();
+        if (Math.abs(written - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("The bloom control shows " + written + " instead of the FX default");
         }
         if (control.slider.getMin() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MIN
                 || control.slider.getMax() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MAX) {
-            throw new IllegalStateException("The bloom control's slider does not span the config's range");
+            throw new IllegalStateException("The bloom control's slider does not span 0..2");
         }
-        Photon.LOGGER.info("[bloom-control-smoke] the scene bar's bloom control reads the live intensity ({}) and spans 0..2",
+        Photon.LOGGER.info("[bloom-control-smoke] the scene bar's bloom control reads this FX's intensity ({}) and spans 0..2",
                 written);
 
-        // the control writes through to the config the renderer reads, and leaves nothing behind
-        var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-        try {
-            control.slider.setValue(0.7f, true);
-            var applied = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-            if (Math.abs(applied - 0.7) > 0.0001) {
-                throw new IllegalStateException("Dragging the bloom control wrote " + applied + " instead of 0.7");
-            }
-            Photon.LOGGER.info("[bloom-control-smoke] dragging the scene bar's bloom slider writes bloom_intensity={}", applied);
-        } finally {
-            com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
+        control.slider.setValue(0.7f, true);
+        var applied = control.current();
+        if (Math.abs(applied - 0.7f) > 0.0001f) {
+            throw new IllegalStateException("Dragging the bloom control wrote " + applied + " instead of 0.7");
+        }
+        Photon.LOGGER.info("[bloom-control-smoke] dragging the scene bar's bloom slider writes this FX's bloomIntensity={}", applied);
+
+        verifyLooseTextureLookup();
+        verifySliderDragsContinuously();
+        verifyCyclicLifetimes();
+        verifySections();
+        verifySectionCommand();
+        verifyDestroyKeepsRemnants();
+        verifyVisibleRemnants();
+        verifyInspectorPersistedKeys();
+        verifyParticleDestReuse();
+        verifyPoppedOutScreenSize();
+    }
+
+    /**
+     * {@code /photon fx section ...} is the only way to steer a playing effect from in game, so it is checked end to
+     * end: the command is built by the server command tree, the packet survives encoding (that is what travels to the
+     * client), and the decoded packet moves a real clock between its sections. Encoding and decoding are where a
+     * network command breaks, and a broken one fails silently: the command answers "done" and nothing moves.
+     */
+    private static void verifySectionCommand() {
+        // the subcommand is part of the tree: /photon fx section entity <targets> jump <name> [location]
+        var photon = com.lowdragmc.photon.ServerCommands.createServerCommands().get(0);
+        if (!"photon".equals(photon.getLiteral())) {
+            throw new IllegalStateException("The server command root is not /photon: " + photon.getLiteral());
+        }
+        var fx = literal(photon, "fx");
+        if (fx == null || literal(fx, "section") == null) {
+            throw new IllegalStateException("/photon fx section is not registered");
+        }
+        var sectionNode = literal(fx, "section");
+        // the target is an argument (any entities / a block position), and the actions hang off it
+        var entity = sectionNode == null ? null : literal(sectionNode, "entity");
+        var targets = entity == null ? null : argument(entity, "entities");
+        var jump = targets == null ? null : literal(targets, "jump");
+        // the section name is an argument, not a literal
+        if (jump == null || argument(jump, "section") == null) {
+            throw new IllegalStateException("/photon fx section entity jump <section> is not registered");
+        }
+        var block = sectionNode == null ? null : literal(sectionNode, "block");
+        var pos = block == null ? null : argument(block, "pos");
+        var advance = pos == null ? null : literal(pos, "advance");
+        var release = pos == null ? null : literal(pos, "release");
+        if (advance == null || release == null) {
+            throw new IllegalStateException("/photon fx section block advance/release are not registered");
+        }
+        // the two unnamed actions take an optional trailing location
+        if (argument(release, "location") == null || argument(advance, "location") == null) {
+            throw new IllegalStateException("/photon fx section block release [location] is not registered");
         }
 
-        verifySliderDragsContinuously();
-        verifyLooseTextureLookup();
+        // a packet as the server builds it, through the wire and back
+        var packetType = com.lowdragmc.photon.command.EffectSectionCommand.Action.JUMP;
+        var sent = new com.lowdragmc.photon.command.EffectSectionCommand();
+        setCommandField(sent, "action", packetType);
+        setCommandField(sent, "section", "loop");
+        var buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        sent.encode(buf);
+        var received = com.lowdragmc.photon.command.EffectSectionCommand.decodePacket(buf);
+        if (readCommandField(received, "action") != packetType
+                || !"loop".equals(readCommandField(received, "section"))) {
+            throw new IllegalStateException("A section command did not survive being encoded: action="
+                    + readCommandField(received, "action") + ", section=" + readCommandField(received, "section"));
+        }
+
+        // and it does something: the same clock the timeline uses, with two named stretches
+        var clock = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("intro", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("loop", 10)
+                        .repeat(com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)), 20, null, true);
+        clock.begin(null);
+        if (!"intro".equals(clock.current())) {
+            throw new IllegalStateException("The clock did not start in its first section");
+        }
+        // jump: from the next tick on, the loop section plays
+        if (!received.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
+            throw new IllegalStateException("A jump command was refused by a clock that has the section");
+        }
+        clock.applyPendingJump();
+        if (!"loop".equals(clock.current())) {
+            throw new IllegalStateException("The jump command did not move the clock into 'loop': "
+                    + clock.current());
+        }
+        // a name the effect does not have changes nothing, and says so
+        setCommandField(sent, "section", "does_not_exist");
+        if (sent.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
+            throw new IllegalStateException("A jump to a section that does not exist was reported as done");
+        }
+        Photon.LOGGER.info("[section-command-smoke] /photon fx section is registered and a jump command "
+                + "moves a playing timeline into the named section");
+    }
+
+    /**
+     * The child nodes of a command node. A node that has been built (what the tree hands back once a literal is
+     * found) exposes {@code getChildren()}; a builder that has not been built yet exposes its arguments.
+     */
+    private static java.util.List<com.mojang.brigadier.tree.CommandNode<?>> children(Object node) {
+        if (node instanceof com.mojang.brigadier.tree.CommandNode<?> built) {
+            return java.util.List.copyOf(built.getChildren());
+        }
+        if (node instanceof com.mojang.brigadier.builder.ArgumentBuilder<?, ?> builder) {
+            return java.util.List.copyOf(builder.getArguments());
+        }
+        return java.util.List.of();
+    }
+
+    /** The literal child {@code name} of a command node, or null. */
+    private static Object literal(Object node, String name) {
+        for (var child : children(node)) {
+            if (child instanceof com.mojang.brigadier.tree.LiteralCommandNode<?> literal
+                    && name.equals(literal.getLiteral())) {
+                return literal;
+            }
+        }
+        return null;
+    }
+
+    /** The argument child named {@code name} of a command node, or null (arguments are named, not literal). */
+    private static Object argument(Object node, String name) {
+        for (var child : children(node)) {
+            if (child instanceof com.mojang.brigadier.tree.ArgumentCommandNode<?, ?> argument
+                    && name.equals(argument.getName())) {
+                return argument;
+            }
+        }
+        return null;
+    }
+
+    /** Set a private field of a packet, the way the server command fills it in. */
+    private static void setCommandField(Object packet, String name, Object value) {
+        try {
+            var field = packet.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            field.set(packet, value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not set EffectSectionCommand." + name, e);
+        }
+    }
+
+    /** Read a private field of a packet, the way the client handler reads it. */
+    private static Object readCommandField(Object packet, String name) {
+        try {
+            var field = packet.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(packet);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not read EffectSectionCommand." + name, e);
+        }
+    }
+
+    /**
+     * Timeline sections, ported from 26.3, checked where they decide something: which tick of the timeline plays next.
+     * <p>
+     * A section set to repeat 3 must play its own stretch three times and only then move on — not run into the next
+     * section the first time it reaches the end. A section set to end must stop the clock instead of continuing, a
+     * "goto" must jump. Sections that would be empty (sharing a start, or starting at the content end) are dropped
+     * rather than making a zero-length pass. And a timeline without sections has to save exactly as before, because
+     * every project made until now is one of those.
+     */
+    private static void verifySections() {
+        // A (0..10) repeats 3 times, then B (10..20) plays: 30 ticks of A before B is reached
+        var repeating = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0).repeat(3),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("B", 10)), 20, null, true);
+        repeating.begin(null);
+        for (int i = 0; i < 5; i++) {
+            repeating.step(5);
+        }
+        // 25 ticks in: A has played twice and is on its third pass, still inside its own stretch (0..10)
+        if (!"A".equals(repeating.current()) || repeating.pass() != 2
+                || repeating.time() < 0 || repeating.time() > 10) {
+            throw new IllegalStateException("A section set to repeat 3 did not stay inside its own stretch: now in '"
+                    + repeating.current() + "', pass " + repeating.pass() + ", tick " + repeating.time());
+        }
+        repeating.step(5); // the 30th tick: the third pass ends and B starts exactly at its own start
+        if (!"B".equals(repeating.current()) || Math.abs(repeating.time() - 10) > 1e-4) {
+            throw new IllegalStateException("After three passes A did not hand over to B at tick 10: got '"
+                    + repeating.current() + "' at " + repeating.time());
+        }
+        Photon.LOGGER.info("[sections-smoke] a section repeating 3 times plays 30 ticks and then starts the next one");
+
+        // "then: end" stops the clock at the seam instead of running into the next section
+        var ending = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0)
+                        .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.END)), 20, null, true);
+        ending.begin(null);
+        ending.step(25);
+        if (!ending.endPending() && !ending.ended()) {
+            throw new IllegalStateException("\"then: end\" let the clock run past the end of its section to "
+                    + ending.time());
+        }
+
+        // "goto" jumps to the named section instead of carrying on
+        var jumping = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0)
+                        .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO).target("C"),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("B", 10),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("C", 20)), 30, null, true);
+        jumping.begin(null);
+        jumping.step(15);
+        if (!"C".equals(jumping.current())) {
+            throw new IllegalStateException("\"goto C\" landed in '" + jumping.current() + "' instead");
+        }
+
+        // sections that would be empty are left out and reported, not silently played as zero-length passes
+        var dropped = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("twin", 0),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("past-the-end", 40)), 20, null, true);
+        if (dropped.names().size() != 1 || dropped.skipped().size() != 2) {
+            throw new IllegalStateException("Empty sections were not left out: kept " + dropped.names()
+                    + ", skipped " + dropped.skipped());
+        }
+
+        // a destroy walks into the release section and plays it once instead of repeating it forever
+        var releasing = new com.lowdragmc.photon.client.fx.timeline.SectionClock(java.util.List.of(
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0).repeat(
+                        com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER),
+                new com.lowdragmc.photon.client.fx.timeline.TimelineSection("release", 10).repeat(
+                        com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)), 20, "release", true);
+        releasing.begin(null);
+        if (!releasing.beginWindDown()) {
+            throw new IllegalStateException("Stopping an effect with a release section did nothing");
+        }
+        releasing.applyPendingJump();
+        if (!"release".equals(releasing.current()) || !releasing.isReleased()) {
+            throw new IllegalStateException("The release section was not entered on stop");
+        }
+        // once through it, a forever release section must not repeat: the clock runs past its end, which is how the
+        // runtime knows the effect is finished and can let the remnants go
+        releasing.step(15);
+        if (releasing.time() <= 20) {
+            throw new IllegalStateException("A forever release section kept looping while the effect was stopped: "
+                    + "the clock is at " + releasing.time() + " instead of past the end");
+        }
+        Photon.LOGGER.info("[release-section-smoke] stopping enters the release section and it plays once, not forever");
+
+        // saving: a timeline without sections writes neither key, so every existing project reads and writes as before
+        var bare = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        var bareTag = bare.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        if (bareTag.contains("sections") || bareTag.contains("release")) {
+            throw new IllegalStateException("A timeline without sections saved extra keys: " + bareTag.getAllKeys());
+        }
+        // and one with them round-trips, including the parts that are only written when they differ from the default
+        var withSections = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        withSections.sections().add(new com.lowdragmc.photon.client.fx.timeline.TimelineSection("intro", 0)
+                .repeat(com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER)
+                .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO).target("loop"));
+        withSections.sections().add(new com.lowdragmc.photon.client.fx.timeline.TimelineSection("loop", 10)
+                .repeat(3));
+        withSections.releaseSection("loop").releaseNow(false);
+        var tag = withSections.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        if (!tag.contains("sections") || !tag.contains("release")) {
+            throw new IllegalStateException("A timeline with sections did not save them");
+        }
+        var reloaded = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        reloaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), tag);
+        if (reloaded.sections().size() != 2
+                || !"intro".equals(reloaded.sections().get(0).name())
+                || reloaded.sections().get(0).repeat() != com.lowdragmc.photon.client.fx.timeline.TimelineSection.FOREVER
+                || reloaded.sections().get(0).then()
+                        != com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.GOTO
+                || !"loop".equals(reloaded.sections().get(0).target())
+                || Math.abs(reloaded.sections().get(1).start() - 10) > 1e-4
+                || reloaded.sections().get(1).repeat() != 3
+                || reloaded.sections().get(1).then()
+                        != com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.LINEAR
+                || !"loop".equals(reloaded.releaseSection())
+                || reloaded.releaseNow()) {
+            throw new IllegalStateException("Sections did not survive saving: " + reloaded.sections().size()
+                    + " section(s), release '" + reloaded.releaseSection() + "', now=" + reloaded.releaseNow());
+        }
+        // The editor must not offer names that the runtime cannot distinguish in jump/release requests.
+        if (com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, "intro")
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, " ")
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, " new ")
+                || !com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionName(reloaded, "outro")) {
+            throw new IllegalStateException("The section editor accepted an empty/duplicate name or rejected a new one");
+        }
+        var lengthTrack = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        lengthTrack.clips().add(new com.lowdragmc.photon.client.fx.timeline.Clip(0, 20, 1f));
+        reloaded.tracks().add(lengthTrack);
+        var moving = reloaded.sections().get(1);
+        if (!com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 10)
+                || !com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 12.5)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 0)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, 20)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, -1)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.validSectionStart(reloaded, moving, Double.NaN)) {
+            throw new IllegalStateException("The section editor accepted an invalid or duplicate boundary");
+        }
+        if (!com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 12.6)
+                || moving.start() != 13
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 0)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, 20)
+                || com.lowdragmc.photon.gui.editor.view.FXTimelineView.dragSectionTo(reloaded, moving, Double.NaN)
+                || moving.start() != 13) {
+            throw new IllegalStateException("Dragging a section did not snap to ticks or rejected boundaries moved it");
+        }
+        // a project written before sections existed has no key at all and must load with none
+        var legacy = tag.copy();
+        legacy.remove("sections");
+        legacy.remove("release");
+        var old = new com.lowdragmc.photon.client.fx.timeline.Timeline();
+        old.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), legacy);
+        if (!old.sections().isEmpty() || old.releaseSection() != null || !old.releaseNow()) {
+            throw new IllegalStateException("An older project did not load as one implicit section");
+        }
+        Photon.LOGGER.info("[sections-save-smoke] sections and the release section survive saving, "
+                + "and an older project still loads as a single stretch");
+    }
+
+    /**
+     * Photon 26.2.2.11: stopping without force must not treat remnants as discarded (that is what made lights go
+     * out while particles were still fading) and an FX instance must wind down what it placed, not vanish.
+     */
+    private static void verifyDestroyKeepsRemnants() {
+        var runtime = new com.lowdragmc.photon.client.fx.FX().createRuntime();
+        if (runtime.isValid() || runtime.isTracked()) {
+            throw new IllegalStateException("A runtime is live before it is emitted");
+        }
+        runtime.destroy(false);
+        if (runtime.isValid()) {
+            throw new IllegalStateException("Stopping an effect left it valid");
+        }
+        if (runtime.isTracked()) {
+            throw new IllegalStateException("A runtime that never played is still tracked");
+        }
+        var instance = new com.lowdragmc.photon.client.gameobject.FXInstanceObject();
+        instance.windDown();
+        if (!instance.isWindingDown()) {
+            throw new IllegalStateException("Winding down an FX instance did nothing");
+        }
+        if (instance.sections() != null) {
+            throw new IllegalStateException("An instance outside a runtime has a section control");
+        }
+        Photon.LOGGER.info("[destroy-remnant-smoke] destroy(false) invalidates the runtime; an FX instance winds down");
+    }
+
+    /**
+     * Drain keeps an object ticking while {@code hasVisibleRemnants()} is true. Particle emitters already
+     * reported leftover particles; beams, trails and lights did not, so a Drain clip cut them off.
+     */
+    private static void verifyVisibleRemnants() {
+        var beam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        beam.reset();
+        if (!beam.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live beam reported no remnants; Drain would cut it off");
+        }
+        var trail = new TrailEmitter();
+        trail.reset();
+        if (!trail.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live trail reported no remnants; Drain would cut it off");
+        }
+        var ara = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        ara.reset();
+        if (!ara.hasVisibleRemnants()) {
+            throw new IllegalStateException("A live AraTrail reported no remnants; Drain would cut it off");
+        }
+        var light = new com.lowdragmc.photon.client.gameobject.light.LightObject();
+        if (!light.hasVisibleRemnants()) {
+            throw new IllegalStateException("A running light reported no remnants; Drain would cut it off");
+        }
+        var fog = new com.lowdragmc.photon.client.gameobject.light.FogVolumeObject();
+        if (!fog.hasVisibleRemnants()) {
+            throw new IllegalStateException("A running fog volume reported no remnants; Drain would cut it off");
+        }
+        light.remove(true);
+        fog.remove(true);
+        if (light.hasVisibleRemnants() || fog.hasVisibleRemnants()) {
+            throw new IllegalStateException("A force-removed light or fog still reported remnants");
+        }
+        Photon.LOGGER.info("[visible-remnants-smoke] beam, trail, AraTrail, light and fog report remnants while live");
+    }
+
+    /**
+     * LDLib2 2.2.46.a persistedKey/isPersistedFlat, used to mark FX instance inspector rows.
+     */
+    private static void verifyInspectorPersistedKeys() {
+        try {
+            var name = com.lowdragmc.photon.client.gameobject.FXObject.class.getDeclaredField("name");
+            if (com.lowdragmc.photon.gui.editor.PhotonConfigurators.persistedKey(name) == null) {
+                throw new IllegalStateException("FXObject.name has no persisted key; inspector marks cannot find it");
+            }
+            var transform = com.lowdragmc.photon.client.gameobject.FXObject.class.getDeclaredField("transform");
+            if (!com.lowdragmc.photon.gui.editor.PhotonConfigurators.isPersistedFlat(transform)
+                    && com.lowdragmc.photon.gui.editor.PhotonConfigurators.persistedKey(transform) == null) {
+                throw new IllegalStateException("FXObject.transform is neither flat nor keyed");
+            }
+            var row = new com.lowdragmc.lowdraglib2.configurator.ui.Configurator("row");
+            if (!(row instanceof com.lowdragmc.photon.gui.editor.PhotonConfiguratorExt)) {
+                throw new IllegalStateException("Configurator mixin did not apply; inspector cannot mark overridden rows");
+            }
+            com.lowdragmc.photon.gui.editor.PhotonConfigurators.setOverridden(row, true);
+            com.lowdragmc.photon.gui.editor.PhotonConfigurators.setOverridden(row, false);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("FXObject fields for inspector marks are missing", e);
+        }
+        Photon.LOGGER.info("[inspector-marks-smoke] persisted keys and the 2.2.46.a configurator mixin are in place");
+    }
+
+    /**
+     * Photon 26.3: pose/color reads write into a caller vector so the particle bake does not allocate per particle.
+     * The no-arg getters still return a fresh vector, so anything that stored the old result is unchanged.
+     */
+    private static void verifyParticleDestReuse() {
+        var emitter = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter();
+        var dest = new org.joml.Vector4f(9, 8, 7, 6);
+        var out = emitter.getRGBAColor(dest);
+        var fresh = emitter.getRGBAColor();
+        if (out != dest || dest.x != fresh.x || dest.y != fresh.y || dest.z != fresh.z || dest.w != fresh.w) {
+            throw new IllegalStateException("Emitter color did not write into the caller vector: " + dest + " vs " + fresh);
+        }
+        if (fresh == dest) {
+            throw new IllegalStateException("The no-arg color getter reused the caller vector");
+        }
+        Photon.LOGGER.info("[particle-dest-smoke] emitter color writes into the caller vector ({})", dest);
+    }
+
+    /**
+     * Photon 2.2.10: a popped-out editor draws into its own OS window. ScreenSize must follow that
+     * surface, not the game window, or scene color/depth sampling reads the wrong texel.
+     */
+    private static void verifyPoppedOutScreenSize() {
+        var surface = com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface.current();
+        if (surface == null) {
+            throw new IllegalStateException("UISurface.current() is null; ScreenSize cannot follow a popped-out editor");
+        }
+        int width = surface.framebufferWidth();
+        int height = surface.framebufferHeight();
+        if (width <= 0 || height <= 0) {
+            throw new IllegalStateException("UISurface framebuffer is " + width + "x" + height);
+        }
+        Photon.LOGGER.info("[popped-out-screen-size-smoke] UISurface {}x{} mainWindow={}",
+                width, height, surface.isMainWindow());
+    }
+
+    /**
+     * The two lifetime modes ported from 26.3, checked where they actually decide something: {@code T} per tick.
+     * <p>
+     * {@code Once} must behave exactly as before (0 → 1, then it holds 1) so nothing that already worked changes.
+     * {@code Loop} must return to 0 at every lifetime instead of clamping — that is the whole point of the mode.
+     * {@code PingPong} must come back down, which is what a ping-pong particle draws differently from a looping one.
+     * The clamp is what the old code did, so a regression here would silently make the setting a no-op.
+     */
+    private static void verifyCyclicLifetimes() {
+        var once = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.Once;
+        var loop = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.Loop;
+        var pingPong = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.Mode.PingPong;
+        var lifetime = 20;
+        // once: monotonic, saturates at 1 and stays there
+        if (Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(once, 10, lifetime) - 0.5f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(once, 40, lifetime) - 1f) > 1e-4
+                || once.cyclic()) {
+            throw new IllegalStateException("Once no longer runs 0 to 1 and holds at 1");
+        }
+        // loop: one full lifetime later it is back at the start, not past the end
+        var loopHalf = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 10, lifetime);
+        var loopWrapped = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 10 + lifetime, lifetime);
+        if (Math.abs(loopHalf - 0.5f) > 1e-4 || Math.abs(loopWrapped - 0.5f) > 1e-4 || !loop.cyclic()) {
+            throw new IllegalStateException("Loop did not wrap back to the same phase: " + loopHalf + " then "
+                    + loopWrapped);
+        }
+        // ping-pong: out during the first cycle, back down during the second, out again on the third
+        var out = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 5, lifetime);
+        var back = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 25, lifetime);
+        var returned = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(pingPong, 45, lifetime);
+        if (Math.abs(out - 0.25f) > 1e-4 || Math.abs(back - 0.75f) > 1e-4 || Math.abs(returned - 0.25f) > 1e-4) {
+            throw new IllegalStateException("PingPong did not go out and back: " + out + ", " + back + ", " + returned);
+        }
+        // a cyclic particle only dies because its emitter stopped: it finishes the cycle it is in
+        var endAge = com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.endOfCycle(25, lifetime);
+        if (Math.abs(endAge - 40f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.finalT(pingPong, endAge, lifetime)) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 41, lifetime, endAge) - 1f) > 1e-4) {
+            throw new IllegalStateException("A cyclic particle did not finish and hold its last cycle value");
+        }
+        Photon.LOGGER.info("[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns "
+                + "({} -> {} -> {})", out, back, returned);
+
+        // the exit mode survives a save/load round trip and an old file (no "exit") still reads as Cut
+        var track = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        track.clips().add(new com.lowdragmc.photon.client.fx.timeline.Clip(0.0, 20.0, 1f)
+                .exitMode(com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.DRAIN));
+        var saved = track.writeData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        var reread = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        reread.readData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), saved);
+        if (reread.clips().size() != 1
+                || reread.clips().get(0).exitMode() != com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.DRAIN) {
+            throw new IllegalStateException("A draining clip did not survive saving");
+        }
+        // and a project written before the setting existed still reads as Cut, which is what it always did
+        var legacy = saved.copy();
+        for (var entry : legacy.getList("clips", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            if (entry instanceof net.minecraft.nbt.CompoundTag tag) tag.remove("exit");
+        }
+        var old = new com.lowdragmc.photon.client.fx.timeline.ControlTrack();
+        old.readData(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), legacy);
+        if (old.clips().isEmpty()
+                || old.clips().get(0).exitMode() != com.lowdragmc.photon.client.fx.timeline.Clip.ExitMode.CUT) {
+            throw new IllegalStateException("A project saved before the setting existed did not read as Cut");
+        }
+        Photon.LOGGER.info("[drain-exit-smoke] a draining clip survives saving and an older project still reads as Cut");
     }
 
     /**
@@ -247,12 +939,31 @@ public final class PhotonFXEditorSmokeTest {
         var looseFile = looseRoot.resolve("assets").resolve(id.getNamespace()).resolve(id.getPath());
         var adopted = assets.resolve(id.getNamespace()).resolve(id.getPath());
         try {
+            var badData = new CompoundTag();
+            var badObjects = new ListTag();
+            var badObject = new CompoundTag();
+            badObject.putString("type", "diagnostic_missing_type");
+            badObject.put("data", new CompoundTag());
+            badObjects.add(badObject);
+            badData.put("fxObjects", badObjects);
+            new com.lowdragmc.photon.client.fx.FXData().deserializeNBT(
+                    com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), badData);
+            var diagnosticKey = "failure-unknown-object-decode-diagnostic_missing_type-";
+            var diagnosticFile = com.lowdragmc.lowdraglib2.Platform.getGamePath().resolve("photon/diagnostics")
+                    .resolve("fx-" + Integer.toUnsignedString(diagnosticKey.hashCode(), 16) + ".txt");
+            if (!Files.isRegularFile(diagnosticFile) || !Files.readString(diagnosticFile).contains("diagnostic_missing_type")) {
+                throw new IllegalStateException("A rejected FX object did not produce a diagnostic dump");
+            }
+            Files.delete(diagnosticFile);
+            // An incomplete workspace namespace must not mask the same namespace in another tree.
+            Files.createDirectories(assets.resolve(id.getNamespace()));
             Files.createDirectories(looseFile.getParent());
-            Files.write(looseFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
+            Files.write(looseFile, java.util.Base64.getDecoder().decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4r2DwHwAFwAJPDlQtOgAAAABJRU5ErkJggg=="));
             com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
 
             var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
-            if (folder == null || !Files.isRegularFile(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
+            if (folder == null || !looseFile.equals(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
                 throw new IllegalStateException("The loose texture lookup did not find " + id + " in " + looseRoot
                         + "; indexed namespace folder was " + folder);
             }
@@ -260,6 +971,35 @@ public final class PhotonFXEditorSmokeTest {
             if (!resolved.equals(id) || !Files.isRegularFile(adopted)) {
                 throw new IllegalStateException("Resolving " + id + " did not adopt the loose file into "
                         + adopted + " (got " + resolved + ")");
+            }
+            // No resource reload has occurred: rendering must upload the PNG directly rather than cache
+            // Minecraft's missing texture for a namespace the pack manager has never seen.
+            var manager = Minecraft.getInstance().getTextureManager();
+            // Photon 1 custom shader samplers used to bypass TextureMaterial's loose-file path.
+            var custom = new CustomShaderMaterial(new ResourceLocation("photon", "ci/tornado_smoke"));
+            var shaderData = new CompoundTag();
+            var samplers = new CompoundTag();
+            var sampler = new CompoundTag();
+            sampler.putString("type", "texture");
+            sampler.putString("resource", id.toString());
+            samplers.put("Sampler0", sampler);
+            shaderData.put("samplers", samplers);
+            var materialData = new CompoundTag();
+            materialData.put("shaderData", shaderData);
+            custom.deserializeAdditionalNBT(materialData, com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+            custom.getShader(MaterialContext.NORMAL);
+            if (custom.isCompiledError()
+                    || !(manager.getTexture(id, null) instanceof net.minecraft.client.renderer.texture.DynamicTexture)) {
+                throw new IllegalStateException("A custom shader sampler could not use the loose texture: " + id);
+            }
+            if (!com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(id).equals(id)
+                    || !(manager.getTexture(id, null) instanceof net.minecraft.client.renderer.texture.DynamicTexture)) {
+                throw new IllegalStateException("The copied texture was not usable before a resource reload: " + id);
+            }
+            var uploaded = manager.getTexture(id, null);
+            com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(id);
+            if (manager.getTexture(id, null) != uploaded) {
+                throw new IllegalStateException("The loose texture was uploaded again on every frame: " + id);
             }
             Photon.LOGGER.info("[loose-texture-smoke] found {} in a folder no pack mounts and copied it to the workspace",
                     id);
@@ -310,6 +1050,7 @@ public final class PhotonFXEditorSmokeTest {
         } catch (java.io.IOException failure) {
             throw new IllegalStateException("Loose texture lookup fixture failed", failure);
         } finally {
+            Minecraft.getInstance().getTextureManager().release(id);
             try {
                 Files.deleteIfExists(adopted);
                 Files.deleteIfExists(looseFile);
@@ -331,6 +1072,20 @@ public final class PhotonFXEditorSmokeTest {
      * path the screen uses, so a slider that only starts a drag on its handle cannot pass.
      */
     private static void verifySliderDragsContinuously() {
+        IllegalStateException last = null;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                verifySliderDragsContinuouslyOnce();
+                return;
+            } catch (IllegalStateException failure) {
+                last = failure;
+                Photon.LOGGER.warn("[slider-drag-smoke] attempt {} failed: {}", attempt + 1, failure.getMessage());
+            }
+        }
+        throw last;
+    }
+
+    private static void verifySliderDragsContinuouslyOnce() {
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
         var slider = control.slider;
         var min = com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MIN;
@@ -339,47 +1094,62 @@ public final class PhotonFXEditorSmokeTest {
         slider.setUnmountedTrackWidth(100f);
         var x0 = slider.getContentX();
         var width = 100f;
-        var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
+        // a press at the left end is an instant set, not a "grab the handle" that needs a second press
+        dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
+        var atPress = control.current();
+        if (Math.abs(atPress - min) > 0.02) {
+            throw new IllegalStateException("A press on the track did not set the value to the minimum: fx="
+                    + atPress + " widget=" + slider.getValue() + ", dragging=" + slider.isDragging());
+        }
+        if (!slider.isDragging()) {
+            throw new IllegalStateException("A press on the track did not start a drag");
+        }
+        // then the drag: each move must be written, monotonically, without releasing and pressing again
+        var seen = new ArrayList<Double>();
+        var widget = new ArrayList<Double>();
+        var discrepancies = new ArrayList<String>();
+        for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
+            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
+            widget.add((double) slider.getValue());
+            seen.add((double) control.current());
+            if (Math.abs(seen.get(seen.size() - 1) - slider.getValue()) > 0.02) {
+                discrepancies.add("widget=" + slider.getValue() + ", fx=" + seen.get(seen.size() - 1));
+            }
+        }
+        for (var i = 1; i < seen.size(); i++) {
+            if (!discrepancies.isEmpty() || seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
+                throw new IllegalStateException("The slider did not keep up with the drag: fx=" + seen
+                        + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width
+                        + ", discrepancies=" + discrepancies + ")");
+            }
+        }
+        if (Math.abs(control.slider.getValue() - max) > 0.02) {
+            throw new IllegalStateException("The end of the drag did not reach the maximum: "
+                    + control.slider.getValue() + " vs " + max);
+        }
+        Photon.LOGGER.info("[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously: {}",
+                seen);
+        dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_UP, x0 + width);
+        if (slider.isDragging()) {
+            throw new IllegalStateException("Releasing the mouse did not end the drag");
+        }
+    }
+
+    /** Whether the config file is, right now, in the middle of being rewritten or reloaded. */
+    private static String describeConfigFile() {
         try {
-            // a press at the left end is an instant set, not a "grab the handle" that needs a second press
-            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
-            var atPress = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-            if (Math.abs(atPress - min) > 0.02) {
-                throw new IllegalStateException("A press on the track did not set the value to the minimum: " + atPress);
-            }
-            if (!slider.isDragging()) {
-                throw new IllegalStateException("A press on the track did not start a drag");
-            }
-            // then the drag: each move must be written, monotonically, without releasing and pressing again
-            var seen = new ArrayList<Double>();
-            var widget = new ArrayList<Double>();
-            for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
-                dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
-                // both sides: the widget's own value says whether the drag followed the pointer, the config says
-                // whether that value reached the renderer. Reporting only one of them cannot tell a stuck slider
-                // from a write that something reverted.
-                widget.add((double) slider.getValue());
-                seen.add(com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get());
-            }
-            for (var i = 1; i < seen.size(); i++) {
-                if (seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
-                    throw new IllegalStateException("The slider did not keep up with the drag: config=" + seen
-                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width + ")");
-                }
-            }
-            // the config holds the value: reading it back is what a slider that only redraws itself would fail
-            if (Math.abs(control.slider.getValue() - max) > 0.02) {
-                throw new IllegalStateException("The end of the drag did not reach the maximum: "
-                        + control.slider.getValue() + " vs " + max);
-            }
-            Photon.LOGGER.info("[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously: {}",
-                    seen);
-            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_UP, x0 + width);
-            if (slider.isDragging()) {
-                throw new IllegalStateException("Releasing the mouse did not end the drag");
-            }
-        } finally {
-            com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
+            var path = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("photon-client.toml");
+            if (!java.nio.file.Files.isRegularFile(path)) return "no config file at " + path;
+            var text = java.nio.file.Files.readString(path);
+            var line = text.lines().filter(l -> l.startsWith("bloom_intensity"))
+                    .findFirst().orElse("<bloom_intensity missing>");
+            return "file " + path.getFileName() + " (" + text.length() + " chars) says " + line
+                    + ", watcher threads=" + Thread.getAllStackTraces().keySet().stream()
+                    .map(Thread::getName)
+                    .filter(name -> name.toLowerCase(java.util.Locale.ROOT).contains("watch"))
+                    .toList();
+        } catch (Exception e) {
+            return "config file unreadable: " + e;
         }
     }
 
@@ -670,6 +1440,8 @@ public final class PhotonFXEditorSmokeTest {
             // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
+                verifyLegacyBlendSafety();
+                verifyBloomSceneMask();
                 verifyBloomDefaults();
                 verifyFxPickerAndBloomControl();
                 bloomSmokeLogged = true;
@@ -768,7 +1540,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[fxproj-editor-smoke] expired screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 Files.deleteIfExists(projectFile);
-                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScanFile = new File("./ldlib2/projects/scan.fxproj");
                 var realScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
                 editor.loadProject(realScan, realScanFile);
                 if (editor.getCurrentProject() != realScan || editor.runtime == null)
@@ -805,7 +1577,7 @@ public final class PhotonFXEditorSmokeTest {
                         message -> Photon.LOGGER.info("[real-scan-project-smoke] screenshot: {}", message.getString()));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realScanSmoke");
-                var realTornadoFile = new File("./ldlib2/assets/tornado.fxproj");
+                var realTornadoFile = new File("./ldlib2/projects/tornado.fxproj");
                 var realTornado = (FXProject) FXProject.TYPE.loadProjectFromFile(realTornadoFile);
                 editor.loadProject(realTornado, realTornadoFile);
                 if (editor.getCurrentProject() != realTornado || editor.runtime == null)
@@ -853,7 +1625,7 @@ public final class PhotonFXEditorSmokeTest {
                 System.clearProperty("photon.realTornadoSmoke");
                 editor.sceneView.sceneEditor.scene.setCenter(savedSceneCenter);
                 editor.sceneView.sceneEditor.scene.setZoom(savedSceneZoom);
-                var realShieldFile = new File("./ldlib2/assets/shield.fxproj");
+                var realShieldFile = new File("./ldlib2/projects/shield.fxproj");
                 var realShield = (FXProject) FXProject.TYPE.loadProjectFromFile(realShieldFile);
                 editor.loadProject(realShield, realShieldFile);
                 if (editor.getCurrentProject() != realShield || editor.runtime == null)
@@ -1038,7 +1810,7 @@ public final class PhotonFXEditorSmokeTest {
                 }));
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realShieldSmoke");
-                var realTrailFile = new File("./ldlib2/assets/arrow_trail.fxproj");
+                var realTrailFile = new File("./ldlib2/projects/arrow_trail.fxproj");
                 var realTrail = (FXProject) FXProject.TYPE.loadProjectFromFile(realTrailFile);
                 editor.loadProject(realTrail, realTrailFile);
                 if (editor.getCurrentProject() != realTrail || editor.runtime == null)
@@ -1086,7 +1858,7 @@ public final class PhotonFXEditorSmokeTest {
                 editor.closeCurrentProject(false, null);
                 System.clearProperty("photon.realTrailSmoke");
                 minecraft.setScreen(previousScreen);
-                var realScanFile = new File("./ldlib2/assets/scan.fxproj");
+                var realScanFile = new File("./ldlib2/projects/scan.fxproj");
                 var firstPersonScan = (FXProject) FXProject.TYPE.loadProjectFromFile(realScanFile);
                 minecraft.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
                 System.setProperty("photon.firstPersonSmoke", "true");
@@ -1102,7 +1874,7 @@ public final class PhotonFXEditorSmokeTest {
                 System.clearProperty("photon.firstPersonBillboardSeen");
                 System.clearProperty("photon.firstPersonScanPixels");
                 System.setProperty("photon.firstPersonGpuSmoke", "true");
-                var scanFile = new File("./ldlib2/assets/scan.fxproj");
+                var scanFile = new File("./ldlib2/projects/scan.fxproj");
                 var gpuScan = (FXProject) FXProject.TYPE.loadProjectFromFile(scanFile);
                 gpuScan.getFx().getFxData().objects().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).forEach(emitter -> emitter.config.renderer.setUseGPUInstance(true));
@@ -1182,6 +1954,17 @@ public final class PhotonFXEditorSmokeTest {
         holderData.put("uniforms", legacyUniforms);
         holderData.put("samplers", new CompoundTag());
         legacyData.put("shaderData", holderData);
+        var missingShader = new CustomShaderMaterial(new ResourceLocation("photon", "ci/intentionally_missing"));
+        var missingData = legacyData.copy();
+        var sampler = new CompoundTag();
+        sampler.putString("type", "texture");
+        sampler.putString("resource", "example:textures/particle/spark.png");
+        missingData.getCompound("shaderData").getCompound("samplers").put("Sampler0", sampler);
+        missingShader.deserializeAdditionalNBT(missingData, provider);
+        var savedMissing = (CompoundTag) missingShader.serializeAdditionalNBT(provider);
+        if (!missingShader.isCompiledError() || !savedMissing.getCompound("shaderData").equals(missingData.getCompound("shaderData"))) {
+            throw new IllegalStateException("Saving a missing shader discarded its uniforms or samplers");
+        }
         legacyMaterial.deserializeAdditionalNBT(legacyData, provider);
         if (legacyMaterial.getShader(MaterialContext.NORMAL).getUniform("LegacyVariantOnly") != null) {
             throw new IllegalStateException("Legacy variant-only uniform unexpectedly exists in the base shader");
@@ -1881,7 +2664,8 @@ public final class PhotonFXEditorSmokeTest {
     private static void verifyPhoton1Compatibility() throws Exception {
         var sparseTransform = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTransformTag(new CompoundTag());
         if (!com.lowdragmc.photon.client.fx.FXRuntime.ROOT_UUID.toString().equals(sparseTransform.getString("_parentId"))
-                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).size() != 3
+                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).size() != 4
+                || sparseTransform.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f
                 || sparseTransform.getList("localScale", Tag.TAG_FLOAT).size() != 3
                 || sparseTransform.getList("localPosition", Tag.TAG_FLOAT).size() != 3) {
             throw new IllegalStateException("Sparse Photon 1 transform fields were not safely defaulted");
@@ -1892,6 +2676,86 @@ public final class PhotonFXEditorSmokeTest {
         if (com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(delayedEmitter).getInt("startDelay") != 300
                 || com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamConfig(delayedEmitter).getInt("startDelay") != 300)
             throw new IllegalStateException("Photon 1 trail or beam delay was lost");
+        // Photon 1's pre-smoothing trail reader scales Constant widths, including the default,
+        // but does not scale curve output bounds or RandomConstant widths.
+        var oldTrail = new CompoundTag();
+        var oldWidth = new CompoundTag();
+        oldWidth.putString("_type", "Constant"); oldWidth.putInt("number", 2);
+        oldTrail.put("widthOverTrail", oldWidth);
+        var migratedTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(oldTrail);
+        var loadedTrailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        loadedTrailConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), migratedTrail);
+        if (Math.abs(loadedTrailConfig.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 0.2f) > 0.0001f
+                || oldWidth.getInt("number") != 2)
+            throw new IllegalStateException("Old constant trail width was not migrated without changing its source");
+        var reloadedTrailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        reloadedTrailConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                loadedTrailConfig.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        if (Math.abs(reloadedTrailConfig.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 0.2f) > 0.0001f)
+            throw new IllegalStateException("Old trail width was scaled twice after Photon 2 save/reload");
+        oldTrail.putBoolean("smoothInterpolation", false);
+        var modernWidth = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(oldTrail);
+        if (modernWidth.getCompound("widthOverTrail").getCompound("data").getInt("number") != 2)
+            throw new IllegalStateException("Modern Photon 1 trail width was incorrectly scaled");
+        var attachedTrail = new CompoundTag();
+        var oldAttachedConfig = new CompoundTag(); oldAttachedConfig.put("widthOverTrail", oldWidth.copy());
+        attachedTrail.put("config", oldAttachedConfig);
+        var attachedWidth = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapTrailsTag(attachedTrail)
+                .getCompound("config").getCompound("widthOverTrail").getCompound("data").getFloat("number");
+        if (Math.abs(attachedWidth - 0.2f) > 0.0001f)
+            throw new IllegalStateException("Particle-attached old trail width was not migrated");
+        var nestedSparse = new CompoundTag(); nestedSparse.put("config", new CompoundTag());
+        var attachedDefault = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapTrailsTag(nestedSparse)
+                .getCompound("config").getCompound("widthOverTrail").getCompound("data").getFloat("number");
+        if (Math.abs(attachedDefault - 0.05f) > 0.0001f)
+            throw new IllegalStateException("Attached old trail lost its own 0.5 width default");
+        // The still older TrailsSetting format stores material and trail values next to ratio,
+        // optionally overriding a nested config. Its flat width must not be divided by ten.
+        var flatTrails = new CompoundTag(); flatTrails.putBoolean("enable", true);
+        var flatMaterial = new CompoundTag(); var flatTexture = new CompoundTag();
+        flatTexture.putString("_type", "TextureMaterial");
+        flatTexture.putString("texture", "minecraft:textures/block/stone.png");
+        flatTexture.putFloat("discardThreshold", 0.01f); flatMaterial.put("material", flatTexture);
+        flatMaterial.putBoolean("depthTest", false); flatTrails.put("material", flatMaterial);
+        var flatWidth = new CompoundTag(); flatWidth.putString("_type", "Constant"); flatWidth.putFloat("number", 3f);
+        flatTrails.put("widthOverTrail", flatWidth);
+        var flatColor = new CompoundTag(); flatColor.putString("_type", "Color"); flatColor.putInt("number", 0xff123456);
+        flatTrails.put("colorOverTrail", flatColor);
+        flatTrails.putString("uvMode", "Tile"); flatTrails.putFloat("minimumVertexDistance", 0.25f);
+        flatTrails.put("config", oldAttachedConfig.copy());
+        var flatTrailParticleTag = new CompoundTag(); flatTrailParticleTag.putString("_type", "particle"); flatTrailParticleTag.put("trails", flatTrails);
+        var flatObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(flatTrailParticleTag));
+        if (!(flatObject instanceof ParticleEmitter flatTrailEmitter))
+            throw new IllegalStateException("Flat Photon 1 trail did not deserialize");
+        var trailCfg = flatTrailEmitter.config.trails.config;
+        if (!flatTrailEmitter.config.trails.isEnable()
+                || Math.abs(trailCfg.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 3f) > 0.0001f
+                || trailCfg.getColorOverTrail().get(0f, () -> 0.5f).intValue() != 0xff123456
+                || !trailCfg.getUvMode().name().equals("Tile") || Math.abs(trailCfg.getMinVertexDistance() - 0.25f) > 0.0001f
+                || trailCfg.renderer.getMaterials().size() != 1
+                || trailCfg.renderer.getMaterials().get(0).isDepthTest()
+                || !(trailCfg.renderer.getMaterials().get(0).getMaterial() instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial flatTex)
+                || !flatTex.getTexture().equals(new ResourceLocation("minecraft:textures/block/stone.png")))
+            throw new IllegalStateException("Flat legacy attached trail lost material, width, color, UV or distance");
+        var flatReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(flatTrailEmitter.serializeWrapper());
+        if (!(flatReload instanceof ParticleEmitter flatAgain)
+                || Math.abs(flatAgain.config.trails.config.getWidthOverTrail().get(0f, () -> 0.5f).floatValue() - 3f) > 0.0001f
+                || flatAgain.config.trails.config.renderer.getMaterials().size() != 1)
+            throw new IllegalStateException("Flat legacy trail did not survive save and reload");
+        Photon.LOGGER.info("[photon1-flat-trail-smoke] restored flat trail material, parameters and nested override");
+        var sparseTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(new CompoundTag());
+        if (Math.abs(sparseTrail.getCompound("widthOverTrail").getCompound("data").getFloat("number") - 0.02f) > 0.0001f)
+            throw new IllegalStateException("Old sparse trail lost the Photon 1 migrated default");
+        var oldCurveWidth = new CompoundTag(); oldCurveWidth.putString("_type", "Curve");
+        oldCurveWidth.putFloat("min", 0); oldCurveWidth.putFloat("max", 10);
+        oldCurveWidth.putFloat("lower", 1); oldCurveWidth.putFloat("upper", 2);
+        var curveTrail = new CompoundTag(); curveTrail.put("widthOverTrail", oldCurveWidth);
+        var curveData = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(curveTrail)
+                .getCompound("widthOverTrail").getCompound("data");
+        if (curveData.getFloat("max") != 1f || curveData.getFloat("lower") != 1f || curveData.getFloat("upper") != 2f)
+            throw new IllegalStateException("Old trail curve migration changed its sampled output bounds");
+        Photon.LOGGER.info("[photon1-old-trail-smoke] migrated legacy constant widths exactly once and preserved curve output");
         var oldAtlas = new CompoundTag();
         oldAtlas.putString("_type", "BlockTextureSheetMaterial");
         oldAtlas.putString("texture", "minecraft:textures/atlas/blocks.png");
@@ -1953,10 +2817,77 @@ public final class PhotonFXEditorSmokeTest {
         legacySubEffects.put("spark", main.copy());
         definition.put("subFXs", legacySubEffects);
         legacy.put("fx", definition);
+        // Real legacy exports can omit rotation. Exercise the decoder, not only the converted NBT's shape:
+        // a three-float default cannot be decoded as LDLib2's quaternion and makes the entire effect fail.
+        var missingRotation = legacy.copy();
+        missingRotation.getCompound("fx").getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND)
+                .getCompound(0).getCompound("transform").remove("localRotation");
+        var sparseFx = new com.lowdragmc.photon.client.fx.FX();
+        sparseFx.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(missingRotation));
+        if (sparseFx.getFxData().objects().size() != 1) {
+            throw new IllegalStateException("A Photon 1 effect without localRotation did not load");
+        }
+        // Parent references and explicit sibling order must survive a complete conversion and runtime copy.
+        var parentId = java.util.UUID.randomUUID();
+        var firstId = java.util.UUID.randomUUID();
+        var secondId = java.util.UUID.randomUUID();
+        var hierarchy = legacy.copy();
+        var hierarchyObjects = hierarchy.getCompound("fx").getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
+        var parentTransform = hierarchyObjects.getCompound(0).getCompound("transform");
+        parentTransform.put("id", net.minecraft.nbt.NbtUtils.createUUID(parentId));
+        parentTransform.remove("_parentId");
+        var childOrder = new ListTag();
+        childOrder.add(net.minecraft.nbt.NbtUtils.createUUID(secondId));
+        childOrder.add(net.minecraft.nbt.NbtUtils.createUUID(firstId));
+        parentTransform.put("_childrenId", childOrder);
+        for (var id : new java.util.UUID[]{firstId, secondId}) {
+            var child = empty.copy();
+            child.getCompound("transform").put("id", net.minecraft.nbt.NbtUtils.createUUID(id));
+            child.getCompound("transform").put("_parentId", net.minecraft.nbt.NbtUtils.createUUID(parentId));
+            hierarchyObjects.add(child);
+        }
+        var hierarchyFx = new com.lowdragmc.photon.client.fx.FX();
+        hierarchyFx.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(hierarchy));
+        var hierarchyRuntime = hierarchyFx.createRuntime();
+        var parentObject = hierarchyRuntime.objects.get(parentId);
+        if (parentObject == null || !parentObject.transform().children().stream().map(t -> t.id()).toList()
+                .equals(java.util.List.of(secondId, firstId))) {
+            throw new IllegalStateException("Photon 1 parent hierarchy or explicit child order was not retained");
+        }
         var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
             throw new IllegalStateException("Photon 1 effect wrapper was not converted without modifying the source");
+        // An older converter already wrote these files as current-version FX, with [0,0,0] rotations.
+        // Loading must repair root and nested objects without modifying the saved source tag.
+        var alreadyConverted = mapped.copy();
+        var oldRotation = new ListTag();
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        oldRotation.add(net.minecraft.nbt.FloatTag.ZERO);
+        alreadyConverted.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0)
+                .getCompound("data").getCompound("transform").put("localRotation", oldRotation.copy());
+        alreadyConverted.getCompound("legacySubFXs").getCompound("spark").getCompound("fxData")
+                .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data")
+                .getCompound("transform").put("localRotation", oldRotation.copy());
+        var oldSnapshot = alreadyConverted.copy();
+        var restoredConverted = new com.lowdragmc.photon.client.fx.FX();
+        restoredConverted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(alreadyConverted));
+        if (restoredConverted.getFxData().objects().size() != 1
+                || restoredConverted.getLegacySubFXs().get("spark").getFxData().objects().size() != 1
+                || !alreadyConverted.equals(oldSnapshot)) {
+            throw new IllegalStateException("An already-converted legacy FX or nested effect did not load safely");
+        }
+        var projectData = new CompoundTag();
+        projectData.put("fx", alreadyConverted.copy());
+        var restoredProject = new com.lowdragmc.photon.gui.editor.FXProject();
+        restoredProject.deserializeProject(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), projectData);
+        if (restoredProject.getFx().getFxData().objects().size() != 1) {
+            throw new IllegalStateException("An already-converted Photon 1 project did not load");
+        }
         var marker = Minecraft.getInstance().getResourceManager().getResource(
                 new ResourceLocation("photon_legacy_probe", "textures/marker.txt")).orElseThrow(
                 () -> new IllegalStateException("Photon 1 editor assets were not mounted"));
@@ -2014,10 +2945,603 @@ public final class PhotonFXEditorSmokeTest {
         if (conversion.converted() != 1 || !Files.isRegularFile(dest.resolve("test.fx")))
             throw new IllegalStateException("Photon 1 converter did not flatten the effect into assets/photon/fx");
         var firstExport = Files.readAllBytes(dest.resolve("test.fx"));
+        try (var outputs = Files.list(dest)) {
+            if (outputs.anyMatch(path -> path.getFileName().toString().startsWith(".photon-convert-")))
+                throw new IllegalStateException("Completed Photon 1 conversion left a temporary file behind");
+        }
         var second = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
         if (second.converted() != 0 || second.skipped().isEmpty()
                 || !java.util.Arrays.equals(firstExport, Files.readAllBytes(dest.resolve("test.fx"))))
             throw new IllegalStateException("Photon 1 converter overwrote an existing effect or hid the skip");
+        NbtIo.write(legacy, source.resolve("raw.fx").toFile());
+        var rawConversion = com.lowdragmc.photon.client.fx.compat.FXCompat.convertFX(source, dest);
+        if (rawConversion.converted() != 1 || !Files.isRegularFile(dest.resolve("raw.fx"))) {
+            throw new IllegalStateException("The converter rejected an uncompressed Photon 1 effect");
+        }
+        // Upstream exposes construction from an existing config for integrations.
+        var suppliedConfig = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleConfig();
+        suppliedConfig.setDuration(37);
+        var configuredEmitter = new ParticleEmitter(suppliedConfig);
+        if (configuredEmitter.config != suppliedConfig || configuredEmitter.getLifetime() != 37)
+            throw new IllegalStateException("ParticleEmitter did not initialize from its supplied config");
+        // Delayed beam/trail emitters must not spend their short visible duration waiting.
+        var freshBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        var freshTrail = new TrailEmitter();
+        if (freshBeam.getParticleAmount() != 0 || freshTrail.getParticleAmount() != 0)
+            throw new IllegalStateException("Uninitialized beam/trail reports a particle");
+        freshBeam.remove(true); freshTrail.remove(true); // safe before reset/emission
+        var beamConfig = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamConfig();
+        beamConfig.setStartDelay(2); beamConfig.setDuration(1); beamConfig.setLooping(false);
+        var delayedBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter(beamConfig);
+        var trailConfig = new com.lowdragmc.photon.client.gameobject.emitter.trail.TrailConfig();
+        trailConfig.setStartDelay(2); trailConfig.setDuration(1); trailConfig.setLooping(false);
+        var delayedTrail = new TrailEmitter(trailConfig);
+        delayedBeam.setLevel(Minecraft.getInstance().level); delayedTrail.setLevel(Minecraft.getInstance().level);
+        delayedBeam.reset(); delayedTrail.reset();
+        for (int i = 0; i < 4; i++) {
+            delayedBeam.updateTick(0.5f); delayedTrail.updateTick(0.5f);
+            if (!delayedBeam.isAlive() || !delayedTrail.isAlive() || delayedBeam.getAgeF() != 0 || delayedTrail.getAgeF() != 0)
+                throw new IllegalStateException("A delayed beam or trail consumed its duration before starting");
+        }
+        delayedBeam.updateTick(0.5f); delayedTrail.updateTick(0.5f);
+        if (delayedBeam.getAgeF() != 0.5f || delayedTrail.getAgeF() != 0.5f)
+            throw new IllegalStateException("Beam or trail did not advance after its fractional start delay");
+        delayedBeam.remove(true); delayedTrail.remove(true);
+        var delayedLegacyTag = new CompoundTag();
+        delayedLegacyTag.putInt("startDelay", 2); delayedLegacyTag.putInt("duration", 1);
+        delayedLegacyTag.putBoolean("looping", false);
+        delayedLegacyTag.putString("_type", "beam");
+        var decodedBeam = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(delayedLegacyTag));
+        delayedLegacyTag.putString("_type", "trail");
+        var decodedTrail = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailEmitter(delayedLegacyTag));
+        if (!(decodedBeam instanceof com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter importedBeam)
+                || !(decodedTrail instanceof TrailEmitter importedTrail))
+            throw new IllegalStateException("Delayed legacy beam/trail did not deserialize");
+        if (!importedBeam.getConfig().getEnd().equals(new org.joml.Vector3f(3, 0, 0)))
+            throw new IllegalStateException("A sparse Photon 1 beam lost its +X default endpoint");
+        var explicitBeamEnd = new CompoundTag(); explicitBeamEnd.putFloat("x", -2); explicitBeamEnd.putFloat("y", 4); explicitBeamEnd.putFloat("z", 8);
+        var explicitBeam = delayedLegacyTag.copy(); explicitBeam.putString("_type", "beam"); explicitBeam.put("end", explicitBeamEnd);
+        var explicitObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(explicitBeam));
+        if (!(explicitObject instanceof com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter explicitEmitter)
+                || !explicitEmitter.getConfig().getEnd().equals(new org.joml.Vector3f(-2, 4, 8)))
+            throw new IllegalStateException("An authored Photon 1 beam endpoint was replaced by the default");
+        for (var imported : java.util.List.of(importedBeam, importedTrail)) {
+            imported.setLevel(Minecraft.getInstance().level);
+            imported.reset();
+            for (int i = 0; i < 2; i++) imported.updateTick(1f);
+            if (!imported.isAlive() || imported.getAgeF() != 0)
+                throw new IllegalStateException("Imported beam or trail expired during start delay");
+            imported.updateTick(0.5f);
+            if (imported.getAgeF() != 0.5f) throw new IllegalStateException("Imported beam/trail did not start after delay");
+            imported.remove(true);
+        }
+        // The Photon 1 v0 emitter decoder treated the entire object as its config; v1+ nested it.
+        var flat = new CompoundTag();
+        flat.putString("_type", "particle");
+        flat.putInt("duration", 42);
+        flat.putInt("maxParticles", 137);
+        flat.putInt("time", 19);
+        flat.putInt("startDelay", 8);
+        flat.put("end", new CompoundTag());
+        var flatParticle = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(flat).getCompound("data").getCompound("config");
+        var flatTrail = com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailEmitter(flat).getCompound("data").getCompound("config");
+        var flatBeam = com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(flat).getCompound("data").getCompound("config");
+        if (flatParticle.getInt("duration") != 42 || flatParticle.getInt("maxParticles") != 137
+                || flatTrail.getInt("duration") != 42 || flatTrail.getInt("time") != 19
+                || flatBeam.getInt("duration") != 42 || flatBeam.getInt("startDelay") != 8) {
+            throw new IllegalStateException("Photon 1 flat v0 emitter configuration was lost");
+        }
+        // Actually decode a sparse v0 particle emitter: omitted fields must retain the real defaults.
+        var sparseFlat = flat.copy();
+        sparseFlat.remove("startDelay"); // particle delay was a number function, unlike beam/trail
+        var decodedFlat = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat));
+        if (!(decodedFlat instanceof ParticleEmitter sparseParticle)
+                || sparseParticle.config.getDuration() != 42 || sparseParticle.config.getMaxParticles() != 137
+                || sparseParticle.config.getStartLifetime().get(0f, () -> 0f).intValue() != 100) {
+            throw new IllegalStateException("Sparse Photon 1 particle emitter did not load with its defaults");
+        }
+        // Before NumberFunction3, shape vectors were compounds of raw doubles. The Photon 1
+        // reader upgrades all three vectors when position.x is a double.
+        var oldShapeEmitter = sparseFlat.copy();
+        var rawShape = new CompoundTag();
+        var oldShapePos = new CompoundTag(); oldShapePos.putDouble("x", 2.5); oldShapePos.putDouble("y", -3); oldShapePos.putDouble("z", 4);
+        var oldShapeRot = new CompoundTag(); oldShapeRot.putDouble("x", 10); oldShapeRot.putDouble("y", 20); oldShapeRot.putDouble("z", 30);
+        var oldShapeScale = new CompoundTag(); oldShapeScale.putDouble("x", 1); oldShapeScale.putDouble("y", 2); oldShapeScale.putDouble("z", 3);
+        rawShape.put("position", oldShapePos); rawShape.put("rotation", oldShapeRot); rawShape.put("scale", oldShapeScale);
+        oldShapeEmitter.put("shape", rawShape);
+        var migratedShape = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(oldShapeEmitter));
+        if (!(migratedShape instanceof ParticleEmitter shapeEmitter)
+                || !shapeEmitter.config.shape.getPosition().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.5f, -3, 4))
+                || !shapeEmitter.config.shape.getRotation().get(0f, () -> 0f).equals(new org.joml.Vector3f(10, 20, 30))
+                || !shapeEmitter.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1, 2, 3))
+                || oldShapePos.getDouble("x") != 2.5) {
+            throw new IllegalStateException("Photon 1 raw-double shape vectors were not imported intact");
+        }
+        var shapeReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(shapeEmitter.serializeWrapper());
+        if (!(shapeReload instanceof ParticleEmitter shapeAgain)
+                || !shapeAgain.config.shape.getPosition().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.5f, -3, 4))
+                || !shapeAgain.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1, 2, 3)))
+            throw new IllegalStateException("Imported old shape vectors did not survive a Photon 2 roundtrip");
+        var missingVectors = new CompoundTag(); missingVectors.put("position", oldShapePos.copy());
+        var mappedMissing = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapShapeTag(missingVectors);
+        if (mappedMissing.getList("scale", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 0)
+            throw new IllegalStateException("Old sparse shape vector did not follow Photon 1's zero default");
+        Photon.LOGGER.info("[photon1-raw-shape-smoke] restored pre-NumberFunction3 shape transforms through save and reload");
+        // Photon 1's older format stored scalar startSize and sizeOverLifetime.scale.
+        // Decode them as real runtime config, not just converted NBT.
+        var scalarLegacy = sparseFlat.copy();
+        var scalarSize = new CompoundTag(); scalarSize.putString("_type", "Constant"); scalarSize.putFloat("number", 3.5f);
+        scalarLegacy.put("startSize", scalarSize);
+        var scale = new CompoundTag(); scale.putString("_type", "Constant"); scale.putFloat("number", 0.4f);
+        var scalarOverLife = new CompoundTag(); scalarOverLife.putBoolean("enable", true); scalarOverLife.put("scale", scale);
+        scalarLegacy.put("sizeOverLifetime", scalarOverLife);
+        var scalarDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(scalarLegacy));
+        if (!(scalarDecoded instanceof ParticleEmitter scalarEmitter)
+                || !scalarEmitter.config.getSimulationSpace().name().equals("World")
+                || !scalarEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f))
+                || !scalarEmitter.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f))) {
+            throw new IllegalStateException("Old scalar size or world simulation space was lost during Photon 1 conversion");
+        }
+        var scalarReloaded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(scalarEmitter.serializeWrapper());
+        if (!(scalarReloaded instanceof ParticleEmitter reloadedScalar)
+                || !reloadedScalar.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f)))
+            throw new IllegalStateException("Converted scalar start size did not survive saving and reloading");
+        var sizeWarningEmitter = new ParticleEmitter();
+        sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 0, 0));
+        if (!com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))
+            throw new IllegalStateException("All-zero constant particle size was not diagnosed");
+        sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 1, 0));
+        if (com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))
+            throw new IllegalStateException("Nonzero particle size was incorrectly diagnosed as all-zero");
+        // Already-converted files can still carry Photon 1 codec names. Unrecognized types
+        // decode as constant 0, which makes the whole effect invisible. Repair a copy at load.
+        var leftoverConstant = new CompoundTag();
+        leftoverConstant.putString("type", "Constant");
+        leftoverConstant.putFloat("number", 2.25f);
+        var leftoverFunction = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverConstant);
+        if (leftoverFunction.get(0f, () -> 0f).floatValue() != 2.25f)
+            throw new IllegalStateException("Photon 1 Constant number function decoded as zero");
+        var leftoverMaterial = new CompoundTag();
+        leftoverMaterial.putString("type", "TextureMaterial");
+        leftoverMaterial.putString("texture", "minecraft:textures/particle/glow.png");
+        leftoverMaterial.putFloat("discardThreshold", 0.01f);
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial.deserializeWrapper(leftoverMaterial)
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial leftoverTexture)
+                || !leftoverTexture.getTexture().toString().equals("minecraft:textures/particle/glow.png")) {
+            throw new IllegalStateException("Photon 1 TextureMaterial did not load");
+        }
+        var leftoverGradient = new CompoundTag();
+        leftoverGradient.putString("type", "Gradient");
+        leftoverGradient.put("a", floatList(0f, 1f, 1f, 1f));
+        leftoverGradient.put("r", floatList(0f, 1f, 1f, 1f));
+        leftoverGradient.put("g", floatList(0f, 0f, 1f, 0f));
+        leftoverGradient.put("b", floatList(0f, 0f, 1f, 0f));
+        var leftoverGradientFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverGradient);
+        if (!(leftoverGradientFn instanceof com.lowdragmc.photon.client.gameobject.emitter.data.number.color.Gradient)
+                || leftoverGradient.contains("data")
+                || ((leftoverGradientFn.get(0f, () -> 0f).intValue() >> 16) & 0xff) < 200) {
+            throw new IllegalStateException("Photon 1 Gradient colour channels did not load");
+        }
+        var leftoverRandomGradient = new CompoundTag();
+        leftoverRandomGradient.putString("_type", "RandomGradient");
+        leftoverRandomGradient.put("a", leftoverGradient.copy());
+        leftoverRandomGradient.put("b", leftoverGradient.copy());
+        leftoverRandomGradient.remove("type");
+        leftoverRandomGradient.getCompound("a").remove("type");
+        leftoverRandomGradient.getCompound("b").remove("type");
+        var leftoverRandomFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverRandomGradient);
+        if (!(leftoverRandomFn instanceof com.lowdragmc.photon.client.gameobject.emitter.data.number.color.RandomGradient)
+                || leftoverRandomGradient.contains("data")
+                || leftoverRandomFn.get(0f, () -> 0f).intValue() == 0) {
+            throw new IllegalStateException("Photon 1 RandomGradient colour channels did not load");
+        }
+        var leftoverRange = new CompoundTag();
+        leftoverRange.putString("type", "RandomConstant");
+        leftoverRange.putInt("a", 0);
+        leftoverRange.putInt("b", 1);
+        leftoverRange.putBoolean("isDecimals", false);
+        var leftoverRangeFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverRange);
+        if (leftoverRangeFn.get(0f, () -> 0.99f).intValue() != 1)
+            throw new IllegalStateException("Photon 1 integer RandomConstant range no longer includes the upper endpoint");
+        var leftoverToggle = new CompoundTag();
+        leftoverToggle.putBoolean("enable", true);
+        var repairedToggle = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverToggle);
+        if (!(repairedToggle instanceof CompoundTag enabledToggle) || !enabledToggle.getBoolean("_enable")
+                || leftoverToggle.contains("_enable")) {
+            throw new IllegalStateException("Photon 1 enable flag was not read as a Photon 2 toggle");
+        }
+        var leftoverShader = new CompoundTag();
+        leftoverShader.putString("type", "CustomShaderMaterial");
+        leftoverShader.putString("shader", "photon:circle");
+        var leftoverUniforms = new CompoundTag();
+        leftoverUniforms.put("uniforms", new CompoundTag());
+        leftoverShader.put("uniform", leftoverUniforms);
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial.deserializeWrapper(leftoverShader)
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial leftoverCustom)
+                || !leftoverCustom.getShaderLocation().toString().equals("photon:circle")) {
+            throw new IllegalStateException("Photon 1 CustomShaderMaterial did not load");
+        }
+        var leftoverUv = new CompoundTag();
+        leftoverUv.putBoolean("enable", true);
+        var leftoverTiles = new CompoundTag();
+        leftoverTiles.putInt("a", 4);
+        leftoverTiles.putInt("b", 2);
+        leftoverUv.put("tiles", leftoverTiles);
+        var repairedUv = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverUv);
+        if (!(repairedUv instanceof CompoundTag uvTag) || leftoverUv.getCompound("tiles").getInt("a") != 4
+                || !java.util.Arrays.equals(uvTag.getIntArray("tiles"), new int[]{4, 2})) {
+            throw new IllegalStateException("Photon 1 UV tiles were not read as a Photon 2 sheet size");
+        }
+        var leftoverShapeSetting = new CompoundTag();
+        leftoverShapeSetting.put("shape", new CompoundTag());
+        var leftoverPos = new CompoundTag();
+        leftoverPos.putDouble("x", 2.5);
+        leftoverPos.putDouble("y", -3);
+        leftoverPos.putDouble("z", 4);
+        leftoverShapeSetting.put("position", leftoverPos);
+        leftoverShapeSetting.put("rotation", leftoverPos.copy());
+        leftoverShapeSetting.put("scale", leftoverPos.copy());
+        var repairedShape = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverShapeSetting);
+        if (!(repairedShape instanceof CompoundTag shapeTag)
+                || leftoverShapeSetting.getCompound("position").getDouble("x") != 2.5
+                || shapeTag.getList("position", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 2.5) {
+            throw new IllegalStateException("Photon 1 raw shape vectors were not read as NumberFunction3");
+        }
+        var leftoverSol = new CompoundTag();
+        leftoverSol.putBoolean("enable", true);
+        leftoverSol.put("scale", leftoverConstant.copy());
+        var repairedSol = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSol);
+        if (!(repairedSol instanceof CompoundTag solTag) || leftoverSol.contains("size")
+                || solTag.getList("size", Tag.TAG_COMPOUND).size() != 3
+                || solTag.getList("size", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getFloat("number") != 2.25f) {
+            throw new IllegalStateException("Photon 1 size-over-lifetime scale did not expand");
+        }
+        var leftoverSub = new CompoundTag();
+        leftoverSub.putString("event", "Birth");
+        leftoverSub.putString("emitter", "spark");
+        var repairedSub = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSub);
+        if (!(repairedSub instanceof CompoundTag subTag) || !"spark".equals(leftoverSub.getString("emitter"))
+                || !subTag.getString("legacySubFXName").equals("spark") || !subTag.getBoolean("legacyTickGate")) {
+            throw new IllegalStateException("Photon 1 sub-emitter name was not kept");
+        }
+        var leftoverBursts = new CompoundTag();
+        leftoverBursts.put("emissionRate", leftoverConstant.copy());
+        var leftoverBurstList = new ListTag();
+        var leftoverBurst = new CompoundTag();
+        leftoverBurst.putInt("time", 5);
+        leftoverBurstList.add(leftoverBurst);
+        leftoverBursts.put("bursts", leftoverBurstList);
+        var repairedBursts = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBursts);
+        if (!(repairedBursts instanceof CompoundTag leftoverBurstTag) || leftoverBursts.getList("bursts", Tag.TAG_COMPOUND).size() != 1
+                || leftoverBurstTag.getCompound("bursts").getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("time") != 5) {
+            throw new IllegalStateException("Photon 1 burst list was not wrapped for Photon 2");
+        }
+        var leftoverParticle = new CompoundTag();
+        leftoverParticle.put("emission", new CompoundTag());
+        leftoverParticle.put("startLifetime", leftoverConstant.copy());
+        leftoverParticle.put("startSize", leftoverConstant.copy());
+        var repairedParticle = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverParticle);
+        if (!(repairedParticle instanceof CompoundTag particleTag) || leftoverParticle.contains("simulationSpace")
+                || !"World".equals(particleTag.getString("simulationSpace"))
+                || particleTag.getList("startSize", Tag.TAG_COMPOUND).size() != 3) {
+            throw new IllegalStateException("Photon 1 particle without simulationSpace did not default to World");
+        }
+        var leftoverTrails = new CompoundTag();
+        leftoverTrails.putFloat("ratio", 1f);
+        leftoverTrails.put("material", leftoverMaterial.copy());
+        leftoverTrails.put("widthOverTrail", leftoverConstant.copy());
+        leftoverTrails.putFloat("minimumVertexDistance", 0.1f);
+        var repairedTrails = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTrails);
+        if (!(repairedTrails instanceof CompoundTag trailsTag) || leftoverTrails.contains("config")
+                || trailsTag.getCompound("config").getFloat("minVertexDistance") != 0.1f
+                || !trailsTag.getCompound("config").contains("widthOverTrail")
+                || trailsTag.getCompound("config").getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).isEmpty()) {
+            throw new IllegalStateException("Photon 1 flat trail material was not nested into TrailConfig");
+        }
+        var leftoverSlot = new CompoundTag();
+        leftoverSlot.put("blendMode", new CompoundTag());
+        leftoverSlot.putByte("cull", (byte) 1);
+        leftoverSlot.putByte("depthTest", (byte) 1);
+        leftoverSlot.put("material", leftoverMaterial.copy());
+        var leftoverConfigMaterial = new CompoundTag();
+        leftoverConfigMaterial.put("material", leftoverSlot);
+        leftoverConfigMaterial.put("renderer", new CompoundTag());
+        var repairedConfigMaterial = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverConfigMaterial);
+        if (!(repairedConfigMaterial instanceof CompoundTag configMaterialTag)
+                || leftoverConfigMaterial.getCompound("renderer").contains("materials")
+                || !"CUSTOM".equals(configMaterialTag.getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).getCompound(0).getString("renderStateSource"))
+                || !configMaterialTag.getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).getCompound(0).getCompound("material")
+                .getCompound("data").getString("texture").equals("minecraft:textures/particle/glow.png")) {
+            throw new IllegalStateException("Photon 1 config material was not nested into renderer.materials");
+        }
+        var leftoverFrom = new CompoundTag(); leftoverFrom.putFloat("x", -8); leftoverFrom.putFloat("y", -4); leftoverFrom.putFloat("z", -2);
+        var leftoverTo = new CompoundTag(); leftoverTo.putFloat("x", 12); leftoverTo.putFloat("y", 6); leftoverTo.putFloat("z", 3);
+        var leftoverCull = new CompoundTag(); leftoverCull.putBoolean("enable", true); leftoverCull.put("from", leftoverFrom); leftoverCull.put("to", leftoverTo);
+        var repairedCull = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverCull);
+        if (!(repairedCull instanceof CompoundTag cullTag) || leftoverCull.contains("cullBox")
+                || cullTag.getCompound("cullBox").getList("min", Tag.TAG_DOUBLE).getDouble(0) != -8
+                || cullTag.getCompound("cullBox").getList("max", Tag.TAG_DOUBLE).getDouble(0) != 12) {
+            throw new IllegalStateException("Photon 1 cull from/to was not read as cullBox");
+        }
+        var leftoverBloom = new CompoundTag();
+        var leftoverBloomRenderer = new CompoundTag(); leftoverBloomRenderer.putBoolean("bloomEffect", true);
+        leftoverBloom.put("renderer", leftoverBloomRenderer);
+        var repairedBloom = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBloom);
+        if (!(repairedBloom instanceof CompoundTag bloomTag) || leftoverBloom.getCompound("lights").getBoolean("legacyBloomFullBright")
+                || !bloomTag.getCompound("lights").getBoolean("legacyBloomFullBright")) {
+            throw new IllegalStateException("Photon 1 bloomEffect did not keep full-bright lighting");
+        }
+        var leftoverBlend = new CompoundTag(); leftoverBlend.putString("blendFunc", "sub");
+        var repairedBlend = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBlend);
+        if (!(repairedBlend instanceof CompoundTag blendTag) || !"sub".equals(leftoverBlend.getString("blendFunc"))
+                || !"SUB".equals(blendTag.getString("blendFunc"))) {
+            throw new IllegalStateException("Photon 1 blendFunc sub was not renamed");
+        }
+        var leftoverEmission = new CompoundTag();
+        leftoverEmission.putString("emissionMode", "Exacting");
+        leftoverEmission.put("emissionRate", leftoverConstant.copy());
+        var repairedEmission = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverEmission);
+        if (!(repairedEmission instanceof CompoundTag emissionTag) || leftoverEmission.contains("legacyTickEmission")
+                || !emissionTag.getBoolean("legacyTickEmission")) {
+            throw new IllegalStateException("Photon 1 emission did not keep integer-age sampling");
+        }
+        var leftoverInherit = new CompoundTag();
+        leftoverInherit.putString("mode", "INITIAL");
+        leftoverInherit.put("multiply", leftoverConstant.copy());
+        leftoverInherit.putBoolean("enable", true);
+        var repairedInherit = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverInherit);
+        if (!(repairedInherit instanceof CompoundTag inheritTag) || leftoverInherit.contains("legacyUnscaledVelocity")
+                || !inheritTag.getBoolean("legacyUnscaledVelocity")) {
+            throw new IllegalStateException("Photon 1 inherit-velocity did not keep raw emitter speed");
+        }
+        var leftoverSubList = new CompoundTag();
+        leftoverSubList.putBoolean("enable", true);
+        var leftoverSubEntries = new ListTag();
+        leftoverSubEntries.add(leftoverSub.copy());
+        leftoverSubList.put("emitters", leftoverSubEntries);
+        var repairedSubList = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSubList);
+        if (!(repairedSubList instanceof CompoundTag subListTag) || leftoverSubList.getList("emitters", Tag.TAG_COMPOUND).size() != 1
+                || !"spark".equals(subListTag.getCompound("emitters").getList("payload", Tag.TAG_COMPOUND)
+                .getCompound(0).getString("legacySubFXName"))) {
+            throw new IllegalStateException("Photon 1 sub-emitter list was not wrapped for Photon 2");
+        }
+        var leftoverTransform = new CompoundTag();
+        var leftoverTransformPos = new CompoundTag(); leftoverTransformPos.putFloat("x", 1); leftoverTransformPos.putFloat("y", 2); leftoverTransformPos.putFloat("z", 3);
+        leftoverTransform.put("localPosition", leftoverTransformPos);
+        leftoverTransform.put("localScale", leftoverTransformPos.copy());
+        var leftoverRot = leftoverTransformPos.copy(); leftoverRot.putFloat("w", 1);
+        leftoverTransform.put("localRotation", leftoverRot);
+        var repairedTransform = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransform);
+        if (!(repairedTransform instanceof CompoundTag transformTag) || leftoverTransform.getCompound("localPosition").getFloat("x") != 1
+                || transformTag.getList("localPosition", Tag.TAG_FLOAT).getFloat(0) != 1f
+                || transformTag.getList("localRotation", Tag.TAG_FLOAT).size() != 4
+                || transformTag.getList("localRotation", Tag.TAG_FLOAT).getFloat(3) != 1f) {
+            throw new IllegalStateException("Photon 1 transform vectors were not read as float lists");
+        }
+        var leftoverUuid = java.util.UUID.fromString("12345678-1234-1234-1234-123456789abc");
+        var leftoverTransformUuid = leftoverTransform.copy();
+        leftoverTransformUuid.put("id", net.minecraft.nbt.NbtUtils.createUUID(leftoverUuid));
+        leftoverTransformUuid.put("_parentId", net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001")));
+        var leftoverChildren = new ListTag();
+        leftoverChildren.add(net.minecraft.nbt.NbtUtils.createUUID(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002")));
+        leftoverTransformUuid.put("_childrenId", leftoverChildren);
+        var repairedTransformUuid = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransformUuid);
+        if (!(repairedTransformUuid instanceof CompoundTag uuidTag)
+                || !(leftoverTransformUuid.get("id") instanceof net.minecraft.nbt.IntArrayTag)
+                || !leftoverUuid.toString().equals(uuidTag.getString("id"))
+                || !"00000000-0000-0000-0000-000000000001".equals(uuidTag.getString("_parentId"))
+                || !"00000000-0000-0000-0000-000000000002".equals(uuidTag.getList("_childrenId", Tag.TAG_STRING).getString(0))) {
+            throw new IllegalStateException("Photon 1 transform UUID int arrays were not read as strings");
+        }
+        var leftoverTransformUuidLists = new CompoundTag();
+        leftoverTransformUuidLists.put("localPosition", transformTag.get("localPosition").copy());
+        leftoverTransformUuidLists.put("id", net.minecraft.nbt.NbtUtils.createUUID(leftoverUuid));
+        var repairedUuidLists = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTransformUuidLists);
+        if (!(repairedUuidLists instanceof CompoundTag uuidListTag)
+                || !(leftoverTransformUuidLists.get("id") instanceof net.minecraft.nbt.IntArrayTag)
+                || !leftoverUuid.toString().equals(uuidListTag.getString("id"))) {
+            throw new IllegalStateException("Photon 1 transform UUID leftover was not repaired on list coords");
+        }
+        var leftoverNf3Floats = new CompoundTag();
+        leftoverNf3Floats.putFloat("x", 2.25f);
+        leftoverNf3Floats.putFloat("y", 3.5f);
+        leftoverNf3Floats.putFloat("z", 4.75f);
+        var leftoverNf3 = new CompoundTag();
+        leftoverNf3.put("startSize", leftoverNf3Floats);
+        leftoverNf3.put("force", leftoverNf3Floats.copy());
+        var repairedNf3 = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverNf3);
+        if (!(repairedNf3 instanceof CompoundTag nf3Tag) || leftoverNf3.getCompound("startSize").getFloat("x") != 2.25f
+                || nf3Tag.getList("startSize", Tag.TAG_COMPOUND).size() != 3
+                || nf3Tag.getList("startSize", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 2.25
+                || nf3Tag.getList("force", Tag.TAG_COMPOUND).getCompound(2).getCompound("data").getDouble("number") != 4.75) {
+            throw new IllegalStateException("Photon 1 NumberFunction3 float x/y/z was not read as constants");
+        }
+        var leftoverBeamEnd = new CompoundTag(); leftoverBeamEnd.putFloat("x", 1); leftoverBeamEnd.putFloat("y", 2); leftoverBeamEnd.putFloat("z", 3);
+        var leftoverBeam = new CompoundTag();
+        leftoverBeam.put("emitRate", leftoverConstant.copy());
+        leftoverBeam.put("width", leftoverConstant.copy());
+        leftoverBeam.put("color", leftoverConstant.copy());
+        leftoverBeam.put("end", leftoverBeamEnd);
+        var repairedBeam = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBeam);
+        if (!(repairedBeam instanceof CompoundTag beamTag) || leftoverBeam.getCompound("end").getFloat("x") != 1
+                || beamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 1f
+                || beamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 3f) {
+            throw new IllegalStateException("Photon 1 beam end was not read as a float list");
+        }
+        var leftoverBeamSparse = new CompoundTag();
+        leftoverBeamSparse.put("emitRate", leftoverConstant.copy());
+        leftoverBeamSparse.put("width", leftoverConstant.copy());
+        leftoverBeamSparse.put("color", leftoverConstant.copy());
+        var repairedBeamSparse = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBeamSparse);
+        if (!(repairedBeamSparse instanceof CompoundTag sparseBeamTag) || leftoverBeamSparse.contains("end")
+                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 3f
+                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 0f) {
+            throw new IllegalStateException("Photon 1 beam without end did not default to +X");
+        }
+        var leftoverFlatEmitter = new CompoundTag();
+        leftoverFlatEmitter.put("transform", leftoverTransform.copy());
+        leftoverFlatEmitter.put("startLifetime", leftoverConstant.copy());
+        leftoverFlatEmitter.put("emission", leftoverEmission.copy());
+        leftoverFlatEmitter.putString("name", "spark");
+        var repairedFlatEmitter = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverFlatEmitter);
+        if (!(repairedFlatEmitter instanceof CompoundTag flatEmitterTag) || leftoverFlatEmitter.contains("config")
+                || !"spark".equals(flatEmitterTag.getString("name"))
+                || !flatEmitterTag.contains("transform")
+                || !flatEmitterTag.getCompound("config").contains("startLifetime")
+                || !flatEmitterTag.getCompound("config").contains("emission")
+                || !flatEmitterTag.getCompound("config").getCompound("emission").getBoolean("legacyTickEmission")) {
+            throw new IllegalStateException("Photon 1 version-0 emitter config was not nested");
+        }
+        var leftoverShape = new CompoundTag();
+        leftoverShape.putString("type", "Circle");
+        leftoverShape.putFloat("radius", 1.5f);
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape.deserializeWrapper(leftoverShape)
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.shape.Circle leftoverCircle)
+                || leftoverCircle.getRadius() != 1.5f) {
+            throw new IllegalStateException("Photon 1 Circle shape did not load");
+        }
+        var leftover = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat).copy();
+        leftover.putString("type", "particle");
+        var leftoverAxes = new CompoundTag();
+        leftoverAxes.put("x", leftoverConstant.copy());
+        leftoverAxes.put("y", leftoverConstant.copy());
+        leftoverAxes.put("z", leftoverConstant.copy());
+        leftover.getCompound("data").getCompound("config").put("startSize", leftoverAxes);
+        var leftoverDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(leftover);
+        if (!(leftoverDecoded instanceof ParticleEmitter leftoverEmitter))
+            throw new IllegalStateException("Photon 1 particle type did not load as a particle emitter");
+        if (!leftover.getString("type").equals("particle")
+                || !leftover.getCompound("data").getCompound("config").getCompound("startSize").contains("x"))
+            throw new IllegalStateException("Leftover Photon 1 codec repair mutated the author's tag");
+        if (!leftoverEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f)))
+            throw new IllegalStateException("Photon 1 x/y/z start size did not load");
+        var leftoverScalar = leftover.copy();
+        leftoverScalar.getCompound("data").getCompound("config").put("startSize", leftoverConstant.copy());
+        var leftoverScalarDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(leftoverScalar);
+        if (!(leftoverScalarDecoded instanceof ParticleEmitter leftoverScalarEmitter)
+                || !leftoverScalarEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f))) {
+            throw new IllegalStateException("Photon 1 scalar start size did not load");
+        }
+        Photon.LOGGER.info("[photon1-codec-smoke] loaded Photon 1 type names without reconverting");
+        // Sparse enabled modules must not turn missing 1-valued defaults into zero.
+        var sparseModules = sparseFlat.copy();
+        var enabledModule = new CompoundTag(); enabledModule.putBoolean("enable", true);
+        for (var name : java.util.List.of("velocityOverLifetime", "sizeBySpeed", "noise", "inheritVelocity"))
+            sparseModules.put(name, enabledModule.copy());
+        var sparsePhysics = enabledModule.copy(); sparsePhysics.putBoolean("removedWhenCollided", true);
+        sparseModules.put("physics", sparsePhysics);
+        sparseModules.put("shape", new CompoundTag());
+        var modulesObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseModules));
+        if (!(modulesObject instanceof ParticleEmitter modules)
+                || modules.config.velocityOverLifetime.getSpeedModifier().get(0f, () -> 0f).floatValue() != 1f
+                || modules.config.velocityOverLifetime.getOrbitalMode() == null
+                || !modules.config.sizeBySpeed.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(1f))
+                || !modules.config.shape.getScale().get(0f, () -> 0f).equals(new org.joml.Vector3f(1f))
+                || Math.abs(modules.config.noise.getPosition().x.get(0f, () -> 0f).floatValue() - 0.1f) > 0.0001f
+                || modules.config.noise.getFrequency() != 1f
+                || modules.config.inheritVelocity.getMultiply().get(0f, () -> 0f).floatValue() != 1f
+                || !modules.config.physics.isRemovedWhenCollided()) {
+            throw new IllegalStateException("Sparse legacy modules lost defaults or collision-removal flag");
+        }
+        // Photon 1 persisted the inheritance multiplier but did not use it in either particle
+        // velocity path. Test converted settings through particle setup, runtime, and reload.
+        for (var inheritanceMode : com.lowdragmc.photon.client.gameobject.emitter.data.InheritVelocitySetting.Mode.values()) {
+            var oldInherit = new CompoundTag(); oldInherit.putBoolean("enable", true);
+            oldInherit.putString("mode", inheritanceMode.name());
+            var multiplier = new CompoundTag(); multiplier.putString("_type", "Constant"); multiplier.putFloat("number", 0.25f);
+            oldInherit.put("multiply", multiplier);
+            var mover = new ParticleEmitter() {
+                @Override public org.joml.Vector3f getVelocity() { return new org.joml.Vector3f(2, 0, 0); }
+            };
+            mover.setLevel(Minecraft.getInstance().level);
+            mover.config.shape.setShape(new com.lowdragmc.photon.client.gameobject.emitter.data.shape.Dot());
+            mover.config.inheritVelocity.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                    com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapInheritVelocity(oldInherit));
+            var savedInheritance = mover.config.inheritVelocity.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+            mover.config.inheritVelocity.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), savedInheritance);
+            var inherited = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(mover, mover.config);
+            if (Math.abs(inherited.getRealVelocity().x - 2f) > 0.0001f
+                    || mover.config.inheritVelocity.getMultiply().get(0f, () -> 0f).floatValue() != 0.25f)
+                throw new IllegalStateException("Photon 1 " + inheritanceMode + " velocity or multiplier was not retained");
+            mover.config.inheritVelocity.setLegacyUnscaledVelocity(false);
+            var nativeParticle = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(mover, mover.config);
+            if (Math.abs(nativeParticle.getRealVelocity().x - 0.5f) > 0.0001f)
+                throw new IllegalStateException("Native " + inheritanceMode + " velocity no longer applies its multiplier");
+        }
+        var oldFrom = new CompoundTag(); oldFrom.putFloat("x", -8); oldFrom.putFloat("y", -4); oldFrom.putFloat("z", -2);
+        var oldTo = new CompoundTag(); oldTo.putFloat("x", 12); oldTo.putFloat("y", 6); oldTo.putFloat("z", 3);
+        var oldCull = new CompoundTag(); oldCull.putBoolean("enable", true); oldCull.put("from", oldFrom); oldCull.put("to", oldTo);
+        var legacyCullRenderer = new CompoundTag(); legacyCullRenderer.put("cull", oldCull);
+        var renderLegacy = sparseFlat.copy(); renderLegacy.put("renderer", legacyCullRenderer);
+        renderLegacy.put("material", new CompoundTag());
+        renderLegacy.put("uvAnimation", enabledModule.copy());
+        renderLegacy.put("lights", enabledModule.copy());
+        var renderObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(renderLegacy));
+        if (!(renderObject instanceof ParticleEmitter renderEmitter)
+                || !renderEmitter.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3))
+                || renderEmitter.config.uvAnimation.getCycle() != 1f
+                || renderEmitter.config.uvAnimation.getTiles().x != 1 || renderEmitter.config.uvAnimation.getTiles().y != 1
+                || renderEmitter.config.renderer.getMaterials().isEmpty()
+                || !renderEmitter.config.renderer.getMaterials().get(0).isDepthTest()
+                || !renderEmitter.config.renderer.getMaterials().get(0).isCull()) {
+            throw new IllegalStateException("Legacy cull bounds or sparse renderer defaults were lost");
+        }
+        // Legacy bloom forces full-bright regardless of the separate authored light group.
+        // Preserve the authored group too; this does not claim to recreate the bloom halo.
+        var bloomSource = new CompoundTag();
+        var bloomRenderer = new CompoundTag(); bloomRenderer.putBoolean("bloomEffect", true);
+        bloomSource.put("renderer", bloomRenderer);
+        var oldLights = new CompoundTag(); oldLights.putBoolean("enable", false);
+        var oldLowLight = new CompoundTag(); oldLowLight.putString("_type", "Constant"); oldLowLight.putInt("number", 3);
+        oldLights.put("blockLight", oldLowLight); bloomSource.put("lights", oldLights);
+        for (var mappedBloom : java.util.List.of(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapConfigTag(bloomSource),
+                com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamConfig(bloomSource),
+                com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailConfig(bloomSource))) {
+            var lights = new com.lowdragmc.photon.client.gameobject.emitter.data.LightOverLifetimeSetting();
+            lights.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), mappedBloom.getCompound("lights"));
+            var lightCopy = new com.lowdragmc.photon.client.gameobject.emitter.data.LightOverLifetimeSetting();
+            lightCopy.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                    lights.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+            if (lightCopy.isEnable() || lightCopy.getBlockLight().get(0f, () -> 0f).intValue() != 3
+                    || !lightCopy.createRuntime().isEnable()
+                    || lightCopy.createRuntime().getLight(null, 0f) != net.minecraft.client.renderer.LightTexture.FULL_BRIGHT)
+                throw new IllegalStateException("Photon 1 bloom full-bright or authored light settings were lost");
+        }
+        bloomRenderer.putBoolean("bloomEffect", false);
+        if (com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapConfigTag(bloomSource)
+                .getCompound("lights").getBoolean("legacyBloomFullBright"))
+            throw new IllegalStateException("Non-bloom Photon 1 effect was incorrectly made full-bright");
+        var sparseCull = enabledModule.copy();
+        com.lowdragmc.photon.client.fx.compat.MapperUtils.mapCullTag(sparseCull); // omitted bounds must not throw
+        var sheet = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.Animation.WholeSheet;
+        var rowMode = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.Animation.SingleRow;
+        var uvZero = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(0, 0), sheet, 3, 0);
+        var uvNormal = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(4, 2), sheet, 5, 0);
+        var uvNegative = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(4, 2), rowMode, -1, 0);
+        var uvLarge = com.lowdragmc.photon.client.gameobject.emitter.data.UVAnimationSetting.calculateUVs(new org.joml.Vector2i(65536, 65536), sheet, 7, 0);
+        if (!uvZero.equals(new org.joml.Vector4f(0, 0, 1, 1)) || !uvNormal.equals(new org.joml.Vector4f(0.25f, 0.5f, 0.5f, 1f))
+                || !uvNegative.equals(new org.joml.Vector4f(0.75f, 0, 1, 0.5f)) || !Float.isFinite(uvLarge.x))
+            throw new IllegalStateException("UV sheet coordinates failed for malformed, large or wrapped tile counts");
+        var nested = new CompoundTag();
+        nested.putString("_type", "particle");
+        nested.putInt("_version", 2);
+        nested.put("config", flat.copy());
+        if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(nested)
+                .getCompound("data").getCompound("config").equals(flatParticle)) {
+            throw new IllegalStateException("Photon 1 flat and nested emitter configurations differ");
+        }
         var oldBurst = new CompoundTag();
         oldBurst.putInt("time", 4); oldBurst.putInt("cycles", 3); oldBurst.putInt("interval", 2);
         oldBurst.putFloat("probability", 0.75f);
@@ -2030,7 +3554,47 @@ public final class PhotonFXEditorSmokeTest {
         if (mappedBursts.getInt("uid") != 1 || burst.getInt("time") != 4 || burst.getInt("cycles") != 3
                 || burst.getCompound("count").getCompound("data").getFloat("number") != 7)
             throw new IllegalStateException("Photon 1 burst was lost during conversion");
+        // Decode the managed list and execute it, rather than checking only the converted tag shape.
+        var immediate = oldBurst.copy();
+        immediate.putInt("time", 0);
+        immediate.putInt("cycles", 1);
+        immediate.putFloat("probability", 1f);
+        var immediateBursts = new ListTag(); immediateBursts.add(immediate);
+        var oldRate = new CompoundTag(); oldRate.putString("_type", "Constant"); oldRate.putFloat("number", 0f);
+        var oldEmission = new CompoundTag();
+        oldEmission.put("bursts", immediateBursts);
+        oldEmission.put("emissionRate", oldRate);
+        oldEmission.putString("emissionMode", "Exacting");
+        var emissionConfig = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        emissionConfig.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(oldEmission));
+        var emissionEmitter = new ParticleEmitter();
+        if (emissionConfig.getBursts().size() != 1 || emissionConfig.createRuntime()
+                .getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 7) {
+            throw new IllegalStateException("A converted Photon 1 burst did not emit its particles");
+        }
+        // Omitted count uses Photon 1's default of 50, rather than an invalid empty function.
+        var sparseBursts = new ListTag(); sparseBursts.add(new CompoundTag());
+        var sparseEmissionTag = new CompoundTag(); sparseEmissionTag.put("bursts", sparseBursts);
+        var sparseEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        sparseEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(sparseEmissionTag));
+        if (sparseEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 51)
+            throw new IllegalStateException("Sparse legacy burst lost its default count or exact emission rate");
+        var hugeBurst = immediate.copy(); hugeBurst.putInt("cycles", 0); hugeBurst.putInt("interval", 1);
+        var singleCount = count.copy(); singleCount.putFloat("number", 1); hugeBurst.put("count", singleCount);
+        var hugeBursts = new ListTag(); hugeBursts.add(hugeBurst);
+        var hugeTag = oldEmission.copy(); hugeTag.put("bursts", hugeBursts);
+        var zeroRate = oldRate.copy(); zeroRate.putFloat("number", 0); hugeTag.put("emissionRate", zeroRate);
+        var hugeEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        hugeEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(hugeTag));
+        emissionEmitter.setAge(Integer.MAX_VALUE);
+        if (hugeEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource(), 256f) != 256)
+            throw new IllegalStateException("Large-age infinite bursts overflowed or fired the wrong number of times");
+        emissionEmitter.setAge(0);
         var enabled = new CompoundTag(); enabled.putByte("enable", (byte) 1);
+        enabled.put("force", new CompoundTag()); enabled.putFloat("frequency", 2f); enabled.put("gravity", oldRate.copy());
         if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapForceOTTag(enabled).contains("force", Tag.TAG_LIST)
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(enabled).contains("frequency")
                 || !com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapPhysicsTag(enabled).contains("gravity"))
@@ -2042,6 +3606,77 @@ public final class PhotonFXEditorSmokeTest {
         if (mappedSub.getInt("uid") != 1 || mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("tickInterval") != 512
                 || !mappedSub.getList("payload", Tag.TAG_COMPOUND).getCompound(0).getString("legacySubFXName").equals("spark"))
             throw new IllegalStateException("Photon 1 sub-emitter list or interval was lost during conversion");
+        var decodedSub = new SubEmittersSetting();
+        decodedSub.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapSubEmittersTag(sub));
+        if (decodedSub.getEmitters().size() != 1 || decodedSub.getEmitters().get(0).getTickInterval() != 512
+                || decodedSub.getEmitters().get(0).getEvent() != SubEmittersSetting.Event.Birth
+                || !decodedSub.getEmitters().get(0).isLegacyTickGate())
+            throw new IllegalStateException("Sparse Photon 1 sub-emitter defaults or event gating were not retained");
+        // Disabled Photon 1 modules still serialize authored values: preserve those values for
+        // later editor activation and timeline overrides, including nested modules and lists.
+        var disabledLegacy = sparseFlat.copy();
+        var disabledPhysics = new CompoundTag(); disabledPhysics.putBoolean("enable", false);
+        var gravity = count.copy(); gravity.putFloat("number", 2.5f); disabledPhysics.put("gravity", gravity);
+        disabledLegacy.put("physics", disabledPhysics);
+        var disabledSize = scalarOverLife.copy(); disabledSize.putBoolean("enable", false);
+        disabledLegacy.put("sizeOverLifetime", disabledSize);
+        var disabledUV = new CompoundTag(); disabledUV.putBoolean("enable", false); disabledUV.putFloat("cycle", 3f);
+        var oldTiles = new CompoundTag(); oldTiles.putInt("a", 4); oldTiles.putInt("b", 2); disabledUV.put("tiles", oldTiles);
+        disabledLegacy.put("uvAnimation", disabledUV);
+        var disabledCull = oldCull.copy(); disabledCull.putBoolean("enable", false);
+        var disabledRenderer = new CompoundTag(); disabledRenderer.put("cull", disabledCull);
+        disabledLegacy.put("renderer", disabledRenderer);
+        var disabledSub = sub.copy(); disabledSub.putBoolean("enable", false); disabledLegacy.put("subEmitters", disabledSub);
+        var importedDisabled = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(disabledLegacy));
+        if (!(importedDisabled instanceof ParticleEmitter disabledEmitter))
+            throw new IllegalStateException("Disabled-module legacy emitter did not deserialize");
+        var disabledReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(disabledEmitter.serializeWrapper());
+        if (!(disabledReload instanceof ParticleEmitter retained)) throw new IllegalStateException("Disabled-module emitter did not reload");
+        if (retained.config.physics.isEnable() || retained.config.physics.getGravity().get(0f, () -> 0f).floatValue() != 2.5f)
+            throw new IllegalStateException("Disabled legacy physics did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("physics"));
+        if (retained.config.sizeOverLifetime.isEnable() || !retained.config.sizeOverLifetime.getSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(0.4f)))
+            throw new IllegalStateException("Disabled legacy size did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("sizeOverLifetime"));
+        if (retained.config.uvAnimation.isEnable() || retained.config.uvAnimation.getCycle() != 3f || !retained.config.uvAnimation.getTiles().equals(new org.joml.Vector2i(4, 2)))
+            throw new IllegalStateException("Disabled legacy UV did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("uvAnimation"));
+        if (retained.config.renderer.getCull().isEnable() || !retained.config.renderer.getCull().getCullBox().equals(new net.minecraft.world.phys.AABB(-8, -4, -2, 12, 6, 3)))
+            throw new IllegalStateException("Disabled legacy cull bounds did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("renderer"));
+        if (retained.config.subEmitters.isEnable() || retained.config.subEmitters.getEmitters().size() != 1 || retained.config.subEmitters.getEmitters().get(0).getTickInterval() != 512)
+            throw new IllegalStateException("Disabled legacy sub-emitters did not survive reload: " + retained.serializeWrapper().getCompound("data").getCompound("config").get("subEmitters"));
+        var nestedRemap = new CompoundTag(); nestedRemap.putBoolean("enable", false); nestedRemap.put("remapCurve", count.copy());
+        var disabledNoise = new CompoundTag(); disabledNoise.putBoolean("enable", false); disabledNoise.put("remap", nestedRemap);
+        if (!com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapNoiseTag(disabledNoise)
+                .getCompound("remap").contains("remapCurve"))
+            throw new IllegalStateException("Disabled nested noise remap lost its curve");
+        var parentEmitter = new ParticleEmitter();
+        parentEmitter.setLevel(Minecraft.getInstance().level);
+        var parentParticle = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(parentEmitter, parentEmitter.config);
+        parentParticle.setAge(4f);
+        parentParticle.setLifetime(12);
+        var spawned = new com.lowdragmc.photon.client.fx.FX();
+        spawned.getFxData().objects().add(new ParticleEmitter());
+        spawned.getFxData().objects().add(new TrailEmitter());
+        spawned.getFxData().objects().add(new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter());
+        var spawnedRuntime = spawned.createRuntime();
+        com.lowdragmc.photon.client.fx.IEffectExecutor testExecutor = () -> Minecraft.getInstance().level;
+        spawnedRuntime.emit(testExecutor);
+        var inherit = decodedSub.getEmitters().get(0);
+        inherit.setInheritLifetime(true);
+        inherit.setInheritDuration(true);
+        inherit.applyInheritance(spawnedRuntime, parentParticle);
+        for (var value : spawnedRuntime.objects.values()) {
+            if (value instanceof com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter child
+                    && (child.getAge() != 4 || child.self().getLifetime() != 12
+                    || Math.abs(child.getT() - 4f / 12f) > 0.0001f
+                    || Math.abs(child.getT(0.5f) - 4.5f / 12f) > 0.0001f)) {
+                throw new IllegalStateException("Sub-emitter inherited age or duration did not reach its runtime: " + child);
+            }
+        }
+        // A per-instance override must not edit the shared definition.
+        if (((ParticleEmitter) spawned.getFxData().objects().get(0)).config.getDuration() == 12)
+            throw new IllegalStateException("Sub-emitter inheritance mutated its shared FX definition");
+        spawnedRuntime.destroy(true);
         var oldShader = new CompoundTag(); oldShader.putString("_type", "CustomShaderMaterial");
         oldShader.putString("shader", "photon:ci/tornado_smoke");
         var oldUniform = new CompoundTag();
@@ -2067,6 +3702,126 @@ public final class PhotonFXEditorSmokeTest {
                 .getString("resource").equals("minecraft:textures/particle/flame.png")
                 || restoredUniform == null || Math.abs(restoredUniform.getFloatBuffer().get(0) - 0.37f) > 0.0001f)
             throw new IllegalStateException("Converted Photon 1 shader sampler or variant uniform did not survive deserialization");
+        // Photon 1's integer RandomConstant draws inclusively: [0,1] must sometimes emit 1,
+        // rather than a decimal in [0,1) that is always truncated to zero by the burst.
+        var oldRandom = new CompoundTag();
+        oldRandom.putString("_type", "RandomConstant");
+        oldRandom.putInt("a", 0); oldRandom.putInt("b", 1);
+        oldRandom.putBoolean("isDecimals", false);
+        var random = NumberFunction.deserializeWrapper(com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldRandom, false));
+        if (random.get(0f, () -> 0.25f).intValue() != 0 || random.get(0f, () -> 0.75f).intValue() != 1
+                || random.copy().get(0f, () -> 0.75f).intValue() != 1
+                || NumberFunction.deserializeWrapper(random.serializeWrapper()).get(0f, () -> 0.75f).intValue() != 1) {
+            throw new IllegalStateException("Photon 1 inclusive integer random range was lost during conversion, copy or save");
+        }
+        // Photon 1 sampled at ages 0,3,6 for an exact rate of 0.3. This matters for
+        // short effects that end before a fractional accumulator reaches one particle.
+        // A burst exactly on Photon 1's duration tick must run before the emitter is removed.
+        // Decode an actual legacy object, copy it as a runtime would, and advance real particles.
+        var boundaryBurst = immediate.copy(); boundaryBurst.putInt("time", 1);
+        var boundaryBursts = new ListTag(); boundaryBursts.add(boundaryBurst);
+        var boundaryEmission = oldEmission.copy(); boundaryEmission.put("bursts", boundaryBursts);
+        var boundaryLegacy = new CompoundTag();
+        boundaryLegacy.putString("_type", "particle");
+        boundaryLegacy.putInt("duration", 1);
+        boundaryLegacy.putBoolean("looping", false);
+        var boundaryLife = new CompoundTag(); boundaryLife.putString("_type", "Constant"); boundaryLife.putInt("number", 2);
+        boundaryLegacy.put("startLifetime", boundaryLife);
+        boundaryLegacy.put("emission", boundaryEmission);
+        var boundaryObject = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(boundaryLegacy));
+        if (!(boundaryObject instanceof ParticleEmitter convertedBoundary))
+            throw new IllegalStateException("Legacy boundary emitter did not decode");
+        var boundary = (ParticleEmitter) convertedBoundary.copy(false);
+        boundary.setLevel(Minecraft.getInstance().level);
+        boundary.update(1f);
+        if (boundary.getParticleAmount() != 0 || boundary.getAge() != 1 || boundary.getT() != 0f)
+            throw new IllegalStateException("Boundary emitter emitted, aged or sampled progress incorrectly before its burst");
+        boundary.update(1f);
+        if (boundary.getParticleAmount() != 7)
+            throw new IllegalStateException("Photon 1 burst on the final duration tick did not emit: " + boundary.getParticleAmount());
+        for (int i = 0; i < 4; i++) boundary.update(1f);
+        if (boundary.getParticleAmount() != 0)
+            throw new IllegalStateException("Legacy boundary particles did not drain after their lifetime");
+        boundary.remove(true);
+        var lifetimeOwner = new ParticleEmitter();
+        lifetimeOwner.setLevel(Minecraft.getInstance().level);
+        lifetimeOwner.config.emission.setLegacyTickEmission(true);
+        var oldLife = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(lifetimeOwner, lifetimeOwner.config);
+        oldLife.setLifetime(1);
+        oldLife.updateTick(1f);
+        if (oldLife.isRemoved() || oldLife.getAge() != 1 || oldLife.getT(0) != 1f)
+            throw new IllegalStateException("Legacy particle died before its final Photon 1 tick");
+        oldLife.updateTick(1f);
+        if (!oldLife.isRemoved() || oldLife.getAge() != 2 || oldLife.getT(0) != 2f)
+            throw new IllegalStateException("Legacy particle did not complete its Photon 1 final tick");
+        var nativeOwner = new ParticleEmitter(); nativeOwner.setLevel(Minecraft.getInstance().level);
+        var nativeLife = new com.lowdragmc.photon.client.gameobject.particle.TileParticle(nativeOwner, nativeOwner.config);
+        nativeLife.setLifetime(1);
+        nativeLife.updateTick(1f); nativeLife.updateTick(1f);
+        if (!nativeLife.isRemoved() || nativeLife.getT(0) != 1f)
+            throw new IllegalStateException("Native Photon 2 particle lifetime changed with legacy compatibility");
+        var nativeBoundary = new ParticleEmitter();
+        nativeBoundary.setLevel(Minecraft.getInstance().level);
+        nativeBoundary.config.setDuration(1);
+        nativeBoundary.config.setLooping(false);
+        nativeBoundary.config.emission.setEmissionRate(NumberFunction.constant(0));
+        nativeBoundary.update(1f);
+        if (nativeBoundary.isAlive())
+            throw new IllegalStateException("Photon 2 emitter duration changed with legacy compatibility");
+        var cadenceInput = oldEmission.copy();
+        var slowRate = oldRate.copy(); slowRate.putFloat("number", 0.3f);
+        cadenceInput.put("emissionRate", slowRate);
+        cadenceInput.put("bursts", new ListTag());
+        var cadence = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        cadence.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(cadenceInput));
+        var cadenceRuntime = cadence.createRuntime();
+        for (int age = 0; age < 7; age++) {
+            emissionEmitter.setAge(age);
+            int actual = cadenceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+            if (actual != (age % 3 == 0 ? 1 : 0))
+                throw new IllegalStateException("Photon 1 exact emission cadence changed at age " + age + ": " + actual);
+        }
+        var nativeEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        nativeEmission.setEmissionRate(NumberFunction.constant(0.3f));
+        emissionEmitter.setAge(0);
+        if (nativeEmission.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 0)
+            throw new IllegalStateException("Native Photon 2 emission cadence was changed by legacy compatibility");
+        var cadenceReloaded = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        cadenceReloaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                cadence.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry()));
+        emissionEmitter.setAge(0);
+        if (cadenceReloaded.createRuntime().getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource()) != 1)
+            throw new IllegalStateException("Photon 1 emission cadence was lost on save and reload");
+        var onceBurst = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        onceBurst.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(oldEmission));
+        emissionEmitter.config.setDuration(2);
+        emissionEmitter.config.setLooping(true);
+        emissionEmitter.setAge(0);
+        var onceRuntime = onceBurst.createRuntime();
+        int firstBurst = onceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+        emissionEmitter.setAge(2);
+        int secondBurst = onceRuntime.getEmissionCount(emissionEmitter, emissionEmitter.getRandomSource());
+        if (firstBurst != 7 || secondBurst != 0)
+            throw new IllegalStateException("A one-shot Photon 1 burst incorrectly repeated after the emitter loop");
+        emissionEmitter.setAge(0);
+        var randomBurst = immediate.copy(); randomBurst.put("count", oldRandom);
+        var randomBursts = new ListTag(); randomBursts.add(randomBurst);
+        var randomEmission = oldEmission.copy(); randomEmission.put("bursts", randomBursts);
+        var convertedEmission = new com.lowdragmc.photon.client.gameobject.emitter.data.EmissionSetting();
+        convertedEmission.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapEmissionTag(randomEmission));
+        var randomSource = net.minecraft.util.RandomSource.create(9821L);
+        var emissionRuntime = convertedEmission.createRuntime();
+        int emitted = 0;
+        for (int i = 0; i < 128; i++) emitted += emissionRuntime.getEmissionCount(emissionEmitter, randomSource);
+        if (emitted == 0 || emitted == 128) throw new IllegalStateException("Converted [0,1] burst did not produce both outcomes: " + emitted);
+        oldRandom.putBoolean("isDecimals", true);
+        var decimalRandom = NumberFunction.deserializeWrapper(com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldRandom, false));
+        if (Math.abs(decimalRandom.get(0f, () -> 0.75f).floatValue() - 0.75f) > 0.0001f)
+            throw new IllegalStateException("Photon 1 decimal random range was changed to integer");
         var oldCurve = new CompoundTag(); oldCurve.putString("_type", "RandomCurve");
         oldCurve.putByte("lockControlPoint", (byte) 0); oldCurve.putFloat("lower", 0.3f); oldCurve.putFloat("upper", 0.8f);
         var mappedCurve = com.lowdragmc.photon.client.fx.compat.MapperUtils.mapTypedValue(oldCurve, false);
