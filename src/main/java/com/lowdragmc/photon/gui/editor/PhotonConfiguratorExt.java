@@ -1,4 +1,4 @@
-package com.lowdragmc.photon.core.mixins;
+package com.lowdragmc.photon.gui.editor;
 
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;

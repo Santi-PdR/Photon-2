@@ -6,7 +6,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
-import com.lowdragmc.photon.core.mixins.PhotonConfiguratorExt;
+
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;

@@ -811,7 +811,7 @@ public final class PhotonFXEditorSmokeTest {
                 throw new IllegalStateException("FXObject.transform is neither flat nor keyed");
             }
             var row = new com.lowdragmc.lowdraglib2.configurator.ui.Configurator("row");
-            if (!(row instanceof com.lowdragmc.photon.core.mixins.PhotonConfiguratorExt)) {
+            if (!(row instanceof com.lowdragmc.photon.gui.editor.PhotonConfiguratorExt)) {
                 throw new IllegalStateException("Configurator mixin did not apply; inspector cannot mark overridden rows");
             }
             com.lowdragmc.photon.gui.editor.PhotonConfigurators.setOverridden(row, true);

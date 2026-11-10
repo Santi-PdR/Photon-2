@@ -4,6 +4,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
+import com.lowdragmc.photon.gui.editor.PhotonConfiguratorExt;
 import com.lowdragmc.photon.gui.editor.PhotonConfigurators;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
