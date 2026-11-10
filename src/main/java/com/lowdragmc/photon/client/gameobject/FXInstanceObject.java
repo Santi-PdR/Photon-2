@@ -170,7 +170,8 @@ public class FXInstanceObject extends FXObject {
 
     private void frameTimeline(float partialTicks) {
         if (begun && player != null && !player.isEmpty() && isOuterActive()) {
-            player.frame(partialTicks * outerTimeScale());
+            // tick() already stored outerTimeScale in frameRate; 1.21 scales at the call site instead
+            player.frame(partialTicks);
         }
     }
 
