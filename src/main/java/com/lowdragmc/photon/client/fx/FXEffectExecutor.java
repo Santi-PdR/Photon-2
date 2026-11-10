@@ -34,6 +34,10 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     protected boolean forcedDeath;
     @Setter
     protected boolean allowMulti;
+    /** Timeline section to start from (e.g. a persistent effect recreated mid-loop); null starts at 0. */
+    @Setter
+    @Nullable
+    protected String startSection;
 
     //runtime
     @Getter
@@ -49,6 +53,16 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     protected FXEffectExecutor(FX fx, Level level) {
         this.fx = fx;
         this.level = level;
+    }
+
+    /** Include failures constructing a runtime, before it can reach the common emit diagnostics. */
+    protected FXRuntime createDiagnosedRuntime() {
+        try {
+            return fx.createRuntime();
+        } catch (RuntimeException error) {
+            FXDiagnostics.failure(fx.getFxLocation(), "runtime-create", "Could not create the effect runtime", null, error);
+            throw error;
+        }
     }
 
     /** Fire {@link #onFinished} exactly once (re-armed by the next {@code start()}). */
