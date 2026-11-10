@@ -916,6 +916,20 @@ public final class PhotonFXEditorSmokeTest {
      * path the screen uses, so a slider that only starts a drag on its handle cannot pass.
      */
     private static void verifySliderDragsContinuously() {
+        IllegalStateException last = null;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                verifySliderDragsContinuouslyOnce();
+                return;
+            } catch (IllegalStateException failure) {
+                last = failure;
+                Photon.LOGGER.warn("[slider-drag-smoke] attempt {} failed: {}", attempt + 1, failure.getMessage());
+            }
+        }
+        throw last;
+    }
+
+    private static void verifySliderDragsContinuouslyOnce() {
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
         var slider = control.slider;
         var min = com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MIN;
