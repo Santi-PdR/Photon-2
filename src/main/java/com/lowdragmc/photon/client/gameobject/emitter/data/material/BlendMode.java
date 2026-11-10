@@ -81,16 +81,56 @@ public class BlendMode {
 
     @Configurable(name = "BlendMode.enableBlend")
     private boolean enableBlend;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.srcColorFactor")
     private SourceFactor srcColorFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.dstColorFactor")
     private DestFactor dstColorFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.srcAlphaFactor")
     private SourceFactor srcAlphaFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.dstAlphaFactor")
     private DestFactor dstAlphaFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.blendFunc")
     private BlendFuc blendFunc;
+
+    @EqualsAndHashCode.Exclude
+    private transient boolean reportedInvalidState;
+
+    private void reportInvalidState() {
+        if (!reportedInvalidState) {
+            reportedInvalidState = true;
+            com.lowdragmc.photon.Photon.LOGGER.warn("[fx-diagnostic] Invalid or unknown material blend setting; using default for missing fields. Reimport the original Photon 1 FX to recover its blend mode.");
+        }
+    }
+
+    public SourceFactor getSrcColorFactor() {
+        if (srcColorFactor == null) { reportInvalidState(); return SourceFactor.SRC_ALPHA; }
+        return srcColorFactor;
+    }
+
+    public DestFactor getDstColorFactor() {
+        if (dstColorFactor == null) { reportInvalidState(); return DestFactor.ONE_MINUS_SRC_ALPHA; }
+        return dstColorFactor;
+    }
+
+    public SourceFactor getSrcAlphaFactor() {
+        if (srcAlphaFactor == null) { reportInvalidState(); return SourceFactor.ONE; }
+        return srcAlphaFactor;
+    }
+
+    public DestFactor getDstAlphaFactor() {
+        if (dstAlphaFactor == null) { reportInvalidState(); return DestFactor.ZERO; }
+        return dstAlphaFactor;
+    }
+
+    public BlendFuc getBlendFunc() {
+        if (blendFunc == null) { reportInvalidState(); return BlendFuc.ADD; }
+        return blendFunc;
+    }
 
     private BlendMode(boolean enableBlend, SourceFactor srcColorFactor, DestFactor dstColorFactor, SourceFactor srcAlphaFactor, DestFactor dstAlphaFactor, BlendFuc blendFunc) {
         this.srcColorFactor = srcColorFactor;
@@ -120,8 +160,8 @@ public class BlendMode {
         }
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.blendEquation(this.blendFunc.op);
-        RenderSystem.blendFuncSeparate(this.srcColorFactor, this.dstColorFactor, this.srcAlphaFactor, this.dstAlphaFactor);
+        RenderSystem.blendEquation(getBlendFunc().op);
+        RenderSystem.blendFuncSeparate(getSrcColorFactor(), getDstColorFactor(), getSrcAlphaFactor(), getDstAlphaFactor());
     }
 
     public void reset() {
