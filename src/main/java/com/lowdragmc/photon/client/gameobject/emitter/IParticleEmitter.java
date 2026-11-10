@@ -86,6 +86,11 @@ public interface IParticleEmitter extends IFXObject, IConfigurable {
 
     void setAge(int age);
 
+    /** Override only this runtime's duration when a parent particle passes down its lifetime. */
+    default void inheritDuration(int duration) {
+        self().setLifetime(duration);
+    }
+
     boolean isLooping();
 
     void setRGBAColor(Vector4f color);

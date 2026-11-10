@@ -6,6 +6,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.IScene;
 import com.lowdragmc.lowdraglib2.math.Transform;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.fx.FXBloom;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.IEffectExecutor;
 import com.lowdragmc.photon.client.fx.ParticleTickHost;
@@ -30,6 +31,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.EndTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
+import org.joml.Vector3f;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -69,6 +71,10 @@ public abstract class FXObject extends Particle implements IFXObject {
     /** Timeline visibility flag (this node only; folded into hierarchical {@link #isVisible()}). */
     @Setter
     protected boolean selfTimelineVisible = true;
+    /** Set by {@link #windDown()}, cleared by {@link #reset()}: nothing new starts here, what shows may finish. */
+    @Setter
+    @Getter
+    protected boolean windingDown;
     /**
      * Optional per-tick callback used by {@link com.lowdragmc.photon.client.fx.FXRuntime} to drive
      * the timeline from the always-on root object. Runs after the start delay, before {@code updateTick}.
@@ -227,6 +233,7 @@ public abstract class FXObject extends Particle implements IFXObject {
         this.delay = 0;
         this.age = 0;
         this.removed = false;
+        this.windingDown = false;
         this.onGround = false;
         // restore timeline defaults; the player re-applies gating each tick for controlled objects.
         // (objects that stop being timeline-controlled must fall back to active/visible.)
@@ -268,6 +275,52 @@ public abstract class FXObject extends Particle implements IFXObject {
     @Override
     public void remove(boolean force) {
         remove();
+    }
+
+    /**
+     * Wind this subtree down (a non-force removal, and what a control clip with exit mode Drain does): nothing new
+     * starts, what already shows ends on its own, and a particle that never dies of age ends with its emitter instead
+     * of living forever. Ported from Photon 26.3, where this is what keeps an effect from popping out of existence
+     * the moment its clip ends.
+     */
+    public void windDown() {
+        windingDown = true;
+        remove(false);
+        for (var child : transform.children()) {
+            if (child.sceneObject() instanceof FXObject object) {
+                object.windDown();
+            }
+        }
+    }
+
+    /** Whether nothing new should start here; an FX instance playing its own release stops the search. */
+    public boolean hasWindingDownAncestor() {
+        for (var parent = transform.parent(); parent != null; parent = parent.parent()) {
+            if (parent.sceneObject() instanceof FXObject object) {
+                if (object.windingDown) return true;
+                if (object.isPlayingOwnRelease()) return false;
+            }
+        }
+        return false;
+    }
+
+    /** Overridden by an FX instance that plays its own release instead of being wound down from above. */
+    protected boolean isPlayingOwnRelease() {
+        return false;
+    }
+
+    /**
+     * Whether this object still has something on screen: a draining object is kept ticking until this goes false, so
+     * "the clip ended" does not mean "the particles vanish". The base object shows nothing of its own, so it is done
+     * as soon as its children are.
+     */
+    public boolean hasVisibleRemnants() {
+        for (var child : transform.children()) {
+            if (child.sceneObject() instanceof FXObject object && object.hasVisibleRemnants()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -353,6 +406,23 @@ public abstract class FXObject extends Particle implements IFXObject {
         if (effectExecutor != null) {
             effectExecutor.updateFXObjectFrame(this, partialTicks);
         }
+        if (getScene() instanceof FXRuntime runtime && runtime.getRoot() == this) {
+            FXBloom.contribute(runtime.getFxData());
+        }
+    }
+
+    /**
+     * Keep the vanilla particle at the same place as the transform. Forge culls
+     * {@link Particle#getBoundingBox()}, which starts at the world origin; without this, an FX
+     * following a flying player is left behind as soon as that box leaves the frustum.
+     */
+    @Override
+    public void updatePos(Vector3f newPos) {
+        transform.position(newPos);
+        this.xo = this.x = newPos.x;
+        this.yo = this.y = newPos.y;
+        this.zo = this.z = newPos.z;
+        setBoundingBox(new AABB(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1));
     }
 
     @Override
