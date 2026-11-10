@@ -194,7 +194,7 @@ La banda gráfica de secciones de 26.3 (`SectionStrip`) está portada: aparece b
 secciones, se arrastra por el borde izquierdo, el inspector edita nombre/inicio/repetición/then/release,
 el menú de la banda cubre then/repeat/release/rename/jump/queue, y la barra de transporte gana Advance /
 Release / Follow mientras hay secciones. Sigue el menú de la regla (clic derecho, Mayús+arrastre de marca).
-La despedida se reproduce en la timeline del efecto, no en las timelines internas de un `.fx` anidado.
+Una instancia FX anidada con sección de despedida la reproduce ella misma y después drena lo que colocó.
 
 La interfaz nueva requiere prueba manual en el juego.
 

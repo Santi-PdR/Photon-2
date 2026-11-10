@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.Photon;
@@ -357,8 +358,13 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                 if (pipeline != null) {
                     uniform.set((float) pipeline.framebufferWidth(), (float) pipeline.framebufferHeight());
                 } else {
-                    var target = Minecraft.getInstance().getMainRenderTarget();
-                    uniform.set((float) target.width, (float) target.height);
+                    var surface = UISurface.current();
+                    if (surface != null && !surface.isMainWindow()) {
+                        uniform.set((float) surface.framebufferWidth(), (float) surface.framebufferHeight());
+                    } else {
+                        var target = Minecraft.getInstance().getMainRenderTarget();
+                        uniform.set((float) target.width, (float) target.height);
+                    }
                 }
             });
         }

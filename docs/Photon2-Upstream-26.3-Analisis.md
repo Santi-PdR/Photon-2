@@ -90,6 +90,8 @@ De `26.2.2.10` (entre nuestra base y 26.3), el port ya cubre lo portable:
 - traducciones de 26.2 completas; claves de Drain/Seam del clip de control añadidas.
 - lecturas de pose/color/UV de partícula escriben en un vector del caller (`getReal*(dest)`), como 26.3
   para no allocar por partícula en el bake de CPU. No se porta el instancing GPU ni OIT.
+- muestreo de color/profundidad en un editor desanclado: `ScreenSize` sigue el `UISurface` (2.2.10;
+  en 1.20.1 no existe `setDefaultUniforms`, el mixin actúa en `ShaderInstance.apply`).
 
 ## Recomendación de orden
 

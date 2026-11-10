@@ -430,6 +430,7 @@ public final class PhotonFXEditorSmokeTest {
         verifySectionCommand();
         verifyDestroyKeepsRemnants();
         verifyParticleDestReuse();
+        verifyPoppedOutScreenSize();
     }
 
     /**
@@ -773,6 +774,24 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("The no-arg color getter reused the caller vector");
         }
         Photon.LOGGER.info("[particle-dest-smoke] emitter color writes into the caller vector ({})", dest);
+    }
+
+    /**
+     * Photon 2.2.10: a popped-out editor draws into its own OS window. ScreenSize must follow that
+     * surface, not the game window, or scene color/depth sampling reads the wrong texel.
+     */
+    private static void verifyPoppedOutScreenSize() {
+        var surface = com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface.current();
+        if (surface == null) {
+            throw new IllegalStateException("UISurface.current() is null; ScreenSize cannot follow a popped-out editor");
+        }
+        int width = surface.framebufferWidth();
+        int height = surface.framebufferHeight();
+        if (width <= 0 || height <= 0) {
+            throw new IllegalStateException("UISurface framebuffer is " + width + "x" + height);
+        }
+        Photon.LOGGER.info("[popped-out-screen-size-smoke] UISurface {}x{} mainWindow={}",
+                width, height, surface.isMainWindow());
     }
 
     /**
