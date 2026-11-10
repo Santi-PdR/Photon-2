@@ -428,6 +428,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyCyclicLifetimes();
         verifySections();
         verifySectionCommand();
+        verifyDestroyKeepsRemnants();
     }
 
     /**
@@ -726,6 +727,33 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[sections-save-smoke] sections and the release section survive saving, "
                 + "and an older project still loads as a single stretch");
+    }
+
+    /**
+     * Photon 26.2.2.11: stopping without force must not treat remnants as discarded (that is what made lights go
+     * out while particles were still fading) and an FX instance must wind down what it placed, not vanish.
+     */
+    private static void verifyDestroyKeepsRemnants() {
+        var runtime = new com.lowdragmc.photon.client.fx.FX().createRuntime();
+        if (runtime.isValid() || runtime.isTracked()) {
+            throw new IllegalStateException("A runtime is live before it is emitted");
+        }
+        runtime.destroy(false);
+        if (runtime.isValid()) {
+            throw new IllegalStateException("Stopping an effect left it valid");
+        }
+        if (runtime.isTracked()) {
+            throw new IllegalStateException("A runtime that never played is still tracked");
+        }
+        var instance = new com.lowdragmc.photon.client.gameobject.FXInstanceObject();
+        instance.windDown();
+        if (!instance.isWindingDown()) {
+            throw new IllegalStateException("Winding down an FX instance did nothing");
+        }
+        if (instance.sections() != null) {
+            throw new IllegalStateException("An instance outside a runtime has a section control");
+        }
+        Photon.LOGGER.info("[destroy-remnant-smoke] destroy(false) invalidates the runtime; an FX instance winds down");
     }
 
     /**

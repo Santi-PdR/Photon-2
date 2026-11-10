@@ -305,19 +305,24 @@ public class FXRuntime implements IScene {
     }
 
     /**
-     * Whether this runtime's particles are still tracked by their particle engine. This is the safe
-     * check for callers who CACHE a runtime: the vanilla {@code ParticleEngine} silently discards all
+     * Whether this runtime is still a live effect. False before {@link #emit}, after {@link #destroy}
+     * (even while remnants drain), and after the particle engine discarded its particles.
+     * Callers who CACHE a runtime use this: the vanilla {@code ParticleEngine} silently discards all
      * particles on level change, {@code /photon_client clear_particles}, or when another mod reaches
-     * in — a cached runtime has no other way to notice.
-     * <p>
-     * False before {@link #emit}, after {@link #destroy}, once the FX {@link #isFinished() finished}
-     * and drained, and after the engine discarded its particles. O(1) and cheap to call every tick:
-     * the two known wipe paths invalidate immediately (wipe generation); anything else that stops the
-     * engine from ticking the root is caught at most one engine tick late (heartbeat). A paused game
-     * does not invalidate (the heartbeat clock only advances when particles actually tick).
+     * in. O(1); a paused game does not invalidate (the heartbeat clock only advances when particles
+     * actually tick).
      */
     public boolean isValid() {
-        if (!emitted || destroyed) {
+        return !destroyed && isTracked();
+    }
+
+    /**
+     * {@link #isValid()} minus "not destroyed": stays true while a destroyed effect's remnants play
+     * out, so lights and particles that are still on screen are not treated as discarded. False before
+     * {@link #emit} and after the engine wiped its particles.
+     */
+    public boolean isTracked() {
+        if (!emitted) {
             return false;
         }
         if (host == null || !(root instanceof FXObject fxRoot)) {
@@ -326,14 +331,15 @@ public class FXRuntime implements IScene {
         if (generationAtEmit != host.generation()) {
             return false;
         }
-        // <=1: isValid may be queried mid-engine-tick, before the root has ticked this round
+        // <=1: this may be queried mid-engine-tick, before the root has ticked this round
         return host.tickCount() - fxRoot.getLastHostTick() <= 1;
     }
 
     /**
-     * Stop this runtime for good: removes every object ({@code force} drops visible remnants
-     * immediately; otherwise they drain) and finishes the timeline so no future clip/signal/audio
-     * plays while remnants drain. A later {@link #emit} revives the runtime (editor replay).
+     * Stop this runtime for good; it is no longer {@link #isValid() valid} from here on. {@code force}
+     * drops everything at once. Otherwise the timeline's release section plays out first, if it has
+     * one, then everything winds down: nothing new starts and remnants drain. A later {@link #emit}
+     * revives the runtime (editor replay).
      */
     public void destroy(boolean force) {
         if (force) {

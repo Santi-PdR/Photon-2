@@ -75,9 +75,9 @@ LDLib2. Son portables a mano:
 | **Release sections** (parar sin forzar reproduce un cierre) | `TimelineSection` + `Emitter`/`FXObject` | sí (con sections) | medio |
 | **Exit mode `Drain`** en control clips (deja de emitir y las partículas se apagan) | `Emitter` | sí | barato y visible |
 | **Lifetime `Loop` / `PingPong`** por partícula | `gameobject/particle/ParticleLifetime.java` | sí | barato |
-| Fix: efectos parados sin forzar revivían objetos, partículas con Start Lifetime 0 no morían, luces se apagaban antes | varios | no existe el bug (no hay parada suave) | llega con release sections |
-| Fix: animaciones del timeline tartamudeaban con rate ≠ 1 | `TimelinePlayer` | **puede afectarnos**: `SceneView.simulateTo`/rate está portado | verificar |
-| Fix: `/photon fx remove entity` saltaba los siguientes objetivos | comando | **puede afectarnos**: nuestro `ClientCommands`/comando de servidor recorre entidades | verificar |
+| Fix: efectos parados sin forzar revivían objetos, partículas con Start Lifetime 0 no morían, luces se apagaban antes | `FXRuntime.isTracked`, `FXObject.isDiscarded`, `FXInstanceObject.windDown`, `TileParticle.endAge` | **sí** | luces/partículas siguen en pantalla durante el fade |
+| Fix: animaciones del timeline tartamudeaban con rate ≠ 1 | `TimelinePlayer.frame` (`partialTicks * frameRate`) | **sí** | interpolación al rate del último tick |
+| Fix: `/photon fx remove entity` saltaba los siguientes objetivos | `EffectRemoval` (`continue`) | **sí** | no corta el resto de entidades |
 
 De `26.2.2.10` (entre nuestra base y 26.3), el port ya cubre lo portable:
 

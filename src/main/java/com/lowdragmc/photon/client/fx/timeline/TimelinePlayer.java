@@ -127,6 +127,11 @@ public class TimelinePlayer {
     }
 
     public boolean isFollowSections() {
+        return followSections();
+    }
+
+    /** Nested timelines follow the outer playback: the editor turns this off for replays. */
+    protected boolean followSections() {
         return followSections;
     }
 
@@ -154,7 +159,7 @@ public class TimelinePlayer {
                     + " are empty (sharing a start, or starting at or after the content end) and are left out");
         }
         clock.jumpListener(clockListener);
-        clock.follow(followSections);
+        clock.follow(followSections());
         clock.begin(startSection);
         this.stopped = false;
         this.lastSignalTick = -1;
@@ -185,7 +190,7 @@ public class TimelinePlayer {
     public void tick(float rate) {
         if (stopped) return;
         frameRate = Float.isFinite(rate) ? Math.max(0f, rate) : 1f;
-        clock.follow(followSections);
+        clock.follow(followSections());
         // a jump requested from outside takes effect now, before anything is evaluated
         clock.applyPendingJump();
         // after running into an end, every evaluation is "nothing on": what was on stops, or drains
@@ -261,6 +266,7 @@ public class TimelinePlayer {
      * gates it), so the pose stays put when stopped.
      */
     public void frame(float partialTicks) {
+        if (stopped || clock.ended()) return;
         if (recording()) return; // keep the user's live edits to the recording target
         // a seam that wraps or jumps must not be interpolated through: the frames between two ticks would sample
         // the time the clock never passes, so they stop just short of it

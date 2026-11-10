@@ -223,9 +223,9 @@ public abstract class FXObject extends Particle implements IFXObject {
         return false;
     }
 
-    /** Whether the particle engine dropped this object's runtime without notice; see {@link FXRuntime#isValid()}. */
+    /** Whether the particle engine dropped this object's runtime; a destroyed effect's remnants still show. */
     protected boolean isDiscarded() {
-        return scene instanceof FXRuntime runtime && !runtime.isValid();
+        return scene instanceof FXRuntime runtime && !runtime.isTracked();
     }
 
     @Override
