@@ -3071,14 +3071,14 @@ public final class PhotonFXEditorSmokeTest {
         }
         var leftoverBursts = new CompoundTag();
         leftoverBursts.put("emissionRate", leftoverConstant.copy());
-        var burstList = new ListTag();
-        var burst = new CompoundTag();
-        burst.putInt("time", 5);
-        burstList.add(burst);
-        leftoverBursts.put("bursts", burstList);
+        var leftoverBurstList = new ListTag();
+        var leftoverBurst = new CompoundTag();
+        leftoverBurst.putInt("time", 5);
+        leftoverBurstList.add(leftoverBurst);
+        leftoverBursts.put("bursts", leftoverBurstList);
         var repairedBursts = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBursts);
-        if (!(repairedBursts instanceof CompoundTag burstTag) || leftoverBursts.getList("bursts", Tag.TAG_COMPOUND).size() != 1
-                || burstTag.getCompound("bursts").getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("time") != 5) {
+        if (!(repairedBursts instanceof CompoundTag leftoverBurstTag) || leftoverBursts.getList("bursts", Tag.TAG_COMPOUND).size() != 1
+                || leftoverBurstTag.getCompound("bursts").getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("time") != 5) {
             throw new IllegalStateException("Photon 1 burst list was not wrapped for Photon 2");
         }
         var leftoverParticle = new CompoundTag();
