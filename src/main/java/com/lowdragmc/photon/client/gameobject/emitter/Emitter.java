@@ -113,15 +113,25 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
     protected void update(float dt) {
         this.ageF += dt;
         this.age = (int) this.ageF;
-        if (this.ageF >= getLifetime() && !isLooping()) {
+        if (hasReachedEnd() && !isLooping()) {
             this.remove(false);
         }
         if (getLifetime() > 0) {
-            if(isLooping())
+            if (wrapsProgress())
                 t = (this.ageF % getLifetime()) / getLifetime();
             else
                 t = net.minecraft.util.Mth.clamp(this.ageF / getLifetime(), 0f, 1f);
         }
+    }
+
+    /** Whether normalized emitter progress wraps at its duration. */
+    protected boolean wrapsProgress() {
+        return isLooping();
+    }
+
+    /** Whether the age after this simulation step has reached the emitter's authored end. */
+    protected boolean hasReachedEnd() {
+        return ageF >= getLifetime();
     }
 
     protected void updateOrigin() {
@@ -141,9 +151,10 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
     }
 
     public float getT(float partialTicks) {
-        if (this.lifetime > 0){
-            if (!isLooping()) return net.minecraft.util.Mth.clamp(t + partialTicks / this.lifetime, 0f, 1f);
-            return t + partialTicks / this.lifetime;
+        int duration = getLifetime();
+        if (duration > 0) {
+            float progress = t + partialTicks / duration;
+            return wrapsProgress() ? progress : net.minecraft.util.Mth.clamp(progress, 0f, 1f);
         }
         return 0;
     }
@@ -285,6 +296,13 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
     public void setAge(int age) {
         this.ageF = age;
         this.age = age;
+        int lifetime = getLifetime();
+        if (lifetime > 0) {
+            t = wrapsProgress() ? (ageF % lifetime) / lifetime
+                    : net.minecraft.util.Mth.clamp(ageF / lifetime, 0f, 1f);
+        } else {
+            t = 0f;
+        }
     }
 
     public boolean isLooping() {

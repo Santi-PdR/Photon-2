@@ -44,7 +44,7 @@ public class BeamParticle implements IParticle {
      * Life cycle
      */
     @Setter @Getter
-    protected int delay;
+    protected float delay; // consumed in simulation ticks, including fractional timeline steps
     @Setter @Getter
     protected boolean isRemoved;
 
@@ -82,7 +82,7 @@ public class BeamParticle implements IParticle {
     @Override
     public void updateTick(float dt) {
         if (delay > 0) {
-            delay--;
+            delay -= dt;
             return;
         }
 

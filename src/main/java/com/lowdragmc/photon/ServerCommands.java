@@ -38,6 +38,8 @@ public class ServerCommands {
                                         .then(RemoveBlockEffectCommand.createServerCommand())
                                         .then(RemoveEntityEffectCommand.createServerCommand())
                                 )
+                                // steer a playing effect between the named sections of its timeline
+                                .then(EffectSectionCommand.createServerCommand())
                         )
 
         );
