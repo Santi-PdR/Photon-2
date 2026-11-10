@@ -483,6 +483,8 @@ public class MapperUtils {
             "gradient", "random_gradient");
     private static final java.util.Set<String> MATERIAL_TYPES = java.util.Set.of(
             "texture", "custom_shader", "block_atlas");
+    private static final java.util.Set<String> SHAPE_TYPES = java.util.Set.of(
+            "circle", "cone", "sphere", "box", "cylinder", "dot", "function", "mesh");
     /**
      * Repair already-converted Photon 2 files that still carry Photon 1 codec names or shapes.
      * Unrecognized number-function types decode as constant 0, which makes particles invisible.
@@ -507,7 +509,8 @@ public class MapperUtils {
                 if (!type.equals(aliasLegacyType(type, compound))) return true;
                 if (!compound.contains("data", Tag.TAG_COMPOUND)
                         && !compound.contains("resource", Tag.TAG_STRING)
-                        && (NUMBER_FUNCTION_TYPES.contains(type) || MATERIAL_TYPES.contains(type))
+                        && (NUMBER_FUNCTION_TYPES.contains(type) || MATERIAL_TYPES.contains(type)
+                        || SHAPE_TYPES.contains(type))
                         && hasUnwrappedPayload(compound)) return true;
             }
             if (compound.contains("simulationSpace", Tag.TAG_STRING) && compound.getString("simulationSpace").isBlank()) {
@@ -524,10 +527,10 @@ public class MapperUtils {
     }
 
     private static boolean hasUnwrappedPayload(CompoundTag compound) {
-        return compound.contains("number") || compound.contains("texture", Tag.TAG_STRING)
-                || compound.contains("shader", Tag.TAG_STRING) || compound.contains("curves")
-                || (compound.contains("min") && compound.contains("max"))
-                || (compound.contains("a") && compound.contains("b"));
+        for (var key : compound.getAllKeys()) {
+            if (!"type".equals(key) && !"_type".equals(key)) return true;
+        }
+        return false;
     }
 
     private static boolean normalizeLegacyCodecs(Tag tag) {
@@ -619,15 +622,8 @@ public class MapperUtils {
         var rawType = compound.contains("type", Tag.TAG_STRING)
                 ? compound.getString("type") : compound.getString("_type");
         var type = aliasLegacyType(rawType, compound);
-        if (!NUMBER_FUNCTION_TYPES.contains(type) && !MATERIAL_TYPES.contains(type)) return false;
-        boolean looksPhoton1 = compound.contains("_type", Tag.TAG_STRING)
-                || !rawType.equals(type)
-                || compound.contains("number")
-                || (MATERIAL_TYPES.contains(type) && compound.contains("texture", Tag.TAG_STRING))
-                || compound.contains("shader", Tag.TAG_STRING)
-                || compound.contains("curves")
-                || (compound.contains("min") && compound.contains("max"));
-        if (!looksPhoton1) return false;
+        if (!NUMBER_FUNCTION_TYPES.contains(type) && !MATERIAL_TYPES.contains(type)
+                && !SHAPE_TYPES.contains(type)) return false;
         var data = new CompoundTag();
         for (var key : java.util.List.copyOf(compound.getAllKeys())) {
             if ("type".equals(key) || "_type".equals(key)) continue;

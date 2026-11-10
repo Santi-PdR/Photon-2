@@ -2961,6 +2961,14 @@ public final class PhotonFXEditorSmokeTest {
                 || !leftoverTexture.getTexture().toString().equals("minecraft:textures/particle/glow.png")) {
             throw new IllegalStateException("Photon 1 TextureMaterial did not load");
         }
+        var leftoverShape = new CompoundTag();
+        leftoverShape.putString("type", "Circle");
+        leftoverShape.putFloat("radius", 1.5f);
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape.deserializeWrapper(leftoverShape)
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.shape.Circle leftoverCircle)
+                || leftoverCircle.getRadius() != 1.5f) {
+            throw new IllegalStateException("Photon 1 Circle shape did not load");
+        }
         var leftover = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(sparseFlat).copy();
         leftover.putString("type", "particle");
         var leftoverAxes = new CompoundTag();
