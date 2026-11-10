@@ -517,6 +517,17 @@ public class MapperUtils {
             if (compound.contains("bursts", Tag.TAG_LIST) && compound.contains("emissionRate")) return true;
             if (compound.contains("material", Tag.TAG_COMPOUND) && compound.contains("ratio")
                     && (compound.contains("widthOverTrail") || compound.contains("minimumVertexDistance"))) return true;
+            if (compound.contains("material", Tag.TAG_COMPOUND) && compound.contains("renderer", Tag.TAG_COMPOUND)
+                    && !hasMaterialsPayload(compound.getCompound("renderer"))
+                    && isMaterialSettingCompound(compound.getCompound("material"))) return true;
+            if (compound.contains("from", Tag.TAG_COMPOUND) && !compound.contains("cullBox")
+                    && compound.getCompound("from").contains("x", Tag.TAG_ANY_NUMERIC)
+                    && !compound.getCompound("from").contains("type")) return true;
+            if (compound.contains("renderer", Tag.TAG_COMPOUND)
+                    && compound.getCompound("renderer").getBoolean("bloomEffect")
+                    && !compound.getCompound("lights").getBoolean("legacyBloomFullBright")) return true;
+            var blendFunc = compound.contains("blendFunc", Tag.TAG_STRING) ? compound.getString("blendFunc") : "";
+            if ("sub".equals(blendFunc) || "REVERSE_sub".equals(blendFunc)) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
@@ -559,6 +570,10 @@ public class MapperUtils {
             changed |= rewriteLegacySubEmitter(compound);
             changed |= rewriteLegacyBurstList(compound);
             changed |= rewriteLegacyFlatTrails(compound);
+            changed |= rewriteLegacyConfigMaterial(compound);
+            changed |= rewriteLegacyCullBox(compound);
+            changed |= rewriteLegacyBloomLight(compound);
+            changed |= rewriteLegacyBlendFunc(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -886,6 +901,72 @@ public class MapperUtils {
         }
         config.put("renderer", renderer);
         compound.put("config", config);
+        return true;
+    }
+
+    /** Photon 1 stored the material slot beside the renderer, not in renderer.materials. */
+    private static boolean rewriteLegacyConfigMaterial(CompoundTag compound) {
+        if (!compound.contains("material", Tag.TAG_COMPOUND) || !compound.contains("renderer", Tag.TAG_COMPOUND)) return false;
+        var renderer = compound.getCompound("renderer");
+        if (hasMaterialsPayload(renderer)) return false;
+        var slot = compound.getCompound("material");
+        if (!isMaterialSettingCompound(slot)) return false;
+        slot = slot.copy();
+        if (!slot.contains("renderStateSource", Tag.TAG_STRING)) slot.putString("renderStateSource", "CUSTOM");
+        var materials = new CompoundTag();
+        var payload = new ListTag();
+        payload.add(slot);
+        materials.put("payload", payload);
+        materials.putInt("uid", 1);
+        renderer.put("materials", materials);
+        return true;
+    }
+
+    private static boolean hasMaterialsPayload(CompoundTag renderer) {
+        if (renderer.contains("materials", Tag.TAG_LIST))
+            return !renderer.getList("materials", Tag.TAG_COMPOUND).isEmpty();
+        if (!renderer.contains("materials", Tag.TAG_COMPOUND)) return false;
+        return renderer.getCompound("materials").getList("payload", Tag.TAG_COMPOUND).size() > 0;
+    }
+
+    private static boolean isMaterialSettingCompound(CompoundTag tag) {
+        return tag.contains("blendMode") || tag.contains("material", Tag.TAG_COMPOUND);
+    }
+
+    /** Photon 1 cull used from/to vectors; Photon 2 persists an AABB under cullBox. */
+    private static boolean rewriteLegacyCullBox(CompoundTag compound) {
+        if (compound.contains("cullBox") || !compound.contains("from", Tag.TAG_COMPOUND)) return false;
+        var from = compound.getCompound("from");
+        if (!from.contains("x", Tag.TAG_ANY_NUMERIC) || from.contains("type")) return false;
+        var box = new CompoundTag();
+        box.put("min", compound.contains("from") ? mapCoordsDouble(from) : constantCoords(-0.5));
+        box.put("max", compound.contains("to", Tag.TAG_COMPOUND) ? mapCoordsDouble(compound.get("to")) : constantCoords(0.5));
+        compound.put("cullBox", box);
+        return true;
+    }
+
+    /** Photon 1 bloom emitters drew full-bright even with the light group disabled. */
+    private static boolean rewriteLegacyBloomLight(CompoundTag compound) {
+        if (!compound.contains("renderer", Tag.TAG_COMPOUND)
+                || !compound.getCompound("renderer").getBoolean("bloomEffect")) return false;
+        var lights = compound.contains("lights", Tag.TAG_COMPOUND) ? compound.getCompound("lights") : new CompoundTag();
+        if (lights.getBoolean("legacyBloomFullBright")) return false;
+        lights.putBoolean("legacyBloomFullBright", true);
+        compound.put("lights", lights);
+        return true;
+    }
+
+    /** Photon 1 used mixed-case OpenGL equation names. */
+    private static boolean rewriteLegacyBlendFunc(CompoundTag compound) {
+        if (!compound.contains("blendFunc", Tag.TAG_STRING)) return false;
+        var original = compound.getString("blendFunc");
+        var aliased = switch (original) {
+            case "sub" -> "SUB";
+            case "REVERSE_sub" -> "REVERSE_SUB";
+            default -> original;
+        };
+        if (aliased.equals(original)) return false;
+        compound.putString("blendFunc", aliased);
         return true;
     }
 

@@ -3104,6 +3104,47 @@ public final class PhotonFXEditorSmokeTest {
                 .getList("payload", Tag.TAG_COMPOUND).isEmpty()) {
             throw new IllegalStateException("Photon 1 flat trail material was not nested into TrailConfig");
         }
+        var leftoverSlot = new CompoundTag();
+        leftoverSlot.put("blendMode", new CompoundTag());
+        leftoverSlot.putByte("cull", (byte) 1);
+        leftoverSlot.putByte("depthTest", (byte) 1);
+        leftoverSlot.put("material", leftoverMaterial.copy());
+        var leftoverConfigMaterial = new CompoundTag();
+        leftoverConfigMaterial.put("material", leftoverSlot);
+        leftoverConfigMaterial.put("renderer", new CompoundTag());
+        var repairedConfigMaterial = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverConfigMaterial);
+        if (!(repairedConfigMaterial instanceof CompoundTag configMaterialTag)
+                || leftoverConfigMaterial.getCompound("renderer").contains("materials")
+                || !"CUSTOM".equals(configMaterialTag.getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).getCompound(0).getString("renderStateSource"))
+                || !configMaterialTag.getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).getCompound(0).getCompound("material")
+                .getCompound("data").getString("texture").equals("minecraft:textures/particle/glow.png")) {
+            throw new IllegalStateException("Photon 1 config material was not nested into renderer.materials");
+        }
+        var leftoverFrom = new CompoundTag(); leftoverFrom.putFloat("x", -8); leftoverFrom.putFloat("y", -4); leftoverFrom.putFloat("z", -2);
+        var leftoverTo = new CompoundTag(); leftoverTo.putFloat("x", 12); leftoverTo.putFloat("y", 6); leftoverTo.putFloat("z", 3);
+        var leftoverCull = new CompoundTag(); leftoverCull.putBoolean("enable", true); leftoverCull.put("from", leftoverFrom); leftoverCull.put("to", leftoverTo);
+        var repairedCull = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverCull);
+        if (!(repairedCull instanceof CompoundTag cullTag) || leftoverCull.contains("cullBox")
+                || cullTag.getCompound("cullBox").getList("min", Tag.TAG_DOUBLE).getDouble(0) != -8
+                || cullTag.getCompound("cullBox").getList("max", Tag.TAG_DOUBLE).getDouble(0) != 12) {
+            throw new IllegalStateException("Photon 1 cull from/to was not read as cullBox");
+        }
+        var leftoverBloom = new CompoundTag();
+        var leftoverBloomRenderer = new CompoundTag(); leftoverBloomRenderer.putBoolean("bloomEffect", true);
+        leftoverBloom.put("renderer", leftoverBloomRenderer);
+        var repairedBloom = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBloom);
+        if (!(repairedBloom instanceof CompoundTag bloomTag) || leftoverBloom.getCompound("lights").getBoolean("legacyBloomFullBright")
+                || !bloomTag.getCompound("lights").getBoolean("legacyBloomFullBright")) {
+            throw new IllegalStateException("Photon 1 bloomEffect did not keep full-bright lighting");
+        }
+        var leftoverBlend = new CompoundTag(); leftoverBlend.putString("blendFunc", "sub");
+        var repairedBlend = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBlend);
+        if (!(repairedBlend instanceof CompoundTag blendTag) || !"sub".equals(leftoverBlend.getString("blendFunc"))
+                || !"SUB".equals(blendTag.getString("blendFunc"))) {
+            throw new IllegalStateException("Photon 1 blendFunc sub was not renamed");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);
