@@ -6,6 +6,8 @@ import com.lowdragmc.lowdraglib2.editor.ui.Editor;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.data.TextWrap;
+import com.lowdragmc.lowdraglib2.gui.ui.data.ScrollerMode;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
@@ -274,30 +276,31 @@ public final class FXFileActions {
     private static void showFxPackContents(Editor editor, File packFile) {
         List<ResourceLocation> fxIds;
         try {
-            fxIds = FXPacks.listFx(packFile);
+            fxIds = FXPacks.listFx(packFile).stream().sorted(java.util.Comparator.comparing(ResourceLocation::toString)).toList();
         } catch (Exception e) {
             Photon.LOGGER.error("Failed to read fx pack {}", packFile, e);
             showError(editor, "photon.manage_fxpack", e);
             return;
         }
-        var dialog = new Dialog();
-        dialog.overlay.layout(layout -> layout.width(260).maxWidthPercent(95));
+        float width = 360, height = 240;
+        var dialog = new Dialog().windowMode(
+                editor.getPositionX() + Math.max(0, (editor.getSizeWidth() - width) / 2f),
+                editor.getPositionY() + Math.max(0, (editor.getSizeHeight() - height) / 2f), width, height);
         dialog.setTitle(packFile.getName());
-        var list = new UIElement().layout(layout -> {
-            layout.widthPercent(100);
-            layout.gapAll(2);
-        });
+        var list = new ScrollerView();
+        list.scrollerStyle(style -> style.mode(ScrollerMode.VERTICAL));
+        list.layout(layout -> { layout.widthPercent(100); layout.flex(1); });
         if (!FXPacks.isLoadable(packFile)) {
-            list.addChild(wrappedLabel(Component.translatable("photon.fxpack.not_loadable")));
+            list.addScrollViewChild(wrappedLabel(Component.translatable("photon.fxpack.not_loadable")));
         } else if (!FXPacks.isMounted(packFile)) {
-            list.addChildren(wrappedLabel(Component.translatable("photon.manage_fxpack.not_mounted")),
-                    new Button().setText("photon.fxpack.reload").setOnClick(e -> {
+            list.addScrollViewChild(wrappedLabel(Component.translatable("photon.manage_fxpack.not_mounted")));
+            list.addScrollViewChild(new Button().setText("photon.fxpack.reload").setOnClick(e -> {
                         dialog.close();
                         Minecraft.getInstance().reloadResourcePacks();
                     }));
         }
         if (fxIds.isEmpty()) {
-            list.addChild(new Label().setText("photon.manage_fxpack.empty"));
+            list.addScrollViewChild(new Label().setText("photon.manage_fxpack.empty"));
         }
         for (var fxId : fxIds) {
             var row = new UIElement().layout(layout -> {
@@ -307,11 +310,13 @@ public final class FXFileActions {
                 layout.gapAll(4);
             });
             var name = fxId.getPath().substring(fxId.getPath().lastIndexOf('/') + 1);
-            row.addChildren(
-                    // a long id is cut at the buttons and rolls while hovered
-                    new Label().setText(fxId.toString())
-                            .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
-                            .layout(layout -> layout.flex(1)),
+            // a long id is cut at the buttons, rolls while hovered and reads whole in the tooltip
+            var label = new Label().setText(fxId.toString())
+                    .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
+                    .layout(layout -> layout.flex(1).minWidth(0));
+            label.setOverflowVisible(false);
+            label.style(style -> style.tooltips(Component.literal(fxId.toString())));
+            row.addChildren(label,
                     ResourceDialogs.iconButton(Icons.IMPORT, "photon.manage_fxpack.convert", e ->
                             pickProjectFile(editor, name, projectFile -> {
                                 dialog.close();
@@ -320,7 +325,7 @@ public final class FXFileActions {
                             })),
                     ResourceDialogs.iconButton(Icons.DELETE, "photon.manage_fxpack.remove", e ->
                             confirmRemove(editor, dialog, packFile, fxId)));
-            list.addChild(row);
+            list.addScrollViewChild(row);
         }
         dialog.addContent(list);
         dialog.addButton(new Button().setOnClick(e -> dialog.close())
