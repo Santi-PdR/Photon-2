@@ -143,7 +143,8 @@ public class TextureMaterial extends ShaderInstanceMaterial {
 
     @Override
     public void preload(MaterialContext context, PreloadContext preload) {
-        preload.texture(com.lowdragmc.photon.client.fx.LooseTextures.resolve(texture));
+        preload.texture(texture);
+        preload.onRenderThread(() -> com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture));
         super.preload(context, preload);
     }
 
@@ -151,7 +152,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     public void setupUniform(MaterialContext context) {
         // the id the effect names may not be served by any pack (the author's folder was never registered): bind
         // the copy the workspace adopted, so the particles draw their image instead of the missing checkerboard
-        RenderSystem.setShaderTexture(0, com.lowdragmc.photon.client.fx.LooseTextures.resolve(texture));
+        RenderSystem.setShaderTexture(0, com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture));
         var shader = getShader(context);
         shader.safeGetUniform("DiscardThreshold").set(discardThreshold);
         // the preview thumbnail drops the intensity so a bright emissive material doesn't blow it out
