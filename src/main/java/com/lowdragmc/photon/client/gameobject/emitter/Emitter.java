@@ -207,6 +207,15 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
         return isEmitting() || super.isPlaying();
     }
 
+    /**
+     * A draining clip keeps this emitter ticking while it still shows something, so a beam, trail or
+     * particle that is already out finishes instead of vanishing when the clip ends.
+     */
+    @Override
+    public boolean hasVisibleRemnants() {
+        return getParticleAmount() > 0 || super.hasVisibleRemnants();
+    }
+
     @Override
     public int getLightColor(BlockPos pos) {
         return getLightColor(pos, 0);
