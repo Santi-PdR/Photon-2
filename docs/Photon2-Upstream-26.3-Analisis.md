@@ -79,17 +79,15 @@ LDLib2. Son portables a mano:
 | Fix: animaciones del timeline tartamudeaban con rate ≠ 1 | `TimelinePlayer` | **puede afectarnos**: `SceneView.simulateTo`/rate está portado | verificar |
 | Fix: `/photon fx remove entity` saltaba los siguientes objetivos | comando | **puede afectarnos**: nuestro `ClientCommands`/comando de servidor recorre entidades | verificar |
 
-De `26.2.2.10` (entre nuestra base y 26.3) también quedan cosas portables que **no** están aquí:
+De `26.2.2.10` (entre nuestra base y 26.3), el port ya cubre lo portable:
 
-- crear un `ParticleEmitter` directamente desde un `ParticleConfig` (API pública);
-- glTF que no recargaba al editar el archivo (nosotros tenemos `FXHelper.invalidate` + pack watcher:
-  conviene comprobar si el caso está cubierto);
-- billboards que no giraban con rotation-over-lifetime en world/custom space (nuestro
-  `PhotonBuffers`/renderer puede tener el mismo bug);
-- el gestor de FXPack que se desbordaba con muchos efectos → ventana redimensionable y con scroll;
-- pegar sobre un campo de curva que revertía;
-- la opción *Revert* de una instancia FX que faltaba en el menú del override;
-- traducciones y etiquetas de editor que faltaban.
+- `ParticleEmitter(ParticleConfig)` público;
+- glTF recarga por `PhotonMeshCache.pollFileChanges` / `invalidate`;
+- billboards world/custom en `TileParticleRenderer.applyOuterRotation`;
+- FXPack manager con `ScrollerView` 360×240;
+- pegar sobre curva no revierte (`CurveConfigurator.setPastable(false)`);
+- *Revert* de instancia FX en jerarquía y diálogo de overrides;
+- traducciones de 26.2 completas; claves de Drain/Seam del clip de control añadidas.
 
 ## Recomendación de orden
 

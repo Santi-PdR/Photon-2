@@ -7,15 +7,19 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
+import com.lowdragmc.lowdraglib2.gui.util.DrawerHelper;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
+import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.Track;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
 import java.util.List;
+import java.util.Random;
 
 /** Editor for {@code control} tracks: a name header + per-clip object-bound clips with seeds. */
 @OnlyIn(Dist.CLIENT)
@@ -113,10 +117,28 @@ public class ControlTrackEditor extends ClipTrackEditor {
                     () -> { clip.randomSeed(!old); ctx.requestRebuild(); ctx.refreshPreview(); },
                     () -> { clip.randomSeed(old); ctx.requestRebuild(); ctx.refreshPreview(); });
         });
+        menu.leaf(Component.translatable(clip.exitMode() == Clip.ExitMode.DRAIN
+                ? "photon.gui.editor.timeline.exit_mode_drain" : "photon.gui.editor.timeline.exit_mode_cut"), () -> {
+            var old = clip.exitMode();
+            var flipped = old == Clip.ExitMode.DRAIN ? Clip.ExitMode.CUT : Clip.ExitMode.DRAIN;
+            ctx.pushEdit("photon.gui.editor.timeline.edit_clip",
+                    () -> { clip.exitMode(flipped); ctx.requestRebuild(); ctx.refreshPreview(); },
+                    () -> { clip.exitMode(old); ctx.requestRebuild(); ctx.refreshPreview(); });
+        });
+        if (hasSections(ctx)) {
+            menu.leaf(Component.translatable(clip.seamMode() == Clip.SeamMode.RESTART
+                    ? "photon.gui.editor.timeline.seam_mode_restart" : "photon.gui.editor.timeline.seam_mode_auto"), () -> {
+                var old = clip.seamMode();
+                var flipped = old == Clip.SeamMode.RESTART ? Clip.SeamMode.AUTO : Clip.SeamMode.RESTART;
+                ctx.pushEdit("photon.gui.editor.timeline.edit_clip",
+                        () -> { clip.seamMode(flipped); ctx.requestRebuild(); ctx.refreshPreview(); },
+                        () -> { clip.seamMode(old); ctx.requestRebuild(); ctx.refreshPreview(); });
+            });
+        }
         menu.leaf(Component.translatable("photon.gui.editor.timeline.reseed"), () -> {
             var oldSeed = clip.seed();
             var oldRandom = clip.randomSeed();
-            var newSeed = new java.util.Random().nextLong();
+            var newSeed = new Random().nextLong();
             ctx.pushEdit("photon.gui.editor.timeline.edit_clip",
                     () -> { clip.seed(newSeed).randomSeed(false); ctx.refreshPreview(); },
                     () -> { clip.seed(oldSeed).randomSeed(oldRandom); ctx.refreshPreview(); });
@@ -148,16 +170,35 @@ public class ControlTrackEditor extends ClipTrackEditor {
                         : "photon.gui.editor.timeline.edit_clip.exit_mode.cut",
                 (mode, subGroup) -> { })
         );
-        // what happens when the timeline wraps a repeating section or jumps while this clip is still on
-        group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
-                "photon.gui.editor.timeline.edit_clip.seam_mode", clip::seamMode,
-                v -> { clip.seamMode(v); ctx.refreshPreview(); }, clip.seamMode(), true,
-                List.of(Clip.SeamMode.AUTO, Clip.SeamMode.RESTART),
-                mode -> mode == Clip.SeamMode.RESTART
-                        ? "photon.gui.editor.timeline.edit_clip.seam_mode.restart"
-                        : "photon.gui.editor.timeline.edit_clip.seam_mode.auto",
-                (mode, subGroup) -> { })
-        );
+        // without sections nothing loops, so there is no seam
+        if (hasSections(ctx)) {
+            group.addConfigurator(new ConfiguratorSelectorConfigurator<>(
+                    "photon.gui.editor.timeline.edit_clip.seam_mode", clip::seamMode,
+                    v -> { clip.seamMode(v); ctx.refreshPreview(); }, clip.seamMode(), true,
+                    List.of(Clip.SeamMode.AUTO, Clip.SeamMode.RESTART),
+                    mode -> mode == Clip.SeamMode.RESTART
+                            ? "photon.gui.editor.timeline.edit_clip.seam_mode.restart"
+                            : "photon.gui.editor.timeline.edit_clip.seam_mode.auto",
+                    (mode, subGroup) -> { })
+            );
+        }
+    }
+
+    private static boolean hasSections(TimelineContext ctx) {
+        var runtime = ctx.runtime();
+        return runtime != null && !runtime.fxData.timeline().sections().isEmpty();
+    }
+
+    @Override
+    protected void drawClipDecoration(GuiGraphics graphics, TimelineContext ctx, Track track, Clip clip,
+                                      float x, float y, float w, float h, float pt) {
+        if (clip.exitMode() == Clip.ExitMode.DRAIN) {
+            var tail = Math.min(12, w / 3);
+            DrawerHelper.drawGradientRect(graphics, x + w - tail, y + 1, tail, h - 2, 0x00000000, 0xA0000000, true);
+        }
+        if (clip.seamMode() == Clip.SeamMode.RESTART && w >= 14) {
+            PhotonIcons.LOOP.draw(graphics, 0, 0, x + w - 10, y + 1, 9, 9, pt);
+        }
     }
 
     @Override
