@@ -115,6 +115,19 @@ public class ClientCommands {
                         .then(Commands.literal("convert").requires(source -> source.hasPermission(2))
                                 .executes(context -> convertLegacyFx())
                                 .then(Commands.literal("status").executes(context -> legacyFxStatus())))
+                        .then(createLiteral("fx_source")
+                                .then(Commands.argument("effect", StringArgumentType.string()).executes(context -> {
+                                    var text = StringArgumentType.getString(context, "effect");
+                                    var id = net.minecraft.resources.ResourceLocation.tryParse(text);
+                                    if (id == null) {
+                                        feedback("photon: invalid FX id: " + text);
+                                        return 0;
+                                    }
+                                    var lines = com.lowdragmc.photon.client.fx.FXSourceReport.describe(id);
+                                    lines.forEach(ClientCommands::feedback);
+                                    Photon.LOGGER.info("[fx-source] {}", String.join(" | ", lines));
+                                    return 1;
+                                })))
                         .then(createLiteral("textures").executes(context -> textureStatus()))
                         .then(createLiteral("reload").executes(context -> reloadResources("requested")))
                         .then(createLiteral("fxpacks").executes(context -> refreshServerPacks())),

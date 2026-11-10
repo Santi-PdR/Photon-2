@@ -6,6 +6,8 @@ import com.lowdragmc.lowdraglib2.editor.ui.Editor;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.data.TextWrap;
+import com.lowdragmc.lowdraglib2.gui.ui.data.ScrollerMode;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
@@ -30,6 +32,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -272,34 +275,67 @@ public final class FXFileActions {
 
     /** A pack's effects, each one convertible into a project or removable from the pack. */
     private static void showFxPackContents(Editor editor, File packFile) {
-        List<ResourceLocation> fxIds;
-        try {
-            fxIds = FXPacks.listFx(packFile);
-        } catch (Exception e) {
-            Photon.LOGGER.error("Failed to read fx pack {}", packFile, e);
-            showError(editor, "photon.manage_fxpack", e);
-            return;
-        }
-        var dialog = new Dialog();
-        dialog.overlay.layout(layout -> layout.width(260).maxWidthPercent(95));
+        var fxIds = listFx(editor, packFile);
+        if (fxIds == null) return;
+        float width = 360, height = 240;
+        var dialog = new Dialog().windowMode(
+                editor.getPositionX() + Math.max(0, (editor.getSizeWidth() - width) / 2f),
+                editor.getPositionY() + Math.max(0, (editor.getSizeHeight() - height) / 2f), width, height);
         dialog.setTitle(packFile.getName());
-        var list = new UIElement().layout(layout -> {
+        var notices = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.gapAll(2);
         });
-        if (!FXPacks.isLoadable(packFile)) {
-            list.addChild(wrappedLabel(Component.translatable("photon.fxpack.not_loadable")));
-        } else if (!FXPacks.isMounted(packFile)) {
-            list.addChildren(wrappedLabel(Component.translatable("photon.manage_fxpack.not_mounted")),
-                    new Button().setText("photon.fxpack.reload").setOnClick(e -> {
-                        dialog.close();
-                        Minecraft.getInstance().reloadResourcePacks();
-                    }));
+        var list = new ScrollerView();
+        list.scrollerStyle(style -> style.mode(ScrollerMode.VERTICAL));
+        list.layout(layout -> {
+            layout.widthPercent(100);
+            layout.flex(1);
+        });
+        var contents = new PackContents(editor, dialog, packFile, notices, list);
+        contents.fill(fxIds);
+        dialog.addContent(notices);
+        dialog.addContent(list);
+        dialog.addButton(new Button().setOnClick(e -> dialog.close())
+                .setText("ldlib.gui.tips.confirm").addClass("__confirm-button__"));
+        dialog.show(editor);
+    }
+
+    @Nullable
+    private static List<ResourceLocation> listFx(Editor editor, File packFile) {
+        try {
+            // zip order is arbitrary; a long list has to be scannable
+            return FXPacks.listFx(packFile).stream().sorted(Comparator.comparing(ResourceLocation::toString)).toList();
+        } catch (Exception e) {
+            Photon.LOGGER.error("Failed to read fx pack {}", packFile, e);
+            showError(editor, "photon.manage_fxpack", e);
+            return null;
         }
-        if (fxIds.isEmpty()) {
-            list.addChild(new Label().setText("photon.manage_fxpack.empty"));
+    }
+
+    private record PackContents(Editor editor, Dialog dialog, File packFile, UIElement notices, ScrollerView list) {
+        void fill(List<ResourceLocation> fxIds) {
+            notices.clearAllChildren();
+            if (!FXPacks.isLoadable(packFile)) {
+                notices.addChild(wrappedLabel(Component.translatable("photon.fxpack.not_loadable")));
+            } else if (!FXPacks.isMounted(packFile)) {
+                notices.addChildren(wrappedLabel(Component.translatable("photon.manage_fxpack.not_mounted")),
+                        new Button().setText("photon.fxpack.reload").setOnClick(e -> {
+                            dialog.close();
+                            Minecraft.getInstance().reloadResourcePacks();
+                        }));
+            }
+            notices.setDisplay(!notices.getChildren().isEmpty());
+            list.clearAllScrollViewChildren();
+            if (fxIds.isEmpty()) {
+                list.addScrollViewChild(new Label().setText("photon.manage_fxpack.empty"));
+            }
+            for (var fxId : fxIds) {
+                list.addScrollViewChild(row(fxId));
+            }
         }
-        for (var fxId : fxIds) {
+
+        private UIElement row(ResourceLocation fxId) {
             var row = new UIElement().layout(layout -> {
                 layout.widthPercent(100);
                 layout.flexDirection(FlexDirection.ROW);
@@ -307,42 +343,44 @@ public final class FXFileActions {
                 layout.gapAll(4);
             });
             var name = fxId.getPath().substring(fxId.getPath().lastIndexOf('/') + 1);
-            row.addChildren(
-                    // a long id is cut at the buttons and rolls while hovered
-                    new Label().setText(fxId.toString())
-                            .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
-                            .layout(layout -> layout.flex(1)),
+            // a long id is cut at the buttons, rolls while hovered and reads whole in the tooltip
+            var label = new Label().setText(fxId.toString())
+                    .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
+                    .layout(layout -> layout.flex(1).minWidth(0));
+            label.setOverflowVisible(false);
+            label.style(style -> style.tooltips(Component.literal(fxId.toString())));
+            return row.addChildren(label,
                     ResourceDialogs.iconButton(Icons.IMPORT, "photon.manage_fxpack.convert", e ->
                             pickProjectFile(editor, name, projectFile -> {
                                 dialog.close();
                                 openConverted(editor, projectFile,
                                         () -> FXProjectConverter.convertPacked(packFile, fxId, projectFile));
                             })),
-                    ResourceDialogs.iconButton(Icons.DELETE, "photon.manage_fxpack.remove", e ->
-                            confirmRemove(editor, dialog, packFile, fxId)));
-            list.addChild(row);
+                    ResourceDialogs.iconButton(Icons.DELETE, "photon.manage_fxpack.remove", e -> confirmRemove(fxId)));
         }
-        dialog.addContent(list);
-        dialog.addButton(new Button().setOnClick(e -> dialog.close())
-                .setText("ldlib.gui.tips.confirm").addClass("__confirm-button__"));
-        dialog.show(editor);
-    }
 
-    private static void confirmRemove(Editor editor, Dialog contents, File packFile, ResourceLocation fxId) {
-        Dialog.showCheckBox("photon.manage_fxpack", Component.translatable("photon.manage_fxpack.remove_confirm", fxId.toString()),
-                remove -> {
-                    if (!remove) return;
-                    try {
-                        // garbage-collects the resources nothing else in the pack uses
-                        FXPacks.removeFx(packFile, fxId);
-                    } catch (Exception e) {
-                        Photon.LOGGER.error("Failed to remove {} from {}", fxId, packFile, e);
-                        showError(editor, "photon.manage_fxpack", e);
-                        return;
-                    }
-                    contents.close();
-                    showFxPackContents(editor, packFile); // rebuilt from the fresh listing
-                }).show(editor);
+        private void confirmRemove(ResourceLocation fxId) {
+            Dialog.showCheckBox("photon.manage_fxpack", Component.translatable("photon.manage_fxpack.remove_confirm", fxId.toString()),
+                    remove -> {
+                        if (!remove) return;
+                        try {
+                            // garbage-collects the resources nothing else in the pack uses
+                            FXPacks.removeFx(packFile, fxId);
+                        } catch (Exception e) {
+                            Photon.LOGGER.error("Failed to remove {} from {}", fxId, packFile, e);
+                            showError(editor, "photon.manage_fxpack", e);
+                            return;
+                        }
+                        var fxIds = listFx(editor, packFile);
+                        if (fxIds == null) {
+                            dialog.close();
+                            return;
+                        }
+                        // refilled in place: the window keeps its position, size and scroll
+                        fill(fxIds);
+                        dialog.focus();
+                    }).show(editor);
+        }
     }
 
     // ---- helpers -----------------------------------------------------------------------------------

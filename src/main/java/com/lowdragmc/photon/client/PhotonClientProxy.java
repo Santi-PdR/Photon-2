@@ -100,8 +100,10 @@ public class PhotonClientProxy extends PhotonCommonProxy {
 
     @SubscribeEvent
     public void clientSetup(final FMLClientSetupEvent e) {
+        // before the deferred work, and before anything can be played with: the migration is a one-shot at
+        // startup, so it can never undo a value picked later (the knob happens to pass through 1.0, an old default)
+        migrateOldBloomDefaults();
         e.enqueueWork(() -> {
-            migrateOldBloomDefaults();
             PhotonShaders.init();
             PhotonFXProjectSmokeTest.runIfEnabled();
             PhotonFXEditorSmokeTest.registerIfEnabled();
@@ -112,8 +114,20 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 com.lowdragmc.photon.client.shadergraph.ShaderGraph.NODE_REGISTRY.getNodeClasses().size());
     }
 
-    /** Existing installs persist config values, so replace the old shipped defaults once. */
+    /** Whether the legacy-default migration already ran: it must never touch a value the player has picked. */
+    private static boolean migratedOldBloomDefaults = false;
+
+    /**
+     * Existing installs persist config values, so replace the old shipped defaults — <b>once, ever</b>.
+     * <p>
+     * The startup hook that calls this is deferred work: it can land after the player (or the editor's own smoke
+     * test) has already moved the bloom knob. Without the guard a value picked by hand that happens to equal an old
+     * default — intensity exactly {@code 1.0} on a {@code 0..2} slider, for instance — was silently thrown back to
+     * the new default: the slider reached 1.0, snapped back to 0.18, then worked again further along the track.
+     */
     private static void migrateOldBloomDefaults() {
+        if (migratedOldBloomDefaults) return;
+        migratedOldBloomDefaults = true;
         boolean changed = false;
         if (Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 1.001) == 0
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.1) == 0
