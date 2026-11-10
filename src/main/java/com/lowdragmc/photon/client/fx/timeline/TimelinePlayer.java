@@ -126,6 +126,10 @@ public class TimelinePlayer {
         clock.follow(followSections);
     }
 
+    public boolean isFollowSections() {
+        return followSections;
+    }
+
     /** Hears the clock wrap or jump; the editor uses it to keep its preview clock on timeline time. */
     public void setClockListener(@Nullable SectionClock.JumpListener clockListener) {
         this.clockListener = clockListener;

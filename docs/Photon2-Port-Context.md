@@ -190,18 +190,13 @@ CI verifica comportamiento (`[lifetime-mode-smoke]`, `[drain-exit-smoke]`, `[sec
 efecto concreto, que `Drain` dé la sensación buscada y que una despedida dure lo que tiene que durar
 sigue necesitando la prueba de Alex en juego.
 
-Lo que **todavía no hay** de las secciones, dicho claro:
+La banda gráfica de secciones de 26.3 (`SectionStrip`) está portada: aparece bajo la regla cuando hay
+secciones, se arrastra por el borde izquierdo, el inspector edita nombre/inicio/repetición/then/release,
+el menú de la banda cubre then/repeat/release/rename/jump/queue, y la barra de transporte gana Advance /
+Release / Follow mientras hay secciones. Sigue el menú de la regla (clic derecho, Mayús+arrastre de marca).
+La despedida se reproduce en la timeline del efecto, no en las timelines internas de un `.fx` anidado.
 
-- hay una primera interfaz por menú contextual, no la banda completa de 26.3: clic derecho en la regla
-  sobre contenido para crear una sección y clic derecho cerca de su marca morada para configurar sus
-  repeticiones (0 = indefinido), salida, salto y despedida, renombrarla, moverla introduciendo el tick o
-  eliminarla. Al renombrar se actualizan los saltos y la despedida que la referencian. Para verla en ejecución
-  hay que reiniciar la previsualización; los cambios son deshacibles. También se puede mover un inicio con
-  Mayús + arrastrar su marca en la regla; se ajusta a ticks enteros y no acepta inicios duplicados;
-- la despedida se reproduce en la timeline del efecto, no en las timelines internas de un efecto
-  anidado (un `.fx` dentro de otro): esas se siguen cortando como antes.
-
-La interfaz nueva requiere prueba manual en el juego; la banda gráfica completa sigue pendiente.
+La interfaz nueva requiere prueba manual en el juego.
 
 ## Audio
 
