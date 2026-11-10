@@ -1924,5 +1924,20 @@
   "photon.fx_instance.replace": "替换…",
   "photon.fx_instance.refresh": "跟随更新后的源",
   "photon.fx_instance.enable": "启用",
-  "photon.fx_instance.disable": "禁用"
+  "photon.fx_instance.disable": "禁用",
+  "ParticleConfig.lifetimeMode": "生命周期模式",
+  "photon.emitter.config.lifetimeMode": "生命周期如何驱动 T（所有「随生命周期」曲线读取的 0~1 年龄）。Once：T 从 0 走到 1，粒子随之消亡。Loop：每个生命周期 T 从 0 重新开始，粒子不会因寿命而消亡。PingPong：T 在 0 和 1 之间来回，曲线首尾不必相同。循环的粒子在发射器被停止时（自然消散，或特效被停止）播完当前这一圈再消亡。",
+  "photon.gui.editor.timeline.edit_clip.exit_mode": "结束方式",
+  "photon.gui.editor.timeline.edit_clip.exit_mode.cut": "立即消失",
+  "photon.gui.editor.timeline.edit_clip.exit_mode.drain": "停止发射，自然消散",
+  "photon.gui.editor.timeline.edit_clip.seam_mode": "跨接缝时",
+  "photon.gui.editor.timeline.edit_clip.seam_mode.auto": "自动：继续播放，已结束则重启",
+  "photon.gui.editor.timeline.edit_clip.seam_mode.restart": "每遍重启",
+  "InheritVelocitySetting.legacyUnscaledVelocity": "Photon 1 速度继承",
+  "photon.emitter.config.inheritVelocity.legacyUnscaledVelocity": "使用 Photon 1 的原始发射器速度。关闭则应用倍率。",
+  "LightOverLifetimeSetting.legacyBloomFullBright": "Photon 1 泛光全亮",
+  "photon.emitter.config.lights.legacyBloomFullBright": "导入的 Photon 1 泛光效果使用全亮。这不会还原原来的泛光光晕。",
+  "photon.configuration.assets": "特效资源",
+  "photon.configuration.assets.extra_roots": "额外资源文件夹",
+  "photon.configuration.assets.extra_roots.tooltip": "在游戏目录之外搜索特效图片的文件夹，按 <folder>/assets/<namespace>/... 读取。如果贴图没有显示，把整合包或工作区文件夹加到这里。"
 }
