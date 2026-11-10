@@ -88,6 +88,8 @@ De `26.2.2.10` (entre nuestra base y 26.3), el port ya cubre lo portable:
 - pegar sobre curva no revierte (`CurveConfigurator.setPastable(false)`);
 - *Revert* de instancia FX en jerarquía y diálogo de overrides;
 - traducciones de 26.2 completas; claves de Drain/Seam del clip de control añadidas.
+- lecturas de pose/color/UV de partícula escriben en un vector del caller (`getReal*(dest)`), como 26.3
+  para no allocar por partícula en el bake de CPU. No se porta el instancing GPU ni OIT.
 
 ## Recomendación de orden
 

@@ -326,7 +326,12 @@ public abstract class Emitter extends FXObject implements IParticleEmitter {
     }
 
     public Vector4f getRGBAColor() {
-        return new Vector4f(rCol, gCol, bCol, alpha);
+        return getRGBAColor(new Vector4f());
+    }
+
+    @Override
+    public Vector4f getRGBAColor(Vector4f dest) {
+        return dest.set(rCol, gCol, bCol, alpha);
     }
 }
 

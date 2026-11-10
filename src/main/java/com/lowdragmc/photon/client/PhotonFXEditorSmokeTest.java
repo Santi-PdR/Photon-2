@@ -429,6 +429,7 @@ public final class PhotonFXEditorSmokeTest {
         verifySections();
         verifySectionCommand();
         verifyDestroyKeepsRemnants();
+        verifyParticleDestReuse();
     }
 
     /**
@@ -754,6 +755,24 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("An instance outside a runtime has a section control");
         }
         Photon.LOGGER.info("[destroy-remnant-smoke] destroy(false) invalidates the runtime; an FX instance winds down");
+    }
+
+    /**
+     * Photon 26.3: pose/color reads write into a caller vector so the particle bake does not allocate per particle.
+     * The no-arg getters still return a fresh vector, so anything that stored the old result is unchanged.
+     */
+    private static void verifyParticleDestReuse() {
+        var emitter = new com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter();
+        var dest = new org.joml.Vector4f(9, 8, 7, 6);
+        var out = emitter.getRGBAColor(dest);
+        var fresh = emitter.getRGBAColor();
+        if (out != dest || dest.x != fresh.x || dest.y != fresh.y || dest.z != fresh.z || dest.w != fresh.w) {
+            throw new IllegalStateException("Emitter color did not write into the caller vector: " + dest + " vs " + fresh);
+        }
+        if (fresh == dest) {
+            throw new IllegalStateException("The no-arg color getter reused the caller vector");
+        }
+        Photon.LOGGER.info("[particle-dest-smoke] emitter color writes into the caller vector ({})", dest);
     }
 
     /**
