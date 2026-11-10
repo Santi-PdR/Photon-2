@@ -31,6 +31,9 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;

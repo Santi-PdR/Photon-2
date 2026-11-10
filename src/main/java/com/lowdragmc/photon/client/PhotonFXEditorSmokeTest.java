@@ -3081,6 +3081,29 @@ public final class PhotonFXEditorSmokeTest {
                 || burstTag.getCompound("bursts").getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("time") != 5) {
             throw new IllegalStateException("Photon 1 burst list was not wrapped for Photon 2");
         }
+        var leftoverParticle = new CompoundTag();
+        leftoverParticle.put("emission", new CompoundTag());
+        leftoverParticle.put("startLifetime", leftoverConstant.copy());
+        leftoverParticle.put("startSize", leftoverConstant.copy());
+        var repairedParticle = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverParticle);
+        if (!(repairedParticle instanceof CompoundTag particleTag) || leftoverParticle.contains("simulationSpace")
+                || !"World".equals(particleTag.getString("simulationSpace"))
+                || particleTag.getList("startSize", Tag.TAG_COMPOUND).size() != 3) {
+            throw new IllegalStateException("Photon 1 particle without simulationSpace did not default to World");
+        }
+        var leftoverTrails = new CompoundTag();
+        leftoverTrails.putFloat("ratio", 1f);
+        leftoverTrails.put("material", leftoverMaterial.copy());
+        leftoverTrails.put("widthOverTrail", leftoverConstant.copy());
+        leftoverTrails.putFloat("minimumVertexDistance", 0.1f);
+        var repairedTrails = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverTrails);
+        if (!(repairedTrails instanceof CompoundTag trailsTag) || leftoverTrails.contains("config")
+                || trailsTag.getCompound("config").getFloat("minVertexDistance") != 0.1f
+                || !trailsTag.getCompound("config").contains("widthOverTrail")
+                || trailsTag.getCompound("config").getCompound("renderer").getCompound("materials")
+                .getList("payload", Tag.TAG_COMPOUND).isEmpty()) {
+            throw new IllegalStateException("Photon 1 flat trail material was not nested into TrailConfig");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);
