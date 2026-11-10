@@ -502,6 +502,11 @@ public class MapperUtils {
             if (compound.contains("isDecimals", Tag.TAG_BYTE) && !compound.contains("legacyIntegerInclusive")) return true;
             if (compound.contains("enable") && !compound.contains("_enable")) return true;
             if (compound.contains("shader", Tag.TAG_STRING) && !compound.contains("shaderLocation", Tag.TAG_STRING)) return true;
+            if (compound.contains("tiles", Tag.TAG_COMPOUND) && compound.getCompound("tiles").contains("a")
+                    && compound.getCompound("tiles").contains("b")) return true;
+            if (compound.contains("shape") && compound.contains("position", Tag.TAG_COMPOUND)
+                    && compound.getCompound("position").contains("x", Tag.TAG_ANY_NUMERIC)
+                    && !compound.getCompound("position").contains("type")) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
@@ -537,6 +542,8 @@ public class MapperUtils {
             changed |= rewriteLegacyCustomShader(compound);
             changed |= rewriteLegacyToggleEnable(compound);
             changed |= rewriteLegacyShapeMesh(compound);
+            changed |= rewriteLegacyUvTiles(compound);
+            changed |= rewriteLegacyShapeVectors(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -762,6 +769,44 @@ public class MapperUtils {
         payload.put("meshData", payload.getCompound("mesh").copy());
         payload.remove("mesh");
         return true;
+    }
+
+    /** Photon 1 UV tiles were a Range `{a,b}`. Photon 2 Vector2i reads an int array. */
+    private static boolean rewriteLegacyUvTiles(CompoundTag compound) {
+        if (!compound.contains("tiles", Tag.TAG_COMPOUND)) return false;
+        var tiles = compound.getCompound("tiles");
+        if (!tiles.contains("a") || !tiles.contains("b") || tiles.contains("type")) return false;
+        compound.putIntArray("tiles", new int[]{tiles.getInt("a"), tiles.getInt("b")});
+        return true;
+    }
+
+    /**
+     * Photon 1 ShapeSetting stored position/rotation/scale as raw x/y/z numbers before
+     * NumberFunction3. Mapping those as typed compounds produced invalid functions.
+     */
+    private static boolean rewriteLegacyShapeVectors(CompoundTag compound) {
+        if (!compound.contains("shape") || !compound.contains("position", Tag.TAG_COMPOUND)) return false;
+        var position = compound.getCompound("position");
+        if (!position.contains("x", Tag.TAG_ANY_NUMERIC) || position.contains("type")
+                || position.contains("x", Tag.TAG_COMPOUND)) return false;
+        boolean changed = false;
+        for (var field : java.util.List.of("position", "rotation", "scale")) {
+            if (!compound.contains(field, Tag.TAG_COMPOUND)) continue;
+            var source = compound.getCompound(field);
+            if (!source.contains("x", Tag.TAG_ANY_NUMERIC) || source.contains("type")) continue;
+            var values = new ListTag();
+            for (var axis : java.util.List.of("x", "y", "z")) {
+                var constant = new CompoundTag();
+                constant.putString("type", "constant");
+                var data = new CompoundTag();
+                data.putDouble("number", source.getDouble(axis));
+                constant.put("data", data);
+                values.add(constant);
+            }
+            compound.put(field, values);
+            changed = true;
+        }
+        return changed;
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {

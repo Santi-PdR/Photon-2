@@ -3026,6 +3026,32 @@ public final class PhotonFXEditorSmokeTest {
                 || !leftoverCustom.getShaderLocation().toString().equals("photon:circle")) {
             throw new IllegalStateException("Photon 1 CustomShaderMaterial did not load");
         }
+        var leftoverUv = new CompoundTag();
+        leftoverUv.putBoolean("enable", true);
+        var leftoverTiles = new CompoundTag();
+        leftoverTiles.putInt("a", 4);
+        leftoverTiles.putInt("b", 2);
+        leftoverUv.put("tiles", leftoverTiles);
+        var repairedUv = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverUv);
+        if (!(repairedUv instanceof CompoundTag uvTag) || leftoverUv.getCompound("tiles").getInt("a") != 4
+                || !java.util.Arrays.equals(uvTag.getIntArray("tiles"), new int[]{4, 2})) {
+            throw new IllegalStateException("Photon 1 UV tiles were not read as a Photon 2 sheet size");
+        }
+        var leftoverShapeSetting = new CompoundTag();
+        leftoverShapeSetting.put("shape", new CompoundTag());
+        var leftoverPos = new CompoundTag();
+        leftoverPos.putDouble("x", 2.5);
+        leftoverPos.putDouble("y", -3);
+        leftoverPos.putDouble("z", 4);
+        leftoverShapeSetting.put("position", leftoverPos);
+        leftoverShapeSetting.put("rotation", leftoverPos.copy());
+        leftoverShapeSetting.put("scale", leftoverPos.copy());
+        var repairedShape = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverShapeSetting);
+        if (!(repairedShape instanceof CompoundTag shapeTag)
+                || leftoverShapeSetting.getCompound("position").getDouble("x") != 2.5
+                || shapeTag.getList("position", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 2.5) {
+            throw new IllegalStateException("Photon 1 raw shape vectors were not read as NumberFunction3");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);
