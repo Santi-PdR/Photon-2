@@ -2986,6 +2986,32 @@ public final class PhotonFXEditorSmokeTest {
                 || leftoverRandomFn.get(0f, () -> 0f).intValue() == 0) {
             throw new IllegalStateException("Photon 1 RandomGradient colour channels did not load");
         }
+        var leftoverRange = new CompoundTag();
+        leftoverRange.putString("type", "RandomConstant");
+        leftoverRange.putInt("a", 0);
+        leftoverRange.putInt("b", 1);
+        leftoverRange.putBoolean("isDecimals", false);
+        var leftoverRangeFn = com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.deserializeWrapper(leftoverRange);
+        if (leftoverRangeFn.get(0f, () -> 0.99f).intValue() != 1)
+            throw new IllegalStateException("Photon 1 integer RandomConstant range no longer includes the upper endpoint");
+        var leftoverToggle = new CompoundTag();
+        leftoverToggle.putBoolean("enable", true);
+        var repairedToggle = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverToggle);
+        if (!(repairedToggle instanceof CompoundTag enabledToggle) || !enabledToggle.getBoolean("_enable")
+                || leftoverToggle.contains("_enable")) {
+            throw new IllegalStateException("Photon 1 enable flag was not read as a Photon 2 toggle");
+        }
+        var leftoverShader = new CompoundTag();
+        leftoverShader.putString("type", "CustomShaderMaterial");
+        leftoverShader.putString("shader", "photon:circle");
+        var leftoverUniforms = new CompoundTag();
+        leftoverUniforms.put("uniforms", new CompoundTag());
+        leftoverShader.put("uniform", leftoverUniforms);
+        if (!(com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial.deserializeWrapper(leftoverShader)
+                instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.CustomShaderMaterial leftoverCustom)
+                || !leftoverCustom.getShaderLocation().toString().equals("photon:circle")) {
+            throw new IllegalStateException("Photon 1 CustomShaderMaterial did not load");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);
@@ -3009,6 +3035,13 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Leftover Photon 1 codec repair mutated the author's tag");
         if (!leftoverEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f)))
             throw new IllegalStateException("Photon 1 x/y/z start size did not load");
+        var leftoverScalar = leftover.copy();
+        leftoverScalar.getCompound("data").getCompound("config").put("startSize", leftoverConstant.copy());
+        var leftoverScalarDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(leftoverScalar);
+        if (!(leftoverScalarDecoded instanceof ParticleEmitter leftoverScalarEmitter)
+                || !leftoverScalarEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.25f))) {
+            throw new IllegalStateException("Photon 1 scalar start size did not load");
+        }
         Photon.LOGGER.info("[photon1-codec-smoke] loaded Photon 1 type names without reconverting");
         // Sparse enabled modules must not turn missing 1-valued defaults into zero.
         var sparseModules = sparseFlat.copy();

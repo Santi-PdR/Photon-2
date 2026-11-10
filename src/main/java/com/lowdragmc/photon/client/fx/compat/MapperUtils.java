@@ -124,25 +124,7 @@ public class MapperUtils {
                 break;
             case "CustomShaderMaterial":
                 newTypedValueTag.putString("type", "custom_shader");
-                dataTag.putString("shaderLocation", typedValueTag.getString("shader"));
-                var oldUniforms = typedValueTag.getCompound("uniform");
-                var shaderData = new CompoundTag();
-                shaderData.put("uniforms", oldUniforms.getCompound("uniforms").copy());
-                var samplers = new CompoundTag();
-                var oldSamplers = oldUniforms.getCompound("samplers");
-                for (var key : oldSamplers.getAllKeys()) {
-                    if (!key.matches("[0-9]+") || !oldSamplers.contains(key, Tag.TAG_STRING)) continue;
-                    var texture = net.minecraft.resources.ResourceLocation.tryParse(oldSamplers.getString(key));
-                    if (texture == null) continue;
-                    var sampler = new CompoundTag();
-                    sampler.putString("type", "texture");
-                    sampler.putString("resource", texture.toString());
-                    samplers.put("Sampler" + key, sampler);
-                }
-                shaderData.put("samplers", samplers);
-                var additional = new CompoundTag();
-                additional.put("shaderData", shaderData);
-                dataTag.put("_additional", additional);
+                dataTag = mapPhoton1CustomShaderData(typedValueTag);
                 break;
 
             case "RandomColor":
@@ -517,9 +499,15 @@ public class MapperUtils {
                 return true;
             }
             if (isPhoton1GradientColor(compound)) return true;
+            if (compound.contains("isDecimals", Tag.TAG_BYTE) && !compound.contains("legacyIntegerInclusive")) return true;
+            if (compound.contains("enable") && !compound.contains("_enable")) return true;
+            if (compound.contains("shader", Tag.TAG_STRING) && !compound.contains("shaderLocation", Tag.TAG_STRING)) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
-                if (needsLegacyCodecRepair(compound.get(key))) return true;
+                var child = compound.get(key);
+                if (("startSize".equals(key) || "startRotation".equals(key)) && child instanceof CompoundTag nested
+                        && isNumberFunctionCompound(nested)) return true;
+                if (needsLegacyCodecRepair(child)) return true;
             }
         } else if (tag instanceof ListTag list) {
             for (var entry : list) if (needsLegacyCodecRepair(entry)) return true;
@@ -545,6 +533,10 @@ public class MapperUtils {
             }
             changed |= wrapLegacyTypedPayload(compound);
             changed |= rewriteLegacyGradientPayload(compound);
+            changed |= rewriteLegacyRandomRange(compound);
+            changed |= rewriteLegacyCustomShader(compound);
+            changed |= rewriteLegacyToggleEnable(compound);
+            changed |= rewriteLegacyShapeMesh(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -552,6 +544,9 @@ public class MapperUtils {
                     var axes = asNumberFunction3List(nested);
                     if (axes != null) {
                         compound.put(key, axes);
+                        changed = true;
+                    } else if (("startSize".equals(key) || "startRotation".equals(key)) && isNumberFunctionCompound(nested)) {
+                        compound.put(key, mapUniformTyped3VecFromMapped(nested));
                         changed = true;
                     }
                 } else if (child instanceof ListTag list) {
@@ -693,6 +688,80 @@ public class MapperUtils {
         if (!isPhoton1GradientColor(tag)) return tag.copy();
         return gradient(tag.getList("a", Tag.TAG_FLOAT), tag.getList("r", Tag.TAG_FLOAT),
                 tag.getList("g", Tag.TAG_FLOAT), tag.getList("b", Tag.TAG_FLOAT));
+    }
+
+    private static ListTag mapUniformTyped3VecFromMapped(CompoundTag value) {
+        var result = new ListTag();
+        for (int i = 0; i < 3; i++) result.add(value.copy());
+        return result;
+    }
+
+    /** Photon 1 integer ranges include the upper endpoint. Photon 2 only does that with this flag. */
+    private static boolean rewriteLegacyRandomRange(CompoundTag compound) {
+        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type"), compound);
+        if (!"random_constant".equals(type) && !"random_color".equals(type)) return false;
+        var payload = compound.contains("data", Tag.TAG_COMPOUND) ? compound.getCompound("data") : compound;
+        if (!payload.contains("isDecimals", Tag.TAG_BYTE) || payload.contains("legacyIntegerInclusive")) return false;
+        if (!payload.getBoolean("isDecimals")) payload.putBoolean("legacyIntegerInclusive", true);
+        payload.remove("isDecimals");
+        return true;
+    }
+
+    private static boolean rewriteLegacyCustomShader(CompoundTag compound) {
+        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type"), compound);
+        if (!"custom_shader".equals(type)) return false;
+        var payload = compound.contains("data", Tag.TAG_COMPOUND) ? compound.getCompound("data") : compound;
+        if (!payload.contains("shader", Tag.TAG_STRING) || payload.contains("shaderLocation", Tag.TAG_STRING)) return false;
+        compound.put("data", mapPhoton1CustomShaderData(payload));
+        return true;
+    }
+
+    static CompoundTag mapPhoton1CustomShaderData(CompoundTag photon1) {
+        var dataTag = new CompoundTag();
+        var shader = photon1.contains("shaderLocation", Tag.TAG_STRING)
+                ? photon1.getString("shaderLocation") : photon1.getString("shader");
+        if (!shader.isEmpty()) dataTag.putString("shaderLocation", shader);
+        var oldUniforms = photon1.contains("uniform", Tag.TAG_COMPOUND) ? photon1.getCompound("uniform") : new CompoundTag();
+        var shaderData = new CompoundTag();
+        if (oldUniforms.contains("uniforms", Tag.TAG_COMPOUND)) {
+            shaderData.put("uniforms", oldUniforms.getCompound("uniforms").copy());
+        }
+        var samplers = new CompoundTag();
+        var oldSamplers = oldUniforms.getCompound("samplers");
+        for (var key : oldSamplers.getAllKeys()) {
+            if (!key.matches("[0-9]+") || !oldSamplers.contains(key, Tag.TAG_STRING)) continue;
+            var texture = net.minecraft.resources.ResourceLocation.tryParse(oldSamplers.getString(key));
+            if (texture == null) continue;
+            var sampler = new CompoundTag();
+            sampler.putString("type", "texture");
+            sampler.putString("resource", texture.toString());
+            samplers.put("Sampler" + key, sampler);
+        }
+        shaderData.put("samplers", samplers);
+        var additional = new CompoundTag();
+        additional.put("shaderData", shaderData);
+        dataTag.put("_additional", additional);
+        return dataTag;
+    }
+
+    /** LDLib2 toggle modules persist {@code _enable}; Photon 1 wrote {@code enable}. */
+    private static boolean rewriteLegacyToggleEnable(CompoundTag compound) {
+        if (!compound.contains("enable") || compound.contains("_enable")) return false;
+        compound.putBoolean("_enable", compound.getBoolean("enable"));
+        return true;
+    }
+
+    private static boolean rewriteLegacyShapeMesh(CompoundTag compound) {
+        var type = aliasLegacyType(compound.contains("type", Tag.TAG_STRING)
+                ? compound.getString("type") : compound.getString("_type"), compound);
+        if (!"mesh".equals(type)) return false;
+        var payload = compound.contains("data", Tag.TAG_COMPOUND) ? compound.getCompound("data") : compound;
+        if (!payload.contains("mesh", Tag.TAG_COMPOUND) || payload.contains("meshData", Tag.TAG_COMPOUND)) return false;
+        payload.put("meshData", payload.getCompound("mesh").copy());
+        payload.remove("mesh");
+        return true;
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {
