@@ -15,6 +15,7 @@
     "SearchComponentMixin",
     "ConfiguratorMixin",
     "ConfiguratorParserMixin",
+    "MenuMixin",
     "accessor.FilePackResourcesAccessor",
     "accessor.LDShaderHolderAccessor",
     "accessor.LightTextureAccessor",

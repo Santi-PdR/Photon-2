@@ -49,6 +49,8 @@ public final class FXFileActions {
         var project = editor.getCurrentProject() instanceof FXProject fxProject ? fxProject : null;
         menu.branch("ldlib.gui.editor.menu.export", export -> {
             if (project == null) {
+                PhotonMenus.disabledLeaf(export, "photon.export_fx");
+                PhotonMenus.disabledLeaf(export, "photon.export_fxpack");
                 return;
             }
             export.leaf("photon.save_project", () -> Minecraft.getInstance().tell(() -> showSaveProjectDialog(editor, project)));

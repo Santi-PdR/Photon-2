@@ -431,6 +431,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
+        verifyDisabledMenuLeaves();
         verifyParticleDestReuse();
         verifyPoppedOutScreenSize();
     }
@@ -820,6 +821,30 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("FXObject fields for inspector marks are missing", e);
         }
         Photon.LOGGER.info("[inspector-marks-smoke] persisted keys and the 2.2.46.a configurator mixin are in place");
+    }
+
+    /**
+     * LDLib2 2.2.46.a disabledLeaf: an unavailable action stays in the menu, marked so a click does nothing.
+     */
+    private static void verifyDisabledMenuLeaves() {
+        var menu = com.lowdragmc.lowdraglib2.gui.util.TreeBuilder.Menu.start();
+        com.lowdragmc.photon.gui.editor.PhotonMenus.disabledLeaf(menu, "photon.fx_instance.open_source");
+        menu.leaf("photon.fx_instance.replace", () -> {
+        });
+        boolean disabled = false;
+        boolean enabled = false;
+        for (var leaf : menu.build().getChildren()) {
+            if (leaf.getContent() == com.lowdragmc.photon.gui.editor.PhotonMenus.DISABLED) {
+                disabled = true;
+            } else if (leaf.getContent() instanceof Runnable) {
+                enabled = true;
+            }
+        }
+        if (!disabled || !enabled) {
+            throw new IllegalStateException("disabledLeaf did not mark only the unavailable entry; disabled="
+                    + disabled + " enabled=" + enabled);
+        }
+        Photon.LOGGER.info("[disabled-leaf-smoke] unavailable menu actions stay visible and cannot be picked");
     }
 
     /**

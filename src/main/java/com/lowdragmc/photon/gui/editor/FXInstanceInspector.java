@@ -134,8 +134,9 @@ public final class FXInstanceInspector {
             protected TreeBuilder.Menu createMenu() {
                 var menu = super.createMenu();
                 if (instances.isOverridden(object)) {
-                    menu.crossLine();
                     menu.leaf(Icons.REPLAY, "photon.fx_instance.revert_object", () -> instances.revertObject(object));
+                } else {
+                    PhotonMenus.disabledLeaf(menu, "photon.fx_instance.revert_object");
                 }
                 return menu;
             }
@@ -159,17 +160,14 @@ public final class FXInstanceInspector {
         if (instance.getFx() != null) {
             menu.leaf("photon.fx_instance.open_source", () -> FXFileActions.openSource(editor, instance.getFx()));
         } else {
-            menu.leaf("photon.fx_instance.open_source", () -> {
-            });
+            PhotonMenus.disabledLeaf(menu, "photon.fx_instance.open_source");
         }
         if (placed) {
             menu.leaf("photon.fx_instance.overrides", () -> FXInstanceOverridesDialog.show(editor, instance));
             menu.leaf("photon.fx_instance.revert_all", afterwards.apply(() -> instances.revertAll(instance)));
         } else {
-            menu.leaf("photon.fx_instance.overrides", () -> {
-            });
-            menu.leaf("photon.fx_instance.revert_all", () -> {
-            });
+            PhotonMenus.disabledLeaf(menu, "photon.fx_instance.overrides");
+            PhotonMenus.disabledLeaf(menu, "photon.fx_instance.revert_all");
         }
         menu.leaf("photon.fx_instance.replace",
                 () -> FXInstanceStyle.pickFx(editor, fx -> instances.replace(instance, fx)));
