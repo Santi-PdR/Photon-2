@@ -189,6 +189,16 @@ public class SubEmittersSetting extends ToggleGroup {
         @Nullable
         @Persisted
         protected String legacySubFXName;
+
+        @Override
+        public void deserializeNBT(net.minecraft.core.HolderLookup.@org.jetbrains.annotations.NotNull Provider provider,
+                                   net.minecraft.nbt.@org.jetbrains.annotations.NotNull CompoundTag tag) {
+            IPersistedSerializable.super.deserializeNBT(provider, tag);
+            if (legacySubFXName == null && tag.contains("emitter", net.minecraft.nbt.Tag.TAG_STRING)) {
+                legacySubFXName = tag.getString("emitter");
+                if (!tag.contains("legacyTickGate")) legacyTickGate = true;
+            }
+        }
         /** Photon 1 applied tickInterval to every event, not just Tick. */
         @Persisted
         protected boolean legacyTickGate;

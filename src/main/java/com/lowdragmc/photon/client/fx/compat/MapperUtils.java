@@ -507,6 +507,16 @@ public class MapperUtils {
             if (compound.contains("shape") && compound.contains("position", Tag.TAG_COMPOUND)
                     && compound.getCompound("position").contains("x", Tag.TAG_ANY_NUMERIC)
                     && !compound.getCompound("position").contains("type")) return true;
+            if (compound.contains("scale", Tag.TAG_COMPOUND) && !compound.contains("shape")
+                    && isNumberFunctionCompound(compound.getCompound("scale"))) return true;
+            if (compound.contains("emission") && compound.contains("startLifetime")
+                    && !compound.contains("simulationSpace")
+                    && compound.contains("startSize", Tag.TAG_COMPOUND)) return true;
+            if (compound.contains("emitter", Tag.TAG_STRING) && !compound.contains("legacySubFXName")
+                    && (compound.contains("emitProbability") || compound.contains("event"))) return true;
+            if (compound.contains("bursts", Tag.TAG_LIST) && compound.contains("emissionRate")) return true;
+            if (compound.contains("material", Tag.TAG_COMPOUND) && compound.contains("ratio")
+                    && (compound.contains("widthOverTrail") || compound.contains("minimumVertexDistance"))) return true;
             if (asNumberFunction3List(compound) != null) return true;
             for (var key : compound.getAllKeys()) {
                 var child = compound.get(key);
@@ -544,6 +554,11 @@ public class MapperUtils {
             changed |= rewriteLegacyShapeMesh(compound);
             changed |= rewriteLegacyUvTiles(compound);
             changed |= rewriteLegacyShapeVectors(compound);
+            changed |= rewriteLegacySizeOverLifetime(compound);
+            changed |= rewriteLegacySimulationSpace(compound);
+            changed |= rewriteLegacySubEmitter(compound);
+            changed |= rewriteLegacyBurstList(compound);
+            changed |= rewriteLegacyFlatTrails(compound);
             for (var key : java.util.List.copyOf(compound.getAllKeys())) {
                 var child = compound.get(key);
                 if (child instanceof CompoundTag nested) {
@@ -807,6 +822,71 @@ public class MapperUtils {
             changed = true;
         }
         return changed;
+    }
+
+    /** Photon 1 SizeOverLifetime stored a single {@code scale} function before {@code size}. */
+    private static boolean rewriteLegacySizeOverLifetime(CompoundTag compound) {
+        if (compound.contains("shape") || !compound.contains("scale", Tag.TAG_COMPOUND)) return false;
+        var scale = compound.getCompound("scale");
+        if (!isNumberFunctionCompound(scale)) return false;
+        compound.put("size", mapUniformTyped3VecFromMapped(scale));
+        return true;
+    }
+
+    /** Early Photon 1 particle configs omitted simulationSpace and spawned in World. */
+    private static boolean rewriteLegacySimulationSpace(CompoundTag compound) {
+        if (!compound.contains("emission") || !compound.contains("startLifetime")
+                || compound.contains("simulationSpace")
+                || !compound.contains("startSize", Tag.TAG_COMPOUND)) return false;
+        compound.putString("simulationSpace", "World");
+        return true;
+    }
+
+    private static boolean rewriteLegacySubEmitter(CompoundTag compound) {
+        if (!compound.contains("emitter", Tag.TAG_STRING) || compound.contains("legacySubFXName")) return false;
+        if (!compound.contains("emitProbability") && !compound.contains("event")) return false;
+        compound.putString("legacySubFXName", compound.getString("emitter"));
+        if (!compound.contains("legacyTickGate")) compound.putBoolean("legacyTickGate", true);
+        return true;
+    }
+
+    /** Photon 1 wrote bursts as a raw list; Photon 2 managed lists use `{uid, payload}`. */
+    private static boolean rewriteLegacyBurstList(CompoundTag compound) {
+        if (!compound.contains("emissionRate") || !compound.contains("bursts", Tag.TAG_LIST)) return false;
+        var list = compound.getList("bursts", Tag.TAG_COMPOUND);
+        var envelope = new CompoundTag();
+        envelope.put("payload", list.copy());
+        envelope.putInt("uid", list.size());
+        compound.put("bursts", envelope);
+        return true;
+    }
+
+    /** Before TrailConfig was nested, trail material and widths lived on TrailsSetting. */
+    private static boolean rewriteLegacyFlatTrails(CompoundTag compound) {
+        if (!compound.contains("material", Tag.TAG_COMPOUND) || !compound.contains("ratio")) return false;
+        if (!compound.contains("widthOverTrail") && !compound.contains("colorOverTrail")
+                && !compound.contains("minimumVertexDistance")) return false;
+        var config = compound.contains("config", Tag.TAG_COMPOUND) ? compound.getCompound("config") : new CompoundTag();
+        for (var field : java.util.List.of("widthOverTrail", "colorOverTrail")) {
+            if (compound.contains(field, Tag.TAG_COMPOUND))
+                config.put(field, compound.getCompound(field).copy());
+        }
+        if (compound.contains("uvMode", Tag.TAG_STRING)) config.putString("uvMode", compound.getString("uvMode"));
+        if (compound.contains("minimumVertexDistance"))
+            config.putFloat("minVertexDistance", compound.getFloat("minimumVertexDistance"));
+        var renderer = config.contains("renderer", Tag.TAG_COMPOUND)
+                ? config.getCompound("renderer") : new CompoundTag();
+        if (!renderer.contains("materials")) {
+            var materials = new CompoundTag();
+            var payload = new ListTag();
+            payload.add(compound.getCompound("material").copy());
+            materials.put("payload", payload);
+            materials.putInt("uid", 1);
+            renderer.put("materials", materials);
+        }
+        config.put("renderer", renderer);
+        compound.put("config", config);
+        return true;
     }
 
     private static boolean isNumberFunctionCompound(CompoundTag tag) {

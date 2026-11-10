@@ -183,6 +183,18 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
         Custom
     }
 
+    @Override
+    public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
+        IPersistedSerializable.super.deserializeNBT(provider, tag);
+        // Early Photon 1 stored a single start-size function and defaulted to World space.
+        if (!tag.contains("simulationSpace") && tag.contains("startSize", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var number = NumberFunction.deserializeWrapper(tag.getCompound("startSize"));
+            startSize = new NumberFunction3(number, NumberFunction.copy(number), NumberFunction.copy(number));
+            startRotation = new NumberFunction3(startRotation.z, startRotation.y, startRotation.x);
+            simulationSpace = Space.World;
+        }
+    }
+
     public ParticleConfig() {
         renderer.getMaterials().add(new MaterialSetting());
         // route the shared renderer's structure-change teardown to the shared pass (a per-emitter

@@ -3052,6 +3052,35 @@ public final class PhotonFXEditorSmokeTest {
                 || shapeTag.getList("position", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getDouble("number") != 2.5) {
             throw new IllegalStateException("Photon 1 raw shape vectors were not read as NumberFunction3");
         }
+        var leftoverSol = new CompoundTag();
+        leftoverSol.putBoolean("enable", true);
+        leftoverSol.put("scale", leftoverConstant.copy());
+        var repairedSol = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSol);
+        if (!(repairedSol instanceof CompoundTag solTag) || leftoverSol.contains("size")
+                || solTag.getList("size", Tag.TAG_COMPOUND).size() != 3
+                || solTag.getList("size", Tag.TAG_COMPOUND).getCompound(1).getCompound("data").getFloat("number") != 2.25f) {
+            throw new IllegalStateException("Photon 1 size-over-lifetime scale did not expand");
+        }
+        var leftoverSub = new CompoundTag();
+        leftoverSub.putString("event", "Birth");
+        leftoverSub.putString("emitter", "spark");
+        var repairedSub = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverSub);
+        if (!(repairedSub instanceof CompoundTag subTag) || !"spark".equals(leftoverSub.getString("emitter"))
+                || !subTag.getString("legacySubFXName").equals("spark") || !subTag.getBoolean("legacyTickGate")) {
+            throw new IllegalStateException("Photon 1 sub-emitter name was not kept");
+        }
+        var leftoverBursts = new CompoundTag();
+        leftoverBursts.put("emissionRate", leftoverConstant.copy());
+        var burstList = new ListTag();
+        var burst = new CompoundTag();
+        burst.putInt("time", 5);
+        burstList.add(burst);
+        leftoverBursts.put("bursts", burstList);
+        var repairedBursts = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBursts);
+        if (!(repairedBursts instanceof CompoundTag burstTag) || leftoverBursts.getList("bursts", Tag.TAG_COMPOUND).size() != 1
+                || burstTag.getCompound("bursts").getList("payload", Tag.TAG_COMPOUND).getCompound(0).getInt("time") != 5) {
+            throw new IllegalStateException("Photon 1 burst list was not wrapped for Photon 2");
+        }
         var leftoverShape = new CompoundTag();
         leftoverShape.putString("type", "Circle");
         leftoverShape.putFloat("radius", 1.5f);
