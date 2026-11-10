@@ -378,7 +378,7 @@ public final class FXFileActions {
                         }
                         // refilled in place: the window keeps its position, size and scroll
                         fill(fxIds);
-                        dialog.requestFocus();
+                        dialog.focus();
                     }).show(editor);
         }
     }
