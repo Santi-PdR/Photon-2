@@ -6,6 +6,7 @@ import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.IScene;
 import com.lowdragmc.lowdraglib2.math.Transform;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.fx.FXBloom;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.IEffectExecutor;
 import com.lowdragmc.photon.client.fx.ParticleTickHost;
@@ -30,6 +31,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.EndTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
+import org.joml.Vector3f;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -404,6 +406,23 @@ public abstract class FXObject extends Particle implements IFXObject {
         if (effectExecutor != null) {
             effectExecutor.updateFXObjectFrame(this, partialTicks);
         }
+        if (getScene() instanceof FXRuntime runtime && runtime.getRoot() == this) {
+            FXBloom.contribute(runtime.getFxData());
+        }
+    }
+
+    /**
+     * Keep the vanilla particle at the same place as the transform. Forge culls
+     * {@link Particle#getBoundingBox()}, which starts at the world origin; without this, an FX
+     * following a flying player is left behind as soon as that box leaves the frustum.
+     */
+    @Override
+    public void updatePos(Vector3f newPos) {
+        transform.position(newPos);
+        this.xo = this.x = newPos.x;
+        this.yo = this.y = newPos.y;
+        this.zo = this.z = newPos.z;
+        setBoundingBox(new AABB(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1));
     }
 
     @Override

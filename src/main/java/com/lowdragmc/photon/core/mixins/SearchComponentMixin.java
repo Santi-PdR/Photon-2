@@ -32,11 +32,17 @@ public abstract class SearchComponentMixin {
     private void onSearchWordChanged(String word) {
     }
 
+    @Shadow(remap = false)
+    public abstract Object getValue();
+
     /**
      * Runs after the box opened. The original search already ran with the leftover name; re-running it with the
      * empty query supersedes it (the search engine drops the results of any query that is no longer the current
      * one, so the two do not interleave), and selecting the text is what makes the first keystroke replace the old
      * name instead of being appended to it.
+     * <p>
+     * {@code show()} can run again while the dropdown is already open (layout, refocus). If the field no longer
+     * holds the chosen value, the author is filtering — do not wipe that query back to the whole catalogue.
      */
     @Inject(method = "show", at = @At("TAIL"), remap = false)
     private void photon$showWholeCatalogue(CallbackInfo ci) {
@@ -44,6 +50,12 @@ public abstract class SearchComponentMixin {
             return;
         }
         var text = textField.getValue();
+        var selected = getValue();
+        var selectedText = selected == null ? "" : String.valueOf(selected);
+        boolean leftover = text == null || text.isEmpty() || text.equals(selectedText);
+        if (!leftover) {
+            return;
+        }
         textField.setSelection(0, text == null ? 0 : text.length());
         onSearchWordChanged("");
     }

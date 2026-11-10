@@ -194,6 +194,7 @@ public final class PhotonFXEditorSmokeTest {
                     + " built-in Kila materials; expected " + expectedBuiltinKilaMaterials);
         }
         Photon.LOGGER.info("[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector");
+        com.lowdragmc.photon.client.fx.FXBloom.endFrame();
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
@@ -313,6 +314,37 @@ public final class PhotonFXEditorSmokeTest {
                 + "catalogue ({}) and selects the old name so typing replaces it", candidateCount.get());
     }
 
+    /** Bloom enable + intensity live on the FX, survive a save, and default the old look when missing. */
+    private static void verifyFxBloomRoundtrip() {
+        var data = new com.lowdragmc.photon.client.fx.FXData();
+        if (!data.bloomEnabled() || Math.abs(data.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A new FX did not default to bloom on at the old intensity");
+        }
+        data.setBloomEnabled(false);
+        data.setBloomIntensity(1.25f);
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var tag = data.serializeNBT(provider);
+        var copy = data.copy(false);
+        if (copy.bloomEnabled() || Math.abs(copy.bloomIntensity() - 1.25f) > 0.0001f) {
+            throw new IllegalStateException("FXData.copy dropped bloom");
+        }
+        var loaded = new com.lowdragmc.photon.client.fx.FXData();
+        loaded.deserializeNBT(provider, tag);
+        if (loaded.bloomEnabled() || Math.abs(loaded.bloomIntensity() - 1.25f) > 0.0001f) {
+            throw new IllegalStateException("FX bloom did not survive save: enabled=" + loaded.bloomEnabled()
+                    + " intensity=" + loaded.bloomIntensity());
+        }
+        var legacy = new com.lowdragmc.photon.client.fx.FXData();
+        legacy.deserializeNBT(provider, new net.minecraft.nbt.CompoundTag());
+        if (!legacy.bloomEnabled() || Math.abs(legacy.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A file without bloom keys did not keep the old look");
+        }
+        Photon.LOGGER.info("[fx-bloom-smoke] enable+intensity are saved on the FX and default on at {}",
+                com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY);
+    }
+
     /** Read a private field of a library widget (the test drives the real widget, not a copy of it). */
     private static Object readField(Object owner, String name) {
         try {
@@ -326,8 +358,8 @@ public final class PhotonFXEditorSmokeTest {
 
     /**
      * Prove the two editor entry points that were reported broken: the fx picker lists effect ids (a list that
-     * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes the config
-     * without changing the shipped default.
+     * must be read live, not frozen when the panel was built) and the scene bar's bloom control writes this FX's
+     * intensity, not a client-wide config.
      */
     private static void verifyFxPickerAndBloomControl() {
         var fxIds = com.lowdragmc.photon.client.fx.FXHelper.listAllFX();
@@ -370,32 +402,26 @@ public final class PhotonFXEditorSmokeTest {
                 fxIds.size());
 
         verifySearchBoxOpensOnTheWholeCatalogue();
+        verifyFxBloomRoundtrip();
 
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
-        var shippedDefault = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-        var written = com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.current();
-        if (Math.abs(written - shippedDefault.floatValue()) > 0.0001f) {
-            throw new IllegalStateException("The bloom control shows " + written + " instead of the config value " + shippedDefault);
+        var written = control.current();
+        if (Math.abs(written - com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("The bloom control shows " + written + " instead of the FX default");
         }
         if (control.slider.getMin() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MIN
                 || control.slider.getMax() != com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl.MAX) {
-            throw new IllegalStateException("The bloom control's slider does not span the config's range");
+            throw new IllegalStateException("The bloom control's slider does not span 0..2");
         }
-        Photon.LOGGER.info("[bloom-control-smoke] the scene bar's bloom control reads the live intensity ({}) and spans 0..2",
+        Photon.LOGGER.info("[bloom-control-smoke] the scene bar's bloom control reads this FX's intensity ({}) and spans 0..2",
                 written);
 
-        // the control writes through to the config the renderer reads, and leaves nothing behind
-        var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-        try {
-            control.slider.setValue(0.7f, true);
-            var applied = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-            if (Math.abs(applied - 0.7) > 0.0001) {
-                throw new IllegalStateException("Dragging the bloom control wrote " + applied + " instead of 0.7");
-            }
-            Photon.LOGGER.info("[bloom-control-smoke] dragging the scene bar's bloom slider writes bloom_intensity={}", applied);
-        } finally {
-            com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
+        control.slider.setValue(0.7f, true);
+        var applied = control.current();
+        if (Math.abs(applied - 0.7f) > 0.0001f) {
+            throw new IllegalStateException("Dragging the bloom control wrote " + applied + " instead of 0.7");
         }
+        Photon.LOGGER.info("[bloom-control-smoke] dragging the scene bar's bloom slider writes this FX's bloomIntensity={}", applied);
 
         verifyLooseTextureLookup();
         verifySliderDragsContinuously();
@@ -938,59 +964,44 @@ public final class PhotonFXEditorSmokeTest {
         slider.setUnmountedTrackWidth(100f);
         var x0 = slider.getContentX();
         var width = 100f;
-        var before = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-        try {
-            // a press at the left end is an instant set, not a "grab the handle" that needs a second press
-            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
-            var atPress = com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get();
-            if (Math.abs(atPress - min) > 0.02) {
-                throw new IllegalStateException("A press on the track did not set the value to the minimum: config="
-                        + atPress + " widget=" + slider.getValue() + ", dragging=" + slider.isDragging()
-                        + ", " + describeConfigFile());
+        // a press at the left end is an instant set, not a "grab the handle" that needs a second press
+        dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_DOWN, x0 + 0.001f);
+        var atPress = control.current();
+        if (Math.abs(atPress - min) > 0.02) {
+            throw new IllegalStateException("A press on the track did not set the value to the minimum: fx="
+                    + atPress + " widget=" + slider.getValue() + ", dragging=" + slider.isDragging());
+        }
+        if (!slider.isDragging()) {
+            throw new IllegalStateException("A press on the track did not start a drag");
+        }
+        // then the drag: each move must be written, monotonically, without releasing and pressing again
+        var seen = new ArrayList<Double>();
+        var widget = new ArrayList<Double>();
+        var discrepancies = new ArrayList<String>();
+        for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
+            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
+            widget.add((double) slider.getValue());
+            seen.add((double) control.current());
+            if (Math.abs(seen.get(seen.size() - 1) - slider.getValue()) > 0.02) {
+                discrepancies.add("widget=" + slider.getValue() + ", fx=" + seen.get(seen.size() - 1));
             }
-            if (!slider.isDragging()) {
-                throw new IllegalStateException("A press on the track did not start a drag");
+        }
+        for (var i = 1; i < seen.size(); i++) {
+            if (!discrepancies.isEmpty() || seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
+                throw new IllegalStateException("The slider did not keep up with the drag: fx=" + seen
+                        + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width
+                        + ", discrepancies=" + discrepancies + ")");
             }
-            // then the drag: each move must be written, monotonically, without releasing and pressing again
-            var seen = new ArrayList<Double>();
-            var widget = new ArrayList<Double>();
-            var discrepancies = new ArrayList<String>();
-            for (var fraction : new float[]{0.25f, 0.5f, 0.75f, 1f}) {
-                dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_MOVE, x0 + width * fraction);
-                // both sides: the widget's own value says whether the drag followed the pointer, the config says
-                // whether that value reached the renderer. Reporting only one of them cannot tell a stuck slider
-                // from a write that something reverted.
-                widget.add((double) slider.getValue());
-                seen.add(com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.get());
-                if (Math.abs(seen.get(seen.size() - 1) - slider.getValue()) > 0.02) {
-                    discrepancies.add("widget=" + slider.getValue() + ", config=" + seen.get(seen.size() - 1)
-                            + ", " + describeConfigFile());
-                }
-            }
-            for (var i = 1; i < seen.size(); i++) {
-                if (!discrepancies.isEmpty() || seen.get(i) <= seen.get(i - 1) || widget.get(i) <= widget.get(i - 1)) {
-                    // Diagnose both halves of this: the widget's own value tells a stuck slider apart from a
-                    // write that something took away again. Capture file state at the discrepancy as well as
-                    // after the drag; a reload racing with writes is a hypothesis, not yet a proven cause.
-                    throw new IllegalStateException("The slider did not keep up with the drag: config=" + seen
-                            + " widget=" + widget + " (cursor x0=" + x0 + ", track=" + width
-                            + ", bloom default=" + com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.getDefault()
-                            + ", discrepancies=" + discrepancies + ", final " + describeConfigFile() + ")");
-                }
-            }
-            // the config holds the value: reading it back is what a slider that only redraws itself would fail
-            if (Math.abs(control.slider.getValue() - max) > 0.02) {
-                throw new IllegalStateException("The end of the drag did not reach the maximum: "
-                        + control.slider.getValue() + " vs " + max);
-            }
-            Photon.LOGGER.info("[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously: {}",
-                    seen);
-            dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_UP, x0 + width);
-            if (slider.isDragging()) {
-                throw new IllegalStateException("Releasing the mouse did not end the drag");
-            }
-        } finally {
-            com.lowdragmc.photon.PhotonConfig.INSTANCE.bloomIntensity.set(before);
+        }
+        if (Math.abs(control.slider.getValue() - max) > 0.02) {
+            throw new IllegalStateException("The end of the drag did not reach the maximum: "
+                    + control.slider.getValue() + " vs " + max);
+        }
+        Photon.LOGGER.info("[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously: {}",
+                seen);
+        dispatchSlider(slider, com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_UP, x0 + width);
+        if (slider.isDragging()) {
+            throw new IllegalStateException("Releasing the mouse did not end the drag");
         }
     }
 
