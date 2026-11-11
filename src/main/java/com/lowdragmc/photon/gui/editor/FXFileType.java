@@ -33,7 +33,7 @@ public final class FXFileType extends ProjectType {
         if (!(editor instanceof FXEditor fxEditor) || fxEditor.runtime == null) return;
         var id = FXInstanceEditing.idOf(file);
         if (id == null) {
-            menu.leaf(FXInstanceEditing.isUnderFxFolder(file) ? "photon.fx_instance.add_file.invalid" : "photon.fx_instance.add_file.outside", () -> {});
+            PhotonMenus.disabledLeaf(menu, FXInstanceEditing.isUnderFxFolder(file) ? "photon.fx_instance.add_file.invalid" : "photon.fx_instance.add_file.outside");
             return;
         }
         menu.leaf(PhotonIcons.FX_FILE, "photon.fx_instance.add_file",
