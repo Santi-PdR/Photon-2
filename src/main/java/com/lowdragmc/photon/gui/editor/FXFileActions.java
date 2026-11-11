@@ -275,14 +275,22 @@ public final class FXFileActions {
                 }).show(editor);
     }
 
+    private static final String PACK_CONTENTS_SIZE_KEY = "photon.manage_fxpack.contents";
+    private static final float PACK_CONTENTS_WIDTH = 360;
+    private static final float PACK_CONTENTS_HEIGHT = 240;
+
     /** A pack's effects, each one convertible into a project or removable from the pack. */
     private static void showFxPackContents(Editor editor, File packFile) {
         var fxIds = listFx(editor, packFile);
         if (fxIds == null) return;
-        float width = 360, height = 240;
+        var remembered = PhotonDialogSizes.get(PACK_CONTENTS_SIZE_KEY);
+        float width = remembered != null ? remembered.x : PACK_CONTENTS_WIDTH;
+        float height = remembered != null ? remembered.y : PACK_CONTENTS_HEIGHT;
         var dialog = new Dialog().windowMode(
                 editor.getPositionX() + Math.max(0, (editor.getSizeWidth() - width) / 2f),
-                editor.getPositionY() + Math.max(0, (editor.getSizeHeight() - height) / 2f), width, height);
+                editor.getPositionY() + Math.max(0, (editor.getSizeHeight() - height) / 2f),
+                width, height);
+        PhotonDialogSizes.remember(dialog, PACK_CONTENTS_SIZE_KEY);
         dialog.setTitle(packFile.getName());
         var notices = new UIElement().layout(layout -> {
             layout.widthPercent(100);

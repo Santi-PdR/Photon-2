@@ -432,6 +432,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
         verifyDisabledMenuLeaves();
+        verifyDialogSizeMemory();
         verifyParticleDestReuse();
         verifyPoppedOutScreenSize();
     }
@@ -845,6 +846,19 @@ public final class PhotonFXEditorSmokeTest {
                     + disabled + " enabled=" + enabled);
         }
         Photon.LOGGER.info("[disabled-leaf-smoke] unavailable menu actions stay visible and cannot be picked");
+    }
+
+    /**
+     * LDLib2 2.2.46.a DialogSizeStore: the FXPack contents window keeps the size it was last resized to.
+     */
+    private static void verifyDialogSizeMemory() {
+        var key = "photon.smoke.dialog_size";
+        com.lowdragmc.photon.gui.editor.PhotonDialogSizes.put(key, 420, 310);
+        var got = com.lowdragmc.photon.gui.editor.PhotonDialogSizes.get(key);
+        if (got == null || Math.abs(got.x - 420) > 0.01f || Math.abs(got.y - 310) > 0.01f) {
+            throw new IllegalStateException("dialog size store roundtrip failed: " + got);
+        }
+        Photon.LOGGER.info("[fxpack-dialog-size-smoke] pack contents dialog size is remembered ({}x{})", got.x, got.y);
     }
 
     /**
