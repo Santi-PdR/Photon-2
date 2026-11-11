@@ -60,6 +60,13 @@ public class MaterialResource extends Resource<IMaterial> {
         addKilaTextureMaterial(provider, "vortex");
         addKilaTextureMaterial(provider, "star_rays");
         addKilaTextureMaterial(provider, "flare");
+        addKilaTextureMaterial(provider, "hexagon");
+        addKilaTextureMaterial(provider, "ripple");
+        addKilaTextureMaterial(provider, "sparkle");
+        addKilaTextureMaterial(provider, "shaft");
+        addKilaTextureMaterial(provider, "crescent");
+        addKilaTextureMaterial(provider, "wisp");
+        addKilaTextureMaterial(provider, "arc");
         addKilaTextureMaterial(provider, "slash");
         addKilaTextureMaterial(provider, "spark");
         addKilaTextureMaterial(provider, "trail");
