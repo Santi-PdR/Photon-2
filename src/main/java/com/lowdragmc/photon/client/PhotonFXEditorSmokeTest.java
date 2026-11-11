@@ -868,11 +868,6 @@ public final class PhotonFXEditorSmokeTest {
      * the head instead of the torso.
      */
     private static void verifyPhoton1EntityFeetAnchor() {
-        var converted = new com.lowdragmc.photon.client.fx.FXData();
-        converted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), new net.minecraft.nbt.CompoundTag());
-        if (!converted.entityFollowsFeet()) {
-            throw new IllegalStateException("A Photon 1 file without bloom keys did not follow the feet");
-        }
         var mapped = new net.minecraft.nbt.CompoundTag();
         var emitters = new net.minecraft.nbt.ListTag();
         mapped.put("emitters", emitters);

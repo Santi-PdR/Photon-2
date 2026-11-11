@@ -224,10 +224,7 @@ public final class FXData {
         bloomIntensity = tag.contains("bloomIntensity")
                 ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
                 : DEFAULT_BLOOM_INTENSITY;
-        // Converted Photon 1 files had neither key; they must keep the feet or auras sit on the head.
-        entityFollowsFeet = tag.contains("entityFollowsFeet")
-                ? tag.getBoolean("entityFollowsFeet")
-                : !tag.contains("bloomIntensity");
+        entityFollowsFeet = tag.getBoolean("entityFollowsFeet");
     }
 
     /**
