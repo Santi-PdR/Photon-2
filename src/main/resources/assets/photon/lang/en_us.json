@@ -690,6 +690,7 @@
   "photon.editfx.missing": "FX '%s' is not loaded",
   "photon.editfx.failed": "Could not open %s: %s",
   "photon.editfx.replaced": "Saved %s. Replay the effect to see the change.",
+  "photon.editfx.replaced_live": "Saved %s and replaced %s playing copies.",
   "photon.manage_fxpack": "Manage FXPack...",
   "photon.manage_fxpack.empty": "(no effects in this pack)",
   "photon.manage_fxpack.convert": "Convert to Project",

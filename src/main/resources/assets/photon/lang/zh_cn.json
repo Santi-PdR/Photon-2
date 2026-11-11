@@ -690,6 +690,7 @@
   "photon.editfx.missing": "未加载 FX '%s'",
   "photon.editfx.failed": "无法打开 %s：%s",
   "photon.editfx.replaced": "已保存 %s。重新播放该特效即可看到更改。",
+  "photon.editfx.replaced_live": "已保存 %s，并替换了 %s 个正在播放的副本。",
   "photon.manage_fxpack": "管理 FXPack…",
   "photon.manage_fxpack.empty": "（包内没有特效）",
   "photon.manage_fxpack.convert": "转换为工程",

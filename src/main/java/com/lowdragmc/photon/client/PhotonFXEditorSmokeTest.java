@@ -556,6 +556,9 @@ public final class PhotonFXEditorSmokeTest {
                     || written.getInt("version") != FXProject.VERSION) {
                 throw new IllegalStateException("The replaced playable FX was not a Photon 2 definition: " + written);
             }
+            if (com.lowdragmc.photon.client.fx.FXEffectExecutor.replacePlaying(id) != 0) {
+                throw new IllegalStateException("replacePlaying reported live copies when none were playing");
+            }
         } catch (Exception e) {
             throw new IllegalStateException("Could not replace the playable FX for editfx", e);
         } finally {

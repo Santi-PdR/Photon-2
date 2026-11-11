@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.fx;
 
 import com.lowdragmc.photon.client.gameobject.IFXObject;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -65,6 +66,34 @@ public class EntityEffectExecutor extends FXEffectExecutor {
             return;
         }
         followAllPlaying(event.getPartialTick());
+    }
+
+    /**
+     * Stop every playing copy of {@code id} on entities and start the freshly cached definition
+     * with the same placement. Whole-effect (world-anchored) executors are left alone: they are
+     * not a follow-aura and recreating them as one would move the effect.
+     */
+    public static int replacePlaying(ResourceLocation id) {
+        var fresh = FXHelper.getFX(id);
+        if (fresh == null) return 0;
+        int replaced = 0;
+        var snapshot = new ArrayList<EntityEffectExecutor>();
+        for (var effects : CACHE.values()) {
+            snapshot.addAll(effects);
+        }
+        for (var old : snapshot) {
+            if (old instanceof WholeFXEffectExecutor) continue;
+            if (!id.equals(old.fx.getFxLocation())) continue;
+            if (old.runtime != null) {
+                old.runtime.destroy(true);
+            }
+            old.retire(CACHE, old.entity);
+            var neu = new EntityEffectExecutor(fresh, old.level, old.entity, old.autoRotate);
+            neu.copyPlacementFrom(old);
+            neu.start();
+            replaced++;
+        }
+        return replaced;
     }
 
     /** Apply this frame's follow pose to every live entity FX. Empty-cache no-op. */

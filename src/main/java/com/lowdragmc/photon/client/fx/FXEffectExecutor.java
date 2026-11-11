@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.fx;
 
 import lombok.Getter;
 import lombok.Setter;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -140,5 +141,24 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     /** Whether this executor's runtime ended (finished naturally or discarded by the engine). */
     protected boolean runtimeEnded() {
         return runtime != null && (runtime.isFinished() || !runtime.isValid());
+    }
+
+    /** Copy offset/rotation/scale and start flags so a replacement keeps the same placement. */
+    protected void copyPlacementFrom(FXEffectExecutor other) {
+        offset.set(other.offset);
+        rotation.set(other.rotation);
+        scale.set(other.scale);
+        forcedDeath = other.forcedDeath;
+        allowMulti = other.allowMulti;
+    }
+
+    /**
+     * After an {@code .fx} was rewritten, stop every playing copy of that id and start the newly
+     * cached definition in the same place. {@code /photon fx editfx} save uses this so the author
+     * does not have to replay the effect by hand.
+     */
+    public static int replacePlaying(ResourceLocation id) {
+        if (id == null) return 0;
+        return EntityEffectExecutor.replacePlaying(id) + BlockEffectExecutor.replacePlaying(id);
     }
 }

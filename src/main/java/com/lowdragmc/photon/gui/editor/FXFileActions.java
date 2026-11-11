@@ -444,10 +444,13 @@ public final class FXFileActions {
         NbtIo.writeCompressed(fileData, target);
         project.addKnownAs(id);
         FXHelper.invalidate(java.util.List.of(id));
-        Photon.LOGGER.info("Replaced playable FX {} at {}", id, target.getAbsolutePath());
+        int live = com.lowdragmc.photon.client.fx.FXEffectExecutor.replacePlaying(id);
+        Photon.LOGGER.info("Replaced playable FX {} at {} ({} playing)", id, target.getAbsolutePath(), live);
         var player = Minecraft.getInstance().player;
         if (player != null) {
-            player.sendSystemMessage(Component.translatable("photon.editfx.replaced", id.toString()));
+            player.sendSystemMessage(live > 0
+                    ? Component.translatable("photon.editfx.replaced_live", id.toString(), live)
+                    : Component.translatable("photon.editfx.replaced", id.toString()));
         }
     }
 
