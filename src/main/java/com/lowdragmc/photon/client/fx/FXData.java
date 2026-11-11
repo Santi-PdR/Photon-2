@@ -225,18 +225,19 @@ public final class FXData {
         }
         // tolerate a missing "timeline" tag: legacy FX deserialize to an empty timeline
         timeline.deserializeNBT(provider, tag.getCompound("timeline"));
-        boolean authoredBloom = tag.contains("bloomEnabled") || tag.contains("bloomIntensity");
         // missing keys: files from before per-FX bloom keep the old look (on, 0.18)
         bloomEnabled = !tag.contains("bloomEnabled") || tag.getBoolean("bloomEnabled");
         bloomIntensity = tag.contains("bloomIntensity")
                 ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
                 : DEFAULT_BLOOM_INTENSITY;
         entityFollowsFeet = tag.getBoolean("entityFollowsFeet");
-        // Converted Photon 1 files that never stamped bloom keys still carry leftover bloomEffect
-        // or legacyBloomFullBright. Give them the dedicated-halo intensity so they glow again
-        // without a reconversion.
-        if (!authoredBloom && hasLegacyBloom(baked == null ? tag : baked.fxData())) {
-            bloomEnabled = true;
+        // Photon 1 bloomEffect emitters always wrote into a dedicated bloom buffer. Conversion used
+        // to keep only full-bright lighting, then a later save wrote the Photon 2 default 0.18 —
+        // which is too weak to read as that halo. If the FX still carries the leftover bloom mark
+        // and nobody moved the slider off the default, restore the Photon 1 intensity.
+        if (bloomEnabled
+                && Math.abs(bloomIntensity - DEFAULT_BLOOM_INTENSITY) <= 1e-4f
+                && hasLegacyBloom(baked == null ? tag : baked.fxData())) {
             bloomIntensity = PHOTON1_BLOOM_INTENSITY;
         }
     }

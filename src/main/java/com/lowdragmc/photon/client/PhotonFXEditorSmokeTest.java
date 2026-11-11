@@ -933,6 +933,21 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Already-converted Photon 1 bloom did not restore intensity: "
                     + recovered.bloomEnabled() + " " + recovered.bloomIntensity());
         }
+        leftover.putBoolean("bloomEnabled", true);
+        leftover.putFloat("bloomIntensity", com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY);
+        var savedDefault = new com.lowdragmc.photon.client.fx.FXData();
+        savedDefault.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), leftover);
+        if (Math.abs(savedDefault.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A converted Photon 1 FX saved at the default intensity kept "
+                    + savedDefault.bloomIntensity() + " instead of the Photon 1 halo");
+        }
+        leftover.putFloat("bloomIntensity", 1.25f);
+        var authored = new com.lowdragmc.photon.client.fx.FXData();
+        authored.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), leftover);
+        if (Math.abs(authored.bloomIntensity() - 1.25f) > 0.0001f) {
+            throw new IllegalStateException("An authored bloom intensity was overwritten: " + authored.bloomIntensity());
+        }
         Photon.LOGGER.info("[photon1-bloom-smoke] converted FX keep Photon 1 bloom at intensity {}",
                 com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY);
     }
