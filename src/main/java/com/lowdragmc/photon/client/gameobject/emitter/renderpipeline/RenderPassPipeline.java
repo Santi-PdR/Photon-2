@@ -13,6 +13,7 @@ import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
 import com.lowdragmc.photon.client.postfx.runtime.PostEffectStack;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
+import com.lowdragmc.photon.client.fx.FXBloom;
 import com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -160,11 +161,21 @@ public class RenderPassPipeline {
 
     public static void beginCollecting(RenderPassPipeline pipeline) {
         collecting = pipeline;
+        FXBloom.beginFrame();
+        // The editor scene's root is a no-draw particle; its updateFrame may not contribute
+        // before the bloom pass. Feed the open project's FX data so the scene slider is visible.
+        var manager = PhotonParticleManager.getRenderingManager();
+        if (manager != null && manager.sceneView != null) {
+            FXBloom.contribute(manager.sceneView.fxData());
+        }
     }
 
     public static void finishCollecting(RenderPassPipeline pipeline) {
         try { pipeline.build(); }
-        finally { if (collecting == pipeline) collecting = null; }
+        finally {
+            if (collecting == pipeline) collecting = null;
+            FXBloom.endFrame();
+        }
     }
 
     @Nullable

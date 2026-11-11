@@ -16,6 +16,17 @@ public final class KilaTextures {
     public static final ResourceLocation NOISE_CELLS = tex("noise_cells");
     public static final ResourceLocation NOISE_FLOW = tex("noise_flow");
     public static final ResourceLocation FLOW_SWIRL = tex("flow_swirl");
+    public static final ResourceLocation SPIRAL = tex("spiral");
+    public static final ResourceLocation VORTEX = tex("vortex");
+    public static final ResourceLocation STAR_RAYS = tex("star_rays");
+    public static final ResourceLocation FLARE = tex("flare");
+    public static final ResourceLocation HEXAGON = tex("hexagon");
+    public static final ResourceLocation RIPPLE = tex("ripple");
+    public static final ResourceLocation SPARKLE = tex("sparkle");
+    public static final ResourceLocation SHAFT = tex("shaft");
+    public static final ResourceLocation CRESCENT = tex("crescent");
+    public static final ResourceLocation WISP = tex("wisp");
+    public static final ResourceLocation ARC = tex("arc");
     public static final ResourceLocation GRADIENT_LINEAR = tex("gradient_linear");
     public static final ResourceLocation GRADIENT_RADIAL = tex("gradient_radial");
     public static final ResourceLocation TRAIL = tex("trail");
@@ -36,9 +47,10 @@ public final class KilaTextures {
     public static final ResourceLocation SMOKE_BURST = tex("smoke_burst");
     public static final ResourceLocation SMOKE_BURST_MV = tex("smoke_burst_mv");
 
-    public static final List<ResourceLocation> ALL = List.of(WHITE, SOFT_CIRCLE, RING, GLOW, NOISE_PERLIN, NOISE_CLOUD,
-            NOISE_CELLS, NOISE_FLOW, FLOW_SWIRL, GRADIENT_LINEAR, GRADIENT_RADIAL, TRAIL, SLASH, RUNE_CIRCLE, SPARK,
-            NORMAL_NOISE, MATCAP_GLASS, SMOKE6_POS, SMOKE6_NEG, SMOKE_FLIP, SMOKE_FLIP_MV, SMOKE_BURST, SMOKE_BURST_MV);
+    public static final List<ResourceLocation> ALL = List.of(WHITE, SOFT_CIRCLE, RING, GLOW, FLARE, SPARKLE, HEXAGON, RIPPLE,
+            SHAFT, CRESCENT, WISP, ARC, NOISE_PERLIN, NOISE_CLOUD, NOISE_CELLS, NOISE_FLOW, FLOW_SWIRL, SPIRAL, VORTEX,
+            STAR_RAYS, GRADIENT_LINEAR, GRADIENT_RADIAL, TRAIL, SLASH, RUNE_CIRCLE, SPARK, NORMAL_NOISE, MATCAP_GLASS,
+            SMOKE6_POS, SMOKE6_NEG, SMOKE_FLIP, SMOKE_FLIP_MV, SMOKE_BURST, SMOKE_BURST_MV);
 
     private KilaTextures() {
     }

@@ -49,6 +49,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.particle.ParticleEmitter;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import com.lowdragmc.photon.gui.editor.FXInstanceEditing;
 import com.lowdragmc.photon.gui.editor.FXInstanceInspector;
+import com.lowdragmc.photon.gui.editor.PhotonMenus;
 import java.util.function.BiFunction;
 import com.lowdragmc.photon.gui.editor.FXInstanceOverridesDialog;
 import com.lowdragmc.photon.gui.editor.FXInstanceStyle;
@@ -1129,7 +1130,7 @@ public class FxInstanceEditorScenario implements UIScenario {
                 var name = leaf.getKey().getB();
                 var key = name.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents translatable
                         ? translatable.getKey() : name.getString();
-                enabled.put(key, leaf.getContent() != null && leaf.getContent() != TreeBuilder.Menu.DISABLED);
+                enabled.put(key, leaf.getContent() != null && leaf.getContent() != PhotonMenus.DISABLED);
             }
             ctx.check("open source and replace are offered, overrides and revert all are not", enabled.equals(Map.of(
                     "photon.fx_instance.open_source", true, "photon.fx_instance.overrides", false,
