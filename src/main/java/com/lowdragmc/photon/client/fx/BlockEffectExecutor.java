@@ -44,13 +44,13 @@ public class BlockEffectExecutor extends FXEffectExecutor {
         }
         for (var old : snapshot) {
             if (!id.equals(old.fx.getFxLocation())) continue;
+            var neu = new BlockEffectExecutor(fresh, old.level, old.pos);
+            neu.copyPlacementFrom(old);
+            neu.setCheckState(old.isCheckState());
             if (old.runtime != null) {
                 old.runtime.destroy(true);
             }
             old.retire(CACHE, old.pos);
-            var neu = new BlockEffectExecutor(fresh, old.level, old.pos);
-            neu.copyPlacementFrom(old);
-            neu.setCheckState(old.isCheckState());
             neu.start();
             replaced++;
         }

@@ -84,12 +84,13 @@ public class EntityEffectExecutor extends FXEffectExecutor {
         for (var old : snapshot) {
             if (old instanceof WholeFXEffectExecutor) continue;
             if (!id.equals(old.fx.getFxLocation())) continue;
+            var neu = new EntityEffectExecutor(fresh, old.level, old.entity, old.autoRotate);
+            // copy while the runtime is still live, so the current timeline section survives destroy()
+            neu.copyPlacementFrom(old);
             if (old.runtime != null) {
                 old.runtime.destroy(true);
             }
             old.retire(CACHE, old.entity);
-            var neu = new EntityEffectExecutor(fresh, old.level, old.entity, old.autoRotate);
-            neu.copyPlacementFrom(old);
             neu.start();
             replaced++;
         }
