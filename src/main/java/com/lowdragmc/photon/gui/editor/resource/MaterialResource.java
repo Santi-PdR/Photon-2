@@ -56,6 +56,10 @@ public class MaterialResource extends Resource<IMaterial> {
         addKilaTextureMaterial(provider, "soft_circle");
         addKilaTextureMaterial(provider, "smoke_burst");
         addKilaTextureMaterial(provider, "flow_swirl");
+        addKilaTextureMaterial(provider, "spiral");
+        addKilaTextureMaterial(provider, "vortex");
+        addKilaTextureMaterial(provider, "star_rays");
+        addKilaTextureMaterial(provider, "flare");
         addKilaTextureMaterial(provider, "slash");
         addKilaTextureMaterial(provider, "spark");
         addKilaTextureMaterial(provider, "trail");

@@ -55,6 +55,15 @@ public final class KilaPresets {
         m.main.texture.texture = KilaTextures.GLOW;
     });
 
+    /** An anamorphic cross of light: mix into hit flashes and cores. */
+    public static final Preset FLARE = new Preset("flare", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.color = new HDRColor(1f, 0.92f, 0.75f, 1f, 2f);
+        m.main.texture.texture = KilaTextures.FLARE;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+    });
+
     public static final Preset SMOKE = new Preset("smoke", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.85f, 0.85f, 0.88f, 0.9f, 1f);
         m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
@@ -221,6 +230,69 @@ public final class KilaPresets {
         m.ramp.input = KilaRamp.Input.ALPHA;
         m.ramp.gradient.getRgbP().clear();
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF12002E, 0xFF5B12D8, 0xFFB46CFF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** The swirl flow map as colour, spinning, cut to a disc by Mask 1. */
+    public static final Preset HUE_SWIRL = new Preset("hue_swirl", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 1.8f);
+        m.main.texture.texture = KilaTextures.FLOW_SWIRL;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 40;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.7f;
+    });
+
+    /** Wispy spiral arms spinning in place, tinted purple by a Color Ramp. */
+    public static final Preset SPIRAL = new Preset("spiral", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 2.6f);
+        m.main.texture.texture = KilaTextures.SPIRAL;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 35;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.55f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF1A0038, 0xFF6A18E8, 0xFFC888FF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** Filaments spinning around a dark core. */
+    public static final Preset BLACK_HOLE = new Preset("black_hole", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.VORTEX;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 22;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.5f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF080018, 0xFF3A0A80, 0xFF9B4CFF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** Soft radial rays turning slowly. */
+    public static final Preset STAR_BURST = new Preset("star_burst", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 0.85f, 0.5f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.STAR_RAYS;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 12;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.45f;
     });
 
     /** A smoke puff lit by the six lightmaps it was baked with: the key light and the dynamic ones fall on its sides. */
@@ -512,9 +584,9 @@ public final class KilaPresets {
         m.pixelate.pixels = 24;
     });
 
-    public static final List<Preset> ALL = List.of(GLOW, SPARKS, DISSOLVE, SLASH, SHOCKWAVE,
+    public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE,
             FIRE, SMOKE, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
-            MAGIC_CIRCLE, PORTAL, LIGHTNING, CHARGE_ORB, ENERGY_TRAIL,
+            MAGIC_CIRCLE, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, LIGHTNING, CHARGE_ORB, ENERGY_TRAIL,
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SCAN_PULSE,
             ENERGY_SHIELD, CRYSTAL, HOLOGRAM, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,
