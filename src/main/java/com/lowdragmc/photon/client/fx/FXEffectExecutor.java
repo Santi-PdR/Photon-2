@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.fx;
 
 import lombok.Getter;
 import lombok.Setter;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -34,6 +35,10 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     protected boolean forcedDeath;
     @Setter
     protected boolean allowMulti;
+    /** Timeline section to start from (e.g. a persistent effect recreated mid-loop); null starts at 0. */
+    @Setter
+    @Nullable
+    protected String startSection;
 
     //runtime
     @Getter
@@ -49,6 +54,16 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     protected FXEffectExecutor(FX fx, Level level) {
         this.fx = fx;
         this.level = level;
+    }
+
+    /** Include failures constructing a runtime, before it can reach the common emit diagnostics. */
+    protected FXRuntime createDiagnosedRuntime() {
+        try {
+            return fx.createRuntime();
+        } catch (RuntimeException error) {
+            FXDiagnostics.failure(fx.getFxLocation(), "runtime-create", "Could not create the effect runtime", null, error);
+            throw error;
+        }
     }
 
     /** Fire {@link #onFinished} exactly once (re-armed by the next {@code start()}). */
@@ -126,5 +141,28 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
     /** Whether this executor's runtime ended (finished naturally or discarded by the engine). */
     protected boolean runtimeEnded() {
         return runtime != null && (runtime.isFinished() || !runtime.isValid());
+    }
+
+    /** Copy offset/rotation/scale and start flags so a replacement keeps the same placement. */
+    protected void copyPlacementFrom(FXEffectExecutor other) {
+        offset.set(other.offset);
+        rotation.set(other.rotation);
+        scale.set(other.scale);
+        forcedDeath = other.forcedDeath;
+        allowMulti = other.allowMulti;
+        // already playing: do not re-apply delay. Resume at the live section so a looping combat
+        // FX does not flash its intro when editfx saves.
+        var liveSection = other.runtime != null ? other.runtime.timelinePlayer.currentSection() : null;
+        startSection = liveSection != null ? liveSection : other.startSection;
+    }
+
+    /**
+     * After an {@code .fx} was rewritten, stop every playing copy of that id and start the newly
+     * cached definition in the same place. {@code /photon fx editfx} save uses this so the author
+     * does not have to replay the effect by hand.
+     */
+    public static int replacePlaying(ResourceLocation id) {
+        if (id == null) return 0;
+        return EntityEffectExecutor.replacePlaying(id) + BlockEffectExecutor.replacePlaying(id);
     }
 }
