@@ -8,6 +8,7 @@ import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.photon.Photon;
+import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import com.lowdragmc.photon.gui.editor.view.FXTimelineView;
@@ -80,7 +81,16 @@ public class FXEditor extends Editor {
     protected void loadNewProject(IProject project, @Nullable File projectFile) {
         if (project instanceof FXProject fxProject) {
             try {
-                super.loadNewProject(project, projectFile);
+                // An .fx is a playable definition, not a project document. Binding it as
+                // currentProjectFile makes Save write project NBT over the definition, after
+                // which the effect never appears again. A Photon 1 .fxproj is the same: keep
+                // the source intact and treat the import as unsaved.
+                File bound = projectFile;
+                if (bound != null && (bound.getName().endsWith(FX.SUFFIX)
+                        || FXProjectConverter.isLegacyEditorFile(bound))) {
+                    bound = null;
+                }
+                super.loadNewProject(project, bound);
                 fxProject.setEditor(this);
                 showProject(fxProject);
             } catch (RuntimeException failure) {
