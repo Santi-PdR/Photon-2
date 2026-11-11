@@ -242,6 +242,22 @@ public class TrailsSetting extends ToggleGroup {
         super.deserializeNBT(provider, tag);
         config.deserializeNBT(provider, tag.getCompound("config"));
         araConfig.deserializeNBT(provider, tag.getCompound("araConfig"));
+        // Before TrailConfig was nested, material and trail widths lived on TrailsSetting.
+        if (tag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            if (tag.contains("colorOverTrail", net.minecraft.nbt.Tag.TAG_COMPOUND))
+                config.setColorOverTrail(NumberFunction.deserializeWrapper(tag.getCompound("colorOverTrail")));
+            if (tag.contains("widthOverTrail", net.minecraft.nbt.Tag.TAG_COMPOUND))
+                config.setWidthOverTrail(NumberFunction.deserializeWrapper(tag.getCompound("widthOverTrail")));
+            if (tag.contains("uvMode", net.minecraft.nbt.Tag.TAG_STRING)) {
+                try {
+                    config.setUvMode(TrailParticle.UVMode.valueOf(tag.getString("uvMode")));
+                } catch (IllegalArgumentException ignored) {
+                    // leave the nested config's value
+                }
+            }
+            if (tag.contains("minimumVertexDistance"))
+                config.setMinVertexDistance(tag.getFloat("minimumVertexDistance"));
+        }
     }
 
     private void createTrailTypeConfigurator(TrailType value, ConfiguratorGroup group) {

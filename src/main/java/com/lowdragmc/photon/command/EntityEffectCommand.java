@@ -191,6 +191,11 @@ public class EntityEffectCommand extends EffectCommand {
     private static class Client {
         public static void execute(EntityEffectCommand packet) {
             var level = Minecraft.getInstance().level;
+            Photon.LOGGER.info("[fx-diagnostic] entity playback packet fx={} targets={}", packet.location, packet.ids.length);
+            if (level == null) {
+                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-packet", "No client level", null, null);
+                return;
+            }
             if (level != null) {
                 var fx = FXHelper.getFX(packet.location);
                 if (fx != null) {
@@ -207,7 +212,14 @@ public class EntityEffectCommand extends EffectCommand {
                             effect.setDelay(packet.delay);
                             effect.setForcedDeath(packet.forcedDeath);
                             effect.setAllowMulti(packet.allowMulti);
-                            effect.start();
+                            try {
+                                effect.start();
+                            } catch (RuntimeException error) {
+                                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-start", "Playback start threw an exception", null, error);
+                                throw error;
+                            }
+                        } else {
+                            com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-target", "Entity id " + id + " is not present on the client", null, null);
                         }
                     }
                 }

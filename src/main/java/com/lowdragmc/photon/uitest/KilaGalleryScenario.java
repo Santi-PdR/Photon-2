@@ -208,6 +208,8 @@ public class KilaGalleryScenario implements UIScenario {
             single(emitter, preset == KilaPresets.SCORCH_MARK || preset == KilaPresets.CHARGE_ORB ? 80 : 400, switch (preset.id()) {
                 case "ground_circle", "scorch_mark", "caustics" -> 2.0f;
                 case "scan_pulse" -> 3.0f;
+                case "spiral", "hue_swirl", "black_hole", "star_burst", "hexagon", "ripple", "crescent" -> 1.8f;
+                case "shaft", "wisp" -> 2.2f;
                 default -> preset.target() == KilaPresets.Target.MESH ? 1.8f : 1.2f;
             });
         }
