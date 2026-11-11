@@ -428,6 +428,8 @@ public final class PhotonFXEditorSmokeTest {
         verifyCyclicLifetimes();
         verifySections();
         verifySectionCommand();
+        verifyEditFxCommand();
+        verifyEntityFollowBeforeParticles();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
@@ -515,6 +517,71 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[section-command-smoke] /photon fx section is registered and a jump command "
                 + "moves a playing timeline into the named section");
+    }
+
+    /**
+     * {@code /photon fx editfx <id>} opens that effect in the editor. Saving writes the playable
+     * {@code .fx} into the Photon workspace pack so the next play replaces the current definition.
+     */
+    private static void verifyEditFxCommand() {
+        var photon = com.lowdragmc.photon.ServerCommands.createServerCommands().get(0);
+        var fx = literal(photon, "fx");
+        var editfx = fx == null ? null : literal(fx, "editfx");
+        if (editfx == null || argument(editfx, "location") == null) {
+            throw new IllegalStateException("/photon fx editfx <location> is not registered");
+        }
+        var sent = new com.lowdragmc.photon.command.EditFxCommand();
+        var id = new ResourceLocation("photon_editfx_smoke", "roundtrip");
+        setCommandField(sent, "location", id);
+        var buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        sent.encode(buf);
+        var received = com.lowdragmc.photon.command.EditFxCommand.decodePacket(buf);
+        if (!id.equals(readCommandField(received, "location"))) {
+            throw new IllegalStateException("An editfx command did not survive being encoded: "
+                    + readCommandField(received, "location"));
+        }
+        var project = new FXProject();
+        project.setReplacePlayable(id);
+        var overlay = com.lowdragmc.photon.gui.editor.FXFileActions.playableFile(id);
+        try {
+            com.lowdragmc.photon.gui.editor.FXFileActions.writePlayable(project, id);
+            if (!overlay.isFile()) {
+                throw new IllegalStateException("Saving an edited FX did not write " + overlay.getAbsolutePath());
+            }
+            CompoundTag written;
+            try (var in = new java.io.FileInputStream(overlay)) {
+                written = NbtIo.readCompressed(in);
+            }
+            if (!written.contains("fxData", Tag.TAG_COMPOUND)
+                    || written.getInt("version") != FXProject.VERSION) {
+                throw new IllegalStateException("The replaced playable FX was not a Photon 2 definition: " + written);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not replace the playable FX for editfx", e);
+        } finally {
+            overlay.delete();
+            var parent = overlay.getParentFile();
+            if (parent != null) parent.delete();
+        }
+        Photon.LOGGER.info("[editfx-smoke] /photon fx editfx is registered and saving replaces the playable .fx");
+    }
+
+    /**
+     * Large entity auras smeared at speed because ParticleEngine can draw a child emitter before the
+     * FX root follows. The pose is applied to every playing entity FX before particles draw.
+     */
+    private static void verifyEntityFollowBeforeParticles() {
+        try {
+            var hook = com.lowdragmc.photon.client.fx.EntityEffectExecutor.class
+                    .getMethod("onRenderStage", net.minecraftforge.client.event.RenderLevelStageEvent.class);
+            if (!java.lang.reflect.Modifier.isStatic(hook.getModifiers())) {
+                throw new IllegalStateException("Entity FX follow-before-particles hook is not static");
+            }
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException("Entity FX follow-before-particles hook is missing", e);
+        }
+        com.lowdragmc.photon.client.fx.EntityEffectExecutor.followAllPlaying(0.5f);
+        Photon.LOGGER.info("[entity-follow-frame-smoke] entity FX follow before particles is registered");
     }
 
     /**

@@ -425,6 +425,75 @@ public final class FXFileActions {
         return null;
     }
 
+    /** Workspace file that plays as {@code id}: {@code photon/assets/<ns>/fx/<path>.fx}. */
+    public static File playableFile(ResourceLocation id) {
+        return new File(PhotonPaths.getAssetsDir(), id.getNamespace() + "/fx/" + id.getPath() + FX.SUFFIX);
+    }
+
+    /**
+     * Write the project's definition as the playable {@code .fx} for {@code id} and drop the cached copy
+     * so the next {@link FXHelper#getFX} reads this file. The Photon workspace pack sits at the top of
+     * the pack list, so this replaces a mod or .fxpack of the same id without F3+T.
+     */
+    public static void writePlayable(FXProject project, ResourceLocation id) throws Exception {
+        var target = playableFile(id);
+        var parent = target.getParentFile();
+        if (parent != null) parent.mkdirs();
+        var fileData = project.getFx().serializeNBT(Platform.getFrozenRegistry());
+        fileData.putInt("version", FXProject.VERSION);
+        NbtIo.writeCompressed(fileData, target);
+        project.addKnownAs(id);
+        FXHelper.invalidate(java.util.List.of(id));
+        Photon.LOGGER.info("Replaced playable FX {} at {}", id, target.getAbsolutePath());
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            player.sendSystemMessage(Component.translatable("photon.editfx.replaced", id.toString()));
+        }
+    }
+
+    /**
+     * Load {@code id} as an editor project that, when saved, writes back over the playable {@code .fx}.
+     *
+     * @return null if no definition is loaded under that id
+     */
+    @Nullable
+    public static FXProject projectFromFx(ResourceLocation id) throws Exception {
+        var tag = FXHelper.readTag(id);
+        if (tag == null) return null;
+        var result = FXProjectConverter.convertInMemory(tag, id);
+        result.warnings().forEach(warning -> Photon.LOGGER.warn("photon fx editfx {}: {}", id, warning));
+        result.project().setReplacePlayable(id);
+        return result.project();
+    }
+
+    /**
+     * {@code /photon fx editfx}: open the editor with that effect. Saving the project replaces the
+     * playable workspace copy of the same id.
+     *
+     * @return false if the id is not loaded
+     */
+    public static boolean openForEdit(ResourceLocation id) throws Exception {
+        var project = projectFromFx(id);
+        if (project == null) return false;
+        PhotonPaths.ensureDirectories();
+        var projectFile = new File(PhotonPaths.getProjectsDir(),
+                "editfx/" + id.getNamespace() + "/" + id.getPath() + FXProject.TYPE.getSuffix());
+        var parent = projectFile.getParentFile();
+        if (parent != null) parent.mkdirs();
+        // write the working project without also exporting the playable overlay (that happens on Save)
+        var replace = project.getReplacePlayable();
+        project.setReplacePlayable(null);
+        FXProject.TYPE.saveProjectToFile(project, projectFile);
+        project.setReplacePlayable(replace);
+        var editor = FXEditor.openScreen();
+        editor.loadProject(project, projectFile);
+        if (editor.getCurrentProject() instanceof FXProject loaded) {
+            loaded.setReplacePlayable(id);
+            loaded.addKnownAs(id);
+        }
+        return true;
+    }
+
     /** Open the source of an FX instance: the {@code .fx} under the editor's assets folder, converted into a project. */
     public static void openSource(Editor editor, @Nullable ResourceLocation fx) {
         if (fx == null) return;

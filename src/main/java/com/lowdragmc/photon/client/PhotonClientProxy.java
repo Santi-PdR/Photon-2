@@ -54,6 +54,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
     public PhotonClientProxy(IEventBus eventBus) {
         super(eventBus);
         MinecraftForge.EVENT_BUS.addListener(ClientFxPackSync::onClientLogout);
+        MinecraftForge.EVENT_BUS.addListener(com.lowdragmc.photon.client.fx.EntityEffectExecutor::onRenderStage);
         PhotonFXEditorSmokeTest.prepareModelFixtureIfEnabled();
         eventBus.addListener(this::clientSetup);
         eventBus.addListener(this::shaderRegistry);

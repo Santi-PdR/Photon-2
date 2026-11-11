@@ -65,6 +65,9 @@ public class FXProject implements IProject {
                 throw new IllegalArgumentException("Photon projects cannot be saved over an .fx definition: " + file);
             }
             super.saveProjectToFile(project, file);
+            if (project instanceof FXProject fxProject && fxProject.replacePlayable != null) {
+                FXFileActions.writePlayable(fxProject, fxProject.replacePlayable);
+            }
         }
     };
 
@@ -79,6 +82,14 @@ public class FXProject implements IProject {
     @Setter
     @Nullable
     private FXEditor editor;
+    /**
+     * When set (by {@code /photon fx editfx}), saving the project also writes the playable {@code .fx}
+     * of this id into the Photon workspace pack so the next play replaces what is currently loaded.
+     */
+    @Getter
+    @Setter
+    @Nullable
+    private ResourceLocation replacePlayable;
 
     public FXProject() {
         this.resources = Resources.of(

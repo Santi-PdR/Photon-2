@@ -158,7 +158,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[entity-follow-frame-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -207,6 +207,14 @@ jobs:
       - name: Require the section command
         shell: bash
         run: grep -Fq '[section-command-smoke] /photon fx section is registered and a jump command moves a playing timeline into the named section' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the editfx command
+        shell: bash
+        run: grep -Fq '[editfx-smoke] /photon fx editfx is registered and saving replaces the playable .fx' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require entity FX to follow before particles draw
+        shell: bash
+        run: grep -Fq '[entity-follow-frame-smoke] entity FX follow before particles is registered' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require search pickers to open on the whole catalogue
         shell: bash

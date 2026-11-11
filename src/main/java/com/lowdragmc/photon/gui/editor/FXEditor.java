@@ -3,8 +3,12 @@ package com.lowdragmc.photon.gui.editor;
 import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.editor.project.IProject;
 import com.lowdragmc.lowdraglib2.editor.ui.Editor;
+import com.lowdragmc.lowdraglib2.editor.ui.EditorWindow;
 import com.lowdragmc.lowdraglib2.editor.ui.sceneeditor.sceneobject.utils.TransformGizmo;
+import com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen;
 import com.lowdragmc.lowdraglib2.gui.texture.SpriteTexture;
+import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
+import com.lowdragmc.lowdraglib2.gui.ui.UI;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.photon.Photon;
@@ -14,6 +18,8 @@ import com.lowdragmc.photon.gui.editor.view.FXHierarchyView;
 import com.lowdragmc.photon.gui.editor.view.FXTimelineView;
 import com.lowdragmc.photon.gui.editor.view.scene.SceneView;
 import net.minecraft.MethodsReturnNonnullByDefault;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
@@ -68,6 +74,24 @@ public class FXEditor extends Editor {
     @Override
     protected Editor createNewEditorInstance() {
         return new FXEditor();
+    }
+
+    /**
+     * Open (or restore) the FX editor window and return the editor inside it. Same screen the
+     * {@code /photon_editor} command builds.
+     */
+    public static FXEditor openScreen() {
+        var window = EditorWindow.open(WINDOW_ID, FXEditor::new);
+        window.setId("fx_editor");
+        var minecraft = Minecraft.getInstance();
+        var ui = new ModularUI(UI.of(window))
+                .shouldCloseOnEsc(false)
+                .shouldCloseOnKeyInventory(false);
+        minecraft.setScreen(new ModularUIScreen(ui, Component.empty()));
+        if (!(window.getCurrentEditor() instanceof FXEditor editor)) {
+            throw new IllegalStateException("FX editor window did not hold an FXEditor");
+        }
+        return editor;
     }
 
     public void reloadEffect() {

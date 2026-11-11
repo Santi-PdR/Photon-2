@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.fx;
 import com.lowdragmc.photon.client.gameobject.IFXObject;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -24,6 +25,12 @@ import java.util.*;
  * feet so an aura stays on the torso. First-person views of a Photon 2 (eye-anchored) FX use the
  * camera itself, because elytra / swim / crawl interpolate eye height on the camera, not on
  * {@link Entity#getEyePosition(float)}.
+ * <p>
+ * The pose is also applied once per frame before vanilla particles draw
+ * ({@link RenderLevelStageEvent.Stage#AFTER_ENTITIES}). ParticleEngine walks render types in
+ * identity-hash order, so a child emitter can render before the FX root. Following only in the
+ * root's {@code updateFrame} then left some pieces of a large aura at last frame's pose and some
+ * at this one — a smear when moving fast.
  */
 @OnlyIn(Dist.CLIENT)
 public class EntityEffectExecutor extends FXEffectExecutor {
@@ -48,26 +55,53 @@ public class EntityEffectExecutor extends FXEffectExecutor {
         return entity;
     }
 
-    @Override
-    public void updateFXObjectTick(IFXObject fxObject) {
-        if (runtime == null || fxObject != runtime.root) {
+    /**
+     * Snap every playing entity FX to this frame's interpolated pose before ParticleEngine draws.
+     * Identity-hash render order can draw a child emitter before the FX root; following only in
+     * the root's {@code updateFrame} then shears a large aura across two poses.
+     */
+    public static void onRenderStage(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) {
             return;
         }
-        if (!entity.isAlive()) {
-            // anchor gone: stop the FX (force drops remnants immediately) and retire right away
-            runtime.destroy(forcedDeath);
-            retire(CACHE, entity);
-        } else if (runtimeEnded()) {
-            // self-evict finished runtimes instead of lingering until the next same-key start()
-            retire(CACHE, entity);
-        } else {
+        followAllPlaying(event.getPartialTick());
+    }
+
+    /** Apply this frame's follow pose to every live entity FX. Empty-cache no-op. */
+    public static void followAllPlaying(float partialTicks) {
+        for (var effects : CACHE.values()) {
+            for (var effect : effects) {
+                effect.follow(true, partialTicks);
+            }
+        }
+    }
+
+    @Override
+    public void updateFXObjectTick(IFXObject fxObject) {
+        if (runtime == null) {
+            return;
+        }
+        if (fxObject == runtime.root) {
+            if (!entity.isAlive()) {
+                // anchor gone: stop the FX (force drops remnants immediately) and retire right away
+                runtime.destroy(forcedDeath);
+                retire(CACHE, entity);
+                return;
+            }
+            if (runtimeEnded()) {
+                // self-evict finished runtimes instead of lingering until the next same-key start()
+                retire(CACHE, entity);
+                return;
+            }
+        }
+        if (entity.isAlive()) {
             follow(false, 1f);
         }
     }
 
     @Override
     public void updateFXObjectFrame(IFXObject fxObject, float partialTicks) {
-        if (runtime != null && fxObject == runtime.root) {
+        if (runtime != null) {
             follow(true, partialTicks);
         }
     }

@@ -1,6 +1,7 @@
 package com.lowdragmc.photon;
 
 import com.lowdragmc.photon.command.BlockEffectCommand;
+import com.lowdragmc.photon.command.EditFxCommand;
 import com.lowdragmc.photon.command.EffectSectionCommand;
 import com.lowdragmc.photon.command.EntityEffectCommand;
 import com.lowdragmc.photon.command.RemoveBlockEffectCommand;
@@ -34,6 +35,9 @@ public class PhotonNetworking {
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(7, EffectSectionCommand.class, EffectSectionCommand::encode,
                 EffectSectionCommand::decodePacket, (packet, context) -> handle(context.get(), () -> EffectSectionCommand.execute(packet)),
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(8, EditFxCommand.class, EditFxCommand::encode,
+                EditFxCommand::decodePacket, (packet, context) -> handle(context.get(), () -> EditFxCommand.execute(packet)),
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(4, FxPackSync.ManifestPacket.class, FxPackSync.ManifestPacket::encode,
                 FxPackSync.ManifestPacket::decode, (packet, context) -> handle(context.get(),
