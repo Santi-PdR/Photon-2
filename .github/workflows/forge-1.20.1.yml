@@ -222,6 +222,14 @@ jobs:
         shell: bash
         run: grep -Fq '[fxpack-dialog-size-smoke] pack contents dialog size is remembered' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require Photon 1 entity FX to stay on the torso
+        shell: bash
+        run: grep -Fq '[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the editor to list loaded textures
+        shell: bash
+        run: grep -Fq '[loaded-texture-catalogue-smoke] editor can pick' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require the 26.3 timeline sections
         shell: bash
         run: |

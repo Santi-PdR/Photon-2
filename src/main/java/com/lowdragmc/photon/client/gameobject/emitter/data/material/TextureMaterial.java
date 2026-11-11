@@ -8,8 +8,13 @@ import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
+import com.lowdragmc.lowdraglib2.gui.ui.data.ScrollerMode;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
+import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.photon.Photon;
@@ -18,6 +23,7 @@ import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.ToggleGroup;
 import com.lowdragmc.photon.client.util.PhotonAssetPath;
 import com.lowdragmc.photon.client.util.PhotonPaths;
+import com.lowdragmc.photon.client.util.PhotonTextureCatalogue;
 import com.mojang.blaze3d.shaders.Program;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -27,6 +33,7 @@ import lombok.Setter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,6 +41,7 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 @OnlyIn(Dist.CLIENT)
 @ParametersAreNonnullByDefault
@@ -200,8 +208,64 @@ public class TextureMaterial extends ShaderInstanceMaterial {
                                 com.lowdragmc.photon.client.fx.LooseTextures.resolve(location);
                             }).show(mui.ui.rootElement);
                         }).layout(layout -> layout.alignSelf(AlignItems.CENTER))
+                )
+                .addInlineChild(
+                        new Button().setText("photon.material.pick_loaded_texture").setOnClick(e -> {
+                            var mui = e.currentElement.getModularUI();
+                            if (mui == null) return;
+                            openLoadedTexturePicker(mui.ui.rootElement, location -> {
+                                texture = location;
+                                configurator.notifyChanges();
+                                com.lowdragmc.photon.client.fx.LooseTextures.resolve(location);
+                            });
+                        }).layout(layout -> layout.alignSelf(AlignItems.CENTER))
                 ));
         ConfiguratorParser.createConfigurators(father, this);
+    }
+
+    /**
+     * Textures already in the resource manager (Photon, other mods, mounted FX packs) so an author
+     * can reuse one another effect already draws, without copying the file into the workspace.
+     */
+    private static void openLoadedTexturePicker(com.lowdragmc.lowdraglib2.gui.ui.UIElement host,
+                                                Consumer<ResourceLocation> onPick) {
+        var dialog = new Dialog().windowMode(
+                host.getPositionX() + 20, host.getPositionY() + 20, 280, 260);
+        dialog.setTitle("photon.material.pick_loaded_texture");
+        var list = new ScrollerView();
+        list.scrollerStyle(style -> style.mode(ScrollerMode.VERTICAL));
+        list.layout(layout -> {
+            layout.widthPercent(100);
+            layout.flex(1);
+        });
+        var filter = new TextField();
+        filter.layout(layout -> layout.widthPercent(100).height(14));
+        Runnable refill = () -> {
+            list.clearAllScrollViewChildren();
+            var found = PhotonTextureCatalogue.matching(filter.getText());
+            if (found.isEmpty()) {
+                list.addScrollViewChild(new Label().setText("photon.material.pick_loaded_texture.empty"));
+                return;
+            }
+            for (var location : found) {
+                var row = new Label().setText(Component.literal(location.toString()));
+                row.layout(layout -> layout.widthPercent(100));
+                row.addEventListener(UIEvents.MOUSE_DOWN, event -> {
+                    if (event.button == 0) {
+                        onPick.accept(location);
+                        dialog.close();
+                    }
+                });
+                list.addScrollViewChild(row);
+            }
+        };
+        filter.setTextResponder(word -> refill.run());
+        refill.run();
+        dialog.addContent(filter);
+        dialog.addContent(list);
+        dialog.addButton(new Button().setOnClick(e -> dialog.close())
+                .setText("ldlib.gui.tips.confirm").addClass("__confirm-button__"));
+        dialog.show(host);
     }
 
     public @Nullable ResourceLocation getTextureFromFile(File filePath) {

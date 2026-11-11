@@ -45,6 +45,12 @@ public final class FXData {
     private boolean bloomEnabled = true;
     /** How strong this FX's bloom halo is (0..2). */
     private float bloomIntensity = DEFAULT_BLOOM_INTENSITY;
+    /**
+     * Photon 1 attached entity FX at the feet ({@link net.minecraft.world.entity.Entity#getPosition});
+     * Photon 2 follows the eyes. Converted Photon 1 effects keep the feet so an aura stays on the
+     * torso instead of jumping to the head.
+     */
+    private boolean entityFollowsFeet;
 
     public FXData() {
         this(new ArrayList<>(), new Timeline());
@@ -87,6 +93,14 @@ public final class FXData {
         this.bloomIntensity = Mth.clamp(bloomIntensity, MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY);
     }
 
+    public boolean entityFollowsFeet() {
+        return entityFollowsFeet;
+    }
+
+    public void setEntityFollowsFeet(boolean entityFollowsFeet) {
+        this.entityFollowsFeet = entityFollowsFeet;
+    }
+
     public FXData copy(boolean deepCopy) {
         var copied = objects.stream().map(obj -> obj.copy(deepCopy)).collect(Collectors.toList());
         for (int i = 0; i < copied.size(); i++) {
@@ -98,6 +112,7 @@ public final class FXData {
         var copy = new FXData(copied, timeline.copy());
         copy.bloomEnabled = bloomEnabled;
         copy.bloomIntensity = bloomIntensity;
+        copy.entityFollowsFeet = entityFollowsFeet;
         return copy;
     }
 
@@ -133,6 +148,9 @@ public final class FXData {
     private void writeBloom(CompoundTag tag) {
         tag.putBoolean("bloomEnabled", bloomEnabled);
         tag.putFloat("bloomIntensity", bloomIntensity);
+        if (entityFollowsFeet) {
+            tag.putBoolean("entityFollowsFeet", true);
+        }
     }
 
     /** Every object as it is saved on its own, instances in their placed form. */
@@ -206,6 +224,10 @@ public final class FXData {
         bloomIntensity = tag.contains("bloomIntensity")
                 ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
                 : DEFAULT_BLOOM_INTENSITY;
+        // Converted Photon 1 files had neither key; they must keep the feet or auras sit on the head.
+        entityFollowsFeet = tag.contains("entityFollowsFeet")
+                ? tag.getBoolean("entityFollowsFeet")
+                : !tag.contains("bloomIntensity");
     }
 
     /**

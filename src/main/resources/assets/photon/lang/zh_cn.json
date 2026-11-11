@@ -1746,6 +1746,8 @@
   "photon.blend_preset.multiply": "正片叠底",
   "photon.blend_preset.opaque": "不透明",
   "photon.blend_preset.custom": "自定义",
+  "photon.material.pick_loaded_texture": "已加载的贴图",
+  "photon.material.pick_loaded_texture.empty": "除原版外没有已加载的贴图",
   "photon.material.convert_to_kila": "转换为 Kila 材质",
   "photon.material.convert_to_kila.confirm": "把 %s 替换为外观相同的 Kila 材质吗？所有使用它的特效都会随之切换，原文件会被覆盖。",
   "photon.material.export_shader_graph": "导出为着色器图",

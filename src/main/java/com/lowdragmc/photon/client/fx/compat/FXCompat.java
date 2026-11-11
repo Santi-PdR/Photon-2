@@ -203,6 +203,9 @@ public class FXCompat {
             fxObjects = definition.getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
         }
         fxData.put("fxObjects", mapObjects(fxObjects));
+        // Photon 1 EntityEffect followed the feet; Photon 2 follows the eyes. Keep the feet so an
+        // aura stays on the torso after conversion.
+        fxData.putBoolean("entityFollowsFeet", true);
         new_fx.put("fxData", fxData);
         var definition = fx.contains("fx", Tag.TAG_COMPOUND) ? fx.getCompound("fx") : fx;
         var oldSubEffects = definition.getCompound("subFXs");
@@ -211,6 +214,7 @@ public class FXCompat {
             for (var name : oldSubEffects.getAllKeys()) {
                 var subData = new CompoundTag();
                 subData.put("fxObjects", mapObjects(oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND)));
+                subData.putBoolean("entityFollowsFeet", true);
                 var subEffect = new CompoundTag();
                 subEffect.put("fxData", subData);
                 subEffects.put(name, subEffect);

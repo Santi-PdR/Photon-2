@@ -20,8 +20,9 @@ import java.util.*;
  * <p>
  * Position is applied on the tick as well as the frame. Updating only while the particle renders
  * left the FX frozen at the last drawn pose the moment the player flew or sprinted out of the
- * vanilla particle's stale box. First-person views of the followed entity use the camera itself,
- * because elytra / swim / crawl interpolate eye height on the camera, not on
+ * vanilla particle's stale box. Photon 2 follows the eyes; converted Photon 1 effects follow the
+ * feet so an aura stays on the torso. First-person views of a Photon 2 (eye-anchored) FX use the
+ * camera itself, because elytra / swim / crawl interpolate eye height on the camera, not on
  * {@link Entity#getEyePosition(float)}.
  */
 @OnlyIn(Dist.CLIENT)
@@ -112,22 +113,26 @@ public class EntityEffectExecutor extends FXEffectExecutor {
     }
 
     /**
-     * Where the FX should sit this tick/frame. Tick uses the entity's current eye; the render
-     * frame interpolates, and in first person of this entity it uses the camera so flight does
-     * not leave the FX a frame behind the view.
+     * Where the FX should sit this tick/frame. Photon 1 used the feet ({@link Entity#getPosition});
+     * Photon 2 uses the eyes. Tick uses the current pose; the render frame interpolates, and in
+     * first person of an eye-anchored FX it uses the camera so flight does not leave the FX a
+     * frame behind the view.
      */
     private Vec3 followPosition(boolean renderFrame, float partialTicks) {
+        boolean feet = fx.getFxData().entityFollowsFeet();
         if (renderFrame) {
-            var renderer = Minecraft.getInstance().gameRenderer;
-            if (renderer != null) {
-                var camera = renderer.getMainCamera();
-                if (camera.getEntity() == entity && !camera.isDetached()) {
-                    return camera.getPosition();
+            if (!feet) {
+                var renderer = Minecraft.getInstance().gameRenderer;
+                if (renderer != null) {
+                    var camera = renderer.getMainCamera();
+                    if (camera.getEntity() == entity && !camera.isDetached()) {
+                        return camera.getPosition();
+                    }
                 }
             }
-            return entity.getEyePosition(partialTicks);
+            return feet ? entity.getPosition(partialTicks) : entity.getEyePosition(partialTicks);
         }
-        return entity.getEyePosition();
+        return feet ? entity.position() : entity.getEyePosition();
     }
 
     @Override
@@ -145,7 +150,8 @@ public class EntityEffectExecutor extends FXEffectExecutor {
         resetFinishedNotification();
         this.runtime = createDiagnosedRuntime();
         var root = this.runtime.getRoot();
-        root.updatePos(entity.getEyePosition().toVector3f().add(offset.x, offset.y, offset.z));
+        var start = followPosition(false, 1f);
+        root.updatePos(start.toVector3f().add(offset.x, offset.y, offset.z));
         root.updateRotation(rotation);
         root.updateScale(scale);
         this.runtime.emit(this, delay, startSection);

@@ -433,6 +433,8 @@ public final class PhotonFXEditorSmokeTest {
         verifyInspectorPersistedKeys();
         verifyDisabledMenuLeaves();
         verifyDialogSizeMemory();
+        verifyPhoton1EntityFeetAnchor();
+        verifyLoadedTextureCatalogue();
         verifyParticleDestReuse();
         verifyPoppedOutScreenSize();
     }
@@ -859,6 +861,48 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("dialog size store roundtrip failed: " + got);
         }
         Photon.LOGGER.info("[fxpack-dialog-size-smoke] pack contents dialog size is remembered ({}x{})", got.x, got.y);
+    }
+
+    /**
+     * Photon 1 attached entity FX at the feet. Converted effects must keep that or an aura sits on
+     * the head instead of the torso.
+     */
+    private static void verifyPhoton1EntityFeetAnchor() {
+        var converted = new com.lowdragmc.photon.client.fx.FXData();
+        converted.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), new net.minecraft.nbt.CompoundTag());
+        if (!converted.entityFollowsFeet()) {
+            throw new IllegalStateException("A Photon 1 file without bloom keys did not follow the feet");
+        }
+        var mapped = new net.minecraft.nbt.CompoundTag();
+        var emitters = new net.minecraft.nbt.ListTag();
+        mapped.put("emitters", emitters);
+        var photon2 = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(mapped);
+        if (!photon2.getCompound("fxData").getBoolean("entityFollowsFeet")) {
+            throw new IllegalStateException("Photon 1 conversion did not stamp entityFollowsFeet");
+        }
+        var modern = new net.minecraft.nbt.CompoundTag();
+        modern.putBoolean("bloomEnabled", true);
+        modern.putFloat("bloomIntensity", 0.18f);
+        var authored = new com.lowdragmc.photon.client.fx.FXData();
+        authored.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), modern);
+        if (authored.entityFollowsFeet()) {
+            throw new IllegalStateException("A Photon 2 file followed the feet; it should follow the eyes");
+        }
+        Photon.LOGGER.info("[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes");
+    }
+
+    /**
+     * The texture picker lists textures already loaded (Photon, packs, other mods), not only files
+     * under the workspace folder.
+     */
+    private static void verifyLoadedTextureCatalogue() {
+        var loaded = com.lowdragmc.photon.client.util.PhotonTextureCatalogue.listLoaded();
+        boolean hasParticle = loaded.stream().anyMatch(id -> id.getNamespace().equals("photon")
+                && id.getPath().contains("particle"));
+        if (!hasParticle) {
+            throw new IllegalStateException("Loaded texture catalogue missed Photon's particle textures: " + loaded.size());
+        }
+        Photon.LOGGER.info("[loaded-texture-catalogue-smoke] editor can pick {} loaded textures including Photon's", loaded.size());
     }
 
     /**

@@ -1746,6 +1746,8 @@
   "photon.blend_preset.multiply": "Multiply",
   "photon.blend_preset.opaque": "Opaque",
   "photon.blend_preset.custom": "Custom",
+  "photon.material.pick_loaded_texture": "Loaded textures",
+  "photon.material.pick_loaded_texture.empty": "No loaded textures besides vanilla",
   "photon.material.convert_to_kila": "Convert to Kila Material",
   "photon.material.convert_to_kila.confirm": "Replace %s with a Kila Material that draws the same? Every effect using it switches over, and the file is overwritten.",
   "photon.material.export_shader_graph": "Export as Shader Graph",

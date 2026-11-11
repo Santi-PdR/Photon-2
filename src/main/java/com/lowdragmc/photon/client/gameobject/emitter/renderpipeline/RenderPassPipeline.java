@@ -162,6 +162,12 @@ public class RenderPassPipeline {
     public static void beginCollecting(RenderPassPipeline pipeline) {
         collecting = pipeline;
         FXBloom.beginFrame();
+        // The editor scene's root is a no-draw particle; its updateFrame may not contribute
+        // before the bloom pass. Feed the open project's FX data so the scene slider is visible.
+        var manager = PhotonParticleManager.getRenderingManager();
+        if (manager != null && manager.sceneView != null) {
+            FXBloom.contribute(manager.sceneView.fxData());
+        }
     }
 
     public static void finishCollecting(RenderPassPipeline pipeline) {

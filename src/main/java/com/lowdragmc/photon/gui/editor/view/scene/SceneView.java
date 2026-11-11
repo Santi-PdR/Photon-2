@@ -40,6 +40,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
 
 import java.util.List;
@@ -244,6 +245,12 @@ public class SceneView extends View implements FXSceneOptions {
 
     private FXData currentFxData() {
         return fxEditor.getCurrentProject() instanceof FXProject project ? project.getFx().getFxData() : null;
+    }
+
+    /** The open project's FX data, or null when the scene has no project. Used by the bloom pass. */
+    @Nullable
+    public FXData fxData() {
+        return currentFxData();
     }
 
     public void loadScene() {

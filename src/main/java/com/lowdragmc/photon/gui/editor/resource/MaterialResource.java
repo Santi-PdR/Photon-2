@@ -46,11 +46,22 @@ public class MaterialResource extends Resource<IMaterial> {
         }
 
         addBuiltinShaderMaterial(provider, "circle");
+        addBuiltinTextureMaterial(provider, "white");
         addBuiltinTextureMaterial(provider, "kila_tail");
         addBuiltinTextureMaterial(provider, "laser");
         addBuiltinTextureMaterial(provider, "smoke");
         addBuiltinTextureMaterial(provider, "thaumcraft");
         addBuiltinTextureMaterial(provider, "ring");
+        addKilaTextureMaterial(provider, "glow");
+        addKilaTextureMaterial(provider, "soft_circle");
+        addKilaTextureMaterial(provider, "smoke_burst");
+        addKilaTextureMaterial(provider, "flow_swirl");
+        addKilaTextureMaterial(provider, "slash");
+        addKilaTextureMaterial(provider, "spark");
+        addKilaTextureMaterial(provider, "trail");
+        addKilaTextureMaterial(provider, "rune_circle");
+        addKilaTextureMaterial(provider, "noise_flow");
+        addKilaTextureMaterial(provider, "noise_cloud");
     }
 
     private void addVanillaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
@@ -59,6 +70,10 @@ public class MaterialResource extends Resource<IMaterial> {
 
     private void addBuiltinTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
         builtin.addResource(name, new TextureMaterial(new ResourceLocation("photon:textures/particle/%s.png".formatted(name))));
+    }
+
+    private void addKilaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
+        builtin.addResource("tex/" + name, new TextureMaterial(new ResourceLocation("photon:textures/kila/" + name + ".png")));
     }
 
     private void addBuiltinShaderMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
