@@ -1,7 +1,7 @@
 {
   "photon.configuration.title": "Configuración de Photon",
   "photon.configuration.enable_bloom": "Activar bloom (brillo)",
-  "photon.configuration.enable_bloom.tooltip": "Activa el bloom global para los FX de Photon. El umbral predeterminado también detecta colores brillantes normales; súbelo para limitar el brillo a luces HDR. Sube Intensidad de bloom para reforzar el halo.",
+  "photon.configuration.enable_bloom.tooltip": "Interruptor maestro del bloom de Photon. La intensidad se configura por FX, no aquí.",
   "photon.configuration.bloom_mip_level": "Nivel de bloom",
   "photon.configuration.bloom_mip_level.tooltip": "Controla el ancho y suavidad del halo; valores mayores cuestan más rendimiento.",
   "photon.configuration.bloom_threshold": "Umbral de bloom",
@@ -10,11 +10,20 @@
   "photon.configuration.bloom_intensity.tooltip": "Fuerza del halo que se mezcla con la imagen.",
   "photon.configuration.enable_bloom_with_iris_shader": "Activar bloom con Iris",
   "photon.configuration.enable_bloom_with_iris_shader.tooltip": "Permite el bloom de Photon al usar shaders Iris cuando la capa de FX se mezcla con el objetivo de color del shader.",
-  "photon.is_bloom_visible": "Vista previa de bloom/brillo (B)",
+  "photon.is_bloom_visible": "Bloom de este FX (B)",
+  "photon.fx.bloom.enable": "Activar bloom",
+  "photon.fx.bloom.enable.tooltip": "Si este FX alimenta el halo de bloom de Photon. Desactivado, este efecto no brilla.",
+  "photon.fx.bloom.intensity": "Intensidad de bloom",
+  "photon.fx.bloom.intensity.tooltip": "Fuerza del halo de bloom de este FX (0 a 2). Se guarda en el efecto, no es una opción del cliente.",
+  "photon.editfx.opened": "Abriendo %s en el editor de FX",
+  "photon.editfx.missing": "El FX '%s' no está cargado",
+  "photon.editfx.failed": "No se pudo abrir %s: %s",
+  "photon.editfx.replaced": "Se guardó %s. Volvé a reproducir el efecto para ver el cambio.",
+  "photon.fx_instance.pick.search": "Buscar",
   "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo",
   "photon.gui.editor.timeline.audio.ogg": "Audio OGG personalizado",
   "photon.gui.editor.timeline.audio.import_ogg": "Importar .ogg",
   "photon.gui.editor.timeline.audio.loop": "Repetir sonido",
-  "photon.configuration.bloom_intensity_in_scene": "Intensidad de bloom (barra de escena)",
-  "photon.configuration.bloom_intensity_in_scene.tooltip": "Mueve el deslizador para reforzar o suavizar el halo de bloom sin abrir la configuración. Escribe el mismo valor que Intensidad de bloom (0 a 2); el valor por defecto no cambia."
+  "photon.configuration.bloom_intensity_in_scene": "Intensidad de bloom",
+  "photon.configuration.bloom_intensity_in_scene.tooltip": "Fuerza del halo de bloom de este FX (0 a 2). Se guarda en el efecto, no es una opción del cliente."
 }

@@ -43,12 +43,12 @@ public class FXProject implements IProject {
         @Override
         public IProject loadProjectFromFile(java.io.File file) throws Exception {
             if (FXProjectConverter.isLegacyEditorFile(file)) {
-                var convertedFile = FXProjectConverter.convertedProjectFile(file);
-                var result = FXProjectConverter.convertFile(file, convertedFile);
+                var tag = FXProjectConverter.readFileTag(file);
+                var result = FXProjectConverter.convertInMemory(tag, null);
                 result.warnings().forEach(warning -> com.lowdragmc.photon.Photon.LOGGER.warn(
                         "Photon 1 project {}: {}", file.getAbsolutePath(), warning));
-                com.lowdragmc.photon.Photon.LOGGER.info("Imported Photon 1 project {} as {}",
-                        file.getAbsolutePath(), convertedFile.getAbsolutePath());
+                com.lowdragmc.photon.Photon.LOGGER.info("Imported Photon 1 project {} in memory; source left at {}",
+                        file.getAbsolutePath(), file.getAbsolutePath());
                 return result.project();
             }
             try {
@@ -56,6 +56,17 @@ public class FXProject implements IProject {
             } catch (Exception failure) {
                 com.lowdragmc.photon.Photon.LOGGER.error("Failed to read Photon FX project {}", file.getAbsolutePath(), failure);
                 throw failure;
+            }
+        }
+
+        @Override
+        public void saveProjectToFile(IProject project, java.io.File file) throws Exception {
+            if (file.getName().endsWith(FX.SUFFIX)) {
+                throw new IllegalArgumentException("Photon projects cannot be saved over an .fx definition: " + file);
+            }
+            super.saveProjectToFile(project, file);
+            if (project instanceof FXProject fxProject && fxProject.replacePlayable != null) {
+                FXFileActions.writePlayable(fxProject, fxProject.replacePlayable);
             }
         }
     };
@@ -71,6 +82,14 @@ public class FXProject implements IProject {
     @Setter
     @Nullable
     private FXEditor editor;
+    /**
+     * When set (by {@code /photon fx editfx}), saving the project also writes the playable {@code .fx}
+     * of this id into the Photon workspace pack so the next play replaces what is currently loaded.
+     */
+    @Getter
+    @Setter
+    @Nullable
+    private ResourceLocation replacePlayable;
 
     public FXProject() {
         this.resources = Resources.of(

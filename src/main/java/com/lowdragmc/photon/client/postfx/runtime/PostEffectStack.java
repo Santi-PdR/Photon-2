@@ -155,7 +155,9 @@ public final class PostEffectStack {
      */
     public RenderTarget consumeAndExecute(HDRTarget chainInput, boolean doBuiltinBloom, int sceneDepthTexture) {
         long frame = PostFXTargetPool.currentFrame();
-        if (consumedFrame == frame) return chainInput;
+        // Custom effects are consumed once, but every new HDR particle build still needs its own
+        // bloom before it is clamped into the scene target.
+        if (consumedFrame == frame) return doBuiltinBloom ? PhotonPostProcessing.postTarget(chainInput) : chainInput;
         consumedFrame = frame;
         PostFXPreview.captureIfRequested(chainInput); // editors preview against the clean scene
 
