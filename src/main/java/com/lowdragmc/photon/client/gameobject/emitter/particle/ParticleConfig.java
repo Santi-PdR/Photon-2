@@ -23,6 +23,7 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveCon
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.RandomCurve;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.gameobject.particle.IParticle;
+import com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime;
 import com.lowdragmc.photon.client.gameobject.particle.renderer.TileParticleRenderer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
@@ -30,6 +31,9 @@ import lombok.Getter;
 import lombok.Setter;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -69,6 +73,15 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Configurable(name = "ParticleConfig.startLifetime", tips = "photon.emitter.config.startLifetime")
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, min = 0, defaultValue = 100, curveConfig = @CurveConfig(bound = {0, 200}, xAxis = "duration", yAxis = "life time"))
     protected NumberFunction startLifetime = NumberFunction.constant(100);
+    /**
+     * How a particle's lifetime drives its normalized age T. {@code Once} is what this port always did; {@code Loop}
+     * and {@code PingPong} keep the particle alive until the emitter is stopped, which is what a looping effect needs
+     * to avoid popping at every cycle boundary. Ported from Photon 26.3.
+     */
+    @Setter
+    @Getter
+    @Configurable(name = "ParticleConfig.lifetimeMode", tips = "photon.emitter.config.lifetimeMode")
+    protected ParticleLifetime.Mode lifetimeMode = ParticleLifetime.Mode.Once;
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.startSpeed", tips = "photon.emitter.config.startSpeed")
@@ -171,6 +184,18 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
         Local,
         World,
         Custom
+    }
+
+    @Override
+    public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
+        IPersistedSerializable.super.deserializeNBT(provider, tag);
+        // Early Photon 1 stored a single start-size function and defaulted to World space.
+        if (!tag.contains("simulationSpace") && tag.contains("startSize", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var number = NumberFunction.deserializeWrapper(tag.getCompound("startSize"));
+            startSize = new NumberFunction3(number, NumberFunction.copy(number), NumberFunction.copy(number));
+            startRotation = new NumberFunction3(startRotation.z, startRotation.y, startRotation.x);
+            simulationSpace = Space.World;
+        }
     }
 
     public ParticleConfig() {

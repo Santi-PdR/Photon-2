@@ -139,7 +139,8 @@ public class FXCompat {
                     }
                     CompoundTag photon1FX;
                     try (var input = java.nio.file.Files.newInputStream(path)) {
-                        photon1FX = NbtIo.readCompressed(input);
+                        // The loader accepts both Photon 1's gzip exports and raw NBT; conversion must too.
+                        photon1FX = FXHelper.readNbt(input);
                     }
                     if (!isLegacyEffect(photon1FX)) {
                         var reason = path.getFileName() + ": not a Photon 1 effect";
@@ -150,10 +151,7 @@ public class FXCompat {
                     CompoundTag photon2FX = mapEffect(photon1FX);
                     // the mappers emit the current format; stamp it so the datafixer stays a no-op
                     photon2FX.putInt("version", FXProject.VERSION);
-                    Files.createDirectories(target.getParent());
-                    try (var output = Files.newOutputStream(target, java.nio.file.StandardOpenOption.CREATE_NEW)) {
-                        NbtIo.writeCompressed(photon2FX, output);
-                    }
+                    writeConvertedEffect(target, photon2FX);
                     count.getAndIncrement();
                 }
                 catch(Exception e){
@@ -168,6 +166,21 @@ public class FXCompat {
             Photon.LOGGER.error("Failed to read Photon 1 FX directory {}", source, e);
         }
         return new Report(count.get(), List.copyOf(skipped), List.copyOf(failed), List.of(source.toString()));
+    }
+
+    /** Never leave a half-written destination that a later conversion would mistake for a valid effect. */
+    private static void writeConvertedEffect(Path target, CompoundTag data) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path temporary = Files.createTempFile(target.getParent(), ".photon-convert-", ".tmp");
+        try {
+            try (var output = Files.newOutputStream(temporary)) {
+                NbtIo.writeCompressed(data, output);
+            }
+            // Do not replace existing effects, even if another conversion created one in the meantime.
+            Files.move(temporary, target);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     public static boolean isLegacyEffect(CompoundTag tag) {
@@ -190,6 +203,9 @@ public class FXCompat {
             fxObjects = definition.getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
         }
         fxData.put("fxObjects", mapObjects(fxObjects));
+        // Photon 1 EntityEffect followed the feet; Photon 2 follows the eyes. Keep the feet so an
+        // aura stays on the torso after conversion.
+        fxData.putBoolean("entityFollowsFeet", true);
         new_fx.put("fxData", fxData);
         var definition = fx.contains("fx", Tag.TAG_COMPOUND) ? fx.getCompound("fx") : fx;
         var oldSubEffects = definition.getCompound("subFXs");
@@ -198,6 +214,7 @@ public class FXCompat {
             for (var name : oldSubEffects.getAllKeys()) {
                 var subData = new CompoundTag();
                 subData.put("fxObjects", mapObjects(oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND)));
+                subData.putBoolean("entityFollowsFeet", true);
                 var subEffect = new CompoundTag();
                 subEffect.put("fxData", subData);
                 subEffects.put(name, subEffect);
@@ -212,21 +229,11 @@ public class FXCompat {
         for (Tag object : fxObjects) {
             CompoundTag fxObject = (CompoundTag) object;
             switch (fxObject.getString("_type")) {
-                case "beam":
-                    fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
-                    break;
-                case "trail":
-                    fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
-                    break;
-                case "particle":
-                    fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
-                    break;
-                case "empty":
-                    fxObj.add(EmptyMapper.mapEmpty(fxObject));
-                    break;
-                default:
-                    Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
-
+                case "beam", "Beam", "beam_emitter" -> fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
+                case "trail", "Trail", "trail_emitter" -> fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
+                case "particle", "Particle", "particle_emitter" -> fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
+                case "empty", "Empty" -> fxObj.add(EmptyMapper.mapEmpty(fxObject));
+                default -> Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
             }
         }
         return fxObj;

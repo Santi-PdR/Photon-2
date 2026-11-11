@@ -17,6 +17,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -33,8 +34,23 @@ import java.util.stream.Collectors;
 @ParametersAreNonnullByDefault
 @MethodsReturnNonnullByDefault
 public final class FXData {
+    /** Shipped halo strength, the old client-config default. */
+    public static final float DEFAULT_BLOOM_INTENSITY = 0.18f;
+    public static final float MIN_BLOOM_INTENSITY = 0f;
+    public static final float MAX_BLOOM_INTENSITY = 2f;
+
     private final List<IFXObject> objects;
     private final Timeline timeline;
+    /** Whether this FX feeds Photon's bloom pass. Authored on the FX, not a client slider. */
+    private boolean bloomEnabled = true;
+    /** How strong this FX's bloom halo is (0..2). */
+    private float bloomIntensity = DEFAULT_BLOOM_INTENSITY;
+    /**
+     * Photon 1 attached entity FX at the feet ({@link net.minecraft.world.entity.Entity#getPosition});
+     * Photon 2 follows the eyes. Converted Photon 1 effects keep the feet so an aura stays on the
+     * torso instead of jumping to the head.
+     */
+    private boolean entityFollowsFeet;
 
     public FXData() {
         this(new ArrayList<>(), new Timeline());
@@ -61,6 +77,30 @@ public final class FXData {
         return timeline;
     }
 
+    public boolean bloomEnabled() {
+        return bloomEnabled;
+    }
+
+    public void setBloomEnabled(boolean bloomEnabled) {
+        this.bloomEnabled = bloomEnabled;
+    }
+
+    public float bloomIntensity() {
+        return bloomIntensity;
+    }
+
+    public void setBloomIntensity(float bloomIntensity) {
+        this.bloomIntensity = Mth.clamp(bloomIntensity, MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY);
+    }
+
+    public boolean entityFollowsFeet() {
+        return entityFollowsFeet;
+    }
+
+    public void setEntityFollowsFeet(boolean entityFollowsFeet) {
+        this.entityFollowsFeet = entityFollowsFeet;
+    }
+
     public FXData copy(boolean deepCopy) {
         var copied = objects.stream().map(obj -> obj.copy(deepCopy)).collect(Collectors.toList());
         for (int i = 0; i < copied.size(); i++) {
@@ -69,7 +109,11 @@ public final class FXData {
                 to.setPlacement(from.getPlacement());
             }
         }
-        return new FXData(copied, timeline.copy());
+        var copy = new FXData(copied, timeline.copy());
+        copy.bloomEnabled = bloomEnabled;
+        copy.bloomIntensity = bloomIntensity;
+        copy.entityFollowsFeet = entityFollowsFeet;
+        return copy;
     }
 
     public CompoundTag serializeNBT(HolderLookup.Provider provider) {
@@ -90,12 +134,23 @@ public final class FXData {
             if (!timeline.isEmpty()) {
                 tag.put("timeline", timeline.serializeNBT(provider));
             }
+            writeBloom(tag);
             return tag;
         }
         // an instance is saved as its record: what it placed is not written
         var animated = animatedTransforms();
-        return InstanceWriter.write(serializedObjects(), timeline.isEmpty() ? null : timeline.serializeNBT(provider),
+        var tag = InstanceWriter.write(serializedObjects(), timeline.isEmpty() ? null : timeline.serializeNBT(provider),
                 placements, id -> animated.getOrDefault(id, Set.of()));
+        writeBloom(tag);
+        return tag;
+    }
+
+    private void writeBloom(CompoundTag tag) {
+        tag.putBoolean("bloomEnabled", bloomEnabled);
+        tag.putFloat("bloomIntensity", bloomIntensity);
+        if (entityFollowsFeet) {
+            tag.putBoolean("entityFollowsFeet", true);
+        }
     }
 
     /** Every object as it is saved on its own, instances in their placed form. */
@@ -151,6 +206,11 @@ public final class FXData {
                 var fxObject = IFXObject.deserializeWrapper(data);
                 if (fxObject != null) {
                     objects.add(fxObject);
+                } else {
+                    var type = data.getString("type");
+                    var id = data.getCompound("data").getCompound("transform").getString("id");
+                    FXDiagnostics.failure(null, "object-decode-" + type + "-" + id,
+                            "An FX object was discarded; see the codec error in latest.log", data, null);
                 }
             }
         }
@@ -159,6 +219,12 @@ public final class FXData {
         }
         // tolerate a missing "timeline" tag: legacy FX deserialize to an empty timeline
         timeline.deserializeNBT(provider, tag.getCompound("timeline"));
+        // missing keys: files from before per-FX bloom keep the old look (on, 0.18)
+        bloomEnabled = !tag.contains("bloomEnabled") || tag.getBoolean("bloomEnabled");
+        bloomIntensity = tag.contains("bloomIntensity")
+                ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
+                : DEFAULT_BLOOM_INTENSITY;
+        entityFollowsFeet = tag.getBoolean("entityFollowsFeet");
     }
 
     /**

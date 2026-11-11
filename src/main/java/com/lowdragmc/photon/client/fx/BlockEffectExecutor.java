@@ -49,16 +49,17 @@ public class BlockEffectExecutor extends FXEffectExecutor {
     public void start() {
         var effects = CACHE.computeIfAbsent(pos, p -> new ArrayList<>());
         if (shouldSkipStart(effects)) {
+            com.lowdragmc.photon.Photon.LOGGER.info("[fx-diagnostic] fx={} start skipped: equivalent effect already active and allowMulti=false", fx.getFxLocation());
             return;
         }
         resetFinishedNotification();
-        this.runtime = fx.createRuntime();
+        this.runtime = createDiagnosedRuntime();
         var root = this.runtime.getRoot();
         root.updatePos(new Vector3f(pos.getX(), pos.getY(), pos.getZ())
                 .add(offset.x + 0.5f, offset.y + 0.5f, offset.z + 0.5f));
         root.updateRotation(rotation);
         root.updateScale(scale);
-        this.runtime.emit(this, delay);
+        this.runtime.emit(this, delay, startSection);
         lastState = level.getBlockState(pos);
         effects.add(this);
     }
