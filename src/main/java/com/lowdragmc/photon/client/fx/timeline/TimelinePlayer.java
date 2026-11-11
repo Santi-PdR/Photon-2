@@ -120,6 +120,12 @@ public class TimelinePlayer {
         return clock;
     }
 
+    /** The section the clock is in right now; null before the first, after the end, or with no sections. */
+    @Nullable
+    public String currentSection() {
+        return clock.current();
+    }
+
     /** The editor follows sections only during live playback, so replays and seeks stay in time order. */
     public void setFollowSections(boolean followSections) {
         this.followSections = followSections;

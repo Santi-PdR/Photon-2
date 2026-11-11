@@ -150,6 +150,10 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
         scale.set(other.scale);
         forcedDeath = other.forcedDeath;
         allowMulti = other.allowMulti;
+        // already playing: do not re-apply delay. Resume at the live section so a looping combat
+        // FX does not flash its intro when editfx saves.
+        var liveSection = other.runtime != null ? other.runtime.timelinePlayer.currentSection() : null;
+        startSection = liveSection != null ? liveSection : other.startSection;
     }
 
     /**
