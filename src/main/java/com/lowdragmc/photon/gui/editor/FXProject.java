@@ -60,7 +60,7 @@ public class FXProject implements IProject {
         }
 
         @Override
-        public void saveProjectToFile(IProject project, java.io.File file) {
+        public void saveProjectToFile(IProject project, java.io.File file) throws Exception {
             if (file.getName().endsWith(FX.SUFFIX)) {
                 throw new IllegalArgumentException("Photon projects cannot be saved over an .fx definition: " + file);
             }
