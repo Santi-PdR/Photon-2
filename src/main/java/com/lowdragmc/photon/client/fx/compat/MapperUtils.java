@@ -366,7 +366,7 @@ public class MapperUtils {
 
 
     /** Photon 1 rendered bloom emitters at full brightness even when fixed lights were disabled.
-     * This preserves the light behavior, not the old bloom post-processing or bloom color. */
+     * FX-level bloom (the halo) is stamped separately by {@link FXCompat#mapEffect}. */
     public static void applyLegacyBloomLight(CompoundTag mappedConfig, CompoundTag legacyConfig) {
         if (!legacyConfig.getCompound("renderer").getBoolean("bloomEffect")) return;
         var lights = mappedConfig.contains("lights", Tag.TAG_COMPOUND)

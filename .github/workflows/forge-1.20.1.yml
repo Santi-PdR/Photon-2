@@ -226,6 +226,10 @@ jobs:
         shell: bash
         run: grep -Fq '[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require Photon 1 bloom to survive conversion
+        shell: bash
+        run: grep -Fq '[photon1-bloom-smoke] converted FX keep Photon 1 bloom' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require the editor to list loaded textures
         shell: bash
         run: grep -Fq '[loaded-texture-catalogue-smoke] editor can pick' "$RUNNER_TEMP/photon-client.log"
@@ -248,6 +252,12 @@ jobs:
       - name: Require Photon 1 editor project import
         shell: bash
         run: grep -Fq '[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require opening an FX not to write a project
+        shell: bash
+        run: |
+          grep -Fq '[fx-open-no-write-smoke] opening an .fx does not write a project' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[fx-project-recover-smoke] a project saved over an .fx still loads' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require FX pack dependency retention
         shell: bash

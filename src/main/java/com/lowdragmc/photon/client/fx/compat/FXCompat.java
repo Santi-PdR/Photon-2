@@ -206,15 +206,18 @@ public class FXCompat {
         // Photon 1 EntityEffect followed the feet; Photon 2 follows the eyes. Keep the feet so an
         // aura stays on the torso after conversion.
         fxData.putBoolean("entityFollowsFeet", true);
+        stampLegacyBloom(fxData, fxObjects);
         new_fx.put("fxData", fxData);
         var definition = fx.contains("fx", Tag.TAG_COMPOUND) ? fx.getCompound("fx") : fx;
         var oldSubEffects = definition.getCompound("subFXs");
         if (!oldSubEffects.isEmpty()) {
             var subEffects = new CompoundTag();
             for (var name : oldSubEffects.getAllKeys()) {
+                var subObjects = oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND);
                 var subData = new CompoundTag();
-                subData.put("fxObjects", mapObjects(oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND)));
+                subData.put("fxObjects", mapObjects(subObjects));
                 subData.putBoolean("entityFollowsFeet", true);
+                stampLegacyBloom(subData, subObjects);
                 var subEffect = new CompoundTag();
                 subEffect.put("fxData", subData);
                 subEffects.put(name, subEffect);
@@ -222,6 +225,27 @@ public class FXCompat {
             new_fx.put("legacySubFXs", subEffects);
         }
         return new_fx;
+    }
+
+    /**
+     * Photon 1 bloom was per-emitter ({@code renderer.bloomEffect}) and always wrote those particles
+     * into the bloom buffer. Photon 2 bloom is per-FX and threshold-based, so conversion has to
+     * turn it on and use {@link com.lowdragmc.photon.client.fx.FXData#PHOTON1_BLOOM_INTENSITY} or
+     * the halo disappears.
+     */
+    private static void stampLegacyBloom(CompoundTag fxData, ListTag objects) {
+        if (!objectsHaveBloom(objects)) return;
+        fxData.putBoolean("bloomEnabled", true);
+        fxData.putFloat("bloomIntensity", com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY);
+    }
+
+    private static boolean objectsHaveBloom(ListTag objects) {
+        for (Tag object : objects) {
+            if (!(object instanceof CompoundTag fxObject)) continue;
+            var config = MapperUtils.legacyEmitterConfig(fxObject);
+            if (config.getCompound("renderer").getBoolean("bloomEffect")) return true;
+        }
+        return false;
     }
 
     private static ListTag mapObjects(ListTag fxObjects) {

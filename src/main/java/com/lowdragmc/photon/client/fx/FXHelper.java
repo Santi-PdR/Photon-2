@@ -274,7 +274,27 @@ public class FXHelper {
      * versions and the deserializers' inline legacy fallbacks already handle them — running the
      * V1→current fixers on data of unknown true version would risk double-migration.
      */
+    /**
+     * An {@code .fx} that was overwritten with a Photon 2 editor project ({@code meta} + {@code data.fx}).
+     * Opening or playing that file used to yield an empty effect because the definition sits under
+     * {@code data.fx}, not at the root.
+     */
+    public static boolean isProjectDocument(CompoundTag tag) {
+        return tag.contains("meta", Tag.TAG_COMPOUND)
+                && tag.contains("data", Tag.TAG_COMPOUND)
+                && tag.getCompound("data").contains("fx", Tag.TAG_COMPOUND);
+    }
+
     public static CompoundTag applyVersionFixes(CompoundTag tag) {
+        // A project saved over an .fx still has to play: unwrap to the definition.
+        if (isProjectDocument(tag)) {
+            var fx = tag.getCompound("data").getCompound("fx").copy();
+            var meta = tag.getCompound("meta");
+            if (meta.contains("version_num", Tag.TAG_INT) && !fx.contains("version", Tag.TAG_INT)) {
+                fx.putInt("version", meta.getInt("version_num"));
+            }
+            tag = fx;
+        }
         // Photon 1 used {fx:{mainFX:{fxObjects:[...]}}}; recognize that exact
         // shape before the versioned Photon 2 fixer. Conversion only changes
         // this in-memory tag and never overwrites the author's original file.

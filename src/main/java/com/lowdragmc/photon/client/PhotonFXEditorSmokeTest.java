@@ -884,6 +884,57 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("A Photon 2 file followed the feet; it should follow the eyes");
         }
         Photon.LOGGER.info("[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes");
+        verifyPhoton1BloomPort();
+    }
+
+    /**
+     * Photon 1 {@code renderer.bloomEffect} emitters always bloomed. Conversion used to keep only
+     * full-bright lighting, so ported FX lost their halo.
+     */
+    private static void verifyPhoton1BloomPort() {
+        var bloomEmitter = new CompoundTag();
+        var renderer = new CompoundTag();
+        renderer.putBoolean("bloomEffect", true);
+        var config = new CompoundTag();
+        config.put("renderer", renderer);
+        bloomEmitter.put("config", config);
+        var withBloom = new CompoundTag();
+        var bloomList = new ListTag();
+        bloomList.add(bloomEmitter);
+        withBloom.put("emitters", bloomList);
+        var converted = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(withBloom).getCompound("fxData");
+        if (!converted.getBoolean("bloomEnabled")
+                || Math.abs(converted.getFloat("bloomIntensity")
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("Photon 1 bloomEffect did not stamp FX bloom: " + converted);
+        }
+        var plain = new CompoundTag();
+        plain.put("emitters", new ListTag());
+        var without = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(plain).getCompound("fxData");
+        if (without.contains("bloomIntensity") || without.contains("bloomEnabled")) {
+            throw new IllegalStateException("A Photon 1 FX without bloomEffect stamped bloom keys");
+        }
+        var leftover = new CompoundTag();
+        var objects = new ListTag();
+        var object = new CompoundTag();
+        var data = new CompoundTag();
+        var leftoverConfig = new CompoundTag();
+        var lights = new CompoundTag();
+        lights.putBoolean("legacyBloomFullBright", true);
+        leftoverConfig.put("lights", lights);
+        data.put("config", leftoverConfig);
+        object.put("data", data);
+        objects.add(object);
+        leftover.put("fxObjects", objects);
+        var recovered = new com.lowdragmc.photon.client.fx.FXData();
+        recovered.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), leftover);
+        if (!recovered.bloomEnabled() || Math.abs(recovered.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("Already-converted Photon 1 bloom did not restore intensity: "
+                    + recovered.bloomEnabled() + " " + recovered.bloomIntensity());
+        }
+        Photon.LOGGER.info("[photon1-bloom-smoke] converted FX keep Photon 1 bloom at intensity {}",
+                com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY);
     }
 
     /**

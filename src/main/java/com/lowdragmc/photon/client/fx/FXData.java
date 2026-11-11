@@ -36,6 +36,12 @@ import java.util.stream.Collectors;
 public final class FXData {
     /** Shipped halo strength, the old client-config default. */
     public static final float DEFAULT_BLOOM_INTENSITY = 0.18f;
+    /**
+     * Photon 1 drew {@code bloomEffect} emitters into a dedicated bloom buffer, so the halo showed
+     * even on ordinary colours. Photon 2's threshold pass needs a stronger intensity to read the
+     * same way; 0.7 is the old client-wide default that did that.
+     */
+    public static final float PHOTON1_BLOOM_INTENSITY = 0.7f;
     public static final float MIN_BLOOM_INTENSITY = 0f;
     public static final float MAX_BLOOM_INTENSITY = 2f;
 
@@ -219,12 +225,34 @@ public final class FXData {
         }
         // tolerate a missing "timeline" tag: legacy FX deserialize to an empty timeline
         timeline.deserializeNBT(provider, tag.getCompound("timeline"));
+        boolean authoredBloom = tag.contains("bloomEnabled") || tag.contains("bloomIntensity");
         // missing keys: files from before per-FX bloom keep the old look (on, 0.18)
         bloomEnabled = !tag.contains("bloomEnabled") || tag.getBoolean("bloomEnabled");
         bloomIntensity = tag.contains("bloomIntensity")
                 ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
                 : DEFAULT_BLOOM_INTENSITY;
         entityFollowsFeet = tag.getBoolean("entityFollowsFeet");
+        // Converted Photon 1 files that never stamped bloom keys still carry leftover bloomEffect
+        // or legacyBloomFullBright. Give them the dedicated-halo intensity so they glow again
+        // without a reconversion.
+        if (!authoredBloom && hasLegacyBloom(baked == null ? tag : baked.fxData())) {
+            bloomEnabled = true;
+            bloomIntensity = PHOTON1_BLOOM_INTENSITY;
+        }
+    }
+
+    /** Photon 1 {@code renderer.bloomEffect} emitters, including ones already mapped to full-bright. */
+    private static boolean hasLegacyBloom(CompoundTag fxData) {
+        var list = fxData.getList("fxObjects", ListTag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) {
+            var data = list.getCompound(i).getCompound("data");
+            var config = data.contains("config", ListTag.TAG_COMPOUND) ? data.getCompound("config") : data;
+            if (config.getCompound("lights").getBoolean("legacyBloomFullBright")
+                    || config.getCompound("renderer").getBoolean("bloomEffect")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
