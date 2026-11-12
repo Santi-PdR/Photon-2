@@ -287,7 +287,7 @@ public final class FXInstanceEditing {
     @Nullable
     public FXInstanceObject create(ResourceLocation fx, Transform parent) {
         if (editor.runtime == null) return null;
-        if (parent == null) parent = editor.runtime.getRoot().transform();
+        var hangUnder = parent != null ? parent : editor.runtime.getRoot().transform();
         if (refusedAsCycle(fx)) return null;
         var fresh = new FXInstanceObject(fx);
         fresh.setName(defaultName(fx));
@@ -305,7 +305,7 @@ public final class FXInstanceEditing {
         var instance = placed.instance();
         editor.historyView.pushHistory(Component.translatable("photon.fx_instance.add"), EditAction.of(
                 () -> {
-                    instance.transform().parent(parent, false);
+                    instance.transform().parent(hangUnder, false);
                     editor.hierarchyView.addSceneObject(instance);
                     changed();
                     editor.reloadEffect();
