@@ -457,11 +457,12 @@ jobs:
           retention-days: 14
 
 
-      # Actions artifacts are ZIP downloads. Attach the JAR after a successful run on this
-      # session branch, whether it was triggered by a push or its same-repository PR.
+      # Actions artifacts are ZIP downloads. Attach the JAR after the Forge mod compiled on this
+      # session branch, even if the headless client smoke fails (that job has been red independently
+      # of the compile). A missing jar still fails this step.
       - name: Publish direct-download preview JAR
         if: >-
-          success() &&
+          always() && !cancelled() &&
           ((github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2') ||
            (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
             github.event.pull_request.head.ref == 'arena/747b04a3-photon-2'))
