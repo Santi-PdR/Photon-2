@@ -144,9 +144,13 @@ jobs:
           fi
           echo "::group::client smoke markers"
           grep -E '\[[a-z0-9-]+smoke\]|\[editor-open\]' "$log_file" | tail -n 60 || true
+          last_marker=$(grep -E '\[[a-z0-9-]+smoke\]|\[editor-open\]' "$log_file" | tail -n 1)
+          [ -z "$last_marker" ] || echo "::error title=last client smoke marker::$last_marker"
           echo "::endgroup::"
           echo "::group::client smoke exceptions"
           grep -nE -C 3 'PhotonFXEditorSmokeTest|IllegalStateException|NoSuchElementException|UnsupportedOperationException|MixinApplyError|InvalidInjectionException|FATAL|Caused by:' "$log_file" | tail -n 100 || true
+          grep -n -A 18 -B 2 'failed to open or preview the legacy project' "$log_file" \
+            | head -n 24 | while IFS= read -r line; do echo "::error title=smoke failure stack::$line"; done
           echo "::endgroup::"
           echo "Forge client smoke failed with exit status $result; see the marker and exception diagnostics above." >&2
           exit 1
