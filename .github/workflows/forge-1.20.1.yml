@@ -449,9 +449,8 @@ jobs:
           fi
           # Finally the generic sweep, filtered, as a last resort. Include the owning Java frames for
           # Optional failures and blocked reflection, not only the exception headline.
-          grep -n -A 10 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
-            | grep -E 'NoSuchElementException|UnsupportedOperationException|at com\.lowdragmc\.photon|Caused by:' \
-            | head -n 20 | while IFS= read -r line; do echo "::error title=client trace::$line"; done
+          grep -n -A 12 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
+            | head -n 28 | while IFS= read -r line; do echo "::error title=client exception trace::$line"; done
           grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
             | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
