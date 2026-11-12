@@ -97,46 +97,48 @@ public class EntityEffectExecutor extends FXEffectExecutor {
         return replaced;
     }
 
-    /** Apply this frame's follow pose to every live entity FX. Empty-cache no-op. */
+    /** Apply this frame's interpolated follow pose to every live entity FX. Empty-cache no-op. */
     public static void followAllPlaying(float partialTicks) {
+        followAllPlaying(true, partialTicks);
+    }
+
+    /**
+     * Snap every live follow-aura once. Called at the start of the particle tick (so trails
+     * record the current pose) and before lights / particles draw. Following from every child
+     * emitter's tick/frame used to rebuild the whole transform tree once per object — a large
+     * aura dropped the framerate.
+     */
+    public static void followAllPlaying(boolean renderFrame, float partialTicks) {
         for (var effects : CACHE.values()) {
             for (var effect : effects) {
-                effect.follow(true, partialTicks);
+                effect.follow(renderFrame, partialTicks);
             }
         }
     }
 
     @Override
     public void updateFXObjectTick(IFXObject fxObject) {
-        if (runtime == null) {
+        if (runtime == null || fxObject != runtime.root) {
             return;
         }
-        if (fxObject == runtime.root) {
-            if (!entity.isAlive()) {
-                // anchor gone: stop the FX (force drops remnants immediately) and retire right away
-                runtime.destroy(forcedDeath);
-                retire(CACHE, entity);
-                return;
-            }
-            if (runtimeEnded()) {
-                // self-evict finished runtimes instead of lingering until the next same-key start()
-                retire(CACHE, entity);
-                return;
-            }
+        if (!entity.isAlive()) {
+            // anchor gone: stop the FX (force drops remnants immediately) and retire right away
+            runtime.destroy(forcedDeath);
+            retire(CACHE, entity);
+            return;
         }
-        if (entity.isAlive()) {
-            follow(false, 1f);
+        if (runtimeEnded()) {
+            // self-evict finished runtimes instead of lingering until the next same-key start()
+            retire(CACHE, entity);
         }
     }
 
     @Override
     public void updateFXObjectFrame(IFXObject fxObject, float partialTicks) {
-        if (runtime != null) {
-            follow(true, partialTicks);
-        }
+        // Pose is applied once in followAllPlaying before lights and particles draw.
     }
 
-    private void follow(boolean renderFrame, float partialTicks) {
+    protected void follow(boolean renderFrame, float partialTicks) {
         if (runtime == null || !entity.isAlive()) return;
         var position = followPosition(renderFrame, partialTicks);
         runtime.root.updatePos(new Vector3f(

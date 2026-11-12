@@ -431,6 +431,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyEditFxCommand();
         verifyEditorRootTransformSaves();
         verifyEntityFollowBeforeParticles();
+        verifyEntityFxReplaysWhenTracked();
         verifyPlayingFxBloomContribution();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
@@ -632,7 +633,31 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Entity FX follow-before-particles hook is missing", e);
         }
         com.lowdragmc.photon.client.fx.EntityEffectExecutor.followAllPlaying(0.5f);
+        com.lowdragmc.photon.client.fx.EntityEffectExecutor.followAllPlaying(false, 1f);
         Photon.LOGGER.info("[entity-follow-frame-smoke] entity FX follow before particles is registered");
+    }
+
+    /**
+     * Walking out of range (or a teleport) unloads the other player's entity and drops their FX.
+     * The server has to remember the attachment and re-send it when tracking starts again.
+     */
+    private static void verifyEntityFxReplaysWhenTracked() {
+        try {
+            var replay = com.lowdragmc.photon.command.ActiveEntityEffects.class
+                    .getMethod("replayTo", net.minecraft.server.level.ServerPlayer.class,
+                            net.minecraft.world.entity.Entity.class);
+            if (!java.lang.reflect.Modifier.isStatic(replay.getModifiers())) {
+                throw new IllegalStateException("ActiveEntityEffects.replayTo is not static");
+            }
+            var tracking = com.lowdragmc.photon.PhotonCommonListeners.class
+                    .getMethod("onStartTracking", net.minecraftforge.event.entity.player.PlayerEvent.StartTracking.class);
+            if (!java.lang.reflect.Modifier.isStatic(tracking.getModifiers())) {
+                throw new IllegalStateException("StartTracking listener is not static");
+            }
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException("Entity FX is not re-sent when a player comes back into range", e);
+        }
+        Photon.LOGGER.info("[entity-fx-track-smoke] entity FX is re-sent when tracking starts again");
     }
 
     /**
