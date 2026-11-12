@@ -94,11 +94,7 @@ public class ObjModelSource implements IModelSource {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
-        var nested = LDLibModelAssets.findNested(modelLocation, modelLocation.getPath());
-        if (nested == null) {
-            com.lowdragmc.photon.client.fx.LooseTextures.adoptIntoWorkspace(modelLocation);
-            nested = LDLibModelAssets.findNested(modelLocation, modelLocation.getPath());
-        }
+        var nested = LDLibModelAssets.resolve(modelLocation, modelLocation.getPath());
         if (nested != null) PhotonMeshCache.INSTANCE.trackFile(key(), nested.toFile());
         var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null) : null;
         if (nested == null && resource == null) {

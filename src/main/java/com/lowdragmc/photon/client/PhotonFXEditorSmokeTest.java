@@ -1480,6 +1480,14 @@ public final class PhotonFXEditorSmokeTest {
                     "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_nested_obj.obj\",\"textures\":{},\"flip_v\":true}");
             Files.writeString(nestedModelDir.resolve("obj/ci_nested_obj.obj"),
                     "v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            // Filename-only drop under ldlib2: none of the three editor layouts, so findNested
+            // misses it until LooseTextures adopts the file into the Photon workspace.
+            Path droppedFx = LDLib2.getAssetsDir().toPath().resolve("dropped_fx");
+            Files.createDirectories(droppedFx);
+            Files.writeString(droppedFx.resolve("ci_loose_obj.json"),
+                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_loose_obj.obj\",\"textures\":{},\"flip_v\":true}");
+            Files.writeString(droppedFx.resolve("ci_loose_obj.obj"),
+                    "v 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
             Files.createDirectories(shaderDir);
             try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
@@ -2599,6 +2607,21 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
         Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
+        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/block/ci_loose_obj.json");
+        Path adoptedObj = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.obj");
+        Files.deleteIfExists(adoptedJson);
+        Files.deleteIfExists(adoptedObj);
+        var looseObjMesh = new ObjModelSource(new ResourceLocation("ldlib2", "models/obj/ci_loose_obj.obj")).getMesh();
+        if (looseObjMesh == null || looseObjMesh.vertexCount() < 3)
+            throw new IllegalStateException("Loose ldlib2 OBJ outside editor layouts did not produce a Photon mesh");
+        float[] looseGeometry = looseObjMesh.geometry();
+        if (Math.abs(looseGeometry[0] - 3f) > 0.0001f || Math.abs(looseGeometry[1] - 5f) > 0.0001f
+                || Math.abs(looseGeometry[2] - 7f) > 0.0001f)
+            throw new IllegalStateException("Loose ldlib2 OBJ did not keep its dropped-file vertices");
+        var looseJsonMesh = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_loose_obj")).getMesh();
+        if (looseJsonMesh == null || looseJsonMesh.vertexCount() < 3)
+            throw new IllegalStateException("Loose ldlib2 neoforge:obj JSON outside editor layouts did not produce a Photon mesh");
+        Photon.LOGGER.info("[loose-ldlib2-obj-smoke] adopted dropped OBJ with {} vertices", looseObjMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
         emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));
