@@ -183,7 +183,8 @@ jobs:
           done
           for pattern in "${forbidden_matches[@]}"; do
             echo "::error title=forbidden client log pattern::$pattern"
-            grep -nF "$pattern" "$log_file" | tail -n 8 || true
+            grep -nF -C 3 "$pattern" "$log_file" | tail -n 28 \
+              | while IFS= read -r line; do echo "::error title=forbidden client log context::$line"; done
           done
           echo "::error title=client process status::exit $result"
           echo "::group::client smoke markers"
