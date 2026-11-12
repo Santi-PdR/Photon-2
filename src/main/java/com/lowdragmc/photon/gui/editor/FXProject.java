@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.editor.project.ProjectType;
 import com.lowdragmc.lowdraglib2.editor.resource.ColorsResource;
 import com.lowdragmc.lowdraglib2.editor.resource.Resources;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.instance.InstanceIds;
@@ -52,7 +53,11 @@ public class FXProject implements IProject {
                 return result.project();
             }
             try {
-                return super.loadProjectFromFile(file);
+                var loaded = super.loadProjectFromFile(file);
+                if (loaded instanceof FXProject fxProject && fxProject.replacePlayable == null) {
+                    fxProject.replacePlayable = editFxIdFromProjectFile(file);
+                }
+                return loaded;
             } catch (Exception failure) {
                 com.lowdragmc.photon.Photon.LOGGER.error("Failed to read Photon FX project {}", file.getAbsolutePath(), failure);
                 throw failure;
@@ -124,6 +129,9 @@ public class FXProject implements IProject {
             knownAs.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             data.put("knownAs", ids);
         }
+        if (replacePlayable != null) {
+            data.putString("replacePlayable", replacePlayable.toString());
+        }
         return data;
     }
 
@@ -136,6 +144,27 @@ public class FXProject implements IProject {
             if (id != null) knownAs.add(id);
         }
         fx.deserializeNBT(provider, nbt.getCompound("fx"), knownAs);
+        replacePlayable = nbt.contains("replacePlayable", Tag.TAG_STRING)
+                ? ResourceLocation.tryParse(nbt.getString("replacePlayable")) : null;
+    }
+
+    /**
+     * {@code photon/projects/editfx/<namespace>/<path>.fxproj} is the working copy {@code /photon fx editfx}
+     * writes. Reopening that file must keep replacing the playable {@code .fx} on Save.
+     */
+    @Nullable
+    static ResourceLocation editFxIdFromProjectFile(java.io.File file) {
+        try {
+            var projects = PhotonPaths.getProjectsDir().getCanonicalFile().toPath();
+            var rel = projects.relativize(file.getCanonicalFile().toPath()).toString().replace('\\', '/');
+            if (!rel.startsWith("editfx/") || !rel.endsWith(".fxproj")) return null;
+            var rest = rel.substring("editfx/".length(), rel.length() - ".fxproj".length());
+            var slash = rest.indexOf('/');
+            if (slash <= 0) return null;
+            return ResourceLocation.tryParse(rest.substring(0, slash) + ":" + rest.substring(slash + 1));
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public void addKnownAs(ResourceLocation id) {

@@ -542,6 +542,17 @@ public final class PhotonFXEditorSmokeTest {
         }
         var project = new FXProject();
         project.setReplacePlayable(id);
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var saved = project.serializeProject(provider);
+        if (!id.toString().equals(saved.getString("replacePlayable"))) {
+            throw new IllegalStateException("editfx replacePlayable was not serialized");
+        }
+        var reloaded = new FXProject();
+        reloaded.deserializeProject(provider, saved);
+        if (!id.equals(reloaded.getReplacePlayable())) {
+            throw new IllegalStateException("editfx replacePlayable did not survive reload: "
+                    + reloaded.getReplacePlayable());
+        }
         var overlay = com.lowdragmc.photon.gui.editor.FXFileActions.playableFile(id);
         try {
             com.lowdragmc.photon.gui.editor.FXFileActions.writePlayable(project, id);
