@@ -144,6 +144,7 @@ jobs:
             'photon.mixins.json'
             '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact'
             '[fx-picker-smoke] the fx search lists every loadable effect'
+            '[fx-instance-timeline-history-smoke] inspector snapshots persist FX instance timelines without crashing'
             '[bloom-control-smoke] dragging the scene bar'
             '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously'
             '[editor-open] FXEditor built in'
@@ -209,7 +210,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else

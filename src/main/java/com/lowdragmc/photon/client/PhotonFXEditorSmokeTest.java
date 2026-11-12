@@ -345,6 +345,26 @@ public final class PhotonFXEditorSmokeTest {
                 com.lowdragmc.photon.client.fx.FXData.DEFAULT_BLOOM_INTENSITY);
     }
 
+    /** The inspector's undo snapshot must persist the source timeline carried by an FX instance. */
+    private static void verifyFxInstanceTimelineInspectorHistory() {
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var source = new com.lowdragmc.photon.client.gameobject.FXInstanceObject(
+                new ResourceLocation("photon", "instance_timeline_smoke"));
+        source.getTimeline().sections().add(new com.lowdragmc.photon.client.fx.timeline.TimelineSection("intro", 0)
+                .repeat(3));
+        source.getTimeline().releaseSection("release").releaseNow(false);
+        var snapshot = source.serializeNBT(provider);
+        var restored = new com.lowdragmc.photon.client.gameobject.FXInstanceObject();
+        restored.deserializeNBT(provider, snapshot);
+        if (restored.getTimeline().sections().size() != 1
+                || restored.getTimeline().sections().get(0).repeat() != 3
+                || !"release".equals(restored.getTimeline().releaseSection())
+                || restored.getTimeline().releaseNow()) {
+            throw new IllegalStateException("An FX instance's timeline did not survive the inspector history snapshot");
+        }
+        Photon.LOGGER.info("[fx-instance-timeline-history-smoke] inspector snapshots persist FX instance timelines without crashing");
+    }
+
     /** Read a private field of a library widget (the test drives the real widget, not a copy of it). */
     private static Object readField(Object owner, String name) {
         try {
@@ -403,6 +423,7 @@ public final class PhotonFXEditorSmokeTest {
 
         verifySearchBoxOpensOnTheWholeCatalogue();
         verifyFxBloomRoundtrip();
+        verifyFxInstanceTimelineInspectorHistory();
 
         var control = new com.lowdragmc.photon.gui.editor.view.scene.SceneBloomIntensityControl();
         var written = control.current();

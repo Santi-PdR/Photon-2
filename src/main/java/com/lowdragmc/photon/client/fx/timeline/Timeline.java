@@ -1,7 +1,9 @@
 package com.lowdragmc.photon.client.fx.timeline;
 
+import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonRegistries;
+import com.mojang.serialization.Codec;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -22,6 +24,15 @@ import java.util.List;
  */
 @ParametersAreNonnullByDefault
 public class Timeline {
+    /** NBT codec used by LDLib's persisted configurator snapshots for FX-instance inspector history. */
+    public static final Codec<Timeline> CODEC = CompoundTag.CODEC.xmap(
+            tag -> {
+                var timeline = new Timeline();
+                timeline.deserializeNBT(Platform.getFrozenRegistry(), tag);
+                return timeline;
+            },
+            timeline -> timeline.serializeNBT(Platform.getFrozenRegistry()));
+
     private final List<Track> tracks = new ArrayList<>();
     /** Named bookmarks on the master clock: snapping aids + visual markers (see {@link Marker}). */
     private final List<Marker> markers = new ArrayList<>();
