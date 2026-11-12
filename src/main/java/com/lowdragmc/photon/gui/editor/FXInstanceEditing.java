@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -288,10 +287,17 @@ public final class FXInstanceEditing {
     @Nullable
     public FXInstanceObject create(ResourceLocation fx, Transform parent) {
         if (editor.runtime == null) return null;
+        if (parent == null) parent = editor.runtime.getRoot().transform();
         if (refusedAsCycle(fx)) return null;
         var fresh = new FXInstanceObject(fx);
         fresh.setName(defaultName(fx));
-        var placed = place(Objects.requireNonNull(fresh.serializeWrapper()), List.of());
+        // encodeStart can fail silently (empty DataResult) and used to NPE the whole client
+        // via requireNonNull when Add FX Instance confirmed a picked effect.
+        var tag = fresh.serializeWrapper();
+        if (tag == null) {
+            tag = fallbackInstanceTag(fresh);
+        }
+        var placed = place(tag, List.of());
         if (placed == null) {
             FXFileActions.notify(editor, "photon.fx_instance", Component.translatable("photon.fx_instance.unreadable", fx.toString()));
             return null;
@@ -315,6 +321,21 @@ public final class FXInstanceEditing {
     private static String defaultName(ResourceLocation fx) {
         var path = fx.getPath();
         return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    /** Minimal {@code {type, data}} so bake can still place the source when the codec refuses a blank instance. */
+    public static CompoundTag fallbackInstanceTag(FXInstanceObject instance) {
+        var transform = new CompoundTag();
+        var id = instance.transform().id();
+        if (id != null) transform.putString(InstanceTags.ID, id.toString());
+        var data = new CompoundTag();
+        if (instance.getName() != null) data.putString(InstanceTags.NAME, instance.getName());
+        data.put(InstanceTags.TRANSFORM, transform);
+        if (instance.getFx() != null) data.putString(InstanceTags.FX, instance.getFx().toString());
+        var tag = new CompoundTag();
+        tag.putString(InstanceTags.TYPE, InstanceTags.INSTANCE_TYPE);
+        tag.put(InstanceTags.DATA, data);
+        return tag;
     }
 
     /**
@@ -678,7 +699,8 @@ public final class FXInstanceEditing {
     @Nullable
     private Placed placeAgain(FXInstanceObject instance, ResourceLocation fx) {
         var record = computeRecord(instance);
-        var tag = Objects.requireNonNull(instance.serializeWrapper()).copy();
+        var wrapper = instance.serializeWrapper();
+        var tag = (wrapper != null ? wrapper : fallbackInstanceTag(instance)).copy();
         var data = InstanceTags.data(tag);
         data.remove(InstanceTags.TIMELINE);
         data.remove(InstanceTags.OVERRIDES);

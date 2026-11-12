@@ -432,6 +432,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyEditorRootTransformSaves();
         verifyEntityFollowBeforeParticles();
         verifyEntityFxReplaysWhenTracked();
+        verifyAddFxInstanceSurvivesBlankEncode();
         verifyPlayingFxBloomContribution();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
@@ -658,6 +659,25 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Entity FX is not re-sent when a player comes back into range", e);
         }
         Photon.LOGGER.info("[entity-fx-track-smoke] entity FX is re-sent when tracking starts again");
+    }
+
+    /**
+     * Confirming Add FX Instance used to NPE the client when {@code serializeWrapper()} returned null.
+     * A blank instance must still produce a {type, data.fx} tag the baker can place.
+     */
+    private static void verifyAddFxInstanceSurvivesBlankEncode() {
+        var fresh = new com.lowdragmc.photon.client.gameobject.FXInstanceObject(
+                new ResourceLocation("photon", "ci/missing_instance_source"));
+        fresh.setName("missing_instance_source");
+        var tag = fresh.serializeWrapper();
+        if (tag == null) {
+            tag = com.lowdragmc.photon.gui.editor.FXInstanceEditing.fallbackInstanceTag(fresh);
+        }
+        if (!"fx_instance".equals(tag.getString("type"))
+                || !"photon:ci/missing_instance_source".equals(tag.getCompound("data").getString("fx"))) {
+            throw new IllegalStateException("Add FX Instance tag is missing type/fx: " + tag);
+        }
+        Photon.LOGGER.info("[add-fx-instance-smoke] placing an instance survives a blank codec encode");
     }
 
     /**

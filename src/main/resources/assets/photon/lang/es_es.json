@@ -21,6 +21,7 @@
   "photon.editfx.replaced": "Se guardó %s. Volvé a reproducir el efecto para ver el cambio.",
   "photon.editfx.replaced_live": "Se guardó %s y se reemplazaron %s copias en juego.",
   "photon.fx_instance.pick.search": "Buscar",
+  "photon.manage_fxpack.search": "Buscar",
   "keymap.photon.scene.toggle_bloom": "Alternar vista previa de bloom/brillo",
   "photon.gui.editor.timeline.audio.ogg": "Audio OGG personalizado",
   "photon.gui.editor.timeline.audio.import_ogg": "Importar .ogg",

@@ -11,6 +11,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.fx.FX;
@@ -32,8 +33,10 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -302,9 +305,20 @@ public final class FXFileActions {
             layout.widthPercent(100);
             layout.flex(1);
         });
-        var contents = new PackContents(editor, dialog, packFile, notices, list);
-        contents.fill(fxIds);
+        var all = new ArrayList<>(fxIds);
+        var query = new String[]{""};
+        var contents = new PackContents(editor, dialog, packFile, notices, list, all, query);
+        var search = new TextField();
+        search.setId("photon_fxpack_search");
+        search.layout(layout -> layout.widthPercent(100).height(16));
+        search.setTextResponder(word -> {
+            query[0] = word == null ? "" : word;
+            contents.fill();
+        });
+        contents.fill();
         dialog.addContent(notices);
+        dialog.addContent(new Label().setText("photon.manage_fxpack.search"));
+        dialog.addContent(search);
         dialog.addContent(list);
         dialog.addButton(new Button().setOnClick(e -> dialog.close())
                 .setText("ldlib.gui.tips.confirm").addClass("__confirm-button__"));
@@ -323,8 +337,9 @@ public final class FXFileActions {
         }
     }
 
-    private record PackContents(Editor editor, Dialog dialog, File packFile, UIElement notices, ScrollerView list) {
-        void fill(List<ResourceLocation> fxIds) {
+    private record PackContents(Editor editor, Dialog dialog, File packFile, UIElement notices, ScrollerView list,
+                               List<ResourceLocation> all, String[] query) {
+        void fill() {
             notices.clearAllChildren();
             if (!FXPacks.isLoadable(packFile)) {
                 notices.addChild(wrappedLabel(Component.translatable("photon.fxpack.not_loadable")));
@@ -337,11 +352,15 @@ public final class FXFileActions {
             }
             notices.setDisplay(!notices.getChildren().isEmpty());
             list.clearAllScrollViewChildren();
-            if (fxIds.isEmpty()) {
-                list.addScrollViewChild(new Label().setText("photon.manage_fxpack.empty"));
-            }
-            for (var fxId : fxIds) {
+            var search = query[0] == null ? "" : query[0].toLowerCase(Locale.ROOT);
+            var shown = 0;
+            for (var fxId : all) {
+                if (!search.isEmpty() && !fxId.toString().toLowerCase(Locale.ROOT).contains(search)) continue;
                 list.addScrollViewChild(row(fxId));
+                shown++;
+            }
+            if (shown == 0) {
+                list.addScrollViewChild(new Label().setText("photon.manage_fxpack.empty"));
             }
         }
 
@@ -387,7 +406,9 @@ public final class FXFileActions {
                             return;
                         }
                         // refilled in place: the window keeps its position, size and scroll
-                        fill(fxIds);
+                        all.clear();
+                        all.addAll(fxIds);
+                        fill();
                         dialog.focus();
                     }).show(editor);
         }

@@ -73,7 +73,14 @@ public final class FXInstanceStyle {
         dialog.addButton(new Button().setOnClick(e -> {
             var id = chosen[0].isEmpty() ? null : ResourceLocation.tryParse(chosen[0]);
             dialog.close();
-            if (id != null) onPicked.accept(id);
+            if (id == null) return;
+            try {
+                onPicked.accept(id);
+            } catch (RuntimeException error) {
+                com.lowdragmc.photon.Photon.LOGGER.error("Failed to place FX instance {}", id, error);
+                FXFileActions.notify(editor, "photon.fx_instance",
+                        Component.translatable("photon.fx_instance.unreadable", id.toString()));
+            }
         }).setText("ldlib.gui.tips.confirm").addClass("__confirm-button__"));
         dialog.addButton(new Button().setText("ldlib.gui.tips.cancel").setOnClick(e -> dialog.close()));
         dialog.show(editor);
