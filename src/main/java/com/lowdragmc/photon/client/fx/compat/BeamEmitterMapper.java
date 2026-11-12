@@ -6,11 +6,12 @@ public class BeamEmitterMapper implements Mapper{
 
     public static CompoundTag mapBeamEmitter(CompoundTag emitterTag){
         CompoundTag newEmitterTag = new CompoundTag();
-        newEmitterTag.putString("type", emitterTag.getString("_type") + "_emitter");
+        newEmitterTag.putString("type", "beam_emitter");
         CompoundTag dataTag = new CompoundTag();
 
         //data tag
         dataTag.putString("name", emitterTag.getString("name"));
+        if (emitterTag.contains("enabled")) dataTag.putBoolean("enabled", emitterTag.getBoolean("enabled"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
         dataTag.put("config", mapBeamConfig(MapperUtils.legacyEmitterConfig(emitterTag)));

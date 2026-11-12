@@ -7,11 +7,12 @@ public class ParticleEmitterMapper implements Mapper{
 
     public static CompoundTag mapParticleEmitter(CompoundTag emitterTag){
         CompoundTag newEmitterTag = new CompoundTag();
-        newEmitterTag.putString("type", emitterTag.getString("_type") + "_emitter");
+        newEmitterTag.putString("type", "particle_emitter");
         CompoundTag dataTag = new CompoundTag();
 
         //data tag
         dataTag.putString("name", emitterTag.getString("name"));
+        if (emitterTag.contains("enabled")) dataTag.putBoolean("enabled", emitterTag.getBoolean("enabled"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
         dataTag.put("config", mapConfigTag(MapperUtils.legacyEmitterConfig(emitterTag)));

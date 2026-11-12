@@ -47,6 +47,16 @@ public class MapperUtils {
      * @return
      */
     public static ListTag mapTyped3Vec(CompoundTag typed3VecTag, String[] key, boolean floatToDouble){
+        // Photon 1 NumberFunction3Accessor still reads a raw x/y/z float compound. Mapping those
+        // as empty typed values made startSize decode as constant 0 (invisible particles).
+        if (isNumericVec3(typed3VecTag)) {
+            return constantsFromNumericVec3(typed3VecTag);
+        }
+        // A single function (early startSize / size-over-lifetime.scale) must expand to all axes,
+        // even when a later field such as simulationSpace is already present.
+        if (isNumberFunctionCompound(typed3VecTag)) {
+            return mapUniformTyped3Vec(typed3VecTag, floatToDouble);
+        }
         if(key == null){
             key = new String[]{"x", "y", "z"};
         }
@@ -68,32 +78,53 @@ public class MapperUtils {
     }
 
     public static CompoundTag mapTypedValue(CompoundTag typedValueTag,  boolean floatToDouble){
+        // Already Photon 2 {type, data}. Re-wrapping dropped the number and decoded as constant 0.
+        if (typedValueTag.contains("type", Tag.TAG_STRING) && typedValueTag.contains("data", Tag.TAG_COMPOUND)
+                && !typedValueTag.contains("_type")) {
+            var copy = typedValueTag.copy();
+            if (floatToDouble) {
+                var data = copy.getCompound("data");
+                if (data.contains("number", Tag.TAG_FLOAT)) {
+                    data.putDouble("number", data.getFloat("number"));
+                }
+            }
+            return copy;
+        }
+        var rawType = typedValueTag.contains("_type", Tag.TAG_STRING)
+                ? typedValueTag.getString("_type")
+                : typedValueTag.getString("type");
+        if (rawType.isEmpty() && typedValueTag.contains("number")) rawType = "Constant";
         CompoundTag newTypedValueTag = new CompoundTag();
-        newTypedValueTag.putString("type", typedValueTag.getString("_type").toLowerCase());
+        newTypedValueTag.putString("type", rawType.toLowerCase());
         CompoundTag dataTag = new CompoundTag();
-        switch(typedValueTag.getString("_type")){
-            case "Curve":
+        switch(rawType){
+            case "Curve", "curve":
                dataTag = typedValueTag.copy();
                dataTag.remove("_type");
+               dataTag.remove("type");
                dataTag.remove("defaultValue");
                if (!dataTag.contains("lockControlPoint")) dataTag.putByte("lockControlPoint", (byte)1);
+               newTypedValueTag.putString("type", "curve");
                break;
-            case "RandomCurve":
+            case "RandomCurve", "random_curve":
                newTypedValueTag.putString("type", "random_curve");
                dataTag = typedValueTag.copy();
                dataTag.remove("_type");
+               dataTag.remove("type");
                dataTag.remove("defaultValue");
                if (!dataTag.contains("lockControlPoint")) dataTag.putByte("lockControlPoint", (byte)1);
                break;
-            case "Constant", "Color":
+            case "Constant", "constant", "Color", "color":
                 dataTag = typedValueTag.copy();
                 dataTag.remove("_type");
+                dataTag.remove("type");
+                newTypedValueTag.putString("type", rawType.equalsIgnoreCase("color") ? "color" : "constant");
                 if(floatToDouble && dataTag.contains("number", Tag.TAG_FLOAT)){
                     //convert to double
                     dataTag.putDouble("number", dataTag.getFloat("number"));
                 }
                 break;
-            case "RandomConstant":
+            case "RandomConstant", "random_constant":
                 if (typedValueTag.contains("a")) dataTag.put("a", typedValueTag.get("a").copy());
                 if (typedValueTag.contains("b")) dataTag.put("b", typedValueTag.get("b").copy());
                 // Photon 1 explicitly persisted whether this is a decimal range. Its integer
@@ -103,11 +134,12 @@ public class MapperUtils {
                 }
                 newTypedValueTag.putString("type", "random_constant");
                 break;
-            case "Gradient":
+            case "Gradient", "gradient":
                 CompoundTag gradientTag = gradient(typedValueTag.getList("a", Tag.TAG_FLOAT), typedValueTag.getList("r", Tag.TAG_FLOAT), typedValueTag.getList("g", Tag.TAG_FLOAT), typedValueTag.getList("b", Tag.TAG_FLOAT));
                 dataTag.put("gradientColor",  gradientTag);
+                newTypedValueTag.putString("type", "gradient");
                 break;
-            case "RandomGradient":
+            case "RandomGradient", "random_gradient":
                 newTypedValueTag.putString("type", "random_gradient");
                 var first = typedValueTag.getCompound("a");
                 var second = typedValueTag.getCompound("b");
@@ -116,18 +148,18 @@ public class MapperUtils {
                 dataTag.put("gradientColor1", gradient(second.getList("a", Tag.TAG_FLOAT), second.getList("r", Tag.TAG_FLOAT),
                         second.getList("g", Tag.TAG_FLOAT), second.getList("b", Tag.TAG_FLOAT)));
                 break;
-            case "TextureMaterial", "BlockTextureSheetMaterial":
+            case "TextureMaterial", "texture", "BlockTextureSheetMaterial":
                 newTypedValueTag.putString("type", "texture");
                 dataTag = buildBlankTexture();
                 dataTag.putString("texture",  typedValueTag.getString("texture"));
                 dataTag.putFloat("discardThreshold", typedValueTag.getFloat("discardThreshold"));
                 break;
-            case "CustomShaderMaterial":
+            case "CustomShaderMaterial", "custom_shader":
                 newTypedValueTag.putString("type", "custom_shader");
                 dataTag = mapPhoton1CustomShaderData(typedValueTag);
                 break;
 
-            case "RandomColor":
+            case "RandomColor", "random_color":
                 newTypedValueTag.putString("type", "random_color");
                 if(typedValueTag.contains("a", Tag.TAG_INT)){
                     dataTag.putInt("a", typedValueTag.getInt("a"));
@@ -235,10 +267,11 @@ public class MapperUtils {
 
     public static CompoundTag mapShape(CompoundTag shapeTag){
         CompoundTag newShapeTag = new CompoundTag();
-        newShapeTag.putString("type", shapeTag.getString("_type"));
+        var rawType = shapeTag.contains("_type", Tag.TAG_STRING) ? shapeTag.getString("_type") : shapeTag.getString("type");
+        newShapeTag.putString("type", aliasLegacyType(rawType, shapeTag));
         CompoundTag dataTag = shapeTag.copy();
         dataTag.remove("_type");
-        if ("mesh".equalsIgnoreCase(shapeTag.getString("_type")) && shapeTag.contains("mesh", Tag.TAG_COMPOUND)) {
+        if ("mesh".equalsIgnoreCase(rawType) && shapeTag.contains("mesh", Tag.TAG_COMPOUND)) {
             dataTag.put("meshData", shapeTag.getCompound("mesh").copy());
             dataTag.remove("mesh");
         }
@@ -651,6 +684,7 @@ public class MapperUtils {
             case "particle", "Particle" -> looksLikeFxObject(compound) ? "particle_emitter" : type;
             case "beam", "Beam" -> looksLikeFxObject(compound) ? "beam_emitter" : type;
             case "trail", "Trail" -> looksLikeFxObject(compound) ? "trail_emitter" : type;
+            case "Empty" -> "empty";
             case "Circle" -> "circle";
             case "Cone" -> "cone";
             case "Sphere" -> "sphere";

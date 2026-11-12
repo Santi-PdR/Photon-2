@@ -3139,6 +3139,20 @@ public final class PhotonFXEditorSmokeTest {
                 .equals(java.util.List.of(secondId, firstId))) {
             throw new IllegalStateException("Photon 1 parent hierarchy or explicit child order was not retained");
         }
+        // Unknown Photon 1 object kinds used to be dropped. Children parented to them (including
+        // 3D model emitters) then woke up with a missing parent UUID.
+        var hanging = hierarchy.copy();
+        hanging.getCompound("fx").getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND)
+                .getCompound(0).putString("_type", "model");
+        var hangingFx = new com.lowdragmc.photon.client.fx.FX();
+        hangingFx.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(),
+                com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(hanging));
+        var hangingRuntime = hangingFx.createRuntime();
+        var hangingParent = hangingRuntime.objects.get(parentId);
+        if (hangingParent == null || !hangingParent.transform().children().stream().map(t -> t.id()).toList()
+                .equals(java.util.List.of(secondId, firstId))) {
+            throw new IllegalStateException("Unknown Photon 1 parent type dropped its children");
+        }
         var mapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(legacy);
         if (mapped == legacy || !legacy.contains("fx")
                 || !mapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getString("type").equals("empty"))
@@ -3375,6 +3389,50 @@ public final class PhotonFXEditorSmokeTest {
         if (!(scalarReloaded instanceof ParticleEmitter reloadedScalar)
                 || !reloadedScalar.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f)))
             throw new IllegalStateException("Converted scalar start size did not survive saving and reloading");
+        // PascalCase _type used to emit Particle_emitter, which the registry cannot decode.
+        var pascalParticle = sparseFlat.copy();
+        pascalParticle.putString("_type", "Particle");
+        var pascalMapped = com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(pascalParticle);
+        if (!"particle_emitter".equals(pascalMapped.getString("type")))
+            throw new IllegalStateException("PascalCase Photon 1 particle type became " + pascalMapped.getString("type"));
+        if (!(com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(pascalMapped) instanceof ParticleEmitter))
+            throw new IllegalStateException("PascalCase Photon 1 particle did not load");
+        var pascalBeam = delayedLegacyTag.copy(); pascalBeam.putString("_type", "Beam");
+        if (!"beam_emitter".equals(com.lowdragmc.photon.client.fx.compat.BeamEmitterMapper.mapBeamEmitter(pascalBeam).getString("type")))
+            throw new IllegalStateException("PascalCase Photon 1 beam type was not canonicalized");
+        var pascalTrail = delayedLegacyTag.copy(); pascalTrail.putString("_type", "Trail");
+        if (!"trail_emitter".equals(com.lowdragmc.photon.client.fx.compat.TrailEmitterMapper.mapTrailEmitter(pascalTrail).getString("type")))
+            throw new IllegalStateException("PascalCase Photon 1 trail type was not canonicalized");
+        // Lowercase _type used to skip the mapper switch and write empty data → constant 0.
+        var lowerSize = new CompoundTag(); lowerSize.putString("_type", "constant"); lowerSize.putFloat("number", 2.5f);
+        var lowerParticle = sparseFlat.copy();
+        lowerParticle.put("startSize", lowerSize);
+        lowerParticle.putString("simulationSpace", "Local");
+        var lowerDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(lowerParticle));
+        if (!(lowerDecoded instanceof ParticleEmitter lowerEmitter)
+                || !lowerEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(2.5f)))
+            throw new IllegalStateException("Lowercase Photon 1 startSize decoded as zero");
+        // Scalar startSize next to simulationSpace used to map x/y/z as empty → size 0.
+        var scalarLocal = sparseFlat.copy();
+        scalarLocal.put("startSize", scalarSize.copy());
+        scalarLocal.putString("simulationSpace", "Local");
+        var scalarLocalDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(scalarLocal));
+        if (!(scalarLocalDecoded instanceof ParticleEmitter scalarLocalEmitter)
+                || !scalarLocalEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(3.5f))
+                || !scalarLocalEmitter.config.getSimulationSpace().name().equals("Local"))
+            throw new IllegalStateException("Scalar startSize with simulationSpace was lost");
+        var numericSize = new CompoundTag();
+        numericSize.putFloat("x", 1.25f); numericSize.putFloat("y", 2.5f); numericSize.putFloat("z", 3.75f);
+        var numericParticle = sparseFlat.copy();
+        numericParticle.put("startSize", numericSize);
+        var numericDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(numericParticle));
+        if (!(numericDecoded instanceof ParticleEmitter numericEmitter)
+                || !numericEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(1.25f, 2.5f, 3.75f)))
+            throw new IllegalStateException("Numeric Photon 1 startSize decoded as zero");
+        Photon.LOGGER.info("[photon1-port-holes-smoke] PascalCase types, unknown parents and lowercase startSize convert");
         var sizeWarningEmitter = new ParticleEmitter();
         sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 0, 0));
         if (!com.lowdragmc.photon.client.fx.FXDiagnostics.hasConstantZeroSize(sizeWarningEmitter))

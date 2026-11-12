@@ -6,11 +6,12 @@ public class TrailEmitterMapper implements Mapper {
 
     public static CompoundTag mapTrailEmitter(CompoundTag emitterTag){
         CompoundTag newEmitterTag = new CompoundTag();
-        newEmitterTag.putString("type", emitterTag.getString("_type") + "_emitter");
+        newEmitterTag.putString("type", "trail_emitter");
         CompoundTag dataTag = new CompoundTag();
 
         //data tag
         dataTag.putString("name", emitterTag.getString("name"));
+        if (emitterTag.contains("enabled")) dataTag.putBoolean("enabled", emitterTag.getBoolean("enabled"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
         dataTag.put("config", mapTrailConfig(MapperUtils.legacyEmitterConfig(emitterTag)));

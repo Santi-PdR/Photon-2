@@ -252,15 +252,56 @@ public class FXCompat {
         var fxObj = new ListTag();
         for (Tag object : fxObjects) {
             CompoundTag fxObject = (CompoundTag) object;
-            switch (fxObject.getString("_type")) {
-                case "beam", "Beam", "beam_emitter" -> fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
-                case "trail", "Trail", "trail_emitter" -> fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
-                case "particle", "Particle", "particle_emitter" -> fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
-                case "empty", "Empty" -> fxObj.add(EmptyMapper.mapEmpty(fxObject));
-                default -> Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
-            }
+            fxObj.add(mapObject(fxObject));
         }
         return fxObj;
+    }
+
+    private static CompoundTag mapObject(CompoundTag fxObject) {
+        var type = fxObject.contains("_type", Tag.TAG_STRING) ? fxObject.getString("_type") : fxObject.getString("type");
+        return switch (canonicalObjectType(type, fxObject)) {
+            case "beam_emitter" -> BeamEmitterMapper.mapBeamEmitter(fxObject);
+            case "trail_emitter" -> TrailEmitterMapper.mapTrailEmitter(fxObject);
+            case "particle_emitter" -> ParticleEmitterMapper.mapParticleEmitter(fxObject);
+            default -> EmptyMapper.mapEmpty(fxObject);
+        };
+    }
+
+    /**
+     * Photon 1 grouping nodes and unknown object kinds must still serialize as {@code empty}
+     * so children keep their parent transform. Dropping them left 3D (and every other) child
+     * hanging under a missing UUID — LDLib then logs "Parent transform not found."
+     */
+    static String canonicalObjectType(String type, CompoundTag fxObject) {
+        return switch (type) {
+            case "beam", "Beam", "beam_emitter" -> "beam_emitter";
+            case "trail", "Trail", "trail_emitter" -> "trail_emitter";
+            case "particle", "Particle", "particle_emitter" -> "particle_emitter";
+            case "empty", "Empty" -> "empty";
+            default -> inferLegacyObjectType(type, fxObject);
+        };
+    }
+
+    private static String inferLegacyObjectType(String type, CompoundTag fxObject) {
+        var config = MapperUtils.legacyEmitterConfig(fxObject);
+        if (config.contains("startLifetime") && (config.contains("emission") || config.contains("startSize")
+                || config.contains("startSpeed"))) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as particle emitter", type);
+            return "particle_emitter";
+        }
+        if (config.contains("emitRate") && config.contains("width") && config.contains("color")
+                && !config.contains("startLifetime") && !config.contains("emission")) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as beam emitter", type);
+            return "beam_emitter";
+        }
+        if (config.contains("widthOverTrail") || (config.contains("minVertexDistance") && config.contains("time"))) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as trail emitter", type);
+            return "trail_emitter";
+        }
+        if (!type.isEmpty()) {
+            Photon.LOGGER.warn("Detected unknown type {}; keeping it as an empty grouping node so children keep their parent transform", type);
+        }
+        return "empty";
     }
 
 }

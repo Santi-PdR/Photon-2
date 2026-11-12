@@ -183,6 +183,7 @@ jobs:
           grep -Fq '[photon1-raw-shape-smoke] restored pre-NumberFunction3 shape transforms through save and reload' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[photon1-flat-trail-smoke] restored flat trail material, parameters and nested override' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[photon1-codec-smoke] loaded Photon 1 type names without reconverting' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-port-holes-smoke] PascalCase types, unknown parents and lowercase startSize convert' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require visible bloom from ordinary FX colors
         shell: bash
