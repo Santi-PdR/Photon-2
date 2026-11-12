@@ -231,13 +231,13 @@ public final class FXData {
                 ? Mth.clamp(tag.getFloat("bloomIntensity"), MIN_BLOOM_INTENSITY, MAX_BLOOM_INTENSITY)
                 : DEFAULT_BLOOM_INTENSITY;
         entityFollowsFeet = tag.getBoolean("entityFollowsFeet");
-        // Photon 1 bloomEffect emitters always wrote into a dedicated bloom buffer. Conversion used
-        // to keep only full-bright lighting, then a later save wrote the Photon 2 default 0.18 —
-        // which is too weak to read as that halo. If the FX still carries the leftover bloom mark
-        // and nobody moved the slider off the default, restore the Photon 1 intensity.
+        // Photon 1 wrote emitters into a dedicated bloom buffer. Conversion used to stamp bloom
+        // only when renderer.bloomEffect was set, then a later save wrote the Photon 2 default
+        // 0.18 — too weak to read as that halo. Converted FX (entityFollowsFeet, leftover bloom
+        // marks) still at the default get the Photon 1 intensity; an authored slider move is kept.
         if (bloomEnabled
                 && Math.abs(bloomIntensity - DEFAULT_BLOOM_INTENSITY) <= 1e-4f
-                && hasLegacyBloom(baked == null ? tag : baked.fxData())) {
+                && (entityFollowsFeet || hasLegacyBloom(baked == null ? tag : baked.fxData()))) {
             bloomIntensity = PHOTON1_BLOOM_INTENSITY;
         }
     }

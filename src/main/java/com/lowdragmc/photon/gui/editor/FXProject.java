@@ -179,6 +179,9 @@ public class FXProject implements IProject {
      */
     void bakeEditorRoot() {
         if (editor == null || editor.runtime == null) return;
+        // Always commit world pose so child gizmo / inspector moves persist even while the
+        // animation overlay is driving the synthetic root (that overlay pose is preview-only).
+        editor.runtime.commitWorldTransforms();
         if (editor.sceneView.fxObjectAnimationView.isPlaying()) return;
         editor.runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
     }

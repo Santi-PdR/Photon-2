@@ -101,12 +101,26 @@ public class FXRuntime implements IScene {
     }
 
     /**
+     * Re-apply each object's world pose through the world setters so gizmo / inspector edits that
+     * mutated the cached world vectors land in the persisted {@code localPosition} / rotation / scale.
+     */
+    public void commitWorldTransforms() {
+        for (var fxObject : objects.values()) {
+            var transform = fxObject.transform();
+            transform.position(new Vector3f(transform.position()));
+            transform.rotation(new Quaternionf(transform.rotation()));
+            transform.scale(new Vector3f(transform.scale()));
+        }
+    }
+
+    /**
      * The editor's synthetic root is not in {@link FXData#objects()} and is not written on Save.
      * Gizmo / inspector edits of the whole FX (move, rotate, scale the root) would otherwise
      * vanish. Fold that pose into each direct child, relative to {@code restPosition}, then put
      * the root back at rest so the scene still matches what will play in the world.
      */
     public void bakeRootIntoChildren(Vector3f restPosition) {
+        commitWorldTransforms();
         var rootTransform = root.transform();
         var position = rootTransform.position();
         var scale = rootTransform.scale();

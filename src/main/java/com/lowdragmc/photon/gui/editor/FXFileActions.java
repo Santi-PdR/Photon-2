@@ -113,6 +113,7 @@ public final class FXFileActions {
                     var id = FXInstanceEditing.idOf(target);
                     if (id != null && refuseCycle(editor, project, id)) return;
                     try {
+                        project.bakeEditorRoot();
                         var fileData = fx.serializeNBT(Platform.getFrozenRegistry());
                         // stamp the format version so FXHelper can run the datafixer on future loads
                         fileData.putInt("version", FXProject.VERSION);
@@ -161,6 +162,7 @@ public final class FXFileActions {
         var namespace = baseName(packFile, FXPacks.SUFFIX);
         var fxId = FXPackExporter.fxId(namespace, fxName);
         if (refuseCycle(editor, project, fxId)) return;
+        project.bakeEditorRoot();
         FXPackExporter.Result result;
         try {
             result = FXPackExporter.exportInto(packFile, namespace, fxName, fx, Platform.getFrozenRegistry());

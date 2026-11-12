@@ -616,7 +616,21 @@ public final class PhotonFXEditorSmokeTest {
         if (rootPos.distanceSquared(FXEditor.SCENE_ROOT_POSITION) > 0.01f) {
             throw new IllegalStateException("Editor root was not reset to the scene rest pose: " + rootPos);
         }
-        Photon.LOGGER.info("[editfx-root-smoke] editor root move/scale is baked into children on save");
+        var childFx = new com.lowdragmc.photon.client.fx.FX();
+        var child = new ParticleEmitter();
+        childFx.getFxData().objects().add(child);
+        var childRuntime = childFx.createInternalRuntime();
+        childRuntime.root.updatePos(new org.joml.Vector3f(FXEditor.SCENE_ROOT_POSITION));
+        child.transform().position(new org.joml.Vector3f(1.5f, 4f, 0.5f));
+        childRuntime.commitWorldTransforms();
+        var childSaved = childFx.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        var childLoaded = new com.lowdragmc.photon.client.fx.FX();
+        childLoaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), childSaved);
+        var childPos = childLoaded.getFxData().objects().get(0).transform().localPosition();
+        if (Math.abs(childPos.x - 1f) > 0.05f || Math.abs(childPos.y - 2f) > 0.05f) {
+            throw new IllegalStateException("Child world position was not saved as local: " + childPos);
+        }
+        Photon.LOGGER.info("[editfx-root-smoke] editor root move/scale and child world pose are baked into children on save");
     }
 
     /**
@@ -1072,8 +1086,9 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     /**
-     * Photon 1 {@code renderer.bloomEffect} emitters always bloomed. Conversion used to keep only
-     * full-bright lighting, so ported FX lost their halo.
+     * Photon 1 bloom was a dedicated buffer any emitter could write into. Conversion used to stamp
+     * FX bloom only when {@code renderer.bloomEffect} was set, so trails, beams and unmarked
+     * particle FX lost their halo. Every converted Photon 1 FX now gets the Photon 1 intensity.
      */
     private static void verifyPhoton1BloomPort() {
         var bloomEmitter = new CompoundTag();
@@ -1095,8 +1110,22 @@ public final class PhotonFXEditorSmokeTest {
         var plain = new CompoundTag();
         plain.put("emitters", new ListTag());
         var without = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(plain).getCompound("fxData");
-        if (without.contains("bloomIntensity") || without.contains("bloomEnabled")) {
-            throw new IllegalStateException("A Photon 1 FX without bloomEffect stamped bloom keys");
+        if (!without.getBoolean("bloomEnabled")
+                || Math.abs(without.getFloat("bloomIntensity")
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A Photon 1 FX of any type did not stamp bloom: " + without);
+        }
+        var trail = new CompoundTag();
+        trail.putString("_type", "trail");
+        var trailList = new ListTag();
+        trailList.add(trail);
+        var trailFx = new CompoundTag();
+        trailFx.put("emitters", trailList);
+        var trailConverted = com.lowdragmc.photon.client.fx.compat.FXCompat.mapEffect(trailFx).getCompound("fxData");
+        if (!trailConverted.getBoolean("bloomEnabled")
+                || Math.abs(trailConverted.getFloat("bloomIntensity")
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A Photon 1 trail FX did not stamp bloom: " + trailConverted);
         }
         var leftover = new CompoundTag();
         var objects = new ListTag();
@@ -1132,7 +1161,16 @@ public final class PhotonFXEditorSmokeTest {
         if (Math.abs(authored.bloomIntensity() - 1.25f) > 0.0001f) {
             throw new IllegalStateException("An authored bloom intensity was overwritten: " + authored.bloomIntensity());
         }
-        Photon.LOGGER.info("[photon1-bloom-smoke] converted FX keep Photon 1 bloom at intensity {}",
+        var feetOnly = new CompoundTag();
+        feetOnly.putBoolean("entityFollowsFeet", true);
+        var fromFeet = new com.lowdragmc.photon.client.fx.FXData();
+        fromFeet.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), feetOnly);
+        if (!fromFeet.bloomEnabled() || Math.abs(fromFeet.bloomIntensity()
+                - com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY) > 0.0001f) {
+            throw new IllegalStateException("A converted Photon 1 FX did not restore bloom for every type: "
+                    + fromFeet.bloomEnabled() + " " + fromFeet.bloomIntensity());
+        }
+        Photon.LOGGER.info("[photon1-bloom-smoke] converted FX of every type keep Photon 1 bloom at intensity {}",
                 com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY);
     }
 
