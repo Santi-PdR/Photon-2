@@ -526,7 +526,14 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(new PhotonMeshCache.GltfKey(location, flipV), location);
-        try (var in = Minecraft.getInstance().getResourceManager().open(location)) {
+        var nested = LDLibModelAssets.resolve(location, location.getPath());
+        if (nested != null) PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.GltfKey(location, flipV), nested.toFile());
+        var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(location).orElse(null) : null;
+        if (nested == null && resource == null) {
+            Photon.LOGGER.warn("glTF {} does not exist", location);
+            return SkinnedModel.EMPTY;
+        }
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested) : resource.open()) {
             return GltfMeshParser.parseModel(in, flipV, location);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
