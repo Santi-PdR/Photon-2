@@ -26,19 +26,19 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapConfigTag(CompoundTag configTag){
         CompoundTag newConfigTag = new CompoundTag();
         newConfigTag.putString("simulationSpace",  configTag.getString("simulationSpace"));
-        newConfigTag.put("startLifetime", MapperUtils.mapTypedValue(configTag.getCompound("startLifetime"), false));
+        newConfigTag.put("startLifetime", MapperUtils.mapTypedField(configTag, "startLifetime", false));
         newConfigTag.putInt("prewarm", 0);
         newConfigTag.putInt("maxParticles", configTag.getInt("maxParticles"));
         newConfigTag.putInt("duration", configTag.getInt("duration"));
         newConfigTag.putByte("looping",  configTag.getByte("looping"));
         newConfigTag.putByte("parallelUpdate",  configTag.getByte("parallelUpdate"));
-        newConfigTag.put("startDelay", MapperUtils.mapTypedValue(configTag.getCompound("startDelay"), false));
+        newConfigTag.put("startDelay", MapperUtils.mapTypedField(configTag, "startDelay", false));
         newConfigTag.put("sizeOverLifetime",  MapperUtils.mapTypedValue(configTag.getCompound("sizeOverLifetime"), false));
         newConfigTag.put("startRotation", MapperUtils.mapTyped3Vec(configTag.getCompound("startRotation"), null, false));
         newConfigTag.put("rotationBySpeed", mapRotationBySpeedTag(configTag.getCompound("rotationBySpeed")));
         newConfigTag.put("physics", mapPhysicsTag(configTag.getCompound("physics")));
-        newConfigTag.put("startColor", MapperUtils.mapTypedValue(configTag.getCompound("startColor"), false));
-        newConfigTag.put("startSpeed", MapperUtils.mapTypedValue(configTag.getCompound("startSpeed"), false));
+        newConfigTag.put("startColor", MapperUtils.mapTypedField(configTag, "startColor", false, true));
+        newConfigTag.put("startSpeed", MapperUtils.mapTypedField(configTag, "startSpeed", false));
         newConfigTag.put("inheritVelocity", mapInheritVelocity(configTag.getCompound("inheritVelocity")));
         newConfigTag.put("colorOverLifetime",  mapColorOTTag(configTag.getCompound("colorOverLifetime")));
         newConfigTag.put("startSize", MapperUtils.mapTyped3Vec(configTag.getCompound("startSize"), null, true));
@@ -95,9 +95,9 @@ public class ParticleEmitterMapper implements Mapper{
         CompoundTag newRotationTag = new CompoundTag();
         newRotationTag.putByte("_enable", rotationTag.getByte("enable"));
         newRotationTag.put("speedRange",  rotationTag.getCompound("speedRange"));
-        newRotationTag.put("roll", MapperUtils.mapTypedValue(rotationTag.getCompound("roll"), false));
-        newRotationTag.put("pitch", MapperUtils.mapTypedValue(rotationTag.getCompound("pitch"), false));
-        newRotationTag.put("yaw", MapperUtils.mapTypedValue(rotationTag.getCompound("yaw"), false));
+        newRotationTag.put("roll", MapperUtils.mapTypedField(rotationTag, "roll", false));
+        newRotationTag.put("pitch", MapperUtils.mapTypedField(rotationTag, "pitch", false));
+        newRotationTag.put("yaw", MapperUtils.mapTypedField(rotationTag, "yaw", false));
 
         MapperUtils.retainPresentFields(newRotationTag, rotationTag, "_enable");
         return newRotationTag;
@@ -106,7 +106,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapColorOTTag(CompoundTag colorTag){
         CompoundTag newColorTag = new CompoundTag();
         newColorTag.putByte("_enable", colorTag.getByte("enable"));
-        newColorTag.put("color", MapperUtils.mapTypedValue(colorTag.getCompound("color"), false));
+        newColorTag.put("color", MapperUtils.mapTypedField(colorTag, "color", false, true));
 
         MapperUtils.retainPresentFields(newColorTag, colorTag, "_enable");
         return newColorTag;
@@ -139,8 +139,8 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapNoiseTag(CompoundTag noiseTag){
         CompoundTag newNoiseTag = new CompoundTag();
         newNoiseTag.putByte("_enable", noiseTag.getByte("enable"));
-        newNoiseTag.put("size", MapperUtils.mapTypedValue(noiseTag.getCompound("size"), false));
-        newNoiseTag.put("rotation", MapperUtils.mapTypedValue(noiseTag.getCompound("rotation"), false));
+        newNoiseTag.put("size", MapperUtils.mapTypedField(noiseTag, "size", false));
+        newNoiseTag.put("rotation", MapperUtils.mapTypedField(noiseTag, "rotation", false));
         newNoiseTag.put("position", MapperUtils.mapTyped3Vec(noiseTag.getCompound("position"), null, true));
         CompoundTag remap = new CompoundTag();
         remap.putByte("_enable",  noiseTag.getCompound("remap").getByte("enable"));
@@ -160,11 +160,11 @@ public class ParticleEmitterMapper implements Mapper{
         newPhysicsTag.putByte("_enable", physicsTag.getByte("enable"));
         newPhysicsTag.putByte("hasCollision",  physicsTag.getByte("hasCollision"));
         newPhysicsTag.putByte("removedWhenCollided", physicsTag.getByte("removedWhenCollided"));
-        newPhysicsTag.put("friction", MapperUtils.mapTypedValue(physicsTag.getCompound("friction"), false));
-        newPhysicsTag.put("gravity", MapperUtils.mapTypedValue(physicsTag.getCompound("gravity"), false));
-        newPhysicsTag.put("bounceSpreadRate", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceSpreadRate"), false));
-        newPhysicsTag.put("bounceRate", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceRate"), false));
-        newPhysicsTag.put("bounceChance", MapperUtils.mapTypedValue(physicsTag.getCompound("bounceChance"), false));
+        newPhysicsTag.put("friction", MapperUtils.mapTypedField(physicsTag, "friction", false));
+        newPhysicsTag.put("gravity", MapperUtils.mapTypedField(physicsTag, "gravity", false));
+        newPhysicsTag.put("bounceSpreadRate", MapperUtils.mapTypedField(physicsTag, "bounceSpreadRate", false));
+        newPhysicsTag.put("bounceRate", MapperUtils.mapTypedField(physicsTag, "bounceRate", false));
+        newPhysicsTag.put("bounceChance", MapperUtils.mapTypedField(physicsTag, "bounceChance", false));
 
         MapperUtils.retainPresentFields(newPhysicsTag, physicsTag, "_enable");
         return newPhysicsTag;
@@ -172,7 +172,7 @@ public class ParticleEmitterMapper implements Mapper{
 
     public static CompoundTag mapEmissionTag(CompoundTag emissionTag){
         CompoundTag newEmissionTag = new CompoundTag();
-        newEmissionTag.put("emissionRate", MapperUtils.mapTypedValue(emissionTag.getCompound("emissionRate"), false));
+        newEmissionTag.put("emissionRate", MapperUtils.mapTypedField(emissionTag, "emissionRate", false));
         newEmissionTag.putString("emissionMode",  emissionTag.getString("emissionMode"));
         CompoundTag bursts = new CompoundTag();
         ListTag payload = new ListTag();
@@ -180,7 +180,7 @@ public class ParticleEmitterMapper implements Mapper{
             var oldBurst = (CompoundTag) item;
             var burst = oldBurst.copy();
             if (oldBurst.contains("count", Tag.TAG_COMPOUND)) {
-                burst.put("count", MapperUtils.mapTypedValue(oldBurst.getCompound("count"), false));
+                burst.put("count", MapperUtils.mapTypedField(oldBurst, "count", false));
             }
             payload.add(burst);
         }
@@ -213,7 +213,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapVelocityOLTag(CompoundTag velocityOTTag){
         CompoundTag newVelocityOTTag = new CompoundTag();
         newVelocityOTTag.putByte("_enable", velocityOTTag.getByte("enable"));
-        newVelocityOTTag.put("speedModifier",  MapperUtils.mapTypedValue(velocityOTTag.getCompound("speedModifier"), false));
+        newVelocityOTTag.put("speedModifier",  MapperUtils.mapTypedField(velocityOTTag, "speedModifier", false));
         newVelocityOTTag.putString("orbitalMode",   velocityOTTag.getString("orbitalMode"));
         newVelocityOTTag.put("offset",  MapperUtils.mapTyped3Vec(velocityOTTag.getCompound("offset"), null, false));
         newVelocityOTTag.put("orbital", MapperUtils.mapTyped3Vec(velocityOTTag.getCompound("orbital"), null, false));
@@ -228,9 +228,9 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapRotationOLTTag(CompoundTag rotationOLTTag){
         CompoundTag newRotationOLTTag = new CompoundTag();
         newRotationOLTTag.putByte("_enable", rotationOLTTag.getByte("enable"));
-        newRotationOLTTag.put("roll", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("roll"), false));
-        newRotationOLTTag.put("pitch", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("pitch"), false));
-        newRotationOLTTag.put("yaw", MapperUtils.mapTypedValue(rotationOLTTag.getCompound("yaw"), false));
+        newRotationOLTTag.put("roll", MapperUtils.mapTypedField(rotationOLTTag, "roll", false));
+        newRotationOLTTag.put("pitch", MapperUtils.mapTypedField(rotationOLTTag, "pitch", false));
+        newRotationOLTTag.put("yaw", MapperUtils.mapTypedField(rotationOLTTag, "yaw", false));
 
 
 
@@ -277,8 +277,8 @@ public class ParticleEmitterMapper implements Mapper{
         newTrailsTag.putByte("inheritParticleColor", trailsTag.getByte("inheritParticleColor"));
         newTrailsTag.putByte("sizeAffectsLifetime", trailsTag.getByte("sizeAffectsLifetime"));
         newTrailsTag.putFloat("ratio",  trailsTag.getFloat("ratio"));
-        newTrailsTag.put("colorOverLifetime", MapperUtils.mapTypedValue(trailsTag.getCompound("colorOverLifetime"), false));
-        newTrailsTag.put("lifetime", MapperUtils.mapTypedValue(trailsTag.getCompound("lifetime"), false));
+        newTrailsTag.put("colorOverLifetime", MapperUtils.mapTypedField(trailsTag, "colorOverLifetime", false, true));
+        newTrailsTag.put("lifetime", MapperUtils.mapTypedField(trailsTag, "lifetime", false));
 
         newTrailsTag.put("config", TrailEmitterMapper.mapTrailConfig(trailsTag.getCompound("config"), 0.5f));
         newTrailsTag.put("araConfig", buildAraConfig());
@@ -290,10 +290,10 @@ public class ParticleEmitterMapper implements Mapper{
             // their width must not receive the nested TrailConfig's older-width migration.
             var config = newTrailsTag.contains("config", Tag.TAG_COMPOUND)
                     ? newTrailsTag.getCompound("config") : new CompoundTag();
-            for (var field : java.util.List.of("widthOverTrail", "colorOverTrail")) {
-                if (trailsTag.contains(field, Tag.TAG_COMPOUND))
-                    config.put(field, MapperUtils.mapTypedValue(trailsTag.getCompound(field), false));
-            }
+            if (trailsTag.contains("widthOverTrail"))
+                config.put("widthOverTrail", MapperUtils.mapTypedField(trailsTag, "widthOverTrail", false));
+            if (trailsTag.contains("colorOverTrail"))
+                config.put("colorOverTrail", MapperUtils.mapTypedField(trailsTag, "colorOverTrail", false, true));
             if (trailsTag.contains("uvMode", Tag.TAG_STRING)) config.putString("uvMode", trailsTag.getString("uvMode"));
             config.putFloat("minVertexDistance", trailsTag.getFloat("minimumVertexDistance"));
             var renderer = config.contains("renderer", Tag.TAG_COMPOUND)
@@ -379,7 +379,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapInheritVelocity(CompoundTag inheritVelTag){
         CompoundTag newInheritVelTag = new CompoundTag();
         newInheritVelTag.putByte("_enable", inheritVelTag.getByte("enable"));
-        newInheritVelTag.put("multiply", MapperUtils.mapTypedValue(inheritVelTag.getCompound("multiply"), false));
+        newInheritVelTag.put("multiply", MapperUtils.mapTypedField(inheritVelTag, "multiply", false));
         newInheritVelTag.putString("mode",  inheritVelTag.getString("mode"));
 
 
@@ -393,7 +393,7 @@ public class ParticleEmitterMapper implements Mapper{
     public static CompoundTag mapLTByEmitterSpeed(CompoundTag lteTag){
         CompoundTag newLTETag = new CompoundTag();
         newLTETag.putByte("_enable", lteTag.getByte("enable"));
-        newLTETag.put("multiplier", MapperUtils.mapTypedValue(lteTag.getCompound("multiplier"), false));
+        newLTETag.put("multiplier", MapperUtils.mapTypedField(lteTag, "multiplier", false));
         newLTETag.put("speedRange", lteTag.getCompound("speedRange"));
 
 
@@ -424,7 +424,7 @@ public class ParticleEmitterMapper implements Mapper{
         newSubEmitterTag.putByte("inheritLifetime",  subEmitterTag.getByte("inheritLifetime"));
         newSubEmitterTag.putInt("tickInterval", subEmitterTag.getInt("tickInterval"));
         newSubEmitterTag.putByte("inheritColor",  subEmitterTag.getByte("inheritColor"));
-        newSubEmitterTag.put("emitProbability", MapperUtils.mapTypedValue(subEmitterTag.getCompound("emitProbability"), false));
+        newSubEmitterTag.put("emitProbability", MapperUtils.mapTypedField(subEmitterTag, "emitProbability", false));
         newSubEmitterTag.putByte("inheritDuration",  subEmitterTag.getByte("inheritDuration"));
         newSubEmitterTag.putString("event", subEmitterTag.getString("event"));
         newSubEmitterTag.putString("legacySubFXName", subEmitterTag.getString("emitter"));
@@ -438,7 +438,7 @@ public class ParticleEmitterMapper implements Mapper{
         CompoundTag newColorTag = new CompoundTag();
         newColorTag.putByte("_enable", colorTag.getByte("enable"));
         newColorTag.put("speedRange",  colorTag.getCompound("speedRange"));
-        newColorTag.put("color", MapperUtils.mapTypedValue(colorTag.getCompound("color"), false));
+        newColorTag.put("color", MapperUtils.mapTypedField(colorTag, "color", false, true));
 
         MapperUtils.retainPresentFields(newColorTag, colorTag, "_enable");
         return  newColorTag;

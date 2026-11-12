@@ -3432,6 +3432,41 @@ public final class PhotonFXEditorSmokeTest {
         if (!(numericDecoded instanceof ParticleEmitter numericEmitter)
                 || !numericEmitter.config.getStartSize().get(0f, () -> 0f).equals(new org.joml.Vector3f(1.25f, 2.5f, 3.75f)))
             throw new IllegalStateException("Numeric Photon 1 startSize decoded as zero");
+        // Photon 1 NumberFunction fields that predate the {_type, number} wrapper stored a raw
+        // int/float. getCompound() on those was empty, so lifetime/lights decoded as constant 0.
+        var rawLife = sparseFlat.copy();
+        rawLife.putInt("startLifetime", 50);
+        rawLife.putFloat("startSpeed", 2.5f);
+        var rawLights = new CompoundTag();
+        rawLights.putBoolean("enable", true);
+        rawLights.putInt("skyLight", 4);
+        rawLights.putInt("blockLight", 11);
+        rawLife.put("lights", rawLights);
+        var rawLifeDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(rawLife));
+        if (!(rawLifeDecoded instanceof ParticleEmitter rawLifeEmitter)
+                || rawLifeEmitter.config.getStartLifetime().get(0f, () -> 0f).intValue() != 50
+                || Math.abs(rawLifeEmitter.config.getStartSpeed().get(0f, () -> 0f).floatValue() - 2.5f) > 0.0001f
+                || rawLifeEmitter.config.lights.getSkyLight().get(0f, () -> 0f).intValue() != 4
+                || rawLifeEmitter.config.lights.getBlockLight().get(0f, () -> 0f).intValue() != 11)
+            throw new IllegalStateException("Raw Photon 1 number functions decoded as zero");
+        var rawLifeReload = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(rawLifeEmitter.serializeWrapper());
+        if (!(rawLifeReload instanceof ParticleEmitter rawLifeAgain)
+                || rawLifeAgain.config.getStartLifetime().get(0f, () -> 0f).intValue() != 50
+                || rawLifeAgain.config.lights.getBlockLight().get(0f, () -> 0f).intValue() != 11)
+            throw new IllegalStateException("Raw Photon 1 number functions did not survive saving and reloading");
+        // Early Photon 1 swapped startRotation to z/y/x after load. Numeric x/y/z compounds
+        // used to skip that remap and keep the unswapped euler.
+        var earlyRotation = new CompoundTag();
+        earlyRotation.putFloat("x", 10f); earlyRotation.putFloat("y", 20f); earlyRotation.putFloat("z", 30f);
+        var earlyRotParticle = sparseFlat.copy();
+        earlyRotParticle.put("startSize", scalarSize.copy());
+        earlyRotParticle.put("startRotation", earlyRotation);
+        var earlyRotDecoded = com.lowdragmc.photon.client.gameobject.IFXObject.deserializeWrapper(
+                com.lowdragmc.photon.client.fx.compat.ParticleEmitterMapper.mapParticleEmitter(earlyRotParticle));
+        if (!(earlyRotDecoded instanceof ParticleEmitter earlyRotEmitter)
+                || !earlyRotEmitter.config.getStartRotation().get(0f, () -> 0f).equals(new org.joml.Vector3f(30f, 20f, 10f)))
+            throw new IllegalStateException("Early Photon 1 startRotation was not remapped z/y/x");
         Photon.LOGGER.info("[photon1-port-holes-smoke] PascalCase types, unknown parents and lowercase startSize convert");
         var sizeWarningEmitter = new ParticleEmitter();
         sizeWarningEmitter.config.setStartSize(new com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction3(0, 0, 0));

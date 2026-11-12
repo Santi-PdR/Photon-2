@@ -47,24 +47,61 @@ public class MapperUtils {
      * @return
      */
     public static ListTag mapTyped3Vec(CompoundTag typed3VecTag, String[] key, boolean floatToDouble){
-        // Photon 1 NumberFunction3Accessor still reads a raw x/y/z float compound. Mapping those
-        // as empty typed values made startSize decode as constant 0 (invisible particles).
-        if (isNumericVec3(typed3VecTag)) {
-            return constantsFromNumericVec3(typed3VecTag);
-        }
-        // A single function (early startSize / size-over-lifetime.scale) must expand to all axes,
-        // even when a later field such as simulationSpace is already present.
-        if (isNumberFunctionCompound(typed3VecTag)) {
+        if (key == null) {
+            key = new String[]{"x", "y", "z"};
+            // Photon 1 NumberFunction3Accessor still reads a raw x/y/z float compound. Mapping those
+            // as empty typed values made startSize decode as constant 0 (invisible particles).
+            if (isNumericVec3(typed3VecTag)) {
+                return constantsFromNumericVec3(typed3VecTag);
+            }
+            // A single function (early startSize / size-over-lifetime.scale) must expand to all axes,
+            // even when a later field such as simulationSpace is already present.
+            if (isNumberFunctionCompound(typed3VecTag)) {
+                return mapUniformTyped3Vec(typed3VecTag, floatToDouble);
+            }
+        } else if (isNumberFunctionCompound(typed3VecTag)) {
             return mapUniformTyped3Vec(typed3VecTag, floatToDouble);
         }
-        if(key == null){
-            key = new String[]{"x", "y", "z"};
-        }
         ListTag listTag = new ListTag();
-        for(int i = 0; i < key.length; i++){
-            listTag.add(mapTypedValue(typed3VecTag.getCompound(key[i]), floatToDouble));
+        for (int i = 0; i < key.length; i++) {
+            listTag.add(mapTypedAxis(typed3VecTag, key[i], floatToDouble));
         }
         return listTag;
+    }
+
+    /**
+     * Photon 1 number functions are usually {@code {_type, ...}} compounds, but older files (and a
+     * few fields that predate NumberFunction) stored a raw int/float. {@code getCompound} on those
+     * returns empty, which decoded as constant 0.
+     */
+    public static CompoundTag mapTypedField(CompoundTag parent, String key, boolean floatToDouble) {
+        return mapTypedField(parent, key, floatToDouble, false);
+    }
+
+    public static CompoundTag mapTypedField(CompoundTag parent, String key, boolean floatToDouble, boolean color) {
+        var tag = parent.get(key);
+        if (tag instanceof net.minecraft.nbt.NumericTag numeric) {
+            return constantNumber(numeric.getAsDouble(), floatToDouble, color);
+        }
+        return mapTypedValue(parent.getCompound(key), floatToDouble);
+    }
+
+    private static CompoundTag mapTypedAxis(CompoundTag parent, String axis, boolean floatToDouble) {
+        if (parent.contains(axis, Tag.TAG_ANY_NUMERIC) && !parent.contains(axis, Tag.TAG_COMPOUND)) {
+            return constantNumber(parent.getDouble(axis), floatToDouble, false);
+        }
+        return mapTypedValue(parent.getCompound(axis), floatToDouble);
+    }
+
+    private static CompoundTag constantNumber(double number, boolean floatToDouble, boolean color) {
+        var result = new CompoundTag();
+        result.putString("type", color ? "color" : "constant");
+        var data = new CompoundTag();
+        if (color) data.putInt("number", (int) number);
+        else if (floatToDouble) data.putDouble("number", number);
+        else data.putFloat("number", (float) number);
+        result.put("data", data);
+        return result;
     }
 
 
@@ -390,8 +427,8 @@ public class MapperUtils {
     public static CompoundTag mapLightTag(CompoundTag lightTag){
         CompoundTag newLightTag = new CompoundTag();
         newLightTag.putByte("_enable", lightTag.getByte("enable"));
-        newLightTag.put("blockLight", MapperUtils.mapTypedValue(lightTag.getCompound("blockLight"), false));
-        newLightTag.put("skyLight", MapperUtils.mapTypedValue(lightTag.getCompound("skyLight"), false));
+        newLightTag.put("blockLight", mapTypedField(lightTag, "blockLight", false));
+        newLightTag.put("skyLight", mapTypedField(lightTag, "skyLight", false));
 
         retainPresentFields(newLightTag, lightTag, "_enable");
         return newLightTag;
@@ -470,10 +507,10 @@ public class MapperUtils {
         CompoundTag newUVTag = new CompoundTag();
         newUVTag.putByte("_enable", uvTag.getByte("enable"));
         newUVTag.putIntArray("tiles", new int[]{uvTag.getCompound("tiles").getInt("a"), uvTag.getCompound("tiles").getInt("b")});
-        newUVTag.put("startFrame", MapperUtils.mapTypedValue(uvTag.getCompound("startFrame"), false));
+        newUVTag.put("startFrame", mapTypedField(uvTag, "startFrame", false));
         newUVTag.putFloat("cycle",  uvTag.getFloat("cycle"));
         newUVTag.putString("animation",  uvTag.getString("animation"));
-        newUVTag.put("frameOverTime", MapperUtils.mapTypedValue(uvTag.getCompound("frameOverTime"), false));
+        newUVTag.put("frameOverTime", mapTypedField(uvTag, "frameOverTime", false));
 
 
         retainPresentFields(newUVTag, uvTag, "_enable");
