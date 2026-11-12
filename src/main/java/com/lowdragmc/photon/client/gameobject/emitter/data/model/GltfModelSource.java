@@ -98,7 +98,14 @@ public class GltfModelSource implements IModelSource {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
-        try (var in = Minecraft.getInstance().getResourceManager().open(modelLocation)) {
+        var nested = LDLibModelAssets.resolve(modelLocation, modelLocation.getPath());
+        if (nested != null) PhotonMeshCache.INSTANCE.trackFile(key(), nested.toFile());
+        var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null) : null;
+        if (nested == null && resource == null) {
+            Photon.LOGGER.warn("glTF model {} does not exist", modelLocation);
+            return SkinnedModel.EMPTY;
+        }
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested) : resource.open()) {
             return GltfMeshParser.parseModel(in, flipV, modelLocation);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
