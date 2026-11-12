@@ -139,7 +139,8 @@ public class FXCompat {
                     }
                     CompoundTag photon1FX;
                     try (var input = java.nio.file.Files.newInputStream(path)) {
-                        photon1FX = NbtIo.readCompressed(input);
+                        // The loader accepts both Photon 1's gzip exports and raw NBT; conversion must too.
+                        photon1FX = FXHelper.readNbt(input);
                     }
                     if (!isLegacyEffect(photon1FX)) {
                         var reason = path.getFileName() + ": not a Photon 1 effect";
@@ -150,10 +151,7 @@ public class FXCompat {
                     CompoundTag photon2FX = mapEffect(photon1FX);
                     // the mappers emit the current format; stamp it so the datafixer stays a no-op
                     photon2FX.putInt("version", FXProject.VERSION);
-                    Files.createDirectories(target.getParent());
-                    try (var output = Files.newOutputStream(target, java.nio.file.StandardOpenOption.CREATE_NEW)) {
-                        NbtIo.writeCompressed(photon2FX, output);
-                    }
+                    writeConvertedEffect(target, photon2FX);
                     count.getAndIncrement();
                 }
                 catch(Exception e){
@@ -168,6 +166,21 @@ public class FXCompat {
             Photon.LOGGER.error("Failed to read Photon 1 FX directory {}", source, e);
         }
         return new Report(count.get(), List.copyOf(skipped), List.copyOf(failed), List.of(source.toString()));
+    }
+
+    /** Never leave a half-written destination that a later conversion would mistake for a valid effect. */
+    private static void writeConvertedEffect(Path target, CompoundTag data) throws IOException {
+        Files.createDirectories(target.getParent());
+        Path temporary = Files.createTempFile(target.getParent(), ".photon-convert-", ".tmp");
+        try {
+            try (var output = Files.newOutputStream(temporary)) {
+                NbtIo.writeCompressed(data, output);
+            }
+            // Do not replace existing effects, even if another conversion created one in the meantime.
+            Files.move(temporary, target);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     public static boolean isLegacyEffect(CompoundTag tag) {
@@ -190,14 +203,21 @@ public class FXCompat {
             fxObjects = definition.getCompound("mainFX").getList("fxObjects", Tag.TAG_COMPOUND);
         }
         fxData.put("fxObjects", mapObjects(fxObjects));
+        // Photon 1 EntityEffect followed the feet; Photon 2 follows the eyes. Keep the feet so an
+        // aura stays on the torso after conversion.
+        fxData.putBoolean("entityFollowsFeet", true);
+        stampLegacyBloom(fxData, fxObjects);
         new_fx.put("fxData", fxData);
         var definition = fx.contains("fx", Tag.TAG_COMPOUND) ? fx.getCompound("fx") : fx;
         var oldSubEffects = definition.getCompound("subFXs");
         if (!oldSubEffects.isEmpty()) {
             var subEffects = new CompoundTag();
             for (var name : oldSubEffects.getAllKeys()) {
+                var subObjects = oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND);
                 var subData = new CompoundTag();
-                subData.put("fxObjects", mapObjects(oldSubEffects.getCompound(name).getList("fxObjects", Tag.TAG_COMPOUND)));
+                subData.put("fxObjects", mapObjects(subObjects));
+                subData.putBoolean("entityFollowsFeet", true);
+                stampLegacyBloom(subData, subObjects);
                 var subEffect = new CompoundTag();
                 subEffect.put("fxData", subData);
                 subEffects.put(name, subEffect);
@@ -207,29 +227,81 @@ public class FXCompat {
         return new_fx;
     }
 
+    /**
+     * Photon 1 bloom was per-emitter ({@code renderer.bloomEffect}) and always wrote those particles
+     * into the bloom buffer. Photon 2 bloom is per-FX and threshold-based, so conversion has to
+     * turn it on and use {@link com.lowdragmc.photon.client.fx.FXData#PHOTON1_BLOOM_INTENSITY} or
+     * the halo disappears.
+     */
+    private static void stampLegacyBloom(CompoundTag fxData, ListTag objects) {
+        if (!objectsHaveBloom(objects)) return;
+        fxData.putBoolean("bloomEnabled", true);
+        fxData.putFloat("bloomIntensity", com.lowdragmc.photon.client.fx.FXData.PHOTON1_BLOOM_INTENSITY);
+    }
+
+    private static boolean objectsHaveBloom(ListTag objects) {
+        for (Tag object : objects) {
+            if (!(object instanceof CompoundTag fxObject)) continue;
+            var config = MapperUtils.legacyEmitterConfig(fxObject);
+            if (config.getCompound("renderer").getBoolean("bloomEffect")) return true;
+        }
+        return false;
+    }
+
     private static ListTag mapObjects(ListTag fxObjects) {
         var fxObj = new ListTag();
         for (Tag object : fxObjects) {
             CompoundTag fxObject = (CompoundTag) object;
-            switch (fxObject.getString("_type")) {
-                case "beam":
-                    fxObj.add(BeamEmitterMapper.mapBeamEmitter(fxObject));
-                    break;
-                case "trail":
-                    fxObj.add(TrailEmitterMapper.mapTrailEmitter(fxObject));
-                    break;
-                case "particle":
-                    fxObj.add(ParticleEmitterMapper.mapParticleEmitter(fxObject));
-                    break;
-                case "empty":
-                    fxObj.add(EmptyMapper.mapEmpty(fxObject));
-                    break;
-                default:
-                    Photon.LOGGER.warn("Detected unknown type {}", fxObject.getString("_type"));
-
-            }
+            fxObj.add(mapObject(fxObject));
         }
         return fxObj;
+    }
+
+    private static CompoundTag mapObject(CompoundTag fxObject) {
+        var type = fxObject.contains("_type", Tag.TAG_STRING) ? fxObject.getString("_type") : fxObject.getString("type");
+        return switch (canonicalObjectType(type, fxObject)) {
+            case "beam_emitter" -> BeamEmitterMapper.mapBeamEmitter(fxObject);
+            case "trail_emitter" -> TrailEmitterMapper.mapTrailEmitter(fxObject);
+            case "particle_emitter" -> ParticleEmitterMapper.mapParticleEmitter(fxObject);
+            default -> EmptyMapper.mapEmpty(fxObject);
+        };
+    }
+
+    /**
+     * Photon 1 grouping nodes and unknown object kinds must still serialize as {@code empty}
+     * so children keep their parent transform. Dropping them left 3D (and every other) child
+     * hanging under a missing UUID — LDLib then logs "Parent transform not found."
+     */
+    static String canonicalObjectType(String type, CompoundTag fxObject) {
+        return switch (type) {
+            case "beam", "Beam", "beam_emitter" -> "beam_emitter";
+            case "trail", "Trail", "trail_emitter" -> "trail_emitter";
+            case "particle", "Particle", "particle_emitter" -> "particle_emitter";
+            case "empty", "Empty" -> "empty";
+            default -> inferLegacyObjectType(type, fxObject);
+        };
+    }
+
+    private static String inferLegacyObjectType(String type, CompoundTag fxObject) {
+        var config = MapperUtils.legacyEmitterConfig(fxObject);
+        if (config.contains("startLifetime") && (config.contains("emission") || config.contains("startSize")
+                || config.contains("startSpeed"))) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as particle emitter", type);
+            return "particle_emitter";
+        }
+        if (config.contains("emitRate") && config.contains("width") && config.contains("color")
+                && !config.contains("startLifetime") && !config.contains("emission")) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as beam emitter", type);
+            return "beam_emitter";
+        }
+        if (config.contains("widthOverTrail") || (config.contains("minVertexDistance") && config.contains("time"))) {
+            if (!type.isEmpty()) Photon.LOGGER.warn("Detected unknown type {}; treating as trail emitter", type);
+            return "trail_emitter";
+        }
+        if (!type.isEmpty()) {
+            Photon.LOGGER.warn("Detected unknown type {}; keeping it as an empty grouping node so children keep their parent transform", type);
+        }
+        return "empty";
     }
 
 }

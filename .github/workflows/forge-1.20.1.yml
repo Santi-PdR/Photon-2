@@ -9,10 +9,11 @@ on:
     branches:
       - port/forge-1.20.1-2.2.9
       - port/forge-1.20.1-sync-sound
+      - arena/747b04a3-photon-2
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -91,6 +92,11 @@ jobs:
             exit 0
           fi
           grep -n -E -C 3 'ERROR|FATAL|Exception|Caused by:|fxproj|smoke|Game crashed|BUILD FAILED|Failed to (load|recompile)' "$log_file" | tail -n 240 || true
+          # Surface the failure even when the Actions log archive cannot be downloaded.
+          grep -E 'ERROR|FATAL|Exception|Caused by:|BUILD FAILED|What went wrong|Execution failed' "$log_file" | tail -n 25 | while IFS= read -r line; do
+            echo "::error title=server startup::$line"
+          done
+          echo "::error title=server startup::Server exited with status $result before reaching the ready state."
           echo "Forge server exited with status $result before reaching the ready state." >&2
           exit 1
 
@@ -109,6 +115,8 @@ jobs:
           cp -a ci-fixtures/real-scan/ldlib2/assets/. run/ldlib2/assets/
           cp -a ci-fixtures/real-tornado/ldlib2/assets/. run/ldlib2/assets/
           cp -a ci-fixtures/real-shield-trail/ldlib2/assets/. run/ldlib2/assets/
+          mkdir -p run/ldlib2/projects
+          find run/ldlib2/assets -maxdepth 1 -name '*.fxproj' -exec mv -t run/ldlib2/projects {} +
           mkdir -p run/photon/fxpacks
           python3 - <<'PY'
           from zipfile import ZIP_DEFLATED, ZipFile
@@ -146,7 +154,11 @@ jobs:
         shell: bash
         run: |
           log="$RUNNER_TEMP/photon-client.log"
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]'; do
+          if [ ! -f "$log" ]; then
+            echo "Client smoke test did not run; no markers to report."
+            exit 0
+          fi
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -162,6 +174,17 @@ jobs:
         shell: bash
         run: grep -Fq '[export-server-command-smoke] server command delivered exported FX over Forge networking' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require legacy blend and scene-masked bloom safety
+        shell: bash
+        run: |
+          grep -Fq '[legacy-blend-smoke] legacy equations converted without mutation and invalid blend fields are safe' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[bloom-scene-mask-smoke] bright sky mismatch stays dim while FX contribution survives' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-old-trail-smoke] migrated legacy constant widths exactly once and preserved curve output' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-raw-shape-smoke] restored pre-NumberFunction3 shape transforms through save and reload' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-flat-trail-smoke] restored flat trail material, parameters and nested override' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-codec-smoke] loaded Photon 1 type names without reconverting' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[photon1-port-holes-smoke] PascalCase types, unknown parents and lowercase startSize convert' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require visible bloom from ordinary FX colors
         shell: bash
         run: grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$RUNNER_TEMP/photon-client.log"
@@ -176,6 +199,65 @@ jobs:
           grep -Fq '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours' "$RUNNER_TEMP/photon-client.log"
 
+      - name: Require the 26.3 lifetime and exit modes
+        shell: bash
+        run: |
+          grep -Fq '[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[drain-exit-smoke] a draining clip survives saving and an older project still reads as Cut' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the section command
+        shell: bash
+        run: grep -Fq '[section-command-smoke] /photon fx section is registered and a jump command moves a playing timeline into the named section' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the editfx command
+        shell: bash
+        run: grep -Fq '[editfx-smoke] /photon fx editfx is registered and saving replaces the playable .fx' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require editor root transforms to save
+        shell: bash
+        run: grep -Fq '[editfx-root-smoke] editor root move/scale is baked into children on save' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require entity FX to follow before particles draw
+        shell: bash
+        run: grep -Fq '[entity-follow-frame-smoke] entity FX follow before particles is registered' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require in-world FX to contribute bloom
+        shell: bash
+        run: grep -Fq '[playing-bloom-smoke] in-world FX contribute their authored bloom intensity' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require search pickers to open on the whole catalogue
+        shell: bash
+        run: grep -Fq '[search-box-smoke] opening a picker with a value already chosen lists the whole catalogue' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the 26.3 inspector marks and disabled menu leaves
+        shell: bash
+        run: |
+          grep -Fq '[inspector-marks-smoke] persisted keys and the 2.2.46.a configurator mixin are in place' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[disabled-leaf-smoke] unavailable menu actions stay visible and cannot be picked' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the FXPack manager to remember its window size
+        shell: bash
+        run: grep -Fq '[fxpack-dialog-size-smoke] pack contents dialog size is remembered' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require Photon 1 entity FX to stay on the torso
+        shell: bash
+        run: grep -Fq '[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require Photon 1 bloom to survive conversion
+        shell: bash
+        run: grep -Fq '[photon1-bloom-smoke] converted FX keep Photon 1 bloom' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the editor to list loaded textures
+        shell: bash
+        run: grep -Fq '[loaded-texture-catalogue-smoke] editor can pick' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the 26.3 timeline sections
+        shell: bash
+        run: |
+          grep -Fq '[sections-smoke] a section repeating 3 times plays 30 ticks and then starts the next one' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[release-section-smoke] stopping enters the release section and it plays once, not forever' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[sections-save-smoke] sections and the release section survive saving' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require Photon 1 effect conversion
         shell: bash
         run: |
@@ -187,6 +269,12 @@ jobs:
       - name: Require Photon 1 editor project import
         shell: bash
         run: grep -Fq '[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require opening an FX not to write a project
+        shell: bash
+        run: |
+          grep -Fq '[fx-open-no-write-smoke] opening an .fx does not write a project' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[fx-project-recover-smoke] a project saved over an .fx still loads' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require FX pack dependency retention
         shell: bash
@@ -369,3 +457,28 @@ jobs:
           retention-days: 14
 
 
+      # Actions artifacts are ZIP downloads. Attach the JAR after a successful run on this
+      # session branch, whether it was triggered by a push or its same-repository PR.
+      - name: Publish direct-download preview JAR
+        if: >-
+          success() &&
+          ((github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2') ||
+           (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+            github.event.pull_request.head.ref == 'arena/747b04a3-photon-2'))
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*-all.jar' -print)
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "Expected exactly one distributable JAR, found ${#jars[@]}" >&2
+            exit 1
+          fi
+          tag="preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "${jars[0]}" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Photon Forge 1.20.1 preview ${GITHUB_SHA:0:7}" \
+            --notes "Test build from commit $GITHUB_SHA. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
+          printf '### Direct JAR download\n\n[Download %s](https://github.com/%s/releases/download/%s/%s)\n' \
+            "$(basename "${jars[0]}")" "$GITHUB_REPOSITORY" "$tag" "$(basename "${jars[0]}")" >> "$GITHUB_STEP_SUMMARY"

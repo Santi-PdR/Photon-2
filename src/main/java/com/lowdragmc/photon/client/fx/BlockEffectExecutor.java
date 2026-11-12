@@ -2,10 +2,12 @@ package com.lowdragmc.photon.client.fx;
 
 import com.lowdragmc.photon.client.gameobject.IFXObject;
 import org.joml.Vector3f;
+import lombok.Getter;
 import lombok.Setter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -20,6 +22,7 @@ import java.util.*;
 public class BlockEffectExecutor extends FXEffectExecutor {
     public static Map<BlockPos, List<BlockEffectExecutor>> CACHE = new HashMap<>();
     public final BlockPos pos;
+    @Getter
     @Setter
     private boolean checkState;
     // runtime
@@ -28,6 +31,30 @@ public class BlockEffectExecutor extends FXEffectExecutor {
     public BlockEffectExecutor(FX fx, Level level, BlockPos pos) {
         super(fx, level);
         this.pos = pos;
+    }
+
+    /** See {@link EntityEffectExecutor#replacePlaying(ResourceLocation)}. */
+    public static int replacePlaying(ResourceLocation id) {
+        var fresh = FXHelper.getFX(id);
+        if (fresh == null) return 0;
+        int replaced = 0;
+        var snapshot = new ArrayList<BlockEffectExecutor>();
+        for (var effects : CACHE.values()) {
+            snapshot.addAll(effects);
+        }
+        for (var old : snapshot) {
+            if (!id.equals(old.fx.getFxLocation())) continue;
+            var neu = new BlockEffectExecutor(fresh, old.level, old.pos);
+            neu.copyPlacementFrom(old);
+            neu.setCheckState(old.isCheckState());
+            if (old.runtime != null) {
+                old.runtime.destroy(true);
+            }
+            old.retire(CACHE, old.pos);
+            neu.start();
+            replaced++;
+        }
+        return replaced;
     }
 
     @Override
@@ -49,16 +76,17 @@ public class BlockEffectExecutor extends FXEffectExecutor {
     public void start() {
         var effects = CACHE.computeIfAbsent(pos, p -> new ArrayList<>());
         if (shouldSkipStart(effects)) {
+            com.lowdragmc.photon.Photon.LOGGER.info("[fx-diagnostic] fx={} start skipped: equivalent effect already active and allowMulti=false", fx.getFxLocation());
             return;
         }
         resetFinishedNotification();
-        this.runtime = fx.createRuntime();
+        this.runtime = createDiagnosedRuntime();
         var root = this.runtime.getRoot();
         root.updatePos(new Vector3f(pos.getX(), pos.getY(), pos.getZ())
                 .add(offset.x + 0.5f, offset.y + 0.5f, offset.z + 0.5f));
         root.updateRotation(rotation);
         root.updateScale(scale);
-        this.runtime.emit(this, delay);
+        this.runtime.emit(this, delay, startSection);
         lastState = level.getBlockState(pos);
         effects.add(this);
     }
