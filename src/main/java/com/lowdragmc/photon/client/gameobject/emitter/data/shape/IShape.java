@@ -41,7 +41,8 @@ public interface IShape extends IConfigurable, IPersistedSerializable, ILDLRegis
     }
 
     static IShape deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(new Dot());
+        return CODEC.parse(NbtOps.INSTANCE, com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(tag))
+                .result().orElse(new Dot());
     }
 
     void nextPosVel(TileParticle particle, IParticleEmitter emitter, Vector3f position, Vector3f rotation, Vector3f scale);

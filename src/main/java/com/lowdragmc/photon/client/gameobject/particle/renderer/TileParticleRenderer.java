@@ -147,13 +147,13 @@ public class TileParticleRenderer {
                                 float partialTicks, @Nullable ModelPass model) {
         var vec3 = camera.getPosition();
 
-        var localPos = particle.getSimPos(partialTicks).mulPosition(particle.getSpaceTransform());
+        var localPos = particle.getSimPos(partialTicks, scratchSimPos).mulPosition(particle.getSpaceTransform());
         var relativePos = cameraRelativePosition(particle, camera, localPos, renderer.getRenderMode());
         var x = relativePos.x;
         var y = relativePos.y;
         var z = relativePos.z;
 
-        var color = particle.getRealColor(partialTicks);
+        var color = particle.getRealColor(partialTicks, scratchColor);
         var r = color.x();
         var g = color.y();
         var b = color.z();
@@ -161,10 +161,10 @@ public class TileParticleRenderer {
 
         var light = validParticleLight(particle.getRealLight(partialTicks));
 
-        var rotation = particle.getRealRotation(partialTicks);
+        var rotation = particle.getRealRotation(partialTicks, scratchRotation);
         var renderMode = renderer.getRenderMode();
 
-        var size = particle.getRealSize(partialTicks);
+        var size = particle.getRealSize(partialTicks, scratchSize);
 
         if (model != null) { // non-null exactly in Model mode; see renderQueue
             // mesh positions are already in centered model space (PhotonMesh convention)
@@ -218,16 +218,14 @@ public class TileParticleRenderer {
                 quaternion = computeBillboardQuaternion(particle, renderMode, camera, partialTicks, rotation);
             }
 
-            var rawVertexes = new Vector3f[]{
-                    new Vector3f(-1.0F, -1.0F, 0.0F),
-                    new Vector3f(-1.0F, 1.0F, 0.0F),
-                    new Vector3f(1.0F, 1.0F, 0.0F),
-                    new Vector3f(1.0F, -1.0F, 0.0F),
-            };
-            var normal = new Vector3f(0, 0, -1);
+            billboardVerts[0].set(-1.0F, -1.0F, 0.0F);
+            billboardVerts[1].set(-1.0F, 1.0F, 0.0F);
+            billboardVerts[2].set(1.0F, 1.0F, 0.0F);
+            billboardVerts[3].set(1.0F, -1.0F, 0.0F);
+            var normal = billboardNormal.set(0, 0, -1);
 
             for (var i = 0; i < 4; ++i) {
-                var vertex = rawVertexes[i];
+                var vertex = billboardVerts[i];
                 vertex.mul(finalSizeX, finalSizeY, finalSizeZ);
                 vertex = quaternion.transform(vertex);
                 vertex.mul(spaceScale);
@@ -236,7 +234,7 @@ public class TileParticleRenderer {
 
             normal = quaternion.transform(normal);
 
-            var uvs = particle.getRealUVs(partialTicks);
+            var uvs = particle.getRealUVs(partialTicks, scratchUvs);
             var u0 = uvs.x();
             var v0 = uvs.y();
             var u1 = uvs.z();
@@ -247,10 +245,10 @@ public class TileParticleRenderer {
                 u1 = swap;
             }
 
-            buffer.vertex(rawVertexes[0].x(), rawVertexes[0].y(), rawVertexes[0].z()).color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[1].x(), rawVertexes[1].y(), rawVertexes[1].z()).color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[2].x(), rawVertexes[2].y(), rawVertexes[2].z()).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
-            buffer.vertex(rawVertexes[3].x(), rawVertexes[3].y(), rawVertexes[3].z()).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(billboardVerts[0].x(), billboardVerts[0].y(), billboardVerts[0].z()).color(r, g, b, a).uv(u0, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(billboardVerts[1].x(), billboardVerts[1].y(), billboardVerts[1].z()).color(r, g, b, a).uv(u0, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(billboardVerts[2].x(), billboardVerts[2].y(), billboardVerts[2].z()).color(r, g, b, a).uv(u1, v0).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
+            buffer.vertex(billboardVerts[3].x(), billboardVerts[3].y(), billboardVerts[3].z()).color(r, g, b, a).uv(u1, v1).uv2(light).normal(normal.x, normal.y, normal.z).endVertex();
         }
     }
 
@@ -259,6 +257,14 @@ public class TileParticleRenderer {
     private final Vector3f meshNormal = new Vector3f();
     /** Scratch for the per-instance model pivot; see {@link #uploadInstances}. */
     private final Vector3f instancePivot = new Vector3f();
+    /** Per-particle pose/color/UV; 26.3 writes these into caller vectors so the bake allocates nothing. */
+    private final Vector3f scratchSimPos = new Vector3f();
+    private final Vector3f scratchRotation = new Vector3f();
+    private final Vector3f scratchSize = new Vector3f();
+    private final Vector4f scratchColor = new Vector4f();
+    private final Vector4f scratchUvs = new Vector4f();
+    private final Vector3f[] billboardVerts = {new Vector3f(), new Vector3f(), new Vector3f(), new Vector3f()};
+    private final Vector3f billboardNormal = new Vector3f();
     /** The second half of {@link #poseBaseFor}'s answer, read by the {@link #putMeshVertex} calls that
      *  follow it. Fields rather than a returned record: this is per particle, per frame. */
     private float poseBlend;
@@ -387,15 +393,15 @@ public class TileParticleRenderer {
         for (var p : particles) {
             if (!(p instanceof TileParticle particle) || particle.getDelay() > 0) continue;
             instanceCount++;
-            var localPos = particle.getSimPos(partialTicks).mulPosition(particle.getSpaceTransform());
+            var localPos = particle.getSimPos(partialTicks, scratchSimPos).mulPosition(particle.getSpaceTransform());
             var relativePos = cameraRelativePosition(particle, camera, localPos, renderMode);
             var x = relativePos.x;
             var y = relativePos.y;
             var z = relativePos.z;
 
-            var color = particle.getRealColor(partialTicks);
-            var rotation = particle.getRealRotation(partialTicks);
-            var size = particle.getRealSize(partialTicks);
+            var color = particle.getRealColor(partialTicks, scratchColor);
+            var rotation = particle.getRealRotation(partialTicks, scratchRotation);
+            var size = particle.getRealSize(partialTicks, scratchSize);
             var scale = particle.getSpaceScale();
             var light = validParticleLight(particle.getRealLight(partialTicks));
             if (Boolean.getBoolean("photon.fxprojSmokeTest") && !smokeInstanceLogged) {
@@ -430,7 +436,7 @@ public class TileParticleRenderer {
                 // light int
                 buffer.put(Float.intBitsToFloat(light));
             } else {
-                var uvs = particle.getRealUVs(partialTicks);
+                var uvs = particle.getRealUVs(partialTicks, scratchUvs);
 
                 Quaternionf quaternion;
                 float finalSizeX = size.x;
