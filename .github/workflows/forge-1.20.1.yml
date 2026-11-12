@@ -142,8 +142,13 @@ jobs:
             echo "Photon client setup and the Minecraft sound engine reached the ready state (exit $result after timeout)."
             exit 0
           fi
-          cat "$log_file"
-          echo "Forge client exited with status $result before Photon and Minecraft reached the ready state." >&2
+          echo "::group::client smoke markers"
+          grep -E '\[[a-z0-9-]+smoke\]|\[editor-open\]' "$log_file" | tail -n 60 || true
+          echo "::endgroup::"
+          echo "::group::client smoke exceptions"
+          grep -nE -C 3 'PhotonFXEditorSmokeTest|IllegalStateException|MixinApplyError|InvalidInjectionException|FATAL|Caused by:' "$log_file" | tail -n 100 || true
+          echo "::endgroup::"
+          echo "Forge client smoke failed with exit status $result; see the marker and exception diagnostics above." >&2
           exit 1
 
 
@@ -418,6 +423,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          set +e
           log="$RUNNER_TEMP/photon-client.log"
           [ -f "$log" ] || exit 0
           echo "::group::smoke markers"
@@ -451,6 +457,7 @@ jobs:
         with:
           name: photon-client-diagnostics
           path: |
+            ${{ runner.temp }}/photon-client.log
             run/logs/*.log
             run/screenshots/*.png
           if-no-files-found: ignore
