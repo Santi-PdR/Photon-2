@@ -19,12 +19,12 @@ final class LDLibModelAssets {
 
     static Path findNested(Path assetsDir, ResourceLocation location, String pathWithinAssets) {
         Path root = assetsDir.toAbsolutePath().normalize();
-        // Pack layout (photon/assets/<ns>/<path> or ldlib2/assets/<ns>/<path>), then the older
-        // nested editor tree (<root>/<ns>/assets/<ns>/<path>).
+        // Nested editor tree first: a resource-pack file of the same id is allowed to exist and
+        // must not win (see ci_nested_obj). Then the pack layouts Photon actually writes.
         Path[] candidates = {
+                root.resolve(location.getNamespace()).resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets),
                 root.resolve(location.getNamespace()).resolve(pathWithinAssets),
-                root.resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets),
-                root.resolve(location.getNamespace()).resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets)
+                root.resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets)
         };
         for (var candidate : candidates) {
             var normalized = candidate.normalize();
