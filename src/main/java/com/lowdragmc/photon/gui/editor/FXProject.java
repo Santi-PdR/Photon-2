@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.editor.project.ProjectType;
 import com.lowdragmc.lowdraglib2.editor.resource.ColorsResource;
 import com.lowdragmc.lowdraglib2.editor.resource.Resources;
 import com.lowdragmc.photon.client.PhotonIcons;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.instance.InstanceIds;
@@ -43,19 +44,34 @@ public class FXProject implements IProject {
         @Override
         public IProject loadProjectFromFile(java.io.File file) throws Exception {
             if (FXProjectConverter.isLegacyEditorFile(file)) {
-                var convertedFile = FXProjectConverter.convertedProjectFile(file);
-                var result = FXProjectConverter.convertFile(file, convertedFile);
+                var tag = FXProjectConverter.readFileTag(file);
+                var result = FXProjectConverter.convertInMemory(tag, null);
                 result.warnings().forEach(warning -> com.lowdragmc.photon.Photon.LOGGER.warn(
                         "Photon 1 project {}: {}", file.getAbsolutePath(), warning));
-                com.lowdragmc.photon.Photon.LOGGER.info("Imported Photon 1 project {} as {}",
-                        file.getAbsolutePath(), convertedFile.getAbsolutePath());
+                com.lowdragmc.photon.Photon.LOGGER.info("Imported Photon 1 project {} in memory; source left at {}",
+                        file.getAbsolutePath(), file.getAbsolutePath());
                 return result.project();
             }
             try {
-                return super.loadProjectFromFile(file);
+                var loaded = super.loadProjectFromFile(file);
+                if (loaded instanceof FXProject fxProject && fxProject.replacePlayable == null) {
+                    fxProject.replacePlayable = editFxIdFromProjectFile(file);
+                }
+                return loaded;
             } catch (Exception failure) {
                 com.lowdragmc.photon.Photon.LOGGER.error("Failed to read Photon FX project {}", file.getAbsolutePath(), failure);
                 throw failure;
+            }
+        }
+
+        @Override
+        public void saveProjectToFile(IProject project, java.io.File file) throws Exception {
+            if (file.getName().endsWith(FX.SUFFIX)) {
+                throw new IllegalArgumentException("Photon projects cannot be saved over an .fx definition: " + file);
+            }
+            super.saveProjectToFile(project, file);
+            if (project instanceof FXProject fxProject && fxProject.replacePlayable != null) {
+                FXFileActions.writePlayable(fxProject, fxProject.replacePlayable);
             }
         }
     };
@@ -71,6 +87,14 @@ public class FXProject implements IProject {
     @Setter
     @Nullable
     private FXEditor editor;
+    /**
+     * When set (by {@code /photon fx editfx}), saving the project also writes the playable {@code .fx}
+     * of this id into the Photon workspace pack so the next play replaces what is currently loaded.
+     */
+    @Getter
+    @Setter
+    @Nullable
+    private ResourceLocation replacePlayable;
 
     public FXProject() {
         this.resources = Resources.of(
@@ -98,12 +122,16 @@ public class FXProject implements IProject {
 
     @Override
     public CompoundTag serializeProject(@NotNull HolderLookup.Provider provider) {
+        bakeEditorRoot();
         var data = new CompoundTag();
         data.put("fx", fx.serializeNBT(provider));
         if (!knownAs.isEmpty()) {
             var ids = new ListTag();
             knownAs.forEach(id -> ids.add(StringTag.valueOf(id.toString())));
             data.put("knownAs", ids);
+        }
+        if (replacePlayable != null) {
+            data.putString("replacePlayable", replacePlayable.toString());
         }
         return data;
     }
@@ -117,10 +145,42 @@ public class FXProject implements IProject {
             if (id != null) knownAs.add(id);
         }
         fx.deserializeNBT(provider, nbt.getCompound("fx"), knownAs);
+        replacePlayable = nbt.contains("replacePlayable", Tag.TAG_STRING)
+                ? ResourceLocation.tryParse(nbt.getString("replacePlayable")) : null;
+    }
+
+    /**
+     * {@code photon/projects/editfx/<namespace>/<path>.fxproj} is the working copy {@code /photon fx editfx}
+     * writes. Reopening that file must keep replacing the playable {@code .fx} on Save.
+     */
+    @Nullable
+    static ResourceLocation editFxIdFromProjectFile(java.io.File file) {
+        try {
+            var projects = PhotonPaths.getProjectsDir().getCanonicalFile().toPath();
+            var rel = projects.relativize(file.getCanonicalFile().toPath()).toString().replace('\\', '/');
+            if (!rel.startsWith("editfx/") || !rel.endsWith(".fxproj")) return null;
+            var rest = rel.substring("editfx/".length(), rel.length() - ".fxproj".length());
+            var slash = rest.indexOf('/');
+            if (slash <= 0) return null;
+            return ResourceLocation.tryParse(rest.substring(0, slash) + ":" + rest.substring(slash + 1));
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     public void addKnownAs(ResourceLocation id) {
         knownAs.add(id);
+    }
+
+    /**
+     * Gizmo edits of the synthetic editor root (position / rotation / scale of the whole FX)
+     * are not in {@code fxData}. Fold them into the children that actually get written.
+     * Skip while the scene animation overlay is driving the root — that pose is preview-only.
+     */
+    void bakeEditorRoot() {
+        if (editor == null || editor.runtime == null) return;
+        if (editor.sceneView.fxObjectAnimationView.isPlaying()) return;
+        editor.runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
     }
 
     @Override
