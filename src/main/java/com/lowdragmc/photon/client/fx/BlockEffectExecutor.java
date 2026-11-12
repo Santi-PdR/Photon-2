@@ -35,15 +35,19 @@ public class BlockEffectExecutor extends FXEffectExecutor {
 
     /** See {@link EntityEffectExecutor#replacePlaying(ResourceLocation)}. */
     public static int replacePlaying(ResourceLocation id) {
+        var snapshot = new ArrayList<BlockEffectExecutor>();
+        for (var effects : CACHE.values()) {
+            for (var effect : effects) {
+                if (id.equals(effect.fx.getFxLocation())) {
+                    snapshot.add(effect);
+                }
+            }
+        }
+        if (snapshot.isEmpty()) return 0;
         var fresh = FXHelper.getFX(id);
         if (fresh == null) return 0;
         int replaced = 0;
-        var snapshot = new ArrayList<BlockEffectExecutor>();
-        for (var effects : CACHE.values()) {
-            snapshot.addAll(effects);
-        }
         for (var old : snapshot) {
-            if (!id.equals(old.fx.getFxLocation())) continue;
             var neu = new BlockEffectExecutor(fresh, old.level, old.pos);
             neu.copyPlacementFrom(old);
             neu.setCheckState(old.isCheckState());

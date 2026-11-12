@@ -484,16 +484,13 @@ public final class PhotonFXEditorSmokeTest {
 
         // a packet as the server builds it, through the wire and back
         var packetType = com.lowdragmc.photon.command.EffectSectionCommand.Action.JUMP;
-        var sent = new com.lowdragmc.photon.command.EffectSectionCommand();
-        setCommandField(sent, "action", packetType);
-        setCommandField(sent, "section", "loop");
+        var sent = new com.lowdragmc.photon.command.EffectSectionCommand(packetType, "loop");
         var buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         sent.encode(buf);
         var received = com.lowdragmc.photon.command.EffectSectionCommand.decodePacket(buf);
-        if (readCommandField(received, "action") != packetType
-                || !"loop".equals(readCommandField(received, "section"))) {
+        if (received.action() != packetType || !"loop".equals(received.section())) {
             throw new IllegalStateException("A section command did not survive being encoded: action="
-                    + readCommandField(received, "action") + ", section=" + readCommandField(received, "section"));
+                    + received.action() + ", section=" + received.section());
         }
 
         // and it does something: the same clock the timeline uses, with two named stretches
@@ -515,8 +512,8 @@ public final class PhotonFXEditorSmokeTest {
                     + clock.current());
         }
         // a name the effect does not have changes nothing, and says so
-        setCommandField(sent, "section", "does_not_exist");
-        if (sent.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
+        var missing = new com.lowdragmc.photon.command.EffectSectionCommand(packetType, "does_not_exist");
+        if (missing.apply(com.lowdragmc.photon.client.fx.timeline.SectionControl.of(clock))) {
             throw new IllegalStateException("A jump to a section that does not exist was reported as done");
         }
         Photon.LOGGER.info("[section-command-smoke] /photon fx section is registered and a jump command "
@@ -534,15 +531,14 @@ public final class PhotonFXEditorSmokeTest {
         if (editfx == null || argument(editfx, "location") == null) {
             throw new IllegalStateException("/photon fx editfx <location> is not registered");
         }
-        var sent = new com.lowdragmc.photon.command.EditFxCommand();
         var id = new ResourceLocation("photon_editfx_smoke", "roundtrip");
-        setCommandField(sent, "location", id);
+        var sent = new com.lowdragmc.photon.command.EditFxCommand(id);
         var buf = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
         sent.encode(buf);
         var received = com.lowdragmc.photon.command.EditFxCommand.decodePacket(buf);
-        if (!id.equals(readCommandField(received, "location"))) {
+        if (!id.equals(received.location())) {
             throw new IllegalStateException("An editfx command did not survive being encoded: "
-                    + readCommandField(received, "location"));
+                    + received.location());
         }
         var project = new FXProject();
         project.setReplacePlayable(id);
@@ -749,28 +745,6 @@ public final class PhotonFXEditorSmokeTest {
             }
         }
         return null;
-    }
-
-    /** Set a private field of a packet, the way the server command fills it in. */
-    private static void setCommandField(Object packet, String name, Object value) {
-        try {
-            var field = packet.getClass().getDeclaredField(name);
-            field.setAccessible(true);
-            field.set(packet, value);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Could not set EffectSectionCommand." + name, e);
-        }
-    }
-
-    /** Read a private field of a packet, the way the client handler reads it. */
-    private static Object readCommandField(Object packet, String name) {
-        try {
-            var field = packet.getClass().getDeclaredField(name);
-            field.setAccessible(true);
-            return field.get(packet);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Could not read EffectSectionCommand." + name, e);
-        }
     }
 
     /**

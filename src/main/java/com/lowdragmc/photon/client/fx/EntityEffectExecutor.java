@@ -74,16 +74,19 @@ public class EntityEffectExecutor extends FXEffectExecutor {
      * not a follow-aura and recreating them as one would move the effect.
      */
     public static int replacePlaying(ResourceLocation id) {
+        var snapshot = new ArrayList<EntityEffectExecutor>();
+        for (var effects : CACHE.values()) {
+            for (var effect : effects) {
+                if (!(effect instanceof WholeFXEffectExecutor) && id.equals(effect.fx.getFxLocation())) {
+                    snapshot.add(effect);
+                }
+            }
+        }
+        if (snapshot.isEmpty()) return 0;
         var fresh = FXHelper.getFX(id);
         if (fresh == null) return 0;
         int replaced = 0;
-        var snapshot = new ArrayList<EntityEffectExecutor>();
-        for (var effects : CACHE.values()) {
-            snapshot.addAll(effects);
-        }
         for (var old : snapshot) {
-            if (old instanceof WholeFXEffectExecutor) continue;
-            if (!id.equals(old.fx.getFxLocation())) continue;
             var neu = new EntityEffectExecutor(fresh, old.level, old.entity, old.autoRotate);
             // copy while the runtime is still live, so the current timeline section survives destroy()
             neu.copyPlacementFrom(old);

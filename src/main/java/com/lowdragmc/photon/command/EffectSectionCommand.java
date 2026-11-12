@@ -68,6 +68,23 @@ public class EffectSectionCommand {
     @Nullable
     private ResourceLocation location;
 
+    public EffectSectionCommand() {
+    }
+
+    /** Construct the named action payload used by clients and tests. */
+    public EffectSectionCommand(Action action, String section) {
+        this.action = action;
+        this.section = section == null ? "" : section;
+    }
+
+    public Action action() {
+        return action;
+    }
+
+    public String section() {
+        return section;
+    }
+
     public static LiteralArgumentBuilder<CommandSourceStack> createServerCommand() {
         return Commands.literal("section")
                 .then(Commands.literal("entity").then(actions(Commands.argument("entities", EntityArgument.entities()), false)))

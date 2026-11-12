@@ -30,6 +30,17 @@ public class EditFxCommand {
 
     private ResourceLocation location;
 
+    public EditFxCommand() {
+    }
+
+    public EditFxCommand(ResourceLocation location) {
+        this.location = location;
+    }
+
+    public ResourceLocation location() {
+        return location;
+    }
+
     public static LiteralArgumentBuilder<CommandSourceStack> createServerCommand() {
         return Commands.literal("editfx")
                 .then(Commands.argument("location", new FxLocationArgument())
