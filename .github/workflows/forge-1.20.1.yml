@@ -146,7 +146,7 @@ jobs:
           grep -E '\[[a-z0-9-]+smoke\]|\[editor-open\]' "$log_file" | tail -n 60 || true
           echo "::endgroup::"
           echo "::group::client smoke exceptions"
-          grep -nE -C 3 'PhotonFXEditorSmokeTest|IllegalStateException|MixinApplyError|InvalidInjectionException|FATAL|Caused by:' "$log_file" | tail -n 100 || true
+          grep -nE -C 3 'PhotonFXEditorSmokeTest|IllegalStateException|NoSuchElementException|UnsupportedOperationException|MixinApplyError|InvalidInjectionException|FATAL|Caused by:' "$log_file" | tail -n 100 || true
           echo "::endgroup::"
           echo "Forge client smoke failed with exit status $result; see the marker and exception diagnostics above." >&2
           exit 1
@@ -447,7 +447,11 @@ jobs:
             sed -n "${from},$(( hit + 4 ))p" "$log" | tr '\n' '|' | head -c 2500 | \
               while IFS= read -r line; do echo "::error title=log window::$line"; done
           fi
-          # Finally the generic sweep, filtered, as a last resort.
+          # Finally the generic sweep, filtered, as a last resort. Include the owning Java frames for
+          # Optional failures and blocked reflection, not only the exception headline.
+          grep -n -A 10 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
+            | grep -E 'NoSuchElementException|UnsupportedOperationException|at com\.lowdragmc\.photon|Caused by:' \
+            | head -n 20 | while IFS= read -r line; do echo "::error title=client trace::$line"; done
           grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
             | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
