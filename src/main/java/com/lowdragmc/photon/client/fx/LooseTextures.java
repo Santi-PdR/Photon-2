@@ -152,6 +152,23 @@ public final class LooseTextures {
      * first {@code .png} under a namespace is taken as that namespace's texture root: the file's path inside it is the
      * id's path, which is how every pack layout is meant to work.
      */
+    /**
+     * Copy a loose file (texture, {@code .obj}, model json, …) into the Photon workspace under
+     * {@code id} so the resource manager and FX-pack export can see it. No-op when a pack already
+     * serves the id or nothing is on disk.
+     */
+    @Nullable
+    public static ResourceLocation adoptIntoWorkspace(ResourceLocation id) {
+        if (id == null || BUILTIN.contains(id.getNamespace())) return null;
+        if (packServes(id)) return id;
+        try {
+            return adopt(id);
+        } catch (Exception failure) {
+            Photon.LOGGER.warn("photon: could not adopt loose asset {}", id, failure);
+            return null;
+        }
+    }
+
     @Nullable
     private static ResourceLocation adopt(ResourceLocation id) throws IOException {
         var found = find(id);

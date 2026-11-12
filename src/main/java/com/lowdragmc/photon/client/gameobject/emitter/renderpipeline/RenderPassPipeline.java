@@ -168,6 +168,10 @@ public class RenderPassPipeline {
         if (manager != null && manager.sceneView != null) {
             FXBloom.contribute(manager.sceneView.fxData());
         }
+        // In the world the same no-draw root lives on a different ParticleRenderType than the
+        // emitters, so contribute from every playing FX or bloom intensity stays 0 and the halo
+        // is skipped.
+        FXBloom.contributePlaying();
     }
 
     public static void finishCollecting(RenderPassPipeline pipeline) {

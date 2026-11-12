@@ -436,6 +436,7 @@ public final class FXFileActions {
      * the pack list, so this replaces a mod or .fxpack of the same id without F3+T.
      */
     public static void writePlayable(FXProject project, ResourceLocation id) throws Exception {
+        project.bakeEditorRoot();
         var target = playableFile(id);
         var parent = target.getParentFile();
         if (parent != null) parent.mkdirs();

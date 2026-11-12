@@ -12,6 +12,8 @@ import com.lowdragmc.photon.client.gameobject.IFXObject;
 import lombok.AccessLevel;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.*;
 
@@ -95,6 +97,35 @@ public class FXRuntime implements IScene {
                 fxObject.transform().parent(root.transform(), false);
             }
             fxObject.transform().rebuildChildOrder();
+        }
+    }
+
+    /**
+     * The editor's synthetic root is not in {@link FXData#objects()} and is not written on Save.
+     * Gizmo / inspector edits of the whole FX (move, rotate, scale the root) would otherwise
+     * vanish. Fold that pose into each direct child, relative to {@code restPosition}, then put
+     * the root back at rest so the scene still matches what will play in the world.
+     */
+    public void bakeRootIntoChildren(Vector3f restPosition) {
+        var rootTransform = root.transform();
+        var position = rootTransform.position();
+        var scale = rootTransform.scale();
+        var rotation = rootTransform.rotation();
+        boolean moved = position.distanceSquared(restPosition) > 1e-8f;
+        boolean scaled = Math.abs(scale.x - 1f) + Math.abs(scale.y - 1f) + Math.abs(scale.z - 1f) > 1e-4f;
+        boolean rotated = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z > 1e-8f;
+        if (!moved && !scaled && !rotated) {
+            return;
+        }
+        var children = new ArrayList<>(rootTransform.children());
+        for (var child : children) {
+            child.parent(null, true);
+        }
+        root.updatePos(new Vector3f(restPosition));
+        root.updateRotation(new Quaternionf());
+        root.updateScale(new Vector3f(1, 1, 1));
+        for (var child : children) {
+            child.parent(rootTransform, true);
         }
     }
 

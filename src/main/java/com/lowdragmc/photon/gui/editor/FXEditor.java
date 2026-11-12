@@ -41,6 +41,12 @@ public class FXEditor extends Editor {
     // runtime
     @Nullable
     public FXRuntime runtime;
+    /**
+     * Where the editor parks the synthetic root so the FX sits in the scene view.
+     * That root is not saved with the project, so gizmo edits on it must be baked
+     * into the children before Save (see {@link FXRuntime#bakeRootIntoChildren}).
+     */
+    public static final Vector3f SCENE_ROOT_POSITION = new Vector3f(0.5f, 2, 0.5f);
 
     public FXEditor() {
         // the opening cost is reported once per editor: the parts below are built in this constructor, and a
@@ -126,7 +132,7 @@ public class FXEditor extends Editor {
 
     private void showProject(FXProject fxProject) {
         this.runtime = fxProject.getFx().createInternalRuntime();
-        this.runtime.root.updatePos(new Vector3f(0.5f, 2, 0.5f));
+        this.runtime.root.updatePos(new Vector3f(SCENE_ROOT_POSITION));
         hierarchyView.loadFXRuntime(runtime);
         timelineView.rebuild();
         sceneView.loadScene();

@@ -19,11 +19,19 @@ final class LDLibModelAssets {
 
     static Path findNested(Path assetsDir, ResourceLocation location, String pathWithinAssets) {
         Path root = assetsDir.toAbsolutePath().normalize();
-        Path candidate = root.resolve(location.getNamespace())
-                .resolve("assets")
-                .resolve(location.getNamespace())
-                .resolve(pathWithinAssets)
-                .normalize();
-        return candidate.startsWith(root) && Files.isRegularFile(candidate) ? candidate : null;
+        // Pack layout (photon/assets/<ns>/<path> or ldlib2/assets/<ns>/<path>), then the older
+        // nested editor tree (<root>/<ns>/assets/<ns>/<path>).
+        Path[] candidates = {
+                root.resolve(location.getNamespace()).resolve(pathWithinAssets),
+                root.resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets),
+                root.resolve(location.getNamespace()).resolve("assets").resolve(location.getNamespace()).resolve(pathWithinAssets)
+        };
+        for (var candidate : candidates) {
+            var normalized = candidate.normalize();
+            if (normalized.startsWith(root) && Files.isRegularFile(normalized)) {
+                return normalized;
+            }
+        }
+        return null;
     }
 }

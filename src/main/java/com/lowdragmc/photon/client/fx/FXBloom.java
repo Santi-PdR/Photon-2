@@ -39,6 +39,28 @@ public final class FXBloom {
     }
 
     /**
+     * In-world the FX root is a no-draw particle on a different render type than the emitters,
+     * so its {@code updateFrame} often has not contributed before the bloom pass. Pull intensity
+     * from every live executor instead.
+     */
+    public static void contributePlaying() {
+        for (var effects : EntityEffectExecutor.CACHE.values()) {
+            for (var effect : effects) {
+                if (effect.runtime != null) {
+                    contribute(effect.runtime.getFxData());
+                }
+            }
+        }
+        for (var effects : BlockEffectExecutor.CACHE.values()) {
+            for (var effect : effects) {
+                if (effect.runtime != null) {
+                    contribute(effect.runtime.getFxData());
+                }
+            }
+        }
+    }
+
+    /**
      * Intensity the bloom pass should apply right now. {@code 0} means skip the halo
      * (every FX in this build turned bloom off).
      */

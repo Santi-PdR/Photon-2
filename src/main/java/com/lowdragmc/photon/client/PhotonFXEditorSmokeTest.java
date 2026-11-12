@@ -429,7 +429,9 @@ public final class PhotonFXEditorSmokeTest {
         verifySections();
         verifySectionCommand();
         verifyEditFxCommand();
+        verifyEditorRootTransformSaves();
         verifyEntityFollowBeforeParticles();
+        verifyPlayingFxBloomContribution();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
@@ -581,6 +583,41 @@ public final class PhotonFXEditorSmokeTest {
     }
 
     /**
+     * The editor parks the FX under a synthetic root at {@link FXEditor#SCENE_ROOT_POSITION}.
+     * Moving / scaling / rotating that root is how you transform the whole effect, but the root
+     * is not in {@code fxData}. Baking folds the pose into the children that Save actually writes.
+     */
+    private static void verifyEditorRootTransformSaves() {
+        var fx = new com.lowdragmc.photon.client.fx.FX();
+        var emitter = new ParticleEmitter();
+        emitter.transform().localPosition(new org.joml.Vector3f(0, 1, 0));
+        fx.getFxData().objects().add(emitter);
+        var runtime = fx.createInternalRuntime();
+        runtime.root.updatePos(new org.joml.Vector3f(0.5f, 3f, 0.5f));
+        runtime.root.updateScale(new org.joml.Vector3f(2, 2, 2));
+        runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
+        var saved = fx.serializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry());
+        var loaded = new com.lowdragmc.photon.client.fx.FX();
+        loaded.deserializeNBT(com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry(), saved);
+        if (loaded.getFxData().objects().isEmpty()) {
+            throw new IllegalStateException("Baking the editor root dropped the emitter");
+        }
+        var scale = loaded.getFxData().objects().get(0).transform().localScale();
+        if (Math.abs(scale.x - 2f) > 0.05f) {
+            throw new IllegalStateException("Editor root scale was not saved onto children: " + scale);
+        }
+        var pos = loaded.getFxData().objects().get(0).transform().localPosition();
+        if (pos.y < 1.4f) {
+            throw new IllegalStateException("Editor root position was not saved onto children: " + pos);
+        }
+        var rootPos = runtime.root.transform().position();
+        if (rootPos.distanceSquared(FXEditor.SCENE_ROOT_POSITION) > 0.01f) {
+            throw new IllegalStateException("Editor root was not reset to the scene rest pose: " + rootPos);
+        }
+        Photon.LOGGER.info("[editfx-root-smoke] editor root move/scale is baked into children on save");
+    }
+
+    /**
      * Large entity auras smeared at speed because ParticleEngine can draw a child emitter before the
      * FX root follows. The pose is applied to every playing entity FX before particles draw.
      */
@@ -596,6 +633,27 @@ public final class PhotonFXEditorSmokeTest {
         }
         com.lowdragmc.photon.client.fx.EntityEffectExecutor.followAllPlaying(0.5f);
         Photon.LOGGER.info("[entity-follow-frame-smoke] entity FX follow before particles is registered");
+    }
+
+    /**
+     * In-world bloom used to skip because the no-draw FX root never contributed before the pass.
+     * Playing executors must feed {@link com.lowdragmc.photon.client.fx.FXBloom} or intensity stays 0.
+     */
+    private static void verifyPlayingFxBloomContribution() {
+        com.lowdragmc.photon.client.fx.FXBloom.beginFrame();
+        com.lowdragmc.photon.client.fx.FXBloom.contributePlaying();
+        if (com.lowdragmc.photon.client.fx.FXBloom.intensity() != 0f) {
+            throw new IllegalStateException("contributePlaying with no live FX should leave bloom at 0");
+        }
+        var data = new com.lowdragmc.photon.client.fx.FXData();
+        data.setBloomIntensity(0.7f);
+        com.lowdragmc.photon.client.fx.FXBloom.contribute(data);
+        if (Math.abs(com.lowdragmc.photon.client.fx.FXBloom.intensity() - 0.7f) > 1e-4f) {
+            throw new IllegalStateException("Playing FX bloom intensity was ignored: "
+                    + com.lowdragmc.photon.client.fx.FXBloom.intensity());
+        }
+        com.lowdragmc.photon.client.fx.FXBloom.endFrame();
+        Photon.LOGGER.info("[playing-bloom-smoke] in-world FX contribute their authored bloom intensity");
     }
 
     /**

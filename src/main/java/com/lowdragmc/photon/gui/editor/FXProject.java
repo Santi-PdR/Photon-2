@@ -122,6 +122,7 @@ public class FXProject implements IProject {
 
     @Override
     public CompoundTag serializeProject(@NotNull HolderLookup.Provider provider) {
+        bakeEditorRoot();
         var data = new CompoundTag();
         data.put("fx", fx.serializeNBT(provider));
         if (!knownAs.isEmpty()) {
@@ -169,6 +170,17 @@ public class FXProject implements IProject {
 
     public void addKnownAs(ResourceLocation id) {
         knownAs.add(id);
+    }
+
+    /**
+     * Gizmo edits of the synthetic editor root (position / rotation / scale of the whole FX)
+     * are not in {@code fxData}. Fold them into the children that actually get written.
+     * Skip while the scene animation overlay is driving the root — that pose is preview-only.
+     */
+    void bakeEditorRoot() {
+        if (editor == null || editor.runtime == null) return;
+        if (editor.sceneView.fxObjectAnimationView.isPlaying()) return;
+        editor.runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
     }
 
     @Override
