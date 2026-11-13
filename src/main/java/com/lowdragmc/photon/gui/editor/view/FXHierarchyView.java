@@ -29,6 +29,7 @@ import com.lowdragmc.photon.gui.editor.FXFileActions;
 import com.lowdragmc.photon.gui.editor.FXInstanceEditing;
 import com.lowdragmc.photon.gui.editor.FXInstanceInspector;
 import com.lowdragmc.photon.gui.editor.FXInstanceStyle;
+import com.lowdragmc.photon.gui.editor.PhotonMenus;
 import com.lowdragmc.photon.gui.editor.FXObjectClipboard;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import lombok.Getter;
@@ -568,7 +569,7 @@ public class FXHierarchyView extends View {
                 if (instances.isOverridden(object)) {
                     menu.leaf(Icons.REPLAY, "photon.fx_instance.revert_object", thenFocus(() -> instances.revertObject(object)));
                 } else {
-                    menu.leaf("photon.fx_instance.revert_object", () -> {});
+                    PhotonMenus.disabledLeaf(menu, "photon.fx_instance.revert_object");
                 }
             }
             default -> {

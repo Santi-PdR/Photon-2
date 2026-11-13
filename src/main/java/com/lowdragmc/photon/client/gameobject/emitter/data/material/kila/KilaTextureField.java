@@ -58,7 +58,11 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
         var thumbnail = new UIElement().layout(layout -> {
             layout.heightPercent(100);
             layout.setAspectRatio(1);
-        }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true)));
+        }).style(style -> style.backgroundTexture(KilaSlotPreview.checker()))
+                .addChild(new UIElement().layout(layout -> {
+                    layout.widthPercent(100);
+                    layout.heightPercent(100);
+                }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true))));
 
         preview.layout(layout -> {
             layout.height(HEIGHT);
@@ -116,7 +120,11 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
             bigPreview = new ModularUITooltipComponent(new UIElement().layout(layout -> {
                 layout.width(100);
                 layout.height(100);
-            }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true))));
+            }).style(style -> style.backgroundTexture(KilaSlotPreview.checker()))
+                    .addChild(new UIElement().layout(layout -> {
+                        layout.widthPercent(100);
+                        layout.heightPercent(100);
+                    }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true)))));
         }
         var path = texture.isProcedural() ? describe() : Component.literal(texture.getTexture().toString());
         event.hoverTooltips = new HoverTooltips(List.of(path, Component.translatable("kila.texture.click_to_pick")),
@@ -130,6 +138,9 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
     }
 
     void pick(ResourceLocation location) {
+        // A picker entry may be a loose author texture, not a mounted pack. Adopt/upload it before
+        // refreshing the preview so the first click is immediately visible rather than missing.
+        com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(location);
         updateValueActively(location);
     }
 

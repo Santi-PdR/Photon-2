@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonShaders;
+import com.lowdragmc.photon.client.fx.FXBloom;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.postfx.runtime.SceneBlit;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -78,7 +79,11 @@ public class PhotonPostProcessing {
     public static RenderTarget postTarget(RenderTarget srcTarget) {
         // Nothing prepared (no build ran this frame): hand the frame back untouched rather than
         // indexing an empty mip chain.
-        if (MIPS.isEmpty() || HIGH_LIGHT == null || OUTPUT == null) return srcTarget;
+        if (MIPS.isEmpty() || HIGH_LIGHT == null || OUTPUT == null
+                || PhotonShaders.getBrightPassShader() == null || PhotonShaders.getDownSamplingShader() == null
+                || PhotonShaders.getUpSamplingShader() == null || PhotonShaders.getBloomFinalScatterPassShader() == null) return srcTarget;
+        // Intensity 0 = every FX in this build turned bloom off (or none contributed).
+        if (FXBloom.intensity() <= 1e-6f) return srcTarget;
         renderBloom(srcTarget);
         return OUTPUT == null ? srcTarget : OUTPUT;
     }
@@ -118,6 +123,9 @@ public class PhotonPostProcessing {
 
         brightPassShader.setSampler("inputSampler", srcTarget);
         brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
+        // The shader's soft-knee uniform defaults to zero in GLSL. Without uploading it, the
+        // threshold is a hard cut and most normally lit FX never enter the bloom chain at all.
+        brightPassShader.safeGetUniform("Knee").set(0.5f);
         // Scene mask: bloom only what this build ADDED to the frame, not the frame itself.
         //
         // On the in-place path DRAW_TARGET is a working copy of the frame plus the FX drawn on top
@@ -212,7 +220,7 @@ public class PhotonPostProcessing {
         RenderSystem.defaultBlendFunc();
         finalCombinePassShader.setSampler("inputA", MIPS.get(0).swapA);
         finalCombinePassShader.setSampler("inputB", srcTarget);
-        finalCombinePassShader.safeGetUniform("BloomIntensive").set(PhotonConfig.INSTANCE.bloomIntensity.get().floatValue());
+        finalCombinePassShader.safeGetUniform("BloomIntensive").set(FXBloom.intensity());
         blitShader(finalCombinePassShader, OUTPUT, false);
 
         RenderSystem.depthMask(true);
