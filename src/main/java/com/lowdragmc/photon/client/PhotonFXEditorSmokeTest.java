@@ -212,6 +212,20 @@ public final class PhotonFXEditorSmokeTest {
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
             if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
             var presetMaterial = preset.create();
+            var dissolveProgress = presetMaterial.dissolve.progress;
+            if (presetMaterial.dissolve.isEnable()
+                    && dissolveProgress.source == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE) {
+                float endProgress = dissolveProgress.value + dissolveProgress.scale;
+                if (dissolveProgress.value < 0 || dissolveProgress.value >= 1 || endProgress < 0 || endProgress > 1) {
+                    presetProblems.add(preset.id() + ": dissolve driver must stay in [0, 1] over particle life");
+                }
+            }
+            if (presetMaterial.alpha.source == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE) {
+                float endAlpha = presetMaterial.alpha.value + presetMaterial.alpha.scale;
+                if (presetMaterial.alpha.value < 0 || presetMaterial.alpha.value > 1 || endAlpha < 0 || endAlpha > 1) {
+                    presetProblems.add(preset.id() + ": opacity driver must stay in [0, 1] over particle life");
+                }
+            }
             if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SOUL_FLAME
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WIND_SLASH
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SLIME_PUDDLE) {
