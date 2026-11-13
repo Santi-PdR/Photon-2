@@ -23,8 +23,18 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `prismatic_shield` | Escudo prismático | Superficie / mesh | Escudo translúcido con borde cian y gradiente espectral. |
 | `crystal_shard` | Fragmento de cristal | Superficie / mesh | Cristal translúcido con matcap de vidrio y borde frío. |
 | `dust_devil` | Remolino de polvo | Partícula | Vórtice con silueta ruidosa, onda UV y desvanecimiento. |
+| `ember_burst` | Estallido de brasas | Partícula | Humo animado con gradiente rojo-dorado y disolución. |
+| `frost_ring` | Anillo glacial | Partícula | Onda expansiva azul que se vuelve blanca y se desvanece. |
+| `chain_lightning` | Relámpago ramificado | Partícula | Rayo ramificado violeta-blanco con chisporroteo UV. |
+| `plasma_trail` | Estela de plasma | Trail | Cinta azul-blanca con flujo animado y bordes suaves. |
+| `meteor_strike` | Impacto de meteorito | Suelo / proyección | Marca radial proyectada y consumida por ruido. |
+| `obsidian` | Obsidiana | Superficie / mesh | Vidrio volcánico opaco con iluminación y relieve. |
+| `shadow_cloak` | Manto de sombras | Partícula | Velo translúcido con nubes móviles y desvanecimiento. |
+| `star_gate` | Portal estelar | Mesh | Portal con runas giratorias y borde luminoso. |
+| `steam_vent` | Vaho ascendente | Pantalla | Calor que asciende y distorsiona la escena de fondo. |
+| `sand_blast` | Estallido de arena | Partícula | Polvo granular cálido con capas de ruido Perlin. |
 
-Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los diez presets nuevos reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni aumentan el conjunto de texturas que debe cargar el cliente.
+Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los veinte presets añadidos en estas dos rondas reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni amplían el conjunto de texturas que debe cargar el cliente.
 
 ## Elegir el renderer adecuado
 

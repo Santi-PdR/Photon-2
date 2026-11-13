@@ -208,7 +208,7 @@ public class KilaGalleryScenario implements UIScenario {
         } else if (preset == KilaPresets.SPARKS) {
             stream(emitter, 12, 2, 5, 0.12f);
             config.shape.setShape(new Sphere());
-        } else if (preset == KilaPresets.JET_EXHAUST) {
+        } else if (preset == KilaPresets.JET_EXHAUST || preset == KilaPresets.STEAM_VENT) {
             stream(emitter, 30, 1, 2, 0.8f);
         } else if (preset.target() == KilaPresets.Target.TRAIL) {
             stream(emitter, 30, 0.2f, 5, 0.3f);

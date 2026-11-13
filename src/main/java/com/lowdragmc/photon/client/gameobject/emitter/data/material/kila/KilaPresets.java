@@ -1147,6 +1147,211 @@ public final class KilaPresets {
         m.depth.setEnable(true);
     });
 
+    /** A compact cinder burst: fast smoke flipbook with a bright ember ramp and soft depth intersection. */
+    public static final Preset EMBER_BURST = new Preset("ember_burst", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.color = new HDRColor(1f, 0.48f, 0.12f, 1f, 1.45f);
+        m.main.texture.texture = KilaTextures.SMOKE_FLIP;
+        m.main.flipbook = true;
+        m.main.columns = 4;
+        m.main.rows = 4;
+        m.main.randomRow = true;
+        m.main.frameSource = KilaMainTexture.FrameSource.DRIVER;
+        m.main.frame.bind(KilaDriver.Source.LIFE, 1);
+        m.main.frameBlend = true;
+        m.main.motionVectors = true;
+        m.main.motionTexture.texture = KilaTextures.SMOKE_FLIP_MV;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF35100A, 0xFFE34210, 0xFFFFA32A, 0xFFFFF1B5).getRgbP());
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.dissolve.progress.value = 0.2f;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 0.75f);
+        m.dissolve.softness = 0.1f;
+        m.depth.setEnable(true);
+    });
+
+    /** A crisp blue ice ring that expands by animation and cools to white along its luminance. */
+    public static final Preset FROST_RING = new Preset("frost_ring", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.5f, 0.8f, 1f, 1f, 1.7f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
+        m.main.texture.texture = KilaTextures.RIPPLE;
+        m.main.texture.rotationSpeed = 10;
+        m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF2366C5, 0xFF64D9FF, 0xFFE8FFFF).getRgbP());
+        m.distortion.setEnable(true);
+        m.distortion.strength.value = 0.008f;
+        m.distortion.texture.texture = KilaTextures.NOISE_FLOW;
+        m.depth.setEnable(true);
+    });
+
+    /** A sharp branching bolt with a violet-to-white colour ramp and a brief UV crackle. */
+    public static final Preset CHAIN_LIGHTNING = new Preset("chain_lightning", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.62f, 0.55f, 1f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.LIGHTNING_BOLT;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 2;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF5020CC, 0xFF9B7AFF, 0xFFFFFFFF).getRgbP());
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.012f;
+        m.depth.setEnable(true);
+    });
+
+    /** A blue-white plasma ribbon with flow detail and a soft feathered edge; use in the Trails renderer. */
+    public static final Preset PLASMA_TRAIL = new Preset("plasma_trail", Category.MAGIC, Target.TRAIL, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.48f, 0.72f, 1f, 1f, 1.8f);
+        m.alpha.value = 0;
+        m.alpha.bind(KilaDriver.Source.POINT_T, 1);
+        m.main.texture.texture = KilaTextures.TRAIL;
+        m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.tiling(2, 1).scroll(-0.42f, 0.03f);
+        m.layer.strength.value = 0.32f;
+        m.mask2.setEnable(true);
+        m.mask2.texture.texture = KilaTextures.GRADIENT_LINEAR;
+        m.mask2.texture.rotation = 90;
+        m.mask2.texture.tiling(2, 1);
+        m.mask2.texture.wrapU = KilaTexture.Wrap.MIRROR;
+        m.distortion.setEnable(true);
+        m.distortion.mode = KilaDistortion.Mode.FLOW_MAP;
+        m.distortion.texture.texture = KilaTextures.FLOW_SWIRL;
+        m.distortion.strength.value = 0.012f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.U;
+        m.ramp.mode = KilaRamp.Mode.MULTIPLY;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF49BFFF, 0xFFB8F5FF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** Impact mark from above: a burning radial decal projected onto the ground and eaten away by noise. */
+    public static final Preset METEOR_STRIKE = new Preset("meteor_strike", Category.GROUND, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.fog = false;
+        m.color = new HDRColor(1f, 0.32f, 0.06f, 0.85f, 1.4f);
+        m.main.texture.texture = KilaTextures.GRADIENT_RADIAL;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.MULTIPLY;
+        m.layer.texture.texture = KilaTextures.NOISE_PERLIN;
+        m.layer.strength.value = 0.55f;
+        m.projection.setEnable(true);
+        m.projection.depth = 2.2f;
+        m.projection.size = 1.3f;
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.dissolve.progress.value = 0;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
+        m.dissolve.softness = 0.08f;
+        m.depth.setEnable(true);
+    });
+
+    /** Dark volcanic glass on a mesh: opaque, world-lit and bumped from the bundled Perlin texture. */
+    public static final Preset OBSIDIAN = new Preset("obsidian", Category.SURFACE, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.OPAQUE;
+        m.depthWrite = true;
+        m.color = new HDRColor(0.24f, 0.2f, 0.28f, 1f, 1f);
+        m.main.texture.texture = KilaTextures.NOISE_PERLIN;
+        m.shading.setEnable(true);
+        m.shading.normal = KilaShading.Normal.MESH;
+        m.shading.bump = KilaShading.Bump.HEIGHT;
+        m.shading.bumpStrength = 0.8f;
+        m.shading.ambient = 0.2f;
+        m.lit.setEnable(true);
+    });
+
+    /** A drifting shadow veil for particles, with slow cloud breakup and a soft lifetime fade. */
+    public static final Preset SHADOW_CLOAK = new Preset("shadow_cloak", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.ALPHA;
+        m.color = new HDRColor(0.16f, 0.13f, 0.24f, 0.66f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
+        m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.MULTIPLY;
+        m.layer.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.layer.texture.tiling(1.5f, 1).scroll(0.018f, -0.024f);
+        m.layer.strength.value = 0.72f;
+        m.mask2.setEnable(true);
+        m.mask2.texture.texture = KilaTextures.GRADIENT_RADIAL;
+        m.mask2.power = 0.7f;
+        m.depth.setEnable(true);
+    });
+
+    /** A mesh-bound star portal with a rotating rune plate and a radiant rim. */
+    public static final Preset STAR_GATE = new Preset("star_gate", Category.MAGIC, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.7f, 0.36f, 1f, 0.55f, 1.8f);
+        m.main.texture.texture = KilaTextures.STAR_RAYS;
+        m.main.texture.rotationSpeed = -8;
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.SCREEN;
+        m.layer.texture.texture = KilaTextures.RUNE_CIRCLE;
+        m.layer.texture.rotationSpeed = 13;
+        m.layer.strength.value = 0.5f;
+        m.fresnel.setEnable(true);
+        m.fresnel.power = 2.5f;
+        m.fresnel.color = new HDRColor(0.62f, 0.38f, 1f, 1f, 3f);
+        m.depth.setEnable(true);
+    });
+
+    /** A rising heat vent that bends the background in the screen-distortion pass. */
+    public static final Preset STEAM_VENT = new Preset("steam_vent", Category.SCREEN, m -> {
+        m.blend = BlendMode.Preset.ALPHA;
+        m.worldLight = false;
+        m.fog = false;
+        m.color = new HDRColor(0.8f, 0.9f, 1f, 0.3f, 1f);
+        m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.screenDistortion.setEnable(true);
+        m.screenDistortion.strength.value = 0.003f;
+        m.screenDistortion.texture.scroll(0, 0.8f);
+        m.depth.setEnable(true);
+    });
+
+    /** A sandy blast, with a granular cloud layer, warm ramp and soft depth intersection. */
+    public static final Preset SAND_BLAST = new Preset("sand_blast", Category.STYLIZED, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.color = new HDRColor(0.86f, 0.62f, 0.3f, 0.8f, 1f);
+        m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.MULTIPLY;
+        m.layer.texture.texture = KilaTextures.NOISE_PERLIN;
+        m.layer.texture.tiling(2, 2).scroll(0.12f, -0.08f);
+        m.layer.strength.value = 0.4f;
+        m.mask1.setEnable(true);
+        m.mask1.texture.texture = KilaTextures.NOISE_CELLS;
+        m.mask1.power = 0.72f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF70502D, 0xFFC8914A, 0xFFFFE0A0).getRgbP());
+        m.depth.setEnable(true);
+    });
+
     public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
             HEALING_AURA, SOLAR_BEAM,
             FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LAVA_BURST, LIT_SMOKE, FOG_BALL, POISON_MIST, DUST_DEVIL,
@@ -1154,7 +1359,8 @@ public final class KilaPresets {
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE, RUNE_FLOOR,
             ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS, PRISMATIC_SHIELD, CRYSTAL_SHARD,
             HEAT_HAZE, JET_EXHAUST,
-            FROST_BURST, WATER_BURST, TOON_FIRE, PIXEL_SPELL);
+            FROST_BURST, WATER_BURST, FROST_RING, SAND_BLAST, TOON_FIRE, PIXEL_SPELL,
+            EMBER_BURST, SHADOW_CLOAK, CHAIN_LIGHTNING, PLASMA_TRAIL, METEOR_STRIKE, OBSIDIAN, STAR_GATE, STEAM_VENT);
 
     private KilaPresets() {
     }
