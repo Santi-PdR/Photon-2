@@ -210,8 +210,10 @@ public final class PhotonFXEditorSmokeTest {
         var textureIds = new java.util.HashSet<>(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL);
         var presetIds = new java.util.HashSet<String>();
         var presetProblems = new java.util.ArrayList<String>();
+        var shaderVariantProblems = new java.util.ArrayList<String>();
         var serializationProblems = new java.util.ArrayList<String>();
         int flipbookPresetCount = 0;
+        int shaderVariantCount = 0;
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
             if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
             var presetMaterial = preset.create();
@@ -246,6 +248,13 @@ public final class PhotonFXEditorSmokeTest {
                     presetProblems.add(preset.id() + ": expected opacity to fade from 1 to 0 over particle life");
                 }
             }
+            var contexts = switch (preset.target()) {
+                case PARTICLE -> java.util.List.of(MaterialContext.NORMAL, MaterialContext.PARTICLE_CPU_DATA,
+                        MaterialContext.PARTICLE_INSTANCE);
+                case TRAIL -> java.util.List.of(MaterialContext.NORMAL, MaterialContext.TRAIL_INSTANCE,
+                        MaterialContext.ARA_TRAIL_INSTANCE);
+                case MESH -> java.util.List.of(MaterialContext.NORMAL, MaterialContext.PARTICLE_MODEL_INSTANCE);
+            };
             var stackingVariants = presetMaterial.screenDistortion.isEnable() && presetMaterial.screenDistortion.stack
                     ? new boolean[]{false, true} : new boolean[]{false};
             for (boolean stacking : stackingVariants) {
@@ -254,6 +263,13 @@ public final class PhotonFXEditorSmokeTest {
                 if (!presetLayout.dropped.isEmpty()) {
                     presetProblems.add(preset.id() + (stacking ? " stacked" : "") + ": sampler budget drops "
                             + presetLayout.dropped.stream().map(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaModule::id).toList());
+                }
+                for (var context : contexts) {
+                    shaderVariantCount++;
+                    if (presetLayout.variant(context) == null) {
+                        shaderVariantProblems.add(preset.id() + (stacking ? " stacked" : "") + "/"
+                                + (context.getVariantKey().isEmpty() ? "cpu" : context.getVariantKey()));
+                    }
                 }
             }
             presetMaterial.screenDistortion.stacking = false;
@@ -299,6 +315,10 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Kila presets have resource or sampler problems: " + presetProblems);
         }
         Photon.LOGGER.info("[kila-preset-resources-smoke] {} presets have unique ids, registered textures, and fit the sampler budget", presetIds.size());
+        if (!shaderVariantProblems.isEmpty()) {
+            throw new IllegalStateException("Kila preset shader variants failed to compile: " + shaderVariantProblems);
+        }
+        Photon.LOGGER.info("[kila-preset-shaders-smoke] all {} built-in preset render variants linked", shaderVariantCount);
         Photon.LOGGER.info("[kila-flipbook-sheets-smoke] {} animated presets have valid atlas grids and motion maps", flipbookPresetCount);
         if (!serializationProblems.isEmpty()) {
             throw new IllegalStateException("Kila preset serialization problems: " + serializationProblems);
