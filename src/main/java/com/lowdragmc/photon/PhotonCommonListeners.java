@@ -1,10 +1,13 @@
 package com.lowdragmc.photon;
 
+import com.lowdragmc.photon.command.ActiveEntityEffects;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.world.entity.Entity;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -27,6 +30,8 @@ public class PhotonCommonListeners {
     public static void onPlayerChangeDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             com.lowdragmc.photon.network.FxPackSync.onPlayerJoinLevel(player);
+            // the client wiped ParticleEngine on the new level; replay this player's own FX
+            ActiveEntityEffects.replayTo(player, player);
         }
     }
 
@@ -34,6 +39,7 @@ public class PhotonCommonListeners {
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             com.lowdragmc.photon.network.FxPackSync.onPlayerJoinLevel(player);
+            ActiveEntityEffects.replayTo(player, player);
         }
     }
 
@@ -41,6 +47,30 @@ public class PhotonCommonListeners {
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             com.lowdragmc.photon.network.FxPackSync.onPlayerLogout(player);
+            ActiveEntityEffects.forget(player, null);
+        }
+    }
+
+    /**
+     * A player who walks out of range (or is teleported away) unloads the entity and destroys
+     * the FX. When they come back, the entity is a new client object and nobody re-sends the
+     * original play packet unless we do it here.
+     */
+    @SubscribeEvent
+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            ActiveEntityEffects.replayTo(player, event.getTarget());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        var reason = event.getEntity().getRemovalReason();
+        if (reason == Entity.RemovalReason.KILLED
+                || reason == Entity.RemovalReason.DISCARDED
+                || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) {
+            ActiveEntityEffects.forget(event.getEntity(), null);
         }
     }
 

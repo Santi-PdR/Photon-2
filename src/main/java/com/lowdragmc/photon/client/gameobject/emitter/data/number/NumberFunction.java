@@ -40,7 +40,8 @@ public interface NumberFunction extends IPersistedSerializable, ILDLRegisterClie
     }
 
     static NumberFunction deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(ZERO);
+        return CODEC.parse(NbtOps.INSTANCE, com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(tag))
+                .result().orElse(ZERO);
     }
 
     static NumberFunction copy(NumberFunction function) {

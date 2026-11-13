@@ -18,6 +18,10 @@ The project also expects LDLib 1.0.52.a in the instance. It is a separate requir
 
 The source adapts the Minecraft APIs, Forge networking and shader integration, resource serialization, and editor UI to the Forge 1.20.1 / LDLib2 2.2.39.a APIs. The upstream interactive UI scenarios are excluded from the production source set because they target newer LDLib2 APIs and are developer-only tools.
 
+## Kila material presets
+
+The editor includes ready-to-edit Kila materials, including an aurora trail, lava burst, frost burst, toxic slime puddle, ember rock, soul flame, and frosted glass. Choose the renderer that matches each preset (for example, assign the aurora ribbon in the Trails renderer, not the particle renderer). See the [Kila material preset guide](docs/Photon2-Kila-Presets.md) for descriptions and usage notes.
+
 ## FX packs, models, shaders and bloom
 
 See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) for the folder layout, custom resource rules, and where to turn on Bloom. For a plain-language walkthrough of `.fxpack` files and how a server ships FX updates to every player automatically, see the [FX pack and server distribution guide](docs/Photon2-FXPack-Guia-Servidor.md). For the port's technical and testing history, see [Photon 2 Forge port context](docs/Photon2-Port-Context.md). For a single-document handover covering the whole project (architecture, fixes, CI, releases and pending work), see the [full project context](docs/Photon2-Contexto-Completo.md).
