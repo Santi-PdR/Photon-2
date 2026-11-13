@@ -38,6 +38,10 @@ public class ServerCommands {
                                         .then(RemoveBlockEffectCommand.createServerCommand())
                                         .then(RemoveEntityEffectCommand.createServerCommand())
                                 )
+                                // open a loaded effect in the FX editor; saving replaces the playable copy
+                                .then(EditFxCommand.createServerCommand())
+                                // steer a playing effect between the named sections of its timeline
+                                .then(EffectSectionCommand.createServerCommand())
                         )
 
         );

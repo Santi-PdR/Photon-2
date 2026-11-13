@@ -2,6 +2,7 @@ package com.lowdragmc.photon.client.gameobject.emitter.data;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.gameobject.RuntimeValue;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.Constant;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction;
@@ -35,6 +36,11 @@ public class LightOverLifetimeSetting extends ToggleGroup {
     @NumberFunctionConfig(types = {Constant.class, RandomConstant.class, Curve.class, RandomCurve.class}, numberType = ConfigNumber.Type.INTEGER, defaultValue = 15, min = 0, max = 15, wheelDur = 1, curveConfig = @CurveConfig(xAxis = "lifetime", yAxis = "block light"))
     protected NumberFunction blockLight = NumberFunction.constant(15);
 
+    /** Photon 1 bloom bypassed world and authored light, making its particles full-bright. */
+    @Persisted
+    @Configurable(name = "LightOverLifetimeSetting.legacyBloomFullBright", tips = "photon.emitter.config.lights.legacyBloomFullBright")
+    protected boolean legacyBloomFullBright;
+
     public LightOverLifetimeSetting() {
         // intentionally enabled by default: photon particles render full-bright (15/15)
         // unless the author disables this group to pick up world lighting
@@ -66,10 +72,11 @@ public class LightOverLifetimeSetting extends ToggleGroup {
         }
 
         public boolean isEnable() {
-            return enable.get();
+            return config.legacyBloomFullBright || enable.get();
         }
 
         public int getLight(IParticle particle, float partialTicks) {
+            if (config.legacyBloomFullBright) return net.minecraft.client.renderer.LightTexture.FULL_BRIGHT;
             int sky = skyLight.get().get(particle.getT(partialTicks), () -> particle.getMemRandom("sky-light")).intValue();
             int block = blockLight.get().get(particle.getT(partialTicks), () -> particle.getMemRandom("block-light")).intValue();
             return sky << 20 | block << 4;

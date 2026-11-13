@@ -60,6 +60,15 @@ public final class FXProjectConverter {
         return convert(tag, projectFile, FXProjectConverter::readLoaded, FXInstanceEditing.idOf(fxFile));
     }
 
+    /**
+     * Converts a definition in memory without writing a {@code .fxproj}. Opening an {@code .fx} in
+     * the editor must not create a project on disk: the author is asked to save on close, and
+     * denying that used to still leave a sibling file (or overwrite the definition).
+     */
+    public static Result convertInMemory(CompoundTag fxTag, @Nullable ResourceLocation knownAs) throws Exception {
+        return convert(fxTag, null, FXProjectConverter::readLoaded, knownAs);
+    }
+
     /** Photon 1 editor projects are raw NBT, while its exported {@code .fx} files are gzip NBT. */
     static CompoundTag readFileTag(File file) throws IOException {
         try (var in = new java.io.PushbackInputStream(Files.newInputStream(file.toPath()), 2)) {
@@ -108,18 +117,23 @@ public final class FXProjectConverter {
     }
 
     /** @param knownAs the id the effect was loaded by, so the project knows an FX instance leading back to it is a cycle */
-    private static Result convert(CompoundTag fxTag, File projectFile, LibrarySource source,
+    private static Result convert(CompoundTag fxTag, @Nullable File projectFile, LibrarySource source,
                                   @Nullable ResourceLocation knownAs) throws Exception {
         boolean hasEmbeddedLegacyResources = fxTag.contains("resources", Tag.TAG_COMPOUND);
         var tag = FXHelper.applyVersionFixes(fxTag);
-        var unpacker = new Unpacker(source, resourceDirectory(projectFile));
+        List<String> warnings = new ArrayList<>();
         if (hasEmbeddedLegacyResources) {
-            unpacker.warnings.add("the Photon 1 editor's embedded resource library is not available in Photon 2; external textures, models, and shaders must be installed or packed separately");
+            warnings.add("the Photon 1 editor's embedded resource library is not available in Photon 2; external textures, models, and shaders must be installed or packed separately");
         }
         // file-format stamps, not project data: left in, the project would read as modified once opened
         tag.remove("version");
         tag.remove("resources");
-        unpacker.rewrite(tag);
+        if (projectFile != null) {
+            var unpacker = new Unpacker(source, resourceDirectory(projectFile));
+            unpacker.warnings.addAll(warnings);
+            unpacker.rewrite(tag);
+            warnings = unpacker.warnings;
+        }
         var project = new FXProject();
         if (knownAs != null) project.addKnownAs(knownAs);
         project.getFx().deserializeNBT(Platform.getFrozenRegistry(), tag, project.getKnownAs());
@@ -134,9 +148,11 @@ public final class FXProjectConverter {
                 object.transform()._setInternalParentID(FXRuntime.ROOT_UUID);
             }
         }
-        Files.createDirectories(projectFile.getAbsoluteFile().getParentFile().toPath());
-        FXProject.TYPE.saveProjectToFile(project, projectFile);
-        return new Result(project, List.copyOf(unpacker.warnings));
+        if (projectFile != null) {
+            Files.createDirectories(projectFile.getAbsoluteFile().getParentFile().toPath());
+            FXProject.TYPE.saveProjectToFile(project, projectFile);
+        }
+        return new Result(project, List.copyOf(warnings));
     }
 
     private static File resourceDirectory(File projectFile) {
