@@ -277,7 +277,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private boolean active(KilaModule module, KilaLayout layout) {
-        return module.isEnable() && !layout.dropped.contains(module);
+        return module.isEnable() && !layout.isDropped(module);
     }
 
     @Override
@@ -325,7 +325,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         var layout = layout();
         for (var texture : layout.textures) {
             if (texture.texture() != null) {
-                preload.texture(texture.texture().getTexture());
+                var location = com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture.texture().getTexture());
+                preload.texture(location);
             } else if (texture.dynamic() != null) {
                 texture.dynamic().getAsInt();
             }
