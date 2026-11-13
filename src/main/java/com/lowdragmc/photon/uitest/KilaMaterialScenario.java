@@ -377,6 +377,9 @@ public class KilaMaterialScenario implements UIScenario {
         ctx.check("with everything on, the default textures share samplers and only the last module is left out",
                 everything.samplers.size() <= KilaLayout.SAMPLER_BUDGET && everything.dropped.equals(List.of(all.lit)),
                 "<= " + KilaLayout.SAMPLER_BUDGET + ", lit dropped", everything.samplers + " dropped " + everything.dropped);
+        ctx.check("fast dropped-module lookup agrees with the diagnostic list",
+                all.modules().stream().allMatch(module -> everything.isDropped(module) == everything.dropped.contains(module)),
+                "same membership", everything.dropped.stream().map(KilaModule::id).toList());
         var p1 = new KilaMaterial();
         p1.modules().forEach(module -> module.setEnable(true));
         p1.screenDistortion.setEnable(false);
@@ -448,6 +451,21 @@ public class KilaMaterialScenario implements UIScenario {
         var copy = (KilaMaterial) material.copy();
         ctx.check("copy is deep", copy.main.texture != material.main.texture && copy.layout().key.equals(material.layout().key),
                 "a separate texture object, same layout", copy.main.texture);
+        var failedPresets = new ArrayList<String>();
+        for (var preset : KilaPresets.ALL) {
+            var source = preset.create();
+            var sourceTag = source.serializeWrapper();
+            if (sourceTag == null) {
+                failedPresets.add(preset.id() + ": no serialized tag");
+                continue;
+            }
+            var restored = IMaterial.deserializeWrapper(sourceTag);
+            if (!(restored instanceof KilaMaterial restoredKila)
+                    || !sourceTag.equals(restoredKila.serializeWrapper())) {
+                failedPresets.add(preset.id() + ": round-trip changed the material");
+            }
+        }
+        ctx.check("all built-in presets survive serialization unchanged", failedPresets.isEmpty(), "all round-trip", failedPresets);
     }
 
     private static void inspectors(TestContext ctx) {
