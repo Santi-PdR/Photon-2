@@ -151,8 +151,33 @@ public class EntityEffectCommand extends EffectCommand {
         if (autoRotate) {
             command.setAutoRotate(AutoRotateType.getValue(context, "auto rotate"));
         }
-        PhotonNetworking.CHANNEL.send(PacketDistributor.ALL.noArg(), command);
+        // Players who do not currently track the entity never get a usable start packet
+        // (their client has no entity id). Remember the FX and send it only to trackers;
+        // StartTracking replays it when someone comes back into range.
+        for (var entity : command.entities) {
+            ActiveEntityEffects.remember(entity, command);
+            var packet = command.copyFor(entity);
+            PhotonNetworking.CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> entity), packet);
+        }
         return Command.SINGLE_SUCCESS;
+    }
+
+    EntityEffectExecutor.AutoRotate autoRotate() {
+        return autoRotate;
+    }
+
+    EntityEffectCommand copyFor(Entity entity) {
+        var copy = new EntityEffectCommand();
+        copy.setLocation(location);
+        copy.setOffset(offset);
+        copy.setRotation(rotation);
+        copy.setScale(scale);
+        copy.setDelay(delay);
+        copy.setForcedDeath(forcedDeath);
+        copy.setAllowMulti(allowMulti);
+        copy.setAutoRotate(autoRotate);
+        copy.setEntities(List.of(entity));
+        return copy;
     }
 
     @Override
@@ -191,6 +216,11 @@ public class EntityEffectCommand extends EffectCommand {
     private static class Client {
         public static void execute(EntityEffectCommand packet) {
             var level = Minecraft.getInstance().level;
+            Photon.LOGGER.info("[fx-diagnostic] entity playback packet fx={} targets={}", packet.location, packet.ids.length);
+            if (level == null) {
+                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-packet", "No client level", null, null);
+                return;
+            }
             if (level != null) {
                 var fx = FXHelper.getFX(packet.location);
                 if (fx != null) {
@@ -207,7 +237,14 @@ public class EntityEffectCommand extends EffectCommand {
                             effect.setDelay(packet.delay);
                             effect.setForcedDeath(packet.forcedDeath);
                             effect.setAllowMulti(packet.allowMulti);
-                            effect.start();
+                            try {
+                                effect.start();
+                            } catch (RuntimeException error) {
+                                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-start", "Playback start threw an exception", null, error);
+                                throw error;
+                            }
+                        } else {
+                            com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-target", "Entity id " + id + " is not present on the client", null, null);
                         }
                     }
                 }

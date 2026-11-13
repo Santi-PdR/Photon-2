@@ -277,7 +277,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private boolean active(KilaModule module, KilaLayout layout) {
-        return module.isEnable() && !layout.dropped.contains(module);
+        return module.isEnable() && !layout.isDropped(module);
     }
 
     @Override
@@ -325,7 +325,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         var layout = layout();
         for (var texture : layout.textures) {
             if (texture.texture() != null) {
-                preload.texture(texture.texture().getTexture());
+                var location = com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture.texture().getTexture());
+                preload.texture(location);
             } else if (texture.dynamic() != null) {
                 texture.dynamic().getAsInt();
             }
@@ -724,17 +725,26 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         status.label.layout(layout -> layout.widthPercent(100));
         status.label.moveInlineAsDefault();
         father.addConfigurator(status);
+        // Avoid rebuilding the translated status Component and relaying out its row every UI tick.
+        var lastStatus = new Object() {
+            int samplers = -1;
+            List<KilaModule> dropped = List.of();
+        };
         father.addEventListener(UIEvents.TICK, e -> {
             for (int i = 0; i < modules.size(); i++) {
                 groups.get(i).setDisplay(modules.get(i).isEnable());
             }
             var current = layout();
-            var text = Component.translatable("kila.status.samplers", current.samplers.size(), KilaLayout.SAMPLER_BUDGET);
-            for (var dropped : current.dropped) {
-                text.append(" ").append(Component.translatable("kila.status.dropped",
-                        Component.translatable(dropped.langKey())));
+            if (current.samplers.size() != lastStatus.samplers || !current.dropped.equals(lastStatus.dropped)) {
+                var text = Component.translatable("kila.status.samplers", current.samplers.size(), KilaLayout.SAMPLER_BUDGET);
+                for (var dropped : current.dropped) {
+                    text.append(" ").append(Component.translatable("kila.status.dropped",
+                            Component.translatable(dropped.langKey())));
+                }
+                status.setLabel(text);
+                lastStatus.samplers = current.samplers.size();
+                lastStatus.dropped = current.dropped;
             }
-            status.setLabel(text);
         });
     }
 }
