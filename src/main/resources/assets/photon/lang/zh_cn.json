@@ -1995,5 +1995,9 @@
   "kila.preset.ember_rock": "余烬岩石",
   "kila.preset.ember_rock.desc": "不透明高度凹凸岩石，暗到炽热的渐变、世界光照和微弱余烬发光。",
   "kila.preset.soul_flame": "灵魂之焰",
-  "kila.preset.soul_flame.desc": "向上升起的紫色烟焰，带流动噪声和青紫色溶解边缘，并随粒子生命周期逐渐燃尽。"
+  "kila.preset.soul_flame.desc": "向上升起的紫色烟焰，带流动噪声和青紫色溶解边缘，并随粒子生命周期逐渐燃尽。",
+  "kila.preset.aurora_trail": "极光飘带",
+  "kila.preset.aurora_trail.desc": "柔和的预乘混合拖尾，带两层缓慢流动噪声、镜像边缘遮罩和绿青紫长度渐变。",
+  "kila.preset.lava_burst": "熔岩爆发",
+  "kila.preset.lava_burst.desc": "带运动混合的烟雾翻页动画，从灰烬红渐变到炽白核心，并按生命周期溶解和柔化交界。"
 }

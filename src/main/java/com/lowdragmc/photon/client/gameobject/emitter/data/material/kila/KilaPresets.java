@@ -537,6 +537,36 @@ public final class KilaPresets {
         m.lit.setEnable(true);
     });
 
+    /** A hot animated blast: the smoke flipbook is colour-ramped from cinder red through orange to a white-hot core. */
+    public static final Preset LAVA_BURST = new Preset("lava_burst", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.color = new HDRColor(1f, 0.72f, 0.42f, 1f, 1.5f);
+        m.emission = new HDRColor(1f, 0.12f, 0.015f, 1f, 1.5f);
+        m.main.texture.texture = KilaTextures.SMOKE_BURST;
+        m.main.flipbook = true;
+        m.main.columns = 8;
+        m.main.rows = 4;
+        m.main.randomRow = true;
+        m.main.frameSource = KilaMainTexture.FrameSource.DRIVER;
+        m.main.frame.bind(KilaDriver.Source.LIFE, 1);
+        m.main.frameBlend = true;
+        m.main.motionVectors = true;
+        m.main.motionTexture.texture = KilaTextures.SMOKE_BURST_MV;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF39120C, 0xFFE03812, 0xFFFF9A24, 0xFFFFF2B0).getRgbP());
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.dissolve.progress.value = 0.35f;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 0.65f);
+        m.dissolve.direction = KilaDissolve.Direction.RADIAL;
+        m.dissolve.softness = 0.12f;
+        m.depth.setEnable(true);
+        m.lit.setEnable(true);
+    });
+
     /** Fades to the tail and as points age, soft along its edges, waving, two noises crawling through it, colour fringes. */
     public static final Preset ENERGY_TRAIL = new Preset("energy_trail", Category.MAGIC, Target.TRAIL, m -> {
         m.blend = BlendMode.Preset.ADDITIVE;
@@ -576,6 +606,42 @@ public final class KilaPresets {
         m.ramp.mode = KilaRamp.Mode.MULTIPLY;
         m.ramp.gradient.getRgbP().clear();
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFFFFFFFF, 0xFF7FE6FF, 0xFF6A4BFF).getRgbP());
+    });
+
+    /** A calm aurora ribbon: soft premultiplied colour, two slow flow layers and a feathered trail edge. */
+    public static final Preset AURORA_TRAIL = new Preset("aurora_trail", Category.MAGIC, Target.TRAIL, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.55f, 0.92f, 0.82f, 0.82f, 1.4f);
+        m.alpha.value = 0;
+        m.alpha.bind(KilaDriver.Source.POINT_T, 1);
+        m.intensity.value = 1.1f;
+        m.intensity.bind(KilaDriver.Source.POINT_LIFE, -0.45f);
+        m.main.texture.texture = KilaTextures.TRAIL;
+        m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.tiling(1.5f, 1).scroll(-0.32f, 0.04f);
+        m.layer.strength.value = 0.35f;
+        m.layer2.setEnable(true);
+        m.layer2.blend = KilaLayer.Blend.SCREEN;
+        m.layer2.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.layer2.texture.tiling(2, 1).scroll(-0.12f, 0.08f);
+        m.layer2.strength.value = 0.22f;
+        m.mask2.setEnable(true);
+        m.mask2.texture.texture = KilaTextures.GRADIENT_LINEAR;
+        m.mask2.texture.rotation = 90;
+        m.mask2.texture.tiling(2, 1);
+        m.mask2.texture.wrapU = KilaTexture.Wrap.MIRROR;
+        m.uvEffects.setEnable(true);
+        m.uvEffects.waveAmplitude.value = 0.035f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.U;
+        m.ramp.mode = KilaRamp.Mode.MULTIPLY;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF7CFFD3, 0xFF52D7FF, 0xFF927BFF, 0xFF7CFFD3).getRgbP());
     });
 
     /** Forms from its core outwards as the emitter's custom data (stream 0, x) rises from 0 to 1; invisible at 0. */
@@ -835,8 +901,8 @@ public final class KilaPresets {
     });
 
     public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
-            FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
-            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL,
+            FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LAVA_BURST, LIT_SMOKE, FOG_BALL,
+            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL, AURORA_TRAIL,
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE,
             ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,

@@ -2006,5 +2006,9 @@
   "kila.preset.ember_rock": "Ember rock",
   "kila.preset.ember_rock.desc": "Opaque height-bumped rock with a dark-to-hot ramp, world lighting and a subtle ember emission.",
   "kila.preset.soul_flame": "Soul flame",
-  "kila.preset.soul_flame.desc": "A rising violet wisp with flowing noise and a cyan-magenta dissolve edge that burns away over the particle lifetime."
+  "kila.preset.soul_flame.desc": "A rising violet wisp with flowing noise and a cyan-magenta dissolve edge that burns away over the particle lifetime.",
+  "kila.preset.aurora_trail": "Aurora ribbon",
+  "kila.preset.aurora_trail.desc": "A soft premultiplied trail with two slow flow layers, a mirrored edge mask and a green-cyan-violet length ramp.",
+  "kila.preset.lava_burst": "Lava burst",
+  "kila.preset.lava_burst.desc": "A motion-blended smoke flipbook recoloured from cinder red to a white-hot core, with a lifetime dissolve and soft particles."
 }

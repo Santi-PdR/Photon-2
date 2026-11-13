@@ -1215,5 +1215,9 @@
   "kila.preset.ember_rock": "Roca incandescente",
   "kila.preset.ember_rock.desc": "Roca opaca con relieve de altura, gradiente de oscuro a incandescente, luz del mundo y emisión tenue.",
   "kila.preset.soul_flame": "Llama de alma",
-  "kila.preset.soul_flame.desc": "Estela violeta ascendente con ruido fluido y borde de disolución cian-magenta que se consume durante la vida de la partícula."
+  "kila.preset.soul_flame.desc": "Estela violeta ascendente con ruido fluido y borde de disolución cian-magenta que se consume durante la vida de la partícula.",
+  "kila.preset.aurora_trail": "Estela de aurora",
+  "kila.preset.aurora_trail.desc": "Estela suave premultiplicada con dos capas de flujo lento, máscara de bordes reflejada y gradiente verde-cian-violeta a lo largo.",
+  "kila.preset.lava_burst": "Estallido de lava",
+  "kila.preset.lava_burst.desc": "Flipbook de humo con mezcla de movimiento, teñido de rojo ceniza a núcleo blanco incandescente, disolución por vida y partículas suaves."
 }
