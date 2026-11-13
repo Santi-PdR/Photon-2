@@ -230,6 +230,10 @@ public final class PhotonFXEditorSmokeTest {
                 if (presetMaterial.alpha.value < 0 || presetMaterial.alpha.value > 1 || endAlpha < 0 || endAlpha > 1) {
                     presetProblems.add(preset.id() + ": opacity driver must stay in [0, 1] over particle life");
                 }
+                var lifeChannel = PhotonGpuChannels.byId("addition_gpu_data.t");
+                if (lifeChannel == null || (presetMaterial.getUsedChannelMask() & lifeChannel.bit()) == 0) {
+                    presetProblems.add(preset.id() + ": LIFE-driven opacity did not request the particle lifetime channel");
+                }
             }
             if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SOUL_FLAME
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WIND_SLASH
