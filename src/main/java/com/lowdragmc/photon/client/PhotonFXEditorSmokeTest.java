@@ -183,6 +183,7 @@ public final class PhotonFXEditorSmokeTest {
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
         var invalidKilaTextures = new java.util.ArrayList<String>();
+        var kilaTextureDimensions = new java.util.HashMap<net.minecraft.resources.ResourceLocation, int[]>();
         for (var texture : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL) {
             var resource = Minecraft.getInstance().getResourceManager().getResource(texture);
             if (resource.isEmpty()) {
@@ -191,6 +192,7 @@ public final class PhotonFXEditorSmokeTest {
             }
             try (var input = resource.get().open(); var image = com.mojang.blaze3d.platform.NativeImage.read(input)) {
                 if (image.getWidth() <= 0 || image.getHeight() <= 0) invalidKilaTextures.add(texture + " (empty)");
+                kilaTextureDimensions.put(texture, new int[]{image.getWidth(), image.getHeight()});
                 if (texture.equals(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.LIGHTNING_BOLT)) {
                     int cornerAlpha = image.getPixelRGBA(0, 0) >>> 24;
                     int coreAlpha = image.getPixelRGBA(image.getWidth() / 2, image.getHeight() / 2) >>> 24;
@@ -209,6 +211,7 @@ public final class PhotonFXEditorSmokeTest {
         var presetIds = new java.util.HashSet<String>();
         var presetProblems = new java.util.ArrayList<String>();
         var serializationProblems = new java.util.ArrayList<String>();
+        int flipbookPresetCount = 0;
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
             if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
             var presetMaterial = preset.create();
@@ -264,6 +267,24 @@ public final class PhotonFXEditorSmokeTest {
                     }
                 }
             }
+            var main = presetMaterial.main;
+            if (main.flipbook) {
+                flipbookPresetCount++;
+                var sheet = kilaTextureDimensions.get(main.texture.texture);
+                if (main.columns <= 0 || main.rows <= 0 || sheet == null
+                        || sheet[0] % main.columns != 0 || sheet[1] % main.rows != 0) {
+                    presetProblems.add(preset.id() + ": flipbook sheet dimensions do not divide evenly into its grid");
+                }
+                if (main.randomRow && main.rows < 2) {
+                    presetProblems.add(preset.id() + ": random-row flipbook needs more than one row");
+                }
+                if (main.frameBlend && main.motionVectors) {
+                    var motion = kilaTextureDimensions.get(main.motionTexture.texture);
+                    if (sheet == null || motion == null || sheet[0] != motion[0] || sheet[1] != motion[1]) {
+                        presetProblems.add(preset.id() + ": motion-vector sheet dimensions do not match the flipbook");
+                    }
+                }
+            }
             var serialized = presetMaterial.serializeWrapper();
             if (serialized == null) {
                 serializationProblems.add(preset.id() + ": serialization returned null");
@@ -279,6 +300,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Kila presets have resource or sampler problems: " + presetProblems);
         }
         Photon.LOGGER.info("[kila-preset-resources-smoke] {} presets have unique ids, registered textures, and fit the sampler budget", presetIds.size());
+        Photon.LOGGER.info("[kila-flipbook-sheets-smoke] {} animated presets have valid atlas grids and motion maps", flipbookPresetCount);
         if (!serializationProblems.isEmpty()) {
             throw new IllegalStateException("Kila preset serialization problems: " + serializationProblems);
         }
