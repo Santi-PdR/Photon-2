@@ -124,7 +124,10 @@ public class KilaGalleryScenario implements UIScenario {
 
     private static void compiles(TestContext ctx) {
         var broken = new ArrayList<String>();
+        var ids = new java.util.HashSet<String>();
+        var duplicateIds = new ArrayList<String>();
         for (var preset : KilaPresets.ALL) {
+            if (!ids.add(preset.id())) duplicateIds.add(preset.id());
             var material = preset.create();
             // a stacked distortion compiles another variant when a build can stack it
             for (boolean stacking : material.screenDistortion.stack ? new boolean[]{false, true} : new boolean[]{false}) {
@@ -138,6 +141,7 @@ public class KilaGalleryScenario implements UIScenario {
             }
         }
         ctx.check("every preset links on its draw paths", broken.isEmpty(), "none broken", broken);
+        ctx.check("built-in material preset IDs are unique", duplicateIds.isEmpty(), "no duplicates", duplicateIds);
         var misplacedTrails = new ArrayList<String>();
         for (var preset : KilaPresets.ALL) {
             if (preset.target() != KilaPresets.Target.TRAIL) continue;

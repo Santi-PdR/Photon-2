@@ -277,7 +277,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private boolean active(KilaModule module, KilaLayout layout) {
-        return module.isEnable() && !layout.dropped.contains(module);
+        return module.isEnable() && !layout.isDropped(module);
     }
 
     @Override

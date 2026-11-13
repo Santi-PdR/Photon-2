@@ -377,6 +377,9 @@ public class KilaMaterialScenario implements UIScenario {
         ctx.check("with everything on, the default textures share samplers and only the last module is left out",
                 everything.samplers.size() <= KilaLayout.SAMPLER_BUDGET && everything.dropped.equals(List.of(all.lit)),
                 "<= " + KilaLayout.SAMPLER_BUDGET + ", lit dropped", everything.samplers + " dropped " + everything.dropped);
+        ctx.check("fast dropped-module lookup agrees with the diagnostic list",
+                all.modules().stream().allMatch(module -> everything.isDropped(module) == everything.dropped.contains(module)),
+                "same membership", everything.dropped.stream().map(KilaModule::id).toList());
         var p1 = new KilaMaterial();
         p1.modules().forEach(module -> module.setEnable(true));
         p1.screenDistortion.setEnable(false);

@@ -13,8 +13,18 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `aurora_trail` | Estela de aurora | Trail | Cinta verde-cian-violeta con dos capas de flujo lento y bordes suaves. |
 | `lava_burst` | Estallido de lava | Partícula | Flipbook de humo con mezcla de movimiento, desde rojo ceniza hasta un núcleo blanco caliente. |
 | `frost_burst` | Estallido glacial | Partícula | Flipbook de humo azul y cian con núcleo blanco y distorsión sutil. |
+| `healing_aura` | Aura curativa | Partícula | Pulso verde menta con nubes lentas y degradado cálido. |
+| `poison_mist` | Niebla tóxica | Partícula | Humo animado con textura celular y distorsión de flujo sutil. |
+| `water_burst` | Estallido de agua | Partícula | Onda translúcida deformada por flujo y desvanecida por vida. |
+| `comet_trail` | Estela de cometa | Trail | Cinta aditiva con cabeza incandescente y gradiente cálido. |
+| `void_gate` | Portal del vacío | Mesh | Abertura violeta giratoria con celdas animadas y borde Fresnel. |
+| `solar_beam` | Rayo solar | Partícula | Haz dorado con suavizado de profundidad y degradado cálido. |
+| `rune_floor` | Runas del suelo | Suelo / proyección | Sello rúnico giratorio que se proyecta y desvanece sobre el suelo. |
+| `prismatic_shield` | Escudo prismático | Superficie / mesh | Escudo translúcido con borde cian y gradiente espectral. |
+| `crystal_shard` | Fragmento de cristal | Superficie / mesh | Cristal translúcido con matcap de vidrio y borde frío. |
+| `dust_devil` | Remolino de polvo | Partícula | Vórtice con silueta ruidosa, onda UV y desvanecimiento. |
 
-Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado.
+Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los diez presets nuevos reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni aumentan el conjunto de texturas que debe cargar el cliente.
 
 ## Elegir el renderer adecuado
 
@@ -30,4 +40,5 @@ La galería de presets integrada muestra cada material según su destino. El smo
 - Catálogo y configuración: `src/main/java/com/lowdragmc/photon/client/gameobject/emitter/data/material/kila/KilaPresets.java`.
 - Selector de recursos incorporados: `src/main/java/com/lowdragmc/photon/gui/editor/resource/MaterialResource.java`.
 - Galería y verificación visual: `src/main/java/com/lowdragmc/photon/uitest/KilaGalleryScenario.java`.
+- Búsqueda rápida de módulos descartados por presupuesto de samplers: `KilaLayout.isDropped`, usada desde el recorrido de módulos del material.
 - Traducciones: `src/main/resources/assets/photon/lang/{en_us,es_es,zh_cn}.json`.

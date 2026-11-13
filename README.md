@@ -20,7 +20,7 @@ The source adapts the Minecraft APIs, Forge networking and shader integration, r
 
 ## Kila material presets
 
-The editor includes ready-to-edit Kila materials, including an aurora trail, lava burst, frost burst, toxic slime puddle, ember rock, soul flame, and frosted glass. Choose the renderer that matches each preset (for example, assign the aurora ribbon in the Trails renderer, not the particle renderer). See the [Kila material preset guide](docs/Photon2-Kila-Presets.md) for descriptions and usage notes.
+The editor includes a growing catalogue of ready-to-edit Kila materials: healing aura, poison mist, water burst, comet trail, void gate, solar beam, rune floor, prismatic shield, crystal shard and dust devil, alongside frost/lava bursts, aurora trails, slime, ember and glass presets. Match each preset to its renderer (trails, mesh or projected ground effects have dedicated targets). See the [Kila material preset guide](docs/Photon2-Kila-Presets.md) for descriptions and usage notes.
 
 ## FX packs, models, shaders and bloom
 
