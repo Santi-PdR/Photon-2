@@ -27,6 +27,57 @@ import java.nio.file.Path;
 public final class PhotonFXProjectSmokeTest {
     private PhotonFXProjectSmokeTest() {}
 
+    /** Opening an {@code .fx} in the editor must not write a sibling {@code .fxproj}. */
+    private static void verifyOpeningFxDoesNotWrite() throws Exception {
+        var fxFile = Files.createTempFile("photon-open-fx-", ".fx");
+        try {
+            var emitters = new ListTag();
+            var legacy = new CompoundTag();
+            legacy.put("emitters", emitters);
+            try (var out = Files.newOutputStream(fxFile)) {
+                NbtIo.writeCompressed(legacy, out);
+            }
+            var sibling = fxFile.resolveSibling(fxFile.getFileName().toString() + ".fxproj");
+            var loaded = com.lowdragmc.photon.gui.editor.FXFileType.INSTANCE.loadProjectFromFile(fxFile.toFile());
+            if (!(loaded instanceof FXProject)) {
+                throw new IllegalStateException("Opening an .fx did not produce a project");
+            }
+            if (Files.isRegularFile(sibling)) {
+                throw new IllegalStateException("Opening an .fx wrote " + sibling);
+            }
+            Photon.LOGGER.info("[fx-open-no-write-smoke] opening an .fx does not write a project");
+        } finally {
+            Files.deleteIfExists(fxFile);
+            Files.deleteIfExists(fxFile.resolveSibling(fxFile.getFileName().toString() + ".fxproj"));
+        }
+    }
+
+    /** An .fx that was overwritten with a project document still has to play. */
+    private static void verifyProjectShapedFxRecovers() throws Exception {
+        var project = new FXProject();
+        var emitter = new ParticleEmitter();
+        project.getFx().getFxData().objects().add(emitter);
+        var projectFile = Files.createTempFile("photon-recover-", ".fxproj");
+        var fxFile = projectFile.resolveSibling(projectFile.getFileName().toString().replace(".fxproj", ".fx"));
+        try {
+            FXProject.TYPE.saveProjectToFile(project, projectFile.toFile());
+            Files.copy(projectFile, fxFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            var loaded = com.lowdragmc.photon.gui.editor.FXFileType.INSTANCE.loadProjectFromFile(fxFile.toFile());
+            if (!(loaded instanceof FXProject recovered) || recovered.getFx().getFxData().objects().isEmpty()) {
+                throw new IllegalStateException("A project saved over an .fx did not recover its objects");
+            }
+            var unwrapped = com.lowdragmc.photon.client.fx.FXHelper.applyVersionFixes(NbtIo.read(fxFile.toFile()));
+            if (!unwrapped.contains("fxData", Tag.TAG_COMPOUND)
+                    || unwrapped.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).isEmpty()) {
+                throw new IllegalStateException("In-game load of a project-shaped .fx did not unwrap fxData");
+            }
+            Photon.LOGGER.info("[fx-project-recover-smoke] a project saved over an .fx still loads");
+        } finally {
+            Files.deleteIfExists(projectFile);
+            Files.deleteIfExists(fxFile);
+        }
+    }
+
     public static void runIfEnabled() {
         if (!Boolean.getBoolean("photon.fxprojSmokeTest")) return;
 
@@ -135,13 +186,16 @@ public final class PhotonFXProjectSmokeTest {
                 stem = stem.substring(0, stem.length() - FXProject.TYPE.getSuffix().length());
                 var convertedFile = legacyFile.resolveSibling(stem + "_photon2" + FXProject.TYPE.getSuffix());
                 photon1ConvertedFiles.add(convertedFile);
-                if (!Files.isRegularFile(convertedFile)
-                        || !NbtIo.read(legacyFile.toFile()).equals(legacyDocument)
-                        || !NbtIo.read(convertedFile.toFile()).contains("data", Tag.TAG_COMPOUND)) {
-                    throw new IllegalStateException("Photon 1 .fxproj migration overwrote its source or did not save Photon 2 data");
+                if (!NbtIo.read(legacyFile.toFile()).equals(legacyDocument)) {
+                    throw new IllegalStateException("Photon 1 .fxproj migration overwrote its source");
+                }
+                if (Files.isRegularFile(convertedFile)) {
+                    throw new IllegalStateException("Opening a Photon 1 .fxproj wrote " + convertedFile);
                 }
             }
             Photon.LOGGER.info("[photon1-editor-project-smoke] opened both raw Photon 1 .fxproj layouts and preserved the originals");
+            verifyOpeningFxDoesNotWrite();
+            verifyProjectShapedFxRecovers();
         } catch (Throwable failure) {
             Photon.LOGGER.error("[fxproj-smoke] failed to load synthetic .fxproj", failure);
             throw new IllegalStateException("Photon FX project persistence smoke test failed", failure);
