@@ -1998,5 +1998,13 @@
   "kila.preset.arc_bolt": "Branching arc bolt",
   "kila.preset.soft_puff.desc": "A 4 x 4 smoke flipbook with random rows and motion-vector blending: smooth slow motion without ghosting.",
   "kila.preset.arc_bolt.desc": "A branching plasma bolt with a soft halo; additive, softly distorted, and depth-faded.",
-  "kila.texture.builtin.lightning_bolt": "Branching lightning bolt"
+  "kila.texture.builtin.lightning_bolt": "Branching lightning bolt",
+  "kila.preset.frosted_glass": "Frosted glass",
+  "kila.preset.frosted_glass.desc": "A translucent mesh with a soft glass matcap, cool Fresnel rim and gentle depth intersections.",
+  "kila.preset.slime_puddle": "Toxic slime puddle",
+  "kila.preset.slime_puddle.desc": "A world-projected green decal with flowing cell noise, soft contact fade and a lifetime dissolve.",
+  "kila.preset.ember_rock": "Ember rock",
+  "kila.preset.ember_rock.desc": "Opaque height-bumped rock with a dark-to-hot ramp, world lighting and a subtle ember emission.",
+  "kila.preset.soul_flame": "Soul flame",
+  "kila.preset.soul_flame.desc": "A rising violet wisp with flowing noise and a cyan-magenta dissolve edge that burns away over the particle lifetime."
 }

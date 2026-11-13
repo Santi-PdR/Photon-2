@@ -475,6 +475,24 @@ public final class KilaPresets {
         m.screenDistortion.chromatic = 0.3f;
     });
 
+    /** Frosted translucent mesh: subtle painted reflection, cool rim and gentle soft intersections. */
+    public static final Preset FROSTED_GLASS = new Preset("frosted_glass", Category.SURFACE, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.backFacesFirst = true;
+        m.color = new HDRColor(0.58f, 0.82f, 1f, 0.32f, 1f);
+        m.main.texture.texture = KilaTextures.WHITE;
+        m.matcap.setEnable(true);
+        m.matcap.blend = KilaMatcap.Blend.ADD;
+        m.matcap.strength = 0.55f;
+        m.fresnel.setEnable(true);
+        m.fresnel.power = 2.4f;
+        m.fresnel.color = new HDRColor(0.45f, 0.82f, 1f, 1f, 2.6f);
+        m.depth.setEnable(true);
+        m.depth.distance = 0.45f;
+    });
+
     /** A ball of fog that thins towards its edge from any side, and where the ground cuts it. */
     public static final Preset FOG_BALL = new Preset("fog_ball", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.8f, 0.85f, 0.8f, 0.8f, 1f);
@@ -669,6 +687,89 @@ public final class KilaPresets {
         m.vertexOffset.texture.tiling(1, 6).scroll(0, 2.5f);
     });
 
+    /** A projected toxic puddle: slow cell flow, a soft contact edge and a lifetime-driven dissolve. */
+    public static final Preset SLIME_PUDDLE = new Preset("slime_puddle", Category.GROUND, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.fog = false;
+        m.color = new HDRColor(0.42f, 0.9f, 0.16f, 0.78f, 1.15f);
+        m.main.texture.texture = KilaTextures.NOISE_CELLS;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.uvSource = KilaTexture.UvSource.WORLD_XZ;
+        m.main.texture.tiling(0.7f, 0.7f);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.scroll(0.03f, 0.02f);
+        m.layer.strength.value = 0.35f;
+        m.distortion.setEnable(true);
+        m.distortion.mode = KilaDistortion.Mode.FLOW_MAP;
+        m.distortion.texture.texture = KilaTextures.FLOW_SWIRL;
+        m.distortion.strength.value = 0.025f;
+        m.distortion.flowSpeed = 0.18f;
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.dissolve.progress.value = 1;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
+        m.dissolve.direction = KilaDissolve.Direction.RADIAL;
+        m.dissolve.softness = 0.12f;
+        m.projection.setEnable(true);
+        m.projection.depth = 1.5f;
+        m.projection.size = 0.85f;
+        m.depth.setEnable(true);
+        m.depth.distance = 0.55f;
+    });
+
+    /** Dark, height-bumped rock with hot cracks; an opaque, lit alternative to the clean Debris material. */
+    public static final Preset EMBER_ROCK = new Preset("ember_rock", Category.SURFACE, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.OPAQUE;
+        m.depthWrite = true;
+        m.color = new HDRColor(0.75f, 0.68f, 0.6f, 1f, 1f);
+        m.main.texture.texture = KilaTextures.NOISE_PERLIN;
+        m.shading.setEnable(true);
+        m.shading.normal = KilaShading.Normal.MESH;
+        m.shading.bump = KilaShading.Bump.HEIGHT;
+        m.shading.bumpStrength = 1.8f;
+        m.shading.ambient = 0.38f;
+        m.lit.setEnable(true);
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.mode = KilaRamp.Mode.MULTIPLY;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF24110D, 0xFF5C2112, 0xFFD24A12, 0xFFFFB02E).getRgbP());
+        m.emission = new HDRColor(0.8f, 0.18f, 0.035f, 1f, 0.8f);
+    });
+
+    /** A rising violet soul flame, its edge dissolving into a cyan-magenta burn. */
+    public static final Preset SOUL_FLAME = new Preset("soul_flame", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.vertexColor = KilaMaterial.VertexColor.RGB_ONLY;
+        m.color = new HDRColor(0.62f, 0.34f, 1f, 1f, 2.1f);
+        m.main.texture.texture = KilaTextures.WISP;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.scroll(0.04f, 0.2f);
+        m.layer.strength.value = 0.45f;
+        m.distortion.setEnable(true);
+        m.distortion.texture.noise(KilaTexture.Noise.SIMPLE, 5).scroll(0.08f, 0.24f);
+        m.distortion.strength.value = 0.035f;
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CELLS;
+        m.dissolve.progress.value = 1;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
+        m.dissolve.direction = KilaDissolve.Direction.V;
+        m.dissolve.softness = 0.16f;
+        m.dissolve.edgeWidth.value = 0.08f;
+        m.dissolve.edgeGradient = true;
+        m.dissolve.edgeGradientColors.getRgbP().clear();
+        m.dissolve.edgeGradientColors.getRgbP().addAll(new GradientColor(0xFFFFFFFF, 0xFF63E9FF, 0xFFB951FF, 0x00B951FF).getRgbP());
+        m.depth.setEnable(true);
+    });
+
     /** Opaque rock, bumped by a procedural height and lit by the world and the dynamic lights. */
     public static final Preset DEBRIS = new Preset("debris", Category.SURFACE, Target.MESH, m -> {
         m.blend = BlendMode.Preset.OPAQUE;
@@ -734,10 +835,10 @@ public final class KilaPresets {
     });
 
     public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
-            FIRE, SMOKE, SOFT_PUFF, WISP, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
+            FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
             MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL,
-            GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SCAN_PULSE,
-            ENERGY_SHIELD, CRYSTAL, HOLOGRAM, DEBRIS,
+            GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE,
+            ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,
             TOON_FIRE, PIXEL_SPELL);
 

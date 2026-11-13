@@ -1207,5 +1207,13 @@
   "kila.volume.clip.tips": "Adelgaza el volumen donde lo corta la escena en vez de mostrar el borde recto de una tarjeta plana. Requiere copiar la profundidad de la escena.",
   "kila.volume.density.tips": "Por encima de 1, el centro se vuelve más denso.",
   "kila.volume.power.tips": "Por encima de 1, el borde se vuelve más marcado.",
-  "kila.volume.size.tips": "Radio de la esfera como proporción de la mitad del ancho del cuadrilátero."
+  "kila.volume.size.tips": "Radio de la esfera como proporción de la mitad del ancho del cuadrilátero.",
+  "kila.preset.frosted_glass": "Cristal esmerilado",
+  "kila.preset.frosted_glass.desc": "Malla translúcida con reflejo suave, borde Fresnel frío e intersecciones difuminadas.",
+  "kila.preset.slime_puddle": "Charco de limo tóxico",
+  "kila.preset.slime_puddle.desc": "Proyección verde en el mundo con ruido fluido, contacto suave y disolución durante la vida de la partícula.",
+  "kila.preset.ember_rock": "Roca incandescente",
+  "kila.preset.ember_rock.desc": "Roca opaca con relieve de altura, gradiente de oscuro a incandescente, luz del mundo y emisión tenue.",
+  "kila.preset.soul_flame": "Llama de alma",
+  "kila.preset.soul_flame.desc": "Estela violeta ascendente con ruido fluido y borde de disolución cian-magenta que se consume durante la vida de la partícula."
 }

@@ -1987,5 +1987,13 @@
   "kila.preset.arc_bolt": "分叉电弧",
   "kila.preset.soft_puff.desc": "4 × 4 烟雾翻页动画，随机行并使用运动矢量混合：慢动作流畅且无重影。",
   "kila.preset.arc_bolt.desc": "带柔和光晕的分叉等离子弧：叠加混合、轻微扭曲，并按深度淡出。",
-  "kila.texture.builtin.lightning_bolt": "分叉闪电"
+  "kila.texture.builtin.lightning_bolt": "分叉闪电",
+  "kila.preset.frosted_glass": "磨砂玻璃",
+  "kila.preset.frosted_glass.desc": "半透明网格，带柔和玻璃反射、冷色菲涅尔边缘和轻柔的深度交界。",
+  "kila.preset.slime_puddle": "毒液水洼",
+  "kila.preset.slime_puddle.desc": "投射到世界的绿色贴花，带流动细胞噪声、柔和接触淡出和生命周期溶解。",
+  "kila.preset.ember_rock": "余烬岩石",
+  "kila.preset.ember_rock.desc": "不透明高度凹凸岩石，暗到炽热的渐变、世界光照和微弱余烬发光。",
+  "kila.preset.soul_flame": "灵魂之焰",
+  "kila.preset.soul_flame.desc": "向上升起的紫色烟焰，带流动噪声和青紫色溶解边缘，并随粒子生命周期逐渐燃尽。"
 }
