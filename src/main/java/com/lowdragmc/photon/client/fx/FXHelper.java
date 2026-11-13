@@ -221,11 +221,12 @@ public class FXHelper {
             return tag;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
+            FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation, null, e);
             return null;
         }
     }
 
-    private static CompoundTag readNbt(java.io.InputStream input) throws IOException {
+    public static CompoundTag readNbt(java.io.InputStream input) throws IOException {
         var buffered = new PushbackInputStream(input, 2);
         int first = buffered.read();
         int second = buffered.read();
@@ -253,9 +254,16 @@ public class FXHelper {
             var fx = new FX();
             fx.setFxLocation(fxLocation);
             fx.deserializeNBT(Platform.getFrozenRegistry(), tag);
+            var expected = tag.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).size();
+            var loaded = fx.getFxData().objects().size();
+            if (loaded < expected && !com.lowdragmc.photon.client.fx.instance.InstanceBaker.hasInstances(tag.getCompound("fxData"))) {
+                FXDiagnostics.failure(fxLocation, "decode", "Loaded " + loaded + " of " + expected
+                        + " objects; see preceding object decode messages", tag, null);
+            }
             return fx;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {}", fxLocation, e);
+            FXDiagnostics.failure(fxLocation, "decode", "Effect deserialization threw an exception", tag, e);
             return null;
         }
     }
@@ -266,7 +274,27 @@ public class FXHelper {
      * versions and the deserializers' inline legacy fallbacks already handle them — running the
      * V1→current fixers on data of unknown true version would risk double-migration.
      */
+    /**
+     * An {@code .fx} that was overwritten with a Photon 2 editor project ({@code meta} + {@code data.fx}).
+     * Opening or playing that file used to yield an empty effect because the definition sits under
+     * {@code data.fx}, not at the root.
+     */
+    public static boolean isProjectDocument(CompoundTag tag) {
+        return tag.contains("meta", Tag.TAG_COMPOUND)
+                && tag.contains("data", Tag.TAG_COMPOUND)
+                && tag.getCompound("data").contains("fx", Tag.TAG_COMPOUND);
+    }
+
     public static CompoundTag applyVersionFixes(CompoundTag tag) {
+        // A project saved over an .fx still has to play: unwrap to the definition.
+        if (isProjectDocument(tag)) {
+            var fx = tag.getCompound("data").getCompound("fx").copy();
+            var meta = tag.getCompound("meta");
+            if (meta.contains("version_num", Tag.TAG_INT) && !fx.contains("version", Tag.TAG_INT)) {
+                fx.putInt("version", meta.getInt("version_num"));
+            }
+            tag = fx;
+        }
         // Photon 1 used {fx:{mainFX:{fxObjects:[...]}}}; recognize that exact
         // shape before the versioned Photon 2 fixer. Conversion only changes
         // this in-memory tag and never overwrites the author's original file.
