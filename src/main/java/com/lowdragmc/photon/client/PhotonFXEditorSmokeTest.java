@@ -1654,8 +1654,9 @@ public final class PhotonFXEditorSmokeTest {
             Files.writeString(droppedFx.resolve("ci_loose_obj.json"),
                     "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_loose_obj.obj\",\"textures\":{},\"flip_v\":true}");
             Files.writeString(droppedFx.resolve("ci_loose_obj.obj"),
-                    "mtllib ci_loose_obj.mtl\nv 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
-            Files.writeString(droppedFx.resolve("ci_loose_obj.mtl"), "newmtl ci_loose\nKd 1 1 1\n");
+                    "mtllib ci_loose_obj.mtl\no loose_smoke\nv 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl ci_loose\nf 1/1/1 2/2/1 3/3/1\n");
+            Files.writeString(droppedFx.resolve("ci_loose_obj.mtl"),
+                    "newmtl ci_loose\nKd 1 1 1\nmap_Kd minecraft:block/stone\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
             Files.createDirectories(shaderDir);
             try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
