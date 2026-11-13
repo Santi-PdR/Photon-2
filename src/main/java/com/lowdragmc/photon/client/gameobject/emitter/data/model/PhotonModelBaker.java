@@ -95,7 +95,7 @@ final class PhotonModelBaker implements ModelBaker {
     @Nullable
     private static Path findNestedModel(ResourceLocation location) {
         ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(location);
-        return LDLibModelAssets.findNested(location, file.getPath());
+        return LDLibModelAssets.resolve(location, file.getPath());
     }
 
     @Nullable
@@ -109,7 +109,7 @@ final class PhotonModelBaker implements ModelBaker {
 
         try {
             ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(location);
-            Path nestedFile = LDLibModelAssets.findNested(location, file.getPath());
+            Path nestedFile = LDLibModelAssets.resolve(location, file.getPath());
             Resource resource = nestedFile == null
                     ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
                     : null;
