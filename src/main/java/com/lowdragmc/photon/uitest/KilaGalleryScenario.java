@@ -42,8 +42,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @LDLRegisterClient(name = "kila_gallery", group = "photon", registry = UIScenario.REGISTRY,
         environment = RegistrationEnvironment.DEV_ONLY)
 public class KilaGalleryScenario implements UIScenario {
-    private static final double SPACING = 3.5;
+    private static final double SPACING = 2.3;
     private static final double DISTANCE = 9;
+    private static final int GRID_COLUMNS = 5;
+    private static final double ROW_SPACING = 1.3;
     private static final AtomicReference<Long> DAY_TIME = new AtomicReference<>();
     private static final AtomicReference<Boolean> DAYLIGHT = new AtomicReference<>(true);
     private static final Map<BlockPos, BlockState> WALL = new LinkedHashMap<>();
@@ -124,11 +126,20 @@ public class KilaGalleryScenario implements UIScenario {
 
     private static void compiles(TestContext ctx) {
         var broken = new ArrayList<String>();
+        var overBudget = new ArrayList<String>();
+        var ids = new java.util.HashSet<String>();
+        var duplicateIds = new ArrayList<String>();
         for (var preset : KilaPresets.ALL) {
+            if (!ids.add(preset.id())) duplicateIds.add(preset.id());
             var material = preset.create();
             // a stacked distortion compiles another variant when a build can stack it
             for (boolean stacking : material.screenDistortion.stack ? new boolean[]{false, true} : new boolean[]{false}) {
                 material.screenDistortion.stacking = stacking;
+                var layout = material.layout();
+                if (!layout.dropped.isEmpty()) {
+                    overBudget.add(preset.id() + (stacking ? " stacked" : "") + ": "
+                            + layout.dropped.stream().map(KilaModule::id).toList());
+                }
                 for (var context : paths(preset.target())) {
                     if (material.layout().variant(context) == null) {
                         broken.add(preset.id() + (stacking ? " stacked/" : "/")
@@ -138,6 +149,30 @@ public class KilaGalleryScenario implements UIScenario {
             }
         }
         ctx.check("every preset links on its draw paths", broken.isEmpty(), "none broken", broken);
+        ctx.check("built-in presets keep all modules within the sampler budget", overBudget.isEmpty(), "none dropped", overBudget);
+        ctx.check("built-in material preset IDs are unique", duplicateIds.isEmpty(), "no duplicates", duplicateIds);
+        int largestPage = java.util.Arrays.stream(KilaPresets.Category.values())
+                .mapToInt(category -> (int) KilaPresets.ALL.stream().filter(preset -> preset.category() == category).count())
+                .max().orElse(0);
+        int columns = Math.min(GRID_COLUMNS, largestPage);
+        int rows = (largestPage + GRID_COLUMNS - 1) / GRID_COLUMNS;
+        double maxAcross = (columns - 1) * SPACING / 2;
+        double maxAlong = (rows - 1) * ROW_SPACING / 2;
+        ctx.check("the largest gallery page fits its backdrop", maxAcross <= 14 && maxAlong < 5,
+                "within 14 blocks wide and 5 blocks in depth", maxAcross + " x " + maxAlong);
+        var misplacedTrails = new ArrayList<String>();
+        for (var preset : KilaPresets.ALL) {
+            if (preset.target() != KilaPresets.Target.TRAIL) continue;
+            var demo = showcase(preset);
+            if (!demo.config.trails.isEnable()
+                    || demo.config.renderer.getRenderMode() != ParticleRendererSetting.Mode.None
+                    || !demo.config.renderer.getMaterials().isEmpty()
+                    || demo.config.trails.config.renderer.getMaterials().isEmpty()) {
+                misplacedTrails.add(preset.id());
+            }
+        }
+        ctx.check("trail presets are demonstrated on the trail renderer", misplacedTrails.isEmpty(),
+                "all on trails", misplacedTrails);
     }
 
     private static void start(TestContext ctx, KilaPresets.Category category) {
@@ -147,10 +182,15 @@ public class KilaGalleryScenario implements UIScenario {
         var ahead = player.getDirection();
         var right = ahead.getClockWise();
         var executors = new ArrayList<BlockEffectExecutor>();
+        int rows = (presets.size() + GRID_COLUMNS - 1) / GRID_COLUMNS;
         for (int i = 0; i < presets.size(); i++) {
             var preset = presets.get(i);
-            double across = (i - (presets.size() - 1) / 2.0) * SPACING;
-            double along = category == KilaPresets.Category.GROUND ? DISTANCE - 3 : DISTANCE;
+            int row = i / GRID_COLUMNS;
+            int column = i % GRID_COLUMNS;
+            int columnsInRow = Math.min(GRID_COLUMNS, presets.size() - row * GRID_COLUMNS);
+            double across = (column - (columnsInRow - 1) / 2.0) * SPACING;
+            double rowOffset = (row - (rows - 1) / 2.0) * ROW_SPACING;
+            double along = (category == KilaPresets.Category.GROUND ? DISTANCE - 3 : DISTANCE) + rowOffset;
             var emitter = showcase(preset);
             var fx = new FX();
             fx.getFxData().objects().add(emitter);
@@ -182,16 +222,22 @@ public class KilaGalleryScenario implements UIScenario {
         config.emission.setEmissionRate(NumberFunction.constant(0));
         config.renderer.getMaterials().clear();
         config.renderer.getMaterials().add(new MaterialSetting(material));
-        if (preset == KilaPresets.EXPLOSION_SMOKE) {
+        if (preset == KilaPresets.EXPLOSION_SMOKE || preset == KilaPresets.LAVA_BURST
+                || preset == KilaPresets.MUSHROOM_CLOUD || preset == KilaPresets.ASH_CLOUD) {
             stream(emitter, 40, 0.25f, 0.6f, 1.1f);
+        } else if (preset == KilaPresets.FROST_BURST) {
+            stream(emitter, 32, 0.3f, 0.45f, 1.0f);
+        } else if (material.main.flipbook) {
+            // Exercise every flipbook preset as an animated stream, including presets added later.
+            stream(emitter, 32, 0.3f, 0.45f, 0.9f);
         } else if (preset == KilaPresets.TOON_FIRE) {
             stream(emitter, 24, 0.6f, 1.6f, 0.9f);
         } else if (preset == KilaPresets.SPARKS) {
             stream(emitter, 12, 2, 5, 0.12f);
             config.shape.setShape(new Sphere());
-        } else if (preset == KilaPresets.JET_EXHAUST) {
+        } else if (material.screenDistortion.isEnable()) {
             stream(emitter, 30, 1, 2, 0.8f);
-        } else if (preset == KilaPresets.ENERGY_TRAIL) {
+        } else if (preset.target() == KilaPresets.Target.TRAIL) {
             stream(emitter, 30, 0.2f, 5, 0.3f);
             config.physics.setEnable(true);
             config.physics.setHasCollision(false);
@@ -208,6 +254,8 @@ public class KilaGalleryScenario implements UIScenario {
             single(emitter, preset == KilaPresets.SCORCH_MARK || preset == KilaPresets.CHARGE_ORB ? 80 : 400, switch (preset.id()) {
                 case "ground_circle", "scorch_mark", "caustics" -> 2.0f;
                 case "scan_pulse" -> 3.0f;
+                case "spiral", "hue_swirl", "black_hole", "star_burst", "hexagon", "ripple", "crescent" -> 1.8f;
+                case "shaft", "wisp" -> 2.2f;
                 default -> preset.target() == KilaPresets.Target.MESH ? 1.8f : 1.2f;
             });
         }
