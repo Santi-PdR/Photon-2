@@ -215,16 +215,20 @@ public class KilaGalleryScenario implements UIScenario {
         config.emission.setEmissionRate(NumberFunction.constant(0));
         config.renderer.getMaterials().clear();
         config.renderer.getMaterials().add(new MaterialSetting(material));
-        if (preset == KilaPresets.EXPLOSION_SMOKE || preset == KilaPresets.LAVA_BURST) {
+        if (preset == KilaPresets.EXPLOSION_SMOKE || preset == KilaPresets.LAVA_BURST
+                || preset == KilaPresets.MUSHROOM_CLOUD || preset == KilaPresets.ASH_CLOUD) {
             stream(emitter, 40, 0.25f, 0.6f, 1.1f);
         } else if (preset == KilaPresets.FROST_BURST) {
             stream(emitter, 32, 0.3f, 0.45f, 1.0f);
+        } else if (material.main.flipbook) {
+            // Exercise every flipbook preset as an animated stream, including presets added later.
+            stream(emitter, 32, 0.3f, 0.45f, 0.9f);
         } else if (preset == KilaPresets.TOON_FIRE) {
             stream(emitter, 24, 0.6f, 1.6f, 0.9f);
         } else if (preset == KilaPresets.SPARKS) {
             stream(emitter, 12, 2, 5, 0.12f);
             config.shape.setShape(new Sphere());
-        } else if (preset == KilaPresets.JET_EXHAUST || preset == KilaPresets.STEAM_VENT) {
+        } else if (material.screenDistortion.isEnable()) {
             stream(emitter, 30, 1, 2, 0.8f);
         } else if (preset.target() == KilaPresets.Target.TRAIL) {
             stream(emitter, 30, 0.2f, 5, 0.3f);

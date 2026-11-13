@@ -43,8 +43,18 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `force_pulse` | Pulso de fuerza | Partícula | Anillo expansivo con distorsión radial y desvanecimiento. |
 | `dust_storm` | Tormenta de polvo | Partícula | Frente de polvo denso con nubes y degradado arena. |
 | `sun_lance` | Lanza solar | Partícula | Haz dorado concentrado, blanco caliente en el centro. |
+| `impact_flash` | Destello de impacto | Partícula | Núcleo blanco caliente con borde ámbar y desvanecimiento rápido. |
+| `wind_slash` | Corte de viento | Partícula | Tajo cian con borde animado, disolución y empuje direccional. |
+| `ash_cloud` | Nube de ceniza | Partícula | Flipbook de humo oscuro con detalle de nubes y mezcla de movimiento. |
+| `blue_flame` | Llama azul | Partícula | Flipbook de llama azul con gradiente cian y blanco. |
+| `spore_patch` | Mancha de esporas | Suelo / proyección | Esporas bioluminiscentes proyectadas con flujo lento. |
+| `glacier_crack` | Grieta glaciar | Suelo / proyección | Fracturas azul pálido proyectadas y disueltas por ruido. |
+| `celestial_gate` | Portal celestial | Mesh | Portal con rayos estelares, runas y borde dorado. |
+| `gravity_well` | Pozo gravitatorio | Mesh | Vórtice central con celdas y un borde oscuro. |
+| `circuit_armor` | Armadura de circuito | Superficie / mesh | Placas hexagonales opacas con relieve y luz de mundo. |
+| `molten_armor` | Armadura fundida | Superficie / mesh | Placas volcánicas con grietas rojas y naranjas. |
 
-Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los treinta presets añadidos en estas tres rondas reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni amplían el conjunto de texturas que debe cargar el cliente.
+Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los cuarenta presets añadidos en estas cuatro rondas reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni amplían el conjunto de texturas que debe cargar el cliente.
 
 ## Elegir el renderer adecuado
 
@@ -59,7 +69,7 @@ La galería de presets integrada muestra cada material según su destino. El smo
 
 - Catálogo y configuración: `src/main/java/com/lowdragmc/photon/client/gameobject/emitter/data/material/kila/KilaPresets.java`.
 - El explorador aplica el mismo material que ya muestra su miniatura, evitando construir otra instancia al seleccionar: `KilaDialogs.presets`.
-- La galería de pruebas coloca las categorías grandes en una cuadrícula compacta para mantenerlas dentro del fondo visible: `KilaGalleryScenario`.
+- La galería de pruebas coloca las categorías grandes en una cuadrícula compacta para mantenerlas dentro del fondo visible: `KilaGalleryScenario`; además, configura automáticamente como corrientes animadas todos los materiales con flipbook o distorsión de pantalla.
 - Selector de recursos incorporados: `src/main/java/com/lowdragmc/photon/gui/editor/resource/MaterialResource.java`.
 - Galería y verificación visual: `src/main/java/com/lowdragmc/photon/uitest/KilaGalleryScenario.java`.
 - Búsqueda rápida de módulos descartados por presupuesto de samplers: `KilaLayout.isDropped`, usada desde el recorrido de módulos del material.
