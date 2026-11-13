@@ -80,6 +80,8 @@ public final class KilaPresets {
     public static final Preset SOFT_PUFF = new Preset("soft_puff", Category.FIRE_SMOKE, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.78f, 0.8f, 0.84f, 0.85f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.flipbook = true;
         m.main.columns = 4;
@@ -523,6 +525,8 @@ public final class KilaPresets {
     public static final Preset EXPLOSION_SMOKE = new Preset("explosion_smoke", Category.FIRE_SMOKE, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.55f, 0.52f, 0.5f, 1f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_BURST;
         m.main.flipbook = true;
         m.main.columns = 8;
@@ -542,6 +546,8 @@ public final class KilaPresets {
         m.blend = BlendMode.Preset.ADDITIVE;
         m.worldLight = false;
         m.color = new HDRColor(1f, 0.72f, 0.42f, 1f, 1.5f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.emission = new HDRColor(1f, 0.12f, 0.015f, 1f, 1.5f);
         m.main.texture.texture = KilaTextures.SMOKE_BURST;
         m.main.flipbook = true;
@@ -612,6 +618,8 @@ public final class KilaPresets {
     public static final Preset FROST_BURST = new Preset("frost_burst", Category.STYLIZED, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.62f, 0.84f, 1f, 0.92f, 1.1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.flipbook = true;
         m.main.columns = 4;
@@ -916,6 +924,8 @@ public final class KilaPresets {
         m.blend = BlendMode.Preset.ADDITIVE;
         m.worldLight = false;
         m.color = new HDRColor(0.75f, 0.4f, 1f, 1f, 2f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.texture.nearest = true;
         m.main.flipbook = true;
@@ -951,6 +961,8 @@ public final class KilaPresets {
     public static final Preset POISON_MIST = new Preset("poison_mist", Category.FIRE_SMOKE, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.38f, 0.78f, 0.16f, 0.7f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.flipbook = true;
         m.main.columns = 4;
@@ -1153,6 +1165,8 @@ public final class KilaPresets {
         m.blend = BlendMode.Preset.ADDITIVE;
         m.worldLight = false;
         m.color = new HDRColor(1f, 0.48f, 0.12f, 1f, 1.45f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.flipbook = true;
         m.main.columns = 4;
@@ -1379,6 +1393,8 @@ public final class KilaPresets {
     public static final Preset MUSHROOM_CLOUD = new Preset("mushroom_cloud", Category.FIRE_SMOKE, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.58f, 0.48f, 0.4f, 0.92f, 1.1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_BURST;
         m.main.flipbook = true;
         m.main.columns = 8;

@@ -238,8 +238,7 @@ public final class PhotonFXEditorSmokeTest {
                     presetProblems.add(preset.id() + ": expected dissolve progress 0→1 over particle life");
                 }
             }
-            if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ASH_CLOUD
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.BLUE_FLAME
+            if (presetMaterial.main.flipbook
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM) {
                 var alpha = presetMaterial.alpha;
                 if (alpha.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
