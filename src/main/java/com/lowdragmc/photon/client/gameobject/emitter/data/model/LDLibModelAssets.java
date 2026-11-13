@@ -38,6 +38,7 @@ final class LDLibModelAssets {
         var fileId = new ResourceLocation(location.getNamespace(), pathWithinAssets.replace('\\', '/'));
         if (nested != null) {
             if (fileId.getPath().endsWith(".json")) adoptObjDependency(nested);
+            else if (fileId.getPath().endsWith(".obj")) adoptObjAndMaterials(fileId);
             return nested;
         }
 
@@ -48,8 +49,12 @@ final class LDLibModelAssets {
         if (fileId.getPath().endsWith(".json")) {
             Path looseJson = LooseTextures.find(fileId);
             if (looseJson != null) adoptObjDependency(looseJson);
+            LooseTextures.adoptIntoWorkspace(fileId);
+        } else if (fileId.getPath().endsWith(".obj")) {
+            adoptObjAndMaterials(fileId);
+        } else {
+            LooseTextures.adoptIntoWorkspace(fileId);
         }
-        LooseTextures.adoptIntoWorkspace(fileId);
         return findNested(location, pathWithinAssets);
     }
 

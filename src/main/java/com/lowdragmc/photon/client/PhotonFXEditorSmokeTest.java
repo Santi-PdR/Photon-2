@@ -1651,8 +1651,6 @@ public final class PhotonFXEditorSmokeTest {
             // misses it until LooseTextures adopts the file into the Photon workspace.
             Path droppedFx = LDLib2.getAssetsDir().toPath().resolve("dropped_fx");
             Files.createDirectories(droppedFx);
-            Files.writeString(droppedFx.resolve("ci_loose_obj.json"),
-                    "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_loose_obj.obj\",\"textures\":{},\"flip_v\":true}");
             Files.writeString(droppedFx.resolve("ci_loose_obj.obj"),
                     "mtllib ci_loose_obj.mtl\no loose_smoke\nv 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nusemtl ci_loose\nf 1/1/1 2/2/1 3/3/1\n");
             Files.writeString(droppedFx.resolve("ci_loose_obj.mtl"),
@@ -2776,27 +2774,17 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
         Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
-        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/block/ci_loose_obj.json");
         Path adoptedObj = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.obj");
         Path adoptedMtl = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.mtl");
-        Files.deleteIfExists(adoptedJson);
         Files.deleteIfExists(adoptedObj);
         Files.deleteIfExists(adoptedMtl);
-        // The source is loose, but adoption maps its JSON to a real block-model id. Minecraft scans
-        // models/**/*.json during reload, so keep this fixture valid for Forge's OBJ loader too.
-        var looseJsonSource = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_loose_obj"));
-        if (!looseJsonSource.isObjLoaderModel())
-            throw new IllegalStateException("Loose ldlib2 NeoForge OBJ JSON was not detected");
-        // The JSON can become visible to Forge's model bakery as soon as it is copied into the
-        // workspace pack. Its referenced OBJ must be adopted first, not on a later mesh request.
-        if (!Files.isRegularFile(adoptedJson) || !Files.isRegularFile(adoptedObj) || !Files.isRegularFile(adoptedMtl))
-            throw new IllegalStateException("Loose OBJ and MTL dependencies were not adopted before their model JSON");
-        var looseJsonMesh = looseJsonSource.getMesh();
-        if (looseJsonMesh == null || looseJsonMesh.vertexCount() < 3)
-            throw new IllegalStateException("Loose ldlib2 neoforge:obj JSON outside editor layouts did not produce a Photon mesh");
+        // Exercise a dropped OBJ directly. Its sidecar MTL must be adopted before the OBJ enters
+        // the workspace pack, without publishing a synthetic model JSON to Minecraft's model bakery.
         var looseObjMesh = new ObjModelSource(new ResourceLocation("ldlib2", "models/obj/ci_loose_obj.obj")).getMesh();
         if (looseObjMesh == null || looseObjMesh.vertexCount() < 3)
             throw new IllegalStateException("Loose ldlib2 OBJ outside editor layouts did not produce a Photon mesh");
+        if (!Files.isRegularFile(adoptedObj) || !Files.isRegularFile(adoptedMtl))
+            throw new IllegalStateException("Loose OBJ and its MTL were not adopted into the Photon workspace");
         float[] looseGeometry = looseObjMesh.geometry();
         if (Math.abs(looseGeometry[0] - 3f) > 0.0001f || Math.abs(looseGeometry[1] - 5f) > 0.0001f
                 || Math.abs(looseGeometry[2] - 7f) > 0.0001f)
