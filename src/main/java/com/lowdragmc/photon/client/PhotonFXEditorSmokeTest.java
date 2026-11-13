@@ -212,6 +212,24 @@ public final class PhotonFXEditorSmokeTest {
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
             if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
             var presetMaterial = preset.create();
+            if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SOUL_FLAME
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WIND_SLASH
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SLIME_PUDDLE) {
+                var progress = presetMaterial.dissolve.progress;
+                if (progress.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
+                        || progress.value != 0 || progress.scale != 1) {
+                    presetProblems.add(preset.id() + ": expected dissolve progress 0→1 over particle life");
+                }
+            }
+            if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ASH_CLOUD
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.BLUE_FLAME
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM) {
+                var alpha = presetMaterial.alpha;
+                if (alpha.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
+                        || alpha.value != 1 || alpha.scale != -1) {
+                    presetProblems.add(preset.id() + ": expected opacity to fade from 1 to 0 over particle life");
+                }
+            }
             var stackingVariants = presetMaterial.screenDistortion.isEnable() && presetMaterial.screenDistortion.stack
                     ? new boolean[]{false, true} : new boolean[]{false};
             for (boolean stacking : stackingVariants) {

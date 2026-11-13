@@ -44,9 +44,9 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `dust_storm` | Tormenta de polvo | Partícula | Frente de polvo denso con nubes, degradado arena y desvanecimiento completo por vida. |
 | `sun_lance` | Lanza solar | Partícula | Haz dorado concentrado, blanco caliente en el centro. |
 | `impact_flash` | Destello de impacto | Partícula | Núcleo blanco caliente con borde ámbar y desvanecimiento rápido. |
-| `wind_slash` | Corte de viento | Partícula | Tajo cian con borde animado, disolución y empuje direccional. |
-| `ash_cloud` | Nube de ceniza | Partícula | Flipbook de humo oscuro con detalle de nubes y mezcla de movimiento. |
-| `blue_flame` | Llama azul | Partícula | Flipbook de llama azul con gradiente cian y blanco. |
+| `wind_slash` | Corte de viento | Partícula | Tajo cian con borde animado, empuje direccional y disolución progresiva. |
+| `ash_cloud` | Nube de ceniza | Partícula | Flipbook de humo oscuro con detalle de nubes, mezcla de movimiento y desvanecimiento suave. |
+| `blue_flame` | Llama azul | Partícula | Flipbook azul con gradiente cian y blanco, y desvanecimiento suave. |
 | `spore_patch` | Mancha de esporas | Suelo / proyección | Esporas bioluminiscentes proyectadas con flujo lento. |
 | `glacier_crack` | Grieta glaciar | Suelo / proyección | Fracturas azul pálido proyectadas y disueltas por ruido. |
 | `celestial_gate` | Portal celestial | Mesh | Portal con rayos estelares, runas y borde dorado. |
@@ -63,7 +63,7 @@ Los nombres y descripciones del selector están traducidos al inglés, español 
 - **Suelo/proyección:** los presets de suelo necesitan la configuración de proyección y un emisor orientado hacia la superficie.
 - **Superficie/mesh:** los presets de superficie están diseñados para renderizar un modelo; aplicarlos a un billboard no reproduce el resultado previsto.
 
-La galería de presets integrada muestra cada material según su destino. El smoke test de arranque comprueba IDs únicos, texturas registradas, presupuesto de samplers y round-trip de serialización para todos los presets; la galería de desarrollo también comprueba variantes de shader en los contextos de dibujo y que los trails usan su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
+La galería de presets integrada muestra cada material según su destino. El smoke test de arranque comprueba IDs únicos, texturas registradas, presupuesto de samplers y round-trip de serialización para todos los presets; además protege la dirección de disolución y los fades de vida de materiales animados. La galería de desarrollo también comprueba variantes de shader en los contextos de dibujo y que los trails usan su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
 
 ## Archivos de implementación
 

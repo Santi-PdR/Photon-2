@@ -801,7 +801,7 @@ public final class KilaPresets {
         m.distortion.flowSpeed = 0.18f;
         m.dissolve.setEnable(true);
         m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
-        m.dissolve.progress.value = 1;
+        m.dissolve.progress.value = 0;
         m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
         m.dissolve.direction = KilaDissolve.Direction.RADIAL;
         m.dissolve.softness = 0.12f;
@@ -851,7 +851,8 @@ public final class KilaPresets {
         m.distortion.strength.value = 0.035f;
         m.dissolve.setEnable(true);
         m.dissolve.texture.texture = KilaTextures.NOISE_CELLS;
-        m.dissolve.progress.value = 1;
+        // Progress 0 is intact; advance to 1 over the lifetime so the flame dissolves away instead of starting invisible.
+        m.dissolve.progress.value = 0;
         m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
         m.dissolve.direction = KilaDissolve.Direction.V;
         m.dissolve.softness = 0.16f;
@@ -1594,8 +1595,9 @@ public final class KilaPresets {
         m.ramp.gradient.getRgbP().clear();
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF4EA9D8, 0xFFB9F5FF, 0xFFFFFFFF).getRgbP());
         m.dissolve.setEnable(true);
-        m.dissolve.progress.value = 1;
-        m.dissolve.progress.bind(KilaDriver.Source.LIFE, -1);
+        // The slash starts visible and is cut away as particle life advances.
+        m.dissolve.progress.value = 0;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
         m.dissolve.direction = KilaDissolve.Direction.U;
         m.dissolve.edgeWidth.value = 0.035f;
         m.vertexColor = KilaMaterial.VertexColor.RGB_ONLY;
@@ -1609,6 +1611,8 @@ public final class KilaPresets {
     public static final Preset ASH_CLOUD = new Preset("ash_cloud", Category.FIRE_SMOKE, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.42f, 0.4f, 0.38f, 0.82f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_BURST;
         m.main.flipbook = true;
         m.main.columns = 8;
@@ -1638,6 +1642,8 @@ public final class KilaPresets {
         m.worldLight = false;
         m.color = new HDRColor(0.28f, 0.68f, 1f, 1f, 1.7f);
         m.emission = new HDRColor(0.06f, 0.24f, 1f, 1f, 1.4f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE_FLIP;
         m.main.flipbook = true;
         m.main.columns = 4;
