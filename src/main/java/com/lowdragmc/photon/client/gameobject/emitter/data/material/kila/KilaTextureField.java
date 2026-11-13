@@ -124,7 +124,7 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
                     .addChild(new UIElement().layout(layout -> {
                         layout.widthPercent(100);
                         layout.heightPercent(100);
-                    }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true))));
+                    }).style(style -> style.backgroundTexture(new KilaSlotPreview(texture, kind, true)))));
         }
         var path = texture.isProcedural() ? describe() : Component.literal(texture.getTexture().toString());
         event.hoverTooltips = new HoverTooltips(List.of(path, Component.translatable("kila.texture.click_to_pick")),
