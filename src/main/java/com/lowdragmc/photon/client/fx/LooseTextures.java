@@ -53,6 +53,9 @@ public final class LooseTextures {
     private static final Object MISSING = new Object();
     /** Namespaces already copied into the workspace, so a miss is not retried every draw. */
     private static final Set<String> COPIED = new LinkedHashSet<>();
+    /** Temporary GPU textures for copied files whose namespace is not mounted yet. Render thread only. */
+    private static final Map<ResourceLocation, net.minecraft.client.renderer.texture.DynamicTexture> TEMP_TEXTURES = new HashMap<>();
+    private static final Set<ResourceLocation> FAILED_UPLOADS = new LinkedHashSet<>();
     /** Namespace → folder that holds {@code assets/<namespace>}. */
     private static Map<String, Path> index = Map.of();
     private static int searchesSinceRebuild = 0;
@@ -64,6 +67,7 @@ public final class LooseTextures {
     public static void invalidate() {
         RESOLVED.clear();
         COPIED.clear();
+        FAILED_UPLOADS.clear();
         index = Map.of();
         searchesSinceRebuild = 0;
     }
@@ -98,6 +102,45 @@ public final class LooseTextures {
         }
     }
 
+    /**
+     * Bindable id for the render thread. A newly copied namespace is not visible to the current pack manager until
+     * reload, so register the copied image directly in TextureManager while retaining the original resource id.
+     * Once a mounted pack can serve it, discard only our own temporary texture so pack priority works again.
+     */
+    public static ResourceLocation resolveForRender(ResourceLocation id) {
+        if (id == null || BUILTIN.contains(id.getNamespace())) return id;
+        com.mojang.blaze3d.systems.RenderSystem.assertOnRenderThread();
+        var wasServed = packServes(id);
+        resolve(id); // also adopts a loose file for later reloads and FX pack export
+        var manager = Minecraft.getInstance().getTextureManager();
+        var existing = TEMP_TEXTURES.get(id);
+        if (packServes(id)) {
+            // A just-adopted file can become visible immediately under an already mounted namespace, but
+            // a previous lookup may have cached the missing texture under this id.
+            if (!wasServed && existing == null) manager.release(id);
+            if (existing != null) {
+                if (manager.getTexture(id, null) == existing) manager.release(id);
+                TEMP_TEXTURES.remove(id);
+            }
+            return id;
+        }
+        if (existing != null && manager.getTexture(id, null) == existing) return id;
+        TEMP_TEXTURES.remove(id);
+        if (FAILED_UPLOADS.contains(id)) return id;
+        var target = PhotonPaths.getAssetsDir().toPath().resolve(id.getNamespace()).resolve(id.getPath());
+        if (!Files.isRegularFile(target)) return id;
+        try (var input = Files.newInputStream(target)) {
+            var image = com.mojang.blaze3d.platform.NativeImage.read(input);
+            var texture = new net.minecraft.client.renderer.texture.DynamicTexture(image);
+            manager.register(id, texture);
+            TEMP_TEXTURES.put(id, texture);
+        } catch (Exception failure) {
+            FAILED_UPLOADS.add(id);
+            Photon.LOGGER.warn("photon: could not upload loose texture {} from {}", id, target, failure);
+        }
+        return id;
+    }
+
     /** Whether any mounted pack already answers for this id, which needs no search at all. */
     private static boolean packServes(ResourceLocation id) {
         var manager = Minecraft.getInstance().getResourceManager();
@@ -109,6 +152,23 @@ public final class LooseTextures {
      * first {@code .png} under a namespace is taken as that namespace's texture root: the file's path inside it is the
      * id's path, which is how every pack layout is meant to work.
      */
+    /**
+     * Copy a loose file (texture, {@code .obj}, model json, …) into the Photon workspace under
+     * {@code id} so the resource manager and FX-pack export can see it. No-op when a pack already
+     * serves the id or nothing is on disk.
+     */
+    @Nullable
+    public static ResourceLocation adoptIntoWorkspace(ResourceLocation id) {
+        if (id == null || BUILTIN.contains(id.getNamespace())) return null;
+        if (packServes(id)) return id;
+        try {
+            return adopt(id);
+        } catch (Exception failure) {
+            Photon.LOGGER.warn("photon: could not adopt loose asset {}", id, failure);
+            return null;
+        }
+    }
+
     @Nullable
     private static ResourceLocation adopt(ResourceLocation id) throws IOException {
         var found = find(id);
@@ -119,6 +179,7 @@ public final class LooseTextures {
         if (Files.isRegularFile(target)) return id;
         Files.createDirectories(target.getParent());
         Files.copy(found, target);
+        com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
         Photon.LOGGER.info("photon: found {} outside the packs at {} and copied it into the Photon workspace",
                 id, found);
         return id;
@@ -137,12 +198,15 @@ public final class LooseTextures {
     public static Path find(ResourceLocation id) {
         var name = Path.of(id.getPath()).getFileName().toString();
         var folder = namespaceFolder(id.getNamespace());
-        if (folder != null) {
-            // the id's path verbatim first: assets/<ns>/textures/particle/glow.png
-            var direct = folder.resolve(id.getPath());
+        // A namespace can occur in several roots. The workspace may contain only some of its
+        // images, so its presence must not hide an exact match in an older editor tree or pack.
+        var matchingFolders = namespaceFolders(id.getNamespace());
+        for (var matching : matchingFolders) {
+            var direct = matching.resolve(id.getPath());
             if (Files.isRegularFile(direct)) return direct;
-            // then by file name anywhere under the namespace, which is what a hand-made folder usually looks like
-            var loose = byFileName(folder, name, 6);
+        }
+        for (var matching : matchingFolders) {
+            var loose = byFileName(matching, name, 6);
             if (loose != null) return loose;
         }
         // the same path under a namespace the author never declared as the id's
@@ -158,6 +222,24 @@ public final class LooseTextures {
             if (loose != null) return loose;
         }
         return null;
+    }
+
+    /** Every occurrence of a namespace, in root priority order, not only the first indexed one. */
+    private static List<Path> namespaceFolders(String namespace) {
+        var found = new LinkedHashSet<Path>();
+        for (var root : roots()) {
+            var direct = root.resolve("assets").resolve(namespace);
+            if (Files.isDirectory(direct)) found.add(direct);
+            try (Stream<Path> children = Files.list(root)) {
+                children.filter(Files::isDirectory).forEach(child -> {
+                    var nested = child.resolve("assets").resolve(namespace);
+                    if (Files.isDirectory(nested)) found.add(nested);
+                });
+            } catch (IOException ignored) {
+                // A missing or unreadable search root contributes no folders.
+            }
+        }
+        return List.copyOf(found);
     }
 
     /** The first file called {@code name} under {@code folder}, at most {@code depth} levels down. */
@@ -257,6 +339,71 @@ public final class LooseTextures {
             }
         }
         return roots.stream().distinct().toList();
+    }
+
+    /**
+     * Adopt a texture selected directly from disk into Photon's workspace. A file picker may point outside every
+     * configured asset root; copying it here makes the chosen resource id immediately usable and portable in FX packs.
+     */
+    @Nullable
+    public static ResourceLocation adoptTextureFile(ResourceLocation id, Path source) {
+        if (id == null || source == null
+                || !id.getPath().toLowerCase(java.util.Locale.ROOT).endsWith(".png")
+                || !Files.isRegularFile(source)) return null;
+        if (packServes(id)) return id;
+        if (BUILTIN.contains(id.getNamespace())) return null;
+        var target = PhotonPaths.getAssetsDir().toPath().resolve(id.getNamespace()).resolve(id.getPath()).normalize();
+        var assets = PhotonPaths.getAssetsDir().toPath().toAbsolutePath().normalize();
+        if (!target.toAbsolutePath().normalize().startsWith(assets)) return null;
+        try {
+            var absoluteSource = source.toAbsolutePath().normalize();
+            if (!absoluteSource.equals(target.toAbsolutePath().normalize())) {
+                Files.createDirectories(target.getParent());
+                Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            RESOLVED.remove(id.toString());
+            COPIED.remove(id.getNamespace());
+            FAILED_UPLOADS.remove(id);
+            var texture = TEMP_TEXTURES.remove(id);
+            if (texture != null && com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) {
+                var manager = Minecraft.getInstance().getTextureManager();
+                if (manager.getTexture(id, null) == texture) manager.release(id);
+            }
+            index = Map.of();
+            searchesSinceRebuild = 0;
+            com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
+            return id;
+        } catch (IOException failure) {
+            Photon.LOGGER.warn("photon: could not copy selected texture {} from {}", id, source, failure);
+            return null;
+        }
+    }
+
+    /**
+     * Texture ids found under the loose asset roots. These are not necessarily mounted resource packs, but the picker
+     * can offer them because selection adopts their files into the Photon workspace before drawing.
+     */
+    public static List<ResourceLocation> listLooseTextureIds() {
+        var found = new LinkedHashSet<ResourceLocation>();
+        for (var namespace : buildIndex().keySet()) {
+            if (BUILTIN.contains(namespace)) continue;
+            for (var folder : namespaceFolders(namespace)) {
+                var textures = folder.resolve("textures");
+                if (!Files.isDirectory(textures)) continue;
+                try (Stream<Path> files = Files.walk(textures)) {
+                    files.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".png"))
+                            .forEach(path -> {
+                                var relative = textures.getParent().relativize(path).toString().replace('\\', '/');
+                                var id = ResourceLocation.tryParse(namespace + ":" + relative);
+                                if (id != null) found.add(id);
+                            });
+                } catch (IOException ignored) {
+                    // An unreadable asset folder contributes no choices.
+                }
+            }
+        }
+        return found.stream().sorted(java.util.Comparator.comparing(ResourceLocation::toString)).toList();
     }
 
     /** Whether a loose folder happens to carry this id, for the diagnostics command. */
