@@ -289,6 +289,11 @@ public final class PhotonFXEditorSmokeTest {
             var main = presetMaterial.main;
             if (main.flipbook) {
                 flipbookPresetCount++;
+                if (main.frameSource == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMainTexture.FrameSource.DRIVER
+                        && (main.frame.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
+                        || main.frame.value != 0 || main.frame.scale != 1)) {
+                    presetProblems.add(preset.id() + ": flipbook frame must advance from 0 to 1 over particle life");
+                }
                 var sheet = kilaTextureDimensions.get(main.texture.texture);
                 if (main.columns <= 0 || main.rows <= 0 || sheet == null
                         || sheet[0] % main.columns != 0 || sheet[1] % main.rows != 0) {
