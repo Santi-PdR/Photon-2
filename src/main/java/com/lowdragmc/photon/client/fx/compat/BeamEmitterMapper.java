@@ -6,14 +6,15 @@ public class BeamEmitterMapper implements Mapper{
 
     public static CompoundTag mapBeamEmitter(CompoundTag emitterTag){
         CompoundTag newEmitterTag = new CompoundTag();
-        newEmitterTag.putString("type", emitterTag.getString("_type") + "_emitter");
+        newEmitterTag.putString("type", "beam_emitter");
         CompoundTag dataTag = new CompoundTag();
 
         //data tag
         dataTag.putString("name", emitterTag.getString("name"));
+        if (emitterTag.contains("enabled")) dataTag.putBoolean("enabled", emitterTag.getBoolean("enabled"));
         dataTag.putInt("version",  emitterTag.getInt("_version"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
-        dataTag.put("config", mapBeamConfig(emitterTag.getCompound("config")));
+        dataTag.put("config", mapBeamConfig(MapperUtils.legacyEmitterConfig(emitterTag)));
 
         newEmitterTag.put("data", dataTag);
 
@@ -27,16 +28,26 @@ public class BeamEmitterMapper implements Mapper{
         newBeamConfigTag.putInt("startDelay", configTag.getInt("startDelay"));
         newBeamConfigTag.putByte("looping", configTag.getByte("looping"));
 
-        newBeamConfigTag.put("color", MapperUtils.mapTypedValue(configTag.getCompound("color"), false));
+        newBeamConfigTag.put("color", MapperUtils.mapTypedField(configTag, "color", false, true));
         newBeamConfigTag.put("end", MapperUtils.mapCoords(configTag.getCompound("end")));
         newBeamConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
         newBeamConfigTag.put("uvAnimation", MapperUtils.mapUVTag(configTag.getCompound("uvAnimation")));
-        newBeamConfigTag.put("width", MapperUtils.mapTypedValue(configTag.getCompound("width"), false));
+        newBeamConfigTag.put("width", MapperUtils.mapTypedField(configTag, "width", false));
         newBeamConfigTag.put("lights", MapperUtils.mapLightTag(configTag.getCompound("lights")));
-        newBeamConfigTag.put("emitRate", MapperUtils.mapTypedValue(configTag.getCompound("emitRate"), false));
+        newBeamConfigTag.put("emitRate", MapperUtils.mapTypedField(configTag, "emitRate", false));
 
         newBeamConfigTag.putString("raycastBlockMode", "VISUAL");
-
+        MapperUtils.retainPresentFields(newBeamConfigTag, configTag, "raycastBlockMode");
+        MapperUtils.applyLegacyBloomLight(newBeamConfigTag, configTag);
+        if (!configTag.contains("end", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            // Photon 1's sparse BeamConfig defaulted to +X; Photon 2 defaults to -Z.
+            var oldDefaultEnd = new CompoundTag();
+            oldDefaultEnd.putFloat("x", 3f);
+            newBeamConfigTag.put("end", MapperUtils.mapCoords(oldDefaultEnd));
+        }
+        if (configTag.contains("material", net.minecraft.nbt.Tag.TAG_COMPOUND) && !newBeamConfigTag.contains("renderer")) {
+            newBeamConfigTag.put("renderer", MapperUtils.mapRendererTag(configTag.getCompound("renderer"), configTag));
+        }
         return newBeamConfigTag;
     }
 }

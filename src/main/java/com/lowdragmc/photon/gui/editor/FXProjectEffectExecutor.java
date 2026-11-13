@@ -24,6 +24,12 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
     private long seed = 0;
     @Setter
     private Supplier<FX> definitionSupplier = () -> null;
+    @Setter
+    private Supplier<String> diagnosticLabel = () -> "unsaved-editor-project";
+
+    public String diagnosticLabel() {
+        return diagnosticLabel.get();
+    }
     @Getter
     public final RandomSource randomSource = RandomSource.create(seed);
 

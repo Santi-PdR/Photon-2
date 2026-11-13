@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 /**
  * Starting points: each is a few modules set up the way that kind of effect is usually built. Between them every
- * module and the main options of each are used somewhere ({@code KilaPresetsTest}), so they double as examples.
+ * module and the main options of each are exercised across the catalogue and editor smoke checks, so the presets double as examples.
  */
 @OnlyIn(Dist.CLIENT)
 public final class KilaPresets {
@@ -55,6 +55,15 @@ public final class KilaPresets {
         m.main.texture.texture = KilaTextures.GLOW;
     });
 
+    /** An anamorphic cross of light: mix into hit flashes and cores. */
+    public static final Preset FLARE = new Preset("flare", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.color = new HDRColor(1f, 0.92f, 0.75f, 1f, 2f);
+        m.main.texture.texture = KilaTextures.FLARE;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+    });
+
     public static final Preset SMOKE = new Preset("smoke", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.85f, 0.85f, 0.88f, 0.9f, 1f);
         m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
@@ -65,6 +74,24 @@ public final class KilaPresets {
         m.distortion.setEnable(true);
         m.distortion.strength.value = 0.04f;
         m.depth.setEnable(true);
+    });
+
+    /** A soft animated puff using the authored motion sheet instead of ghosting between smoke frames. */
+    public static final Preset SOFT_PUFF = new Preset("soft_puff", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.color = new HDRColor(0.78f, 0.8f, 0.84f, 0.85f, 1f);
+        m.main.texture.texture = KilaTextures.SMOKE_FLIP;
+        m.main.flipbook = true;
+        m.main.columns = 4;
+        m.main.rows = 4;
+        m.main.randomRow = true;
+        m.main.frameSource = KilaMainTexture.FrameSource.DRIVER;
+        m.main.frame.bind(KilaDriver.Source.LIFE, 1);
+        m.main.frameBlend = true;
+        m.main.motionVectors = true;
+        m.main.motionTexture.texture = KilaTextures.SMOKE_FLIP_MV;
+        m.depth.setEnable(true);
+        m.lit.setEnable(true);
     });
 
     /** Burns away as the particle's colour-over-lifetime alpha drops — which also works on trails. */
@@ -191,6 +218,21 @@ public final class KilaPresets {
         m.mask1.power = 0.35f;
     });
 
+    /** A branching plasma stroke with a soft halo, ready for impact flashes or animated billboard arcs. */
+    public static final Preset ARC_BOLT = new Preset("arc_bolt", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.45f, 0.78f, 1f, 1f, 2.4f);
+        m.main.texture.texture = KilaTextures.LIGHTNING_BOLT;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.alphaSharpen = 1.15f;
+        m.distortion.setEnable(true);
+        m.distortion.texture.noise(KilaTexture.Noise.SIMPLE, 5).scroll(0.2f, 0.8f);
+        m.distortion.strength.value = 0.012f;
+        m.depth.setEnable(true);
+    });
+
     /** Shimmering air: the scene behind, pushed around by a rising noise. Alpha blend, so the soft edge fades it in. */
     public static final Preset HEAT_HAZE = new Preset("heat_haze", Category.SCREEN, m -> {
         m.worldLight = false;
@@ -223,6 +265,185 @@ public final class KilaPresets {
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF12002E, 0xFF5B12D8, 0xFFB46CFF, 0xFFFFFFFF).getRgbP());
     });
 
+    /** The swirl flow map as colour, spinning, cut to a disc by Mask 1. */
+    public static final Preset HUE_SWIRL = new Preset("hue_swirl", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 1.8f);
+        m.main.texture.texture = KilaTextures.FLOW_SWIRL;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 40;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.7f;
+    });
+
+    /** Wispy spiral arms spinning in place, tinted purple by a Color Ramp. */
+    public static final Preset SPIRAL = new Preset("spiral", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 2.6f);
+        m.main.texture.texture = KilaTextures.SPIRAL;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 35;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.55f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF1A0038, 0xFF6A18E8, 0xFFC888FF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** Filaments spinning around a dark core. */
+    public static final Preset BLACK_HOLE = new Preset("black_hole", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.VORTEX;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 22;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.5f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF080018, 0xFF3A0A80, 0xFF9B4CFF, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** Soft radial rays turning slowly. */
+    public static final Preset STAR_BURST = new Preset("star_burst", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 0.85f, 0.5f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.STAR_RAYS;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 12;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.45f;
+    });
+
+    /** A glowing hex spinning in place, a crawling polar noise on top. */
+    public static final Preset HEXAGON = new Preset("hexagon", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.45f, 0.85f, 1f, 1f, 2.4f);
+        m.main.texture.texture = KilaTextures.HEXAGON;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 18;
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_CELLS;
+        m.layer.texture.polar = true;
+        m.layer.texture.scroll(0f, 0.25f);
+        m.layer.strength.value = 0.45f;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.5f;
+    });
+
+    /** Concentric rings, a polar UV Distortion breathing them. */
+    public static final Preset RIPPLE = new Preset("ripple", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.7f, 0.9f, 1f, 1f, 2f);
+        m.main.texture.texture = KilaTextures.RIPPLE;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.distortion.setEnable(true);
+        m.distortion.texture.polar = true;
+        m.distortion.texture.scroll(0f, 0.4f);
+        m.distortion.strength.value = 0.04f;
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.4f;
+    });
+
+    /** A 4-point twinkle: brightness from Particle Random, Camera Fade. */
+    public static final Preset SPARKLE = new Preset("sparkle", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.cameraOffset = 0.2f;
+        m.color = new HDRColor(1f, 0.95f, 0.8f, 1f, 2.8f);
+        m.main.texture.texture = KilaTextures.SPARKLE;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.intensity.value = 0.5f;
+        m.intensity.bind(KilaDriver.Source.RANDOM, 1.4f);
+        m.cameraFade.setEnable(true);
+        m.cameraFade.near = 0.3f;
+        m.cameraFade.range = 1.5f;
+    });
+
+    /** A vertical column of light, Additive, Clip wrap. */
+    public static final Preset SHAFT = new Preset("shaft", Category.BASIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.85f, 0.95f, 1f, 1f, 2.2f);
+        m.main.texture.texture = KilaTextures.SHAFT;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.distortion.setEnable(true);
+        m.distortion.texture.scroll(0.05f, 0.35f);
+        m.distortion.strength.value = 0.03f;
+    });
+
+    /** A crescent slash spinning slowly, Color Ramp by alpha. */
+    public static final Preset CRESCENT = new Preset("crescent", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(1f, 1f, 1f, 1f, 2.4f);
+        m.main.texture.texture = KilaTextures.CRESCENT;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.main.texture.rotationSpeed = 40;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.ALPHA;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF140028, 0xFF7A20E8, 0xFFD0A0FF, 0xFFFFFFFF).getRgbP());
+        m.mask1.setEnable(true);
+        m.mask1.power = 0.45f;
+    });
+
+    /** A rising smoke tendril, a crawling Second Layer and a little UV Distortion. */
+    public static final Preset WISP = new Preset("wisp", Category.FIRE_SMOKE, m -> {
+        m.color = new HDRColor(0.82f, 0.84f, 0.88f, 0.9f, 1f);
+        m.main.texture.texture = KilaTextures.WISP;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.layer.setEnable(true);
+        m.layer.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.layer.texture.scroll(0.03f, 0.12f);
+        m.layer.strength.value = 0.45f;
+        m.distortion.setEnable(true);
+        m.distortion.strength.value = 0.035f;
+        m.distortion.texture.scroll(0.02f, 0.2f);
+        m.depth.setEnable(true);
+    });
+
+    /** A lightning bolt sprite, Additive, UV Distortion crawling along it. */
+    public static final Preset ARC = new Preset("arc", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.55f, 0.75f, 1f, 1f, 3.2f);
+        m.main.texture.texture = KilaTextures.ARC;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.distortion.setEnable(true);
+        m.distortion.strength.value = 0.05f;
+        m.distortion.texture.scroll(1.4f, -0.6f);
+        m.intensity.value = 0.7f;
+        m.intensity.bind(KilaDriver.Source.RANDOM, 0.9f);
+    });
+
     /** A smoke puff lit by the six lightmaps it was baked with: the key light and the dynamic ones fall on its sides. */
     public static final Preset LIT_SMOKE = new Preset("lit_smoke", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.85f, 0.85f, 0.9f, 1f, 1f);
@@ -252,6 +473,24 @@ public final class KilaPresets {
         m.screenDistortion.source = KilaScreenDistortion.Source.NORMAL;
         m.screenDistortion.strength.value = 0.03f;
         m.screenDistortion.chromatic = 0.3f;
+    });
+
+    /** Frosted translucent mesh: subtle painted reflection, cool rim and gentle soft intersections. */
+    public static final Preset FROSTED_GLASS = new Preset("frosted_glass", Category.SURFACE, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.backFacesFirst = true;
+        m.color = new HDRColor(0.58f, 0.82f, 1f, 0.32f, 1f);
+        m.main.texture.texture = KilaTextures.WHITE;
+        m.matcap.setEnable(true);
+        m.matcap.blend = KilaMatcap.Blend.ADD;
+        m.matcap.strength = 0.55f;
+        m.fresnel.setEnable(true);
+        m.fresnel.power = 2.4f;
+        m.fresnel.color = new HDRColor(0.45f, 0.82f, 1f, 1f, 2.6f);
+        m.depth.setEnable(true);
+        m.depth.distance = 0.45f;
     });
 
     /** A ball of fog that thins towards its edge from any side, and where the ground cuts it. */
@@ -448,6 +687,89 @@ public final class KilaPresets {
         m.vertexOffset.texture.tiling(1, 6).scroll(0, 2.5f);
     });
 
+    /** A projected toxic puddle: slow cell flow, a soft contact edge and a lifetime-driven dissolve. */
+    public static final Preset SLIME_PUDDLE = new Preset("slime_puddle", Category.GROUND, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.fog = false;
+        m.color = new HDRColor(0.42f, 0.9f, 0.16f, 0.78f, 1.15f);
+        m.main.texture.texture = KilaTextures.NOISE_CELLS;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.uvSource = KilaTexture.UvSource.WORLD_XZ;
+        m.main.texture.tiling(0.7f, 0.7f);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.scroll(0.03f, 0.02f);
+        m.layer.strength.value = 0.35f;
+        m.distortion.setEnable(true);
+        m.distortion.mode = KilaDistortion.Mode.FLOW_MAP;
+        m.distortion.texture.texture = KilaTextures.FLOW_SWIRL;
+        m.distortion.strength.value = 0.025f;
+        m.distortion.flowSpeed = 0.18f;
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.dissolve.progress.value = 1;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
+        m.dissolve.direction = KilaDissolve.Direction.RADIAL;
+        m.dissolve.softness = 0.12f;
+        m.projection.setEnable(true);
+        m.projection.depth = 1.5f;
+        m.projection.size = 0.85f;
+        m.depth.setEnable(true);
+        m.depth.distance = 0.55f;
+    });
+
+    /** Dark, height-bumped rock with hot cracks; an opaque, lit alternative to the clean Debris material. */
+    public static final Preset EMBER_ROCK = new Preset("ember_rock", Category.SURFACE, Target.MESH, m -> {
+        m.blend = BlendMode.Preset.OPAQUE;
+        m.depthWrite = true;
+        m.color = new HDRColor(0.75f, 0.68f, 0.6f, 1f, 1f);
+        m.main.texture.texture = KilaTextures.NOISE_PERLIN;
+        m.shading.setEnable(true);
+        m.shading.normal = KilaShading.Normal.MESH;
+        m.shading.bump = KilaShading.Bump.HEIGHT;
+        m.shading.bumpStrength = 1.8f;
+        m.shading.ambient = 0.38f;
+        m.lit.setEnable(true);
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.mode = KilaRamp.Mode.MULTIPLY;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF24110D, 0xFF5C2112, 0xFFD24A12, 0xFFFFB02E).getRgbP());
+        m.emission = new HDRColor(0.8f, 0.18f, 0.035f, 1f, 0.8f);
+    });
+
+    /** A rising violet soul flame, its edge dissolving into a cyan-magenta burn. */
+    public static final Preset SOUL_FLAME = new Preset("soul_flame", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.vertexColor = KilaMaterial.VertexColor.RGB_ONLY;
+        m.color = new HDRColor(0.62f, 0.34f, 1f, 1f, 2.1f);
+        m.main.texture.texture = KilaTextures.WISP;
+        m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.ADD;
+        m.layer.texture.texture = KilaTextures.NOISE_FLOW;
+        m.layer.texture.scroll(0.04f, 0.2f);
+        m.layer.strength.value = 0.45f;
+        m.distortion.setEnable(true);
+        m.distortion.texture.noise(KilaTexture.Noise.SIMPLE, 5).scroll(0.08f, 0.24f);
+        m.distortion.strength.value = 0.035f;
+        m.dissolve.setEnable(true);
+        m.dissolve.texture.texture = KilaTextures.NOISE_CELLS;
+        m.dissolve.progress.value = 1;
+        m.dissolve.progress.bind(KilaDriver.Source.LIFE, 1);
+        m.dissolve.direction = KilaDissolve.Direction.V;
+        m.dissolve.softness = 0.16f;
+        m.dissolve.edgeWidth.value = 0.08f;
+        m.dissolve.edgeGradient = true;
+        m.dissolve.edgeGradientColors.getRgbP().clear();
+        m.dissolve.edgeGradientColors.getRgbP().addAll(new GradientColor(0xFFFFFFFF, 0xFF63E9FF, 0xFFB951FF, 0x00B951FF).getRgbP());
+        m.depth.setEnable(true);
+    });
+
     /** Opaque rock, bumped by a procedural height and lit by the world and the dynamic lights. */
     public static final Preset DEBRIS = new Preset("debris", Category.SURFACE, Target.MESH, m -> {
         m.blend = BlendMode.Preset.OPAQUE;
@@ -512,11 +834,11 @@ public final class KilaPresets {
         m.pixelate.pixels = 24;
     });
 
-    public static final List<Preset> ALL = List.of(GLOW, SPARKS, DISSOLVE, SLASH, SHOCKWAVE,
-            FIRE, SMOKE, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
-            MAGIC_CIRCLE, PORTAL, LIGHTNING, CHARGE_ORB, ENERGY_TRAIL,
-            GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SCAN_PULSE,
-            ENERGY_SHIELD, CRYSTAL, HOLOGRAM, DEBRIS,
+    public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
+            FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
+            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL,
+            GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE,
+            ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,
             TOON_FIRE, PIXEL_SPELL);
 
