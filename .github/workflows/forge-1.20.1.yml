@@ -305,7 +305,7 @@ jobs:
 
       - name: Require Photon 1 bloom to survive conversion
         shell: bash
-        run: grep -Fq '[photon1-bloom-smoke] converted FX keep Photon 1 bloom' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[photon1-bloom-smoke] converted FX of every type keep Photon 1 bloom at intensity ' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require the editor to list loaded textures
         shell: bash
