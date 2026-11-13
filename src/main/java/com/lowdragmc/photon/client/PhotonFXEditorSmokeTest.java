@@ -2776,15 +2776,15 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
         Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
-        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/ci/ci_loose_obj.json");
+        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/block/ci_loose_obj.json");
         Path adoptedObj = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.obj");
         Path adoptedMtl = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.mtl");
         Files.deleteIfExists(adoptedJson);
         Files.deleteIfExists(adoptedObj);
         Files.deleteIfExists(adoptedMtl);
-        // Keep this fixture outside models/block: it is exercised by the direct Photon baker, not registered as a
-        // Minecraft block model. That avoids a concurrent resource reload asking Forge's OBJ loader to bake it.
-        var looseJsonSource = new JsonModelSource(new ResourceLocation("ldlib2", "ci/ci_loose_obj"));
+        // The source is loose, but adoption maps its JSON to a real block-model id. Minecraft scans
+        // models/**/*.json during reload, so keep this fixture valid for Forge's OBJ loader too.
+        var looseJsonSource = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_loose_obj"));
         if (!looseJsonSource.isObjLoaderModel())
             throw new IllegalStateException("Loose ldlib2 NeoForge OBJ JSON was not detected");
         // The JSON can become visible to Forge's model bakery as soon as it is copied into the
