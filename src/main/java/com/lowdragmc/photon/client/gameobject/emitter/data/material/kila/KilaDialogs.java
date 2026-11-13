@@ -108,7 +108,8 @@ public final class KilaDialogs {
                 cell.style(style -> style.tooltips(tips.toArray(Component[]::new)));
                 cell.addEventListener(UIEvents.MOUSE_DOWN, event -> {
                     if (event.button != 0) return;
-                    apply.accept(preset.create());
+                    // This instance already owns the live tile preview; reuse it instead of rebuilding every module.
+                    apply.accept(material);
                     dialog.close();
                 });
                 grid.addChild(cell);

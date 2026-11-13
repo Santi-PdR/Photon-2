@@ -61,7 +61,47 @@ public class AudioTrackEditor extends ClipTrackEditor {
 
     @Override
     public UIElement buildHeaderContent(TimelineContext ctx, Track track, TrackUIState state) {
-        return buildTargetSlot(ctx, track, true);
+        var header = new UIElement().layout(layout -> {
+            layout.flex(1);
+            layout.heightPercent(100);
+            layout.flexDirection(dev.vfyjxf.taffy.style.FlexDirection.ROW);
+            layout.gapAll(2);
+        });
+        header.addChild(buildTargetSlot(ctx, track, true));
+        // One click from the track itself imports an OGG and creates a clip at the playhead; users
+        // no longer need to create an empty clip first and discover the import button in the inspector.
+        header.addChild(new Button().setText("+").setOnClick(event -> {
+            var mui = event.currentElement.getModularUI();
+            if (mui != null) importOggAsClip(ctx, track, mui.ui.rootElement);
+        }).layout(layout -> layout.width(24).heightPercent(100))
+                .style(style -> style.tooltips("photon.gui.editor.timeline.audio.import_ogg")));
+        return header;
+    }
+
+    private static void importOggAsClip(TimelineContext ctx, Track track, UIElement host) {
+        Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
+                new File(System.getProperty("user.home")), true, Dialog.suffixFilter(".ogg"), file -> {
+                    if (file == null || !file.isFile()) return;
+                    try {
+                        var sound = AudioAssetImporter.importOgg(file);
+                        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                                Minecraft.getInstance().execute(() -> {
+                                    if (failure != null) {
+                                        com.lowdragmc.photon.Photon.LOGGER.error(
+                                                "Failed to register imported Photon OGG", failure);
+                                        return;
+                                    }
+                                    double duration = SoundLengthCache.getTicks(sound);
+                                    if (duration <= 0) duration = ctx.defaultClipDuration(track.targetId());
+                                    var clip = new AudioClip(Math.max(0, ctx.currentTimeTicks()), Math.max(1, duration), 1.0f)
+                                            .sound(sound);
+                                    ctx.addClip(track, clip);
+                                    ctx.refreshPreview();
+                                }));
+                    } catch (Exception exception) {
+                        com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
+                    }
+                }).show(host);
     }
 
     @Override

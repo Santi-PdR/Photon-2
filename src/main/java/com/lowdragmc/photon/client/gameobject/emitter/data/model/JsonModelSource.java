@@ -91,7 +91,7 @@ public class JsonModelSource implements IModelSource {
     public boolean isObjLoaderModel() {
         try {
             ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
-            Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+            Path nestedFile = LDLibModelAssets.resolve(modelLocation, file.getPath());
             Resource resource = nestedFile == null
                     ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
                     : null;
@@ -125,7 +125,7 @@ public class JsonModelSource implements IModelSource {
         }
         ObjLoaderReference objReference = getObjLoaderReference();
         if (objReference != null) {
-            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objReference.location().getPath());
+            Path nestedObj = LDLibModelAssets.resolve(objReference.location(), objReference.location().getPath());
             if (nestedObj != null) {
                 PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
             }
@@ -170,7 +170,7 @@ public class JsonModelSource implements IModelSource {
             if (objLoaderChecked) return objLoaderReference;
             try {
                 ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
-                Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+                Path nestedFile = LDLibModelAssets.resolve(modelLocation, file.getPath());
                 if (nestedFile != null) {
                     PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedFile.toFile());
                 }
