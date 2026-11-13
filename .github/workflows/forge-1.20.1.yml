@@ -275,7 +275,7 @@ jobs:
 
       - name: Require editor root transforms to save
         shell: bash
-        run: grep -Fq '[editfx-root-smoke] editor root move/scale is baked into children on save' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[editfx-root-smoke] editor root move/scale and child world pose are baked into children on save' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require entity FX to follow before particles draw
         shell: bash
