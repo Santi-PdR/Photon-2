@@ -6,7 +6,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.Photon;
 import net.minecraft.network.chat.Component;
-import net.minecraft.client.Minecraft;
+import com.lowdragmc.photon.client.util.PhotonTextureCatalogue;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -93,10 +93,7 @@ public final class KilaTexturePicker {
         alreadyShown.addAll(PARTICLES);
         alreadyShown.addAll(RECENT);
         var byNamespace = new TreeMap<String, List<ResourceLocation>>();
-        Minecraft.getInstance().getResourceManager().listResources("textures",
-                location -> location.getPath().startsWith("textures/") && location.getPath().endsWith(".png"))
-                .keySet().stream()
-                .filter(location -> !location.getNamespace().equals("minecraft"))
+        PhotonTextureCatalogue.listAvailable().stream()
                 .filter(alreadyShown::add)
                 .sorted()
                 .forEach(location -> byNamespace.computeIfAbsent(location.getNamespace(), key -> new java.util.ArrayList<>())
@@ -135,7 +132,9 @@ public final class KilaTexturePicker {
         candidate.channel = field.texture.channel;
         candidate.colorMode = field.texture.colorMode;
         candidate.nearest = field.texture.nearest;
-        var cell = KilaDialogs.cell(KilaDialogs.fill(new KilaSlotPreview(candidate, field.kind, false)), name, TILE, selected);
+        var thumbnail = KilaDialogs.fill(KilaSlotPreview.checker())
+                .addChild(KilaDialogs.fill(new KilaSlotPreview(candidate, field.kind, false)));
+        var cell = KilaDialogs.cell(thumbnail, name, TILE, selected);
         cell.style(style -> style.tooltips(name));
         cell.addEventListener(UIEvents.MOUSE_DOWN, event -> {
             if (event.button == 0) pick.run();
