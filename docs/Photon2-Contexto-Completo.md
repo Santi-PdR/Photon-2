@@ -58,7 +58,7 @@ GPU **AMD RX Vega 11**, OpenGL 4.6. Servidor sin packs de FX (0 ofrecidos) en el
 - **Emisores y partículas**: materiales, formas (shapes), renderers, modelos (OBJ / glTF / JSON), texturas, shaders, trails, beams, ara-trails, force fields, colisiones.
 - **Iluminación dinámica** con sombras (voxel/screen/contact), luces y volúmenes de niebla.
 - **Post-procesado**: bloom, máscaras (`CustomMask`), graph de shader y grafo fullscreen, clips de post-proceso.
-- **Materiales Kila** con presets, módulos (mask, dissolve, ramp, fresnel, UV, flipbook…), bindings a datos de partícula.
+- **Materiales Kila** con presets, módulos (mask, dissolve, ramp, fresnel, UV, flipbook…), bindings a datos de partícula y galería organizada por destino. Los presets recientes incluyen cristal esmerilado, limo tóxico, roca incandescente, llama de alma, estela de aurora, estallidos de lava/glacial y treinta más: aura curativa, niebla tóxica, estallido de agua, estela de cometa, portal del vacío, rayo solar, runas de suelo, escudo prismático, fragmento de cristal, remolino de polvo, estallido de brasas, anillo glacial, relámpago ramificado, estela de plasma, impacto de meteorito, obsidiana, manto de sombras, portal estelar, vaho ascendente, estallido de arena, marejada, nube de hongo, polvo de hadas, estela rúnica, grieta de sombras, río de lava, aura cristalina, pulso de fuerza, tormenta de polvo y lanza solar; ver [guía de presets Kila](Photon2-Kila-Presets.md). La galería coloca categorías extensas en cuadrícula para mantener todos los presets visibles, comprueba trails en su renderer y valida que cada preset compile en sus rutas. La búsqueda de módulos descartados por el presupuesto de samplers ahora usa lookup por identidad constante, conservando la lista ordenada para diagnóstico.
 - **Carga por namespace** e importación de contenido **Photon 1** (`.fx` y `.fxproj` crudos o gzip, assets legados).
 - **Audio OGG** desde la pista Audio (clip, loop, volumen, pitch, categoría, atenuación).
 - **`.fxpack`**: paquete ZIP autosuficiente para repartir un efecto con sus assets.
@@ -160,7 +160,9 @@ Cientos de commits adaptando APIs NeoForge → Forge 1.20.1: NBT, modelos OBJ (l
 | Uniforms `Threshold`/`Knee` sobrando | Pasadas del port | Eliminados de `bloom_final_scatter_pass.json` |
 | Trails a alta velocidad | Muestreo insuficiente | Sub-muestreo con tope de 64 puntos + prueba de gradiente de color |
 | Textura `brutality:...trail_particle.png` ausente | El asset no existe en la instancia | Se documenta: el exportador avisa la ruta; no puede inventar el archivo |
-| **"Sigue sin funcionar el cosito de elegir partículas"** | Los buscadores (`SearchComponentConfigurator`) copiaban los candidatos **una sola vez** al construir el configurador y nunca se refrescaban → lista vacía si el panel se abrió antes de la primera carga de recursos o después de una recarga | `FXHelper.searchFX(...)` lee la lista (cacheada) **en cada búsqueda**; lo usan sub-emisores, `FXInstanceStyle.pickFx` y `IdLists` |
+| **"Sigue sin funcionar el cosito de elegir partículas"** (1.ª vez) | Los buscadores (`SearchComponentConfigurator`) copiaban los candidatos **una sola vez** al construir el configurador y nunca se refrescaban → lista vacía si el panel se abrió antes de la primera carga de recursos o después de una recarga | `FXHelper.searchFX(...)` lee la lista (cacheada) **en cada búsqueda**; lo usan sub-emisores, `FXInstanceStyle.pickFx` y `IdLists` |
+| **"Lo de las partículas y la lista de fx siguen igual"** (2.ª vez) | La lista de candidatos estaba bien; el fallo era del **widget** de búsqueda de LDLib 2.2.39: al abrirse busca con el texto que el campo ya tiene, que es el nombre del valor **ya elegido**. El desplegable mostraba una sola línea (o ninguna la primera vez), y teclear **concatenaba** al nombre viejo (`nombreElegidoX`), así que no encontraba nada. LDLib lo arregló en 2.2.39.8, versión que no se puede usar aquí | `SearchComponentMixin` (nuevo): repite la búsqueda en vacío al abrir y selecciona el texto, para que la primera tecla reemplace el nombre en vez de sumarse. Arregla **todos** los selectores que usan ese widget de una sola vez. Candado: `[search-box-smoke]` |
+| Slider de bloom que "volvía" a 0.18 | La migración de defaults antiguos corría en trabajo diferido y comparaba por valor: pasar el slider por **1.0** (un default viejo) devolvía el valor a 0.18 | La migración es ahora **una sola vez**, al arrancar, antes del trabajo diferido |
 | Pedido: botón para cambiar intensidad de bloom | Solo existía en la pantalla de config | `SceneBloomIntensityControl` en la barra de escena: slider 0..2 + valor, sincronizado con la config, **sin tocar el default** |
 
 ### 6.3 Pedido de Alex: explicar `.fxpack` y el flujo de servidor
@@ -193,7 +195,7 @@ Límites en código (`FxPackSync`): **32 packs**, **64 MiB por pack**, **128 MiB
 
 ### 7.2 Lo que NO hace
 
-- No actualiza packs en caliente a jugadores ya conectados (se anuncia en el login).
+- No vigila la carpeta del servidor ni empuja cambios por sí solo a quienes ya están conectados: el login siempre recibe el manifiesto, y para refrescar en línea hay que ejecutar `/photon fxpacks` como operador (permiso 2) o pedir al jugador `/photon_client fxpacks`. La descarga compara hashes y el cliente recarga los recursos automáticamente.
 - No sustituye al mod: sin Photon en el servidor no hay anuncio; sin Photon en el cliente no hay render.
 - No transporta código: solo contenido.
 
@@ -295,8 +297,8 @@ Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
 ## 11. Pendientes y siguientes pasos sugeridos
 
-1. **Verificación en el cliente de Alex** del build `0fbf2ad`: picker de FX (sub-emisores e instancias) y slider de bloom.
-2. Si el selector sigue fallando: pedir `latest.log` de la sesión concreta y revisar si el fallo está en la apertura del desplegable (no en la lista de candidatos).
+1. **Verificación en el cliente de Alex** del JAR con el arreglo del buscador (`SearchComponentMixin`) y el slider de bloom.
+2. Selector de FX: la causa de la segunda queja ya está identificada y arreglada en el widget (apertura del desplegable, no la lista de candidatos). Si volviera a fallar, pedir `latest.log` de la sesión concreta y la captura del desplegable abierto.
 3. **Iris/DH**: revisar `iris_composite_mode` y el bloom bajo shaderpacks en hardware AMD.
 4. **Rendimiento**: presupuesto de post-FX (`postfx_pool_budget_mb`), actualización de partículas en paralelo con colisiones.
 5. Considerar publicar el JAR como **release con tag** para que los jugadores tengan enlace permanente (los artifacts caducan).

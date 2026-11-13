@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.util;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -52,10 +53,23 @@ public final class PhotonShaderUtils {
         // Match the dynamic uniform set by CustomShaderMaterial.begin(); this
         // default is applied afterwards and must not overwrite it with window size.
         var pipeline = RenderPassPipeline.getCurrent();
-        var target = Minecraft.getInstance().getMainRenderTarget();
-        shader.safeGetUniform("ScreenSize").set(
-                (float) (pipeline != null ? pipeline.framebufferWidth() : target.width),
-                (float) (pipeline != null ? pipeline.framebufferHeight() : target.height));
+        int width;
+        int height;
+        if (pipeline != null) {
+            width = pipeline.framebufferWidth();
+            height = pipeline.framebufferHeight();
+        } else {
+            var surface = UISurface.current();
+            if (surface != null && !surface.isMainWindow()) {
+                width = surface.framebufferWidth();
+                height = surface.framebufferHeight();
+            } else {
+                var target = Minecraft.getInstance().getMainRenderTarget();
+                width = target.width;
+                height = target.height;
+            }
+        }
+        shader.safeGetUniform("ScreenSize").set((float) width, (float) height);
         shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
         RenderSystem.setupShaderLights(shader);
     }
