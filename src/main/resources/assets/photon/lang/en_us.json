@@ -2010,5 +2010,7 @@
   "kila.preset.aurora_trail": "Aurora ribbon",
   "kila.preset.aurora_trail.desc": "A soft premultiplied trail with two slow flow layers, a mirrored edge mask and a green-cyan-violet length ramp.",
   "kila.preset.lava_burst": "Lava burst",
-  "kila.preset.lava_burst.desc": "A motion-blended smoke flipbook recoloured from cinder red to a white-hot core, with a lifetime dissolve and soft particles."
+  "kila.preset.lava_burst.desc": "A motion-blended smoke flipbook recoloured from cinder red to a white-hot core, with a lifetime dissolve and soft particles.",
+  "kila.preset.frost_burst": "Frost burst",
+  "kila.preset.frost_burst.desc": "A motion-blended smoke flipbook ramped from deep blue through cyan to a frosty white core, with subtle cold distortion."
 }

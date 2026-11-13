@@ -1219,5 +1219,7 @@
   "kila.preset.aurora_trail": "Estela de aurora",
   "kila.preset.aurora_trail.desc": "Estela suave premultiplicada con dos capas de flujo lento, máscara de bordes reflejada y gradiente verde-cian-violeta a lo largo.",
   "kila.preset.lava_burst": "Estallido de lava",
-  "kila.preset.lava_burst.desc": "Flipbook de humo con mezcla de movimiento, teñido de rojo ceniza a núcleo blanco incandescente, disolución por vida y partículas suaves."
+  "kila.preset.lava_burst.desc": "Flipbook de humo con mezcla de movimiento, teñido de rojo ceniza a núcleo blanco incandescente, disolución por vida y partículas suaves.",
+  "kila.preset.frost_burst": "Estallido glacial",
+  "kila.preset.frost_burst.desc": "Flipbook de humo con mezcla de movimiento, degradado de azul profundo a cian y blanco escarchado, con una sutil distorsión fría."
 }

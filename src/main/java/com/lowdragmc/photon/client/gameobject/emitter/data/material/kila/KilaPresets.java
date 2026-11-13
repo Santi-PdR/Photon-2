@@ -608,6 +608,32 @@ public final class KilaPresets {
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFFFFFFFF, 0xFF7FE6FF, 0xFF6A4BFF).getRgbP());
     });
 
+    /** A cold animated burst: the smoke flipbook runs from deep blue through cyan to a frosty white core. */
+    public static final Preset FROST_BURST = new Preset("frost_burst", Category.STYLIZED, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.color = new HDRColor(0.62f, 0.84f, 1f, 0.92f, 1.1f);
+        m.main.texture.texture = KilaTextures.SMOKE_FLIP;
+        m.main.flipbook = true;
+        m.main.columns = 4;
+        m.main.rows = 4;
+        m.main.randomRow = true;
+        m.main.frameSource = KilaMainTexture.FrameSource.DRIVER;
+        m.main.frame.bind(KilaDriver.Source.LIFE, 1);
+        m.main.frameBlend = true;
+        m.main.motionVectors = true;
+        m.main.motionTexture.texture = KilaTextures.SMOKE_FLIP_MV;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.LUMINANCE;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF101B48, 0xFF397FC7, 0xFF9CEBFF, 0xFFFFFFFF).getRgbP());
+        m.distortion.setEnable(true);
+        m.distortion.strength.value = 0.018f;
+        m.distortion.texture.texture = KilaTextures.NOISE_FLOW;
+        m.distortion.texture.scroll(0.08f, -0.12f);
+        m.depth.setEnable(true);
+        m.lit.setEnable(true);
+    });
+
     /** A calm aurora ribbon: soft premultiplied colour, two slow flow layers and a feathered trail edge. */
     public static final Preset AURORA_TRAIL = new Preset("aurora_trail", Category.MAGIC, Target.TRAIL, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
@@ -906,7 +932,7 @@ public final class KilaPresets {
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE,
             ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,
-            TOON_FIRE, PIXEL_SPELL);
+            FROST_BURST, TOON_FIRE, PIXEL_SPELL);
 
     private KilaPresets() {
     }

@@ -1999,5 +1999,7 @@
   "kila.preset.aurora_trail": "极光飘带",
   "kila.preset.aurora_trail.desc": "柔和的预乘混合拖尾，带两层缓慢流动噪声、镜像边缘遮罩和绿青紫长度渐变。",
   "kila.preset.lava_burst": "熔岩爆发",
-  "kila.preset.lava_burst.desc": "带运动混合的烟雾翻页动画，从灰烬红渐变到炽白核心，并按生命周期溶解和柔化交界。"
+  "kila.preset.lava_burst.desc": "带运动混合的烟雾翻页动画，从灰烬红渐变到炽白核心，并按生命周期溶解和柔化交界。",
+  "kila.preset.frost_burst": "冰霜爆发",
+  "kila.preset.frost_burst.desc": "带运动混合的烟雾翻页动画，从深蓝渐变到青色与冰白核心，并带有轻微的寒冰扭曲。"
 }
