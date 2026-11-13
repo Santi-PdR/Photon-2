@@ -42,8 +42,10 @@ import java.util.concurrent.atomic.AtomicReference;
 @LDLRegisterClient(name = "kila_gallery", group = "photon", registry = UIScenario.REGISTRY,
         environment = RegistrationEnvironment.DEV_ONLY)
 public class KilaGalleryScenario implements UIScenario {
-    private static final double SPACING = 3.5;
+    private static final double SPACING = 2.3;
     private static final double DISTANCE = 9;
+    private static final int GRID_COLUMNS = 5;
+    private static final double ROW_SPACING = 1.3;
     private static final AtomicReference<Long> DAY_TIME = new AtomicReference<>();
     private static final AtomicReference<Boolean> DAYLIGHT = new AtomicReference<>(true);
     private static final Map<BlockPos, BlockState> WALL = new LinkedHashMap<>();
@@ -142,6 +144,15 @@ public class KilaGalleryScenario implements UIScenario {
         }
         ctx.check("every preset links on its draw paths", broken.isEmpty(), "none broken", broken);
         ctx.check("built-in material preset IDs are unique", duplicateIds.isEmpty(), "no duplicates", duplicateIds);
+        int largestPage = java.util.Arrays.stream(KilaPresets.Category.values())
+                .mapToInt(category -> (int) KilaPresets.ALL.stream().filter(preset -> preset.category() == category).count())
+                .max().orElse(0);
+        int columns = Math.min(GRID_COLUMNS, largestPage);
+        int rows = (largestPage + GRID_COLUMNS - 1) / GRID_COLUMNS;
+        double maxAcross = (columns - 1) * SPACING / 2;
+        double maxAlong = (rows - 1) * ROW_SPACING / 2;
+        ctx.check("the largest gallery page fits its backdrop", maxAcross <= 14 && maxAlong < 5,
+                "within 14 blocks wide and 5 blocks in depth", maxAcross + " x " + maxAlong);
         var misplacedTrails = new ArrayList<String>();
         for (var preset : KilaPresets.ALL) {
             if (preset.target() != KilaPresets.Target.TRAIL) continue;
@@ -164,10 +175,15 @@ public class KilaGalleryScenario implements UIScenario {
         var ahead = player.getDirection();
         var right = ahead.getClockWise();
         var executors = new ArrayList<BlockEffectExecutor>();
+        int rows = (presets.size() + GRID_COLUMNS - 1) / GRID_COLUMNS;
         for (int i = 0; i < presets.size(); i++) {
             var preset = presets.get(i);
-            double across = (i - (presets.size() - 1) / 2.0) * SPACING;
-            double along = category == KilaPresets.Category.GROUND ? DISTANCE - 3 : DISTANCE;
+            int row = i / GRID_COLUMNS;
+            int column = i % GRID_COLUMNS;
+            int columnsInRow = Math.min(GRID_COLUMNS, presets.size() - row * GRID_COLUMNS);
+            double across = (column - (columnsInRow - 1) / 2.0) * SPACING;
+            double rowOffset = (row - (rows - 1) / 2.0) * ROW_SPACING;
+            double along = (category == KilaPresets.Category.GROUND ? DISTANCE - 3 : DISTANCE) + rowOffset;
             var emitter = showcase(preset);
             var fx = new FX();
             fx.getFxData().objects().add(emitter);

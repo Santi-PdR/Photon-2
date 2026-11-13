@@ -33,8 +33,18 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `star_gate` | Portal estelar | Mesh | Portal con runas giratorias y borde luminoso. |
 | `steam_vent` | Vaho ascendente | Pantalla | Calor que asciende y distorsiona la escena de fondo. |
 | `sand_blast` | Estallido de arena | Partícula | Polvo granular cálido con capas de ruido Perlin. |
+| `tide_surge` | Marejada | Partícula | Onda turquesa con capas de ondas y deformación de flujo. |
+| `mushroom_cloud` | Nube de hongo | Partícula | Flipbook de humo voluminoso con gradiente cálido y profundidad suave. |
+| `faerie_dust` | Polvo de hadas | Partícula | Destellos finos con brillo animado y tinte violeta-menta. |
+| `rune_trail` | Estela rúnica | Trail | Cinta rúnica turquesa con reflejos dorados. |
+| `shadow_rift` | Grieta de sombras | Mesh | Vórtice oscuro con borde Fresnel violeta. |
+| `lava_flow` | Río de lava | Suelo / proyección | Canales de lava sobre el suelo con coordenadas de mundo. |
+| `crystal_aura` | Aura cristalina | Superficie / mesh | Esfera translúcida con matcap, celdas y borde frío. |
+| `force_pulse` | Pulso de fuerza | Partícula | Anillo expansivo con distorsión radial y desvanecimiento. |
+| `dust_storm` | Tormenta de polvo | Partícula | Frente de polvo denso con nubes y degradado arena. |
+| `sun_lance` | Lanza solar | Partícula | Haz dorado concentrado, blanco caliente en el centro. |
 
-Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los veinte presets añadidos en estas dos rondas reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni amplían el conjunto de texturas que debe cargar el cliente.
+Los nombres y descripciones del selector están traducidos al inglés, español y chino simplificado. Los treinta presets añadidos en estas tres rondas reutilizan texturas Kila que ya vienen en el mod: no agregan PNG ni amplían el conjunto de texturas que debe cargar el cliente.
 
 ## Elegir el renderer adecuado
 
@@ -48,6 +58,8 @@ La galería de presets integrada muestra cada material según su destino. El smo
 ## Archivos de implementación
 
 - Catálogo y configuración: `src/main/java/com/lowdragmc/photon/client/gameobject/emitter/data/material/kila/KilaPresets.java`.
+- El explorador aplica el mismo material que ya muestra su miniatura, evitando construir otra instancia al seleccionar: `KilaDialogs.presets`.
+- La galería de pruebas coloca las categorías grandes en una cuadrícula compacta para mantenerlas dentro del fondo visible: `KilaGalleryScenario`.
 - Selector de recursos incorporados: `src/main/java/com/lowdragmc/photon/gui/editor/resource/MaterialResource.java`.
 - Galería y verificación visual: `src/main/java/com/lowdragmc/photon/uitest/KilaGalleryScenario.java`.
 - Búsqueda rápida de módulos descartados por presupuesto de samplers: `KilaLayout.isDropped`, usada desde el recorrido de módulos del material.
