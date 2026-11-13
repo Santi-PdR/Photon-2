@@ -2070,7 +2070,7 @@
   "kila.preset.force_pulse": "Force pulse",
   "kila.preset.force_pulse.desc": "A clean expanding force ring with a lifetime fade and outward flow ripple.",
   "kila.preset.dust_storm": "Dust storm",
-  "kila.preset.dust_storm.desc": "A dense warm dust front with cloud breakup, a soft contact and a sand-coloured ramp.",
+  "kila.preset.dust_storm.desc": "A dense warm dust front with cloud breakup, soft contact, a sand-coloured ramp and a full lifetime fade.",
   "kila.preset.sun_lance": "Sun lance",
   "kila.preset.sun_lance.desc": "A focused golden shaft, thin at the tip and fading from white-hot to amber.",
   "kila.preset.impact_flash": "Impact flash",

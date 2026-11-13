@@ -1279,7 +1279,7 @@
   "kila.preset.force_pulse": "Pulso de fuerza",
   "kila.preset.force_pulse.desc": "Anillo expansivo con desvanecimiento por vida y onda de flujo hacia fuera.",
   "kila.preset.dust_storm": "Tormenta de polvo",
-  "kila.preset.dust_storm.desc": "Frente denso de polvo cálido con nubes, contacto suave y degradado arena.",
+  "kila.preset.dust_storm.desc": "Frente denso de polvo cálido con nubes, contacto suave, degradado arena y desvanecimiento completo por vida.",
   "kila.preset.sun_lance": "Lanza solar",
   "kila.preset.sun_lance.desc": "Haz dorado concentrado, fino en la punta y de blanco caliente a ámbar.",
   "kila.preset.impact_flash": "Destello de impacto",

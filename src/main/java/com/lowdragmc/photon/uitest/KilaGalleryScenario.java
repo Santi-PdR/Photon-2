@@ -126,6 +126,7 @@ public class KilaGalleryScenario implements UIScenario {
 
     private static void compiles(TestContext ctx) {
         var broken = new ArrayList<String>();
+        var overBudget = new ArrayList<String>();
         var ids = new java.util.HashSet<String>();
         var duplicateIds = new ArrayList<String>();
         for (var preset : KilaPresets.ALL) {
@@ -134,6 +135,11 @@ public class KilaGalleryScenario implements UIScenario {
             // a stacked distortion compiles another variant when a build can stack it
             for (boolean stacking : material.screenDistortion.stack ? new boolean[]{false, true} : new boolean[]{false}) {
                 material.screenDistortion.stacking = stacking;
+                var layout = material.layout();
+                if (!layout.dropped.isEmpty()) {
+                    overBudget.add(preset.id() + (stacking ? " stacked" : "") + ": "
+                            + layout.dropped.stream().map(KilaModule::id).toList());
+                }
                 for (var context : paths(preset.target())) {
                     if (material.layout().variant(context) == null) {
                         broken.add(preset.id() + (stacking ? " stacked/" : "/")
@@ -143,6 +149,7 @@ public class KilaGalleryScenario implements UIScenario {
             }
         }
         ctx.check("every preset links on its draw paths", broken.isEmpty(), "none broken", broken);
+        ctx.check("built-in presets keep all modules within the sampler budget", overBudget.isEmpty(), "none dropped", overBudget);
         ctx.check("built-in material preset IDs are unique", duplicateIds.isEmpty(), "no duplicates", duplicateIds);
         int largestPage = java.util.Arrays.stream(KilaPresets.Category.values())
                 .mapToInt(category -> (int) KilaPresets.ALL.stream().filter(preset -> preset.category() == category).count())

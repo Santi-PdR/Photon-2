@@ -642,7 +642,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
             if (mui == null) return;
             // the inspector moved on or its tab is hidden: a hidden subtree stops ticking, so it can't take the corner down
             if (!shownUnder(frame, mui.ui.rootElement)) {
-                corner.getParent().removeChild(corner);
+                var parent = corner.getParent();
+                if (parent != null) parent.removeChild(corner);
                 return;
             }
             var local = corner.worldToLocal(new Vector2f(mui.getLastMouseX(), mui.getLastMouseY()));

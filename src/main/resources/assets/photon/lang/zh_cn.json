@@ -2059,7 +2059,7 @@
   "kila.preset.force_pulse": "力场脉冲",
   "kila.preset.force_pulse.desc": "干净扩张的力场光环，带生命周期淡出和向外流动涟漪。",
   "kila.preset.dust_storm": "沙尘暴",
-  "kila.preset.dust_storm.desc": "浓密暖色尘暴，带云纹、柔和接触效果和沙色渐变。",
+  "kila.preset.dust_storm.desc": "浓密暖色尘暴，带云纹、柔和接触效果、沙色渐变，并在生命周期结束时完全淡出。",
   "kila.preset.sun_lance": "日耀长矛",
   "kila.preset.sun_lance.desc": "聚焦的金色光束，尖端纤细，从炽白渐变到琥珀色。",
   "kila.preset.impact_flash": "冲击闪光",

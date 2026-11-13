@@ -41,7 +41,7 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `lava_flow` | Río de lava | Suelo / proyección | Canales de lava sobre el suelo con coordenadas de mundo. |
 | `crystal_aura` | Aura cristalina | Superficie / mesh | Esfera translúcida con matcap, celdas y borde frío. |
 | `force_pulse` | Pulso de fuerza | Partícula | Anillo expansivo con distorsión radial y desvanecimiento. |
-| `dust_storm` | Tormenta de polvo | Partícula | Frente de polvo denso con nubes y degradado arena. |
+| `dust_storm` | Tormenta de polvo | Partícula | Frente de polvo denso con nubes, degradado arena y desvanecimiento completo por vida. |
 | `sun_lance` | Lanza solar | Partícula | Haz dorado concentrado, blanco caliente en el centro. |
 | `impact_flash` | Destello de impacto | Partícula | Núcleo blanco caliente con borde ámbar y desvanecimiento rápido. |
 | `wind_slash` | Corte de viento | Partícula | Tajo cian con borde animado, disolución y empuje direccional. |
@@ -63,7 +63,7 @@ Los nombres y descripciones del selector están traducidos al inglés, español 
 - **Suelo/proyección:** los presets de suelo necesitan la configuración de proyección y un emisor orientado hacia la superficie.
 - **Superficie/mesh:** los presets de superficie están diseñados para renderizar un modelo; aplicarlos a un billboard no reproduce el resultado previsto.
 
-La galería de presets integrada muestra cada material según su destino. El smoke test `KilaGalleryScenario` comprueba que los shaders compilan para los contextos de dibujo correspondientes y que los presets de tipo trail usan el renderer de trails.
+La galería de presets integrada muestra cada material según su destino. Los smoke tests comprueban que cada preset compila en sus contextos, conserva todos sus módulos dentro del presupuesto de samplers, sobrevive a una serialización completa y que los trails usan su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
 
 ## Archivos de implementación
 

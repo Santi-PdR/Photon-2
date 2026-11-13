@@ -1528,7 +1528,8 @@ public final class KilaPresets {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.72f, 0.48f, 0.23f, 0.74f, 1f);
         m.alpha.value = 1;
-        m.alpha.bind(KilaDriver.Source.LIFE, -0.5f);
+        // Reach zero at end of life instead of leaving a half-opacity dust particle until removal.
+        m.alpha.bind(KilaDriver.Source.LIFE, -1f);
         m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
         m.layer.setEnable(true);
         m.layer.blend = KilaLayer.Blend.MULTIPLY;

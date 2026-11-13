@@ -451,6 +451,21 @@ public class KilaMaterialScenario implements UIScenario {
         var copy = (KilaMaterial) material.copy();
         ctx.check("copy is deep", copy.main.texture != material.main.texture && copy.layout().key.equals(material.layout().key),
                 "a separate texture object, same layout", copy.main.texture);
+        var failedPresets = new ArrayList<String>();
+        for (var preset : KilaPresets.ALL) {
+            var source = preset.create();
+            var sourceTag = source.serializeWrapper();
+            if (sourceTag == null) {
+                failedPresets.add(preset.id() + ": no serialized tag");
+                continue;
+            }
+            var restored = IMaterial.deserializeWrapper(sourceTag);
+            if (!(restored instanceof KilaMaterial restoredKila)
+                    || !sourceTag.equals(restoredKila.serializeWrapper())) {
+                failedPresets.add(preset.id() + ": round-trip changed the material");
+            }
+        }
+        ctx.check("all built-in presets survive serialization unchanged", failedPresets.isEmpty(), "all round-trip", failedPresets);
     }
 
     private static void inspectors(TestContext ctx) {
