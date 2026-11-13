@@ -438,7 +438,7 @@ public class KilaMaterialScenario implements UIScenario {
         material.layer.setEnable(false);
         var tag = material.serializeWrapper();
         ctx.require("the material serialises", tag != null);
-        var back = IMaterial.deserializeWrapper(tag);
+        var back = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.deserializeResource(tag, null);
         ctx.require("it comes back as a KilaMaterial", back instanceof KilaMaterial);
         var kila = (KilaMaterial) back;
         ctx.check("the variant is the same", kila.layout().key.equals(material.layout().key), material.layout().key, kila.layout().key);
@@ -459,7 +459,7 @@ public class KilaMaterialScenario implements UIScenario {
                 failedPresets.add(preset.id() + ": no serialized tag");
                 continue;
             }
-            var restored = IMaterial.deserializeWrapper(sourceTag);
+            var restored = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.deserializeResource(sourceTag, null);
             if (!(restored instanceof KilaMaterial restoredKila)
                     || !sourceTag.equals(restoredKila.serializeWrapper())) {
                 failedPresets.add(preset.id() + ": round-trip changed the material");

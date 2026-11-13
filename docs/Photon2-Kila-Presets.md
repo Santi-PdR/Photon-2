@@ -63,7 +63,7 @@ Los nombres y descripciones del selector están traducidos al inglés, español 
 - **Suelo/proyección:** los presets de suelo necesitan la configuración de proyección y un emisor orientado hacia la superficie.
 - **Superficie/mesh:** los presets de superficie están diseñados para renderizar un modelo; aplicarlos a un billboard no reproduce el resultado previsto.
 
-La galería de presets integrada muestra cada material según su destino. Los smoke tests comprueban que cada preset compila en sus contextos, conserva todos sus módulos dentro del presupuesto de samplers, sobrevive a una serialización completa y que los trails usan su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
+La galería de presets integrada muestra cada material según su destino. El smoke test de arranque comprueba IDs únicos, texturas registradas, presupuesto de samplers y round-trip de serialización para todos los presets; la galería de desarrollo también comprueba variantes de shader en los contextos de dibujo y que los trails usan su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
 
 ## Archivos de implementación
 

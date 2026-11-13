@@ -208,14 +208,21 @@ public final class PhotonFXEditorSmokeTest {
         var textureIds = new java.util.HashSet<>(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL);
         var presetIds = new java.util.HashSet<String>();
         var presetProblems = new java.util.ArrayList<String>();
+        var serializationProblems = new java.util.ArrayList<String>();
         for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
             if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
             var presetMaterial = preset.create();
-            var presetLayout = presetMaterial.layout();
-            if (!presetLayout.dropped.isEmpty()) {
-                presetProblems.add(preset.id() + ": sampler budget drops "
-                        + presetLayout.dropped.stream().map(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaModule::id).toList());
+            var stackingVariants = presetMaterial.screenDistortion.isEnable() && presetMaterial.screenDistortion.stack
+                    ? new boolean[]{false, true} : new boolean[]{false};
+            for (boolean stacking : stackingVariants) {
+                presetMaterial.screenDistortion.stacking = stacking;
+                var presetLayout = presetMaterial.layout();
+                if (!presetLayout.dropped.isEmpty()) {
+                    presetProblems.add(preset.id() + (stacking ? " stacked" : "") + ": sampler budget drops "
+                            + presetLayout.dropped.stream().map(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaModule::id).toList());
+                }
             }
+            presetMaterial.screenDistortion.stacking = false;
             for (var module : presetMaterial.modules()) {
                 var moduleTextures = new java.util.ArrayList<com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTexture>();
                 module.textures(moduleTextures::add);
@@ -225,11 +232,25 @@ public final class PhotonFXEditorSmokeTest {
                     }
                 }
             }
+            var serialized = presetMaterial.serializeWrapper();
+            if (serialized == null) {
+                serializationProblems.add(preset.id() + ": serialization returned null");
+                continue;
+            }
+            var restored = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.deserializeResource(serialized, null);
+            if (!(restored instanceof com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaMaterial restoredKila)
+                    || !serialized.equals(restoredKila.serializeWrapper())) {
+                serializationProblems.add(preset.id() + ": round-trip changed the material");
+            }
         }
         if (!presetProblems.isEmpty()) {
             throw new IllegalStateException("Kila presets have resource or sampler problems: " + presetProblems);
         }
         Photon.LOGGER.info("[kila-preset-resources-smoke] {} presets have unique ids, registered textures, and fit the sampler budget", presetIds.size());
+        if (!serializationProblems.isEmpty()) {
+            throw new IllegalStateException("Kila preset serialization problems: " + serializationProblems);
+        }
+        Photon.LOGGER.info("[kila-preset-serialization-smoke] all {} built-in presets round-trip without data loss", presetIds.size());
         var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
         var actualBuiltinKilaMaterials = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.getResourceInstance()
                 .listAllResourceEntries().stream()

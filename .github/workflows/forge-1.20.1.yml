@@ -150,6 +150,7 @@ jobs:
             '[editor-open] FXEditor built in'
             '[kila-texture-assets-smoke] all '
             '[kila-preset-resources-smoke] '
+            '[kila-preset-serialization-smoke] all '
             '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector'
             '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap'
             '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours'
@@ -252,6 +253,10 @@ jobs:
       - name: Require all built-in Kila texture assets
         shell: bash
         run: grep -Fq '[kila-texture-assets-smoke] all ' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require built-in Kila preset serialization
+        shell: bash
+        run: grep -Fq '[kila-preset-serialization-smoke] all ' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require smooth high-speed trails and trail gradients
         shell: bash
