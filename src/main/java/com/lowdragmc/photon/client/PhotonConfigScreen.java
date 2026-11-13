@@ -43,7 +43,6 @@ public final class PhotonConfigScreen extends Screen {
         addBoolean("photon.configuration.enable_bloom", config.enableBloom, controlX, controlWidth, row++);
         addInt("photon.configuration.bloom_mip_level", config.bloomMipLevel, 2, 10, controlX, controlWidth, row++);
         addDouble("photon.configuration.bloom_threshold", config.bloomThreshold, 0, 10, controlX, controlWidth, row++);
-        addDouble("photon.configuration.bloom_intensity", config.bloomIntensity, 0, 2, controlX, controlWidth, row++);
         addBoolean("photon.configuration.enable_bloom_with_iris_shader", config.enableBloomWithIrisShader,
                 controlX, controlWidth, row++);
         addEnum("photon.configuration.iris_composite_mode", config.irisCompositeMode,

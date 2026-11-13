@@ -38,6 +38,9 @@ public abstract class ParticleEngineMixin {
             at = @At(value = "HEAD"))
     private void photon$injectTick(CallbackInfo ci) {
         VanillaParticleHost.onEngineTick();
+        // Snap follow-auras before any emitter/trail simulates this tick, otherwise a trail
+        // that ticks before the FX root records last tick's pose and lags at sprint/fly speed.
+        EntityEffectExecutor.followAllPlaying(false, 1f);
     }
 }
 

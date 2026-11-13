@@ -259,6 +259,8 @@ public final class KilaUI {
         int slash = relative.indexOf('/');
         if (slash < 0) return null;
         var location = relative.substring(0, slash) + ":" + relative.substring(slash + 1);
-        return LDLib2.isValidResourceLocation(location) ? new ResourceLocation(location) : null;
+        if (!LDLib2.isValidResourceLocation(location)) return null;
+        var id = new ResourceLocation(location);
+        return com.lowdragmc.photon.client.fx.LooseTextures.adoptTextureFile(id, file.toPath());
     }
 }
