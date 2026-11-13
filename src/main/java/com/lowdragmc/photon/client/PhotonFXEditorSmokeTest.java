@@ -182,6 +182,54 @@ public final class PhotonFXEditorSmokeTest {
 
     /** Prove that an ordinary red FX pixel reaches the built-in bloom halo at the shipped defaults. */
     private static void verifyBloomDefaults() {
+        var invalidKilaTextures = new java.util.ArrayList<String>();
+        for (var texture : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL) {
+            var resource = Minecraft.getInstance().getResourceManager().getResource(texture);
+            if (resource.isEmpty()) {
+                invalidKilaTextures.add(texture + " (missing)");
+                continue;
+            }
+            try (var input = resource.get().open(); var image = com.mojang.blaze3d.platform.NativeImage.read(input)) {
+                if (image.getWidth() <= 0 || image.getHeight() <= 0) invalidKilaTextures.add(texture + " (empty)");
+                if (texture.equals(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.LIGHTNING_BOLT)) {
+                    int cornerAlpha = image.getPixelRGBA(0, 0) >>> 24;
+                    int coreAlpha = image.getPixelRGBA(image.getWidth() / 2, image.getHeight() / 2) >>> 24;
+                    if (cornerAlpha != 0 || coreAlpha < 200) invalidKilaTextures.add(texture + " (alpha silhouette invalid)");
+                }
+            } catch (java.io.IOException failure) {
+                invalidKilaTextures.add(texture + " (invalid PNG: " + failure.getMessage() + ")");
+            }
+        }
+        if (!invalidKilaTextures.isEmpty()) {
+            throw new IllegalStateException("Built-in Kila texture resources are missing or invalid: " + invalidKilaTextures);
+        }
+        Photon.LOGGER.info("[kila-texture-assets-smoke] all {} built-in Kila textures are mounted and decode",
+                com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL.size());
+        var textureIds = new java.util.HashSet<>(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.ALL);
+        var presetIds = new java.util.HashSet<String>();
+        var presetProblems = new java.util.ArrayList<String>();
+        for (var preset : com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL) {
+            if (!presetIds.add(preset.id())) presetProblems.add("duplicate preset id " + preset.id());
+            var presetMaterial = preset.create();
+            var presetLayout = presetMaterial.layout();
+            if (!presetLayout.dropped.isEmpty()) {
+                presetProblems.add(preset.id() + ": sampler budget drops "
+                        + presetLayout.dropped.stream().map(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaModule::id).toList());
+            }
+            for (var module : presetMaterial.modules()) {
+                var moduleTextures = new java.util.ArrayList<com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTexture>();
+                module.textures(moduleTextures::add);
+                for (var texture : moduleTextures) {
+                    if (!textureIds.contains(texture.texture)) {
+                        presetProblems.add(preset.id() + ":" + module.id() + " -> " + texture.texture);
+                    }
+                }
+            }
+        }
+        if (!presetProblems.isEmpty()) {
+            throw new IllegalStateException("Kila presets have resource or sampler problems: " + presetProblems);
+        }
+        Photon.LOGGER.info("[kila-preset-resources-smoke] {} presets have unique ids, registered textures, and fit the sampler budget", presetIds.size());
         var expectedBuiltinKilaMaterials = com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.ALL.size() + 1;
         var actualBuiltinKilaMaterials = com.lowdragmc.photon.gui.editor.resource.MaterialResource.INSTANCE.getResourceInstance()
                 .listAllResourceEntries().stream()
@@ -215,7 +263,8 @@ public final class PhotonFXEditorSmokeTest {
             source.bindWrite(false);
             org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
             org.lwjgl.opengl.GL11.glScissor(30, 30, 4, 4);
-            org.lwjgl.opengl.GL11.glClearColor(1, 0, 0, 1);
+            // Below the 0.5 threshold on purpose: the runtime soft knee should still bloom ordinary FX colors.
+            org.lwjgl.opengl.GL11.glClearColor(0.45f, 0, 0, 1);
             org.lwjgl.opengl.GL11.glClear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT);
             org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_SCISSOR_TEST);
 
@@ -226,7 +275,7 @@ public final class PhotonFXEditorSmokeTest {
             org.lwjgl.opengl.GL11.glReadPixels(38, 32, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA,
                     org.lwjgl.opengl.GL11.GL_FLOAT, pixel);
             if (!(pixel.get(0) > 0.001f)) {
-                throw new IllegalStateException("Ordinary red FX did not produce a bloom halo: red=" + pixel.get(0));
+                throw new IllegalStateException("A below-threshold red FX did not produce the soft-knee bloom halo: red=" + pixel.get(0));
             }
             var background = org.lwjgl.BufferUtils.createFloatBuffer(4);
             org.lwjgl.opengl.GL11.glReadPixels(8, 8, 1, 1, org.lwjgl.opengl.GL11.GL_RGBA,
@@ -422,6 +471,7 @@ public final class PhotonFXEditorSmokeTest {
                 fxIds.size());
 
         verifySearchBoxOpensOnTheWholeCatalogue();
+        verifyAudioClipLoopRoundtrip();
         verifyFxBloomRoundtrip();
         verifyFxInstanceTimelineInspectorHistory();
 
@@ -730,6 +780,35 @@ public final class PhotonFXEditorSmokeTest {
         }
         com.lowdragmc.photon.client.fx.FXBloom.endFrame();
         Photon.LOGGER.info("[playing-bloom-smoke] in-world FX contribute their authored bloom intensity");
+    }
+
+    /** The audio inspector's loop checkbox must survive save/load, while older clips keep the looping default. */
+    private static void verifyAudioClipLoopRoundtrip() {
+        var provider = com.lowdragmc.lowdraglib2.Platform.getFrozenRegistry();
+        var track = new com.lowdragmc.photon.client.fx.timeline.AudioTrack();
+        var clip = new com.lowdragmc.photon.client.fx.timeline.AudioClip(12, 40, 1)
+                .sound(new ResourceLocation("photon", "user/loop_probe")).loop(false);
+        track.clips().add(clip);
+        var saved = track.writeData(provider);
+        var restored = new com.lowdragmc.photon.client.fx.timeline.AudioTrack();
+        restored.readData(provider, saved);
+        if (restored.clips().size() != 1
+                || !(restored.clips().get(0) instanceof com.lowdragmc.photon.client.fx.timeline.AudioClip audio)
+                || audio.loop() || !audio.sound().equals(clip.sound())) {
+            throw new IllegalStateException("Audio clip sound/loop settings did not survive save/load");
+        }
+        var legacy = saved.copy();
+        for (var item : legacy.getList("clips", Tag.TAG_COMPOUND)) {
+            if (item instanceof CompoundTag tag) tag.remove("loop");
+        }
+        var old = new com.lowdragmc.photon.client.fx.timeline.AudioTrack();
+        old.readData(provider, legacy);
+        if (old.clips().isEmpty()
+                || !(old.clips().get(0) instanceof com.lowdragmc.photon.client.fx.timeline.AudioClip oldAudio)
+                || !oldAudio.loop()) {
+            throw new IllegalStateException("An audio clip from an older project lost the looping default");
+        }
+        Photon.LOGGER.info("[audio-loop-smoke] the loop option round-trips and old clips retain their default");
     }
 
     /**
@@ -1322,6 +1401,11 @@ public final class PhotonFXEditorSmokeTest {
             Files.write(looseFile, java.util.Base64.getDecoder().decode(
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4r2DwHwAFwAJPDlQtOgAAAABJRU5ErkJggg=="));
             com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+            com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
+            if (!com.lowdragmc.photon.client.fx.LooseTextures.listLooseTextureIds().contains(id)
+                    || !com.lowdragmc.photon.client.util.PhotonTextureCatalogue.listAvailable().contains(id)) {
+                throw new IllegalStateException("The texture picker did not list an unmounted loose texture: " + id);
+            }
 
             var folder = com.lowdragmc.photon.client.fx.LooseTextures.namespaceFolder(id.getNamespace());
             if (folder == null || !looseFile.equals(com.lowdragmc.photon.client.fx.LooseTextures.find(id))) {
@@ -1374,10 +1458,13 @@ public final class PhotonFXEditorSmokeTest {
                 Files.createDirectories(strayFile.getParent());
                 Files.write(strayFile, new byte[]{(byte) 0x89, 'P', 'N', 'G'});
                 com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
-                if (!com.lowdragmc.photon.client.fx.LooseTextures.resolve(strayId).equals(strayId)
+                if (!strayId.equals(com.lowdragmc.photon.client.fx.LooseTextures.adoptTextureFile(strayId, strayFile))
                         || !Files.isRegularFile(strayAdopted)) {
-                    throw new IllegalStateException("A texture whose files sit under another namespace was not found: "
+                    throw new IllegalStateException("Selecting a texture file did not copy it into the workspace: "
                             + strayId);
+                }
+                if (!com.lowdragmc.photon.client.fx.LooseTextures.resolve(strayId).equals(strayId)) {
+                    throw new IllegalStateException("A selected texture id stopped resolving after adoption: " + strayId);
                 }
                 Photon.LOGGER.info("[loose-texture-smoke] found {} outside any assets folder", strayId);
             } finally {
@@ -1385,6 +1472,7 @@ public final class PhotonFXEditorSmokeTest {
                 Files.deleteIfExists(strayFile);
                 Files.deleteIfExists(strayFile.getParent());
                 com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
             }
 
             // the converter's destination is what the picker reads: a flat assets/photon/fx, never fx_old/ inside it
@@ -1420,6 +1508,7 @@ public final class PhotonFXEditorSmokeTest {
                 Files.deleteIfExists(looseRoot.resolve("assets"));
                 Files.deleteIfExists(looseRoot);
                 com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
+                com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
             } catch (java.io.IOException ignored) {
                 // leftovers in a temp tree are harmless
             }
@@ -1565,7 +1654,8 @@ public final class PhotonFXEditorSmokeTest {
             Files.writeString(droppedFx.resolve("ci_loose_obj.json"),
                     "{\"loader\":\"neoforge:obj\",\"model\":\"ldlib2:models/obj/ci_loose_obj.obj\",\"textures\":{},\"flip_v\":true}");
             Files.writeString(droppedFx.resolve("ci_loose_obj.obj"),
-                    "v 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+                    "mtllib ci_loose_obj.mtl\nv 3 5 7\nv 4 5 7\nv 3 6 7\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n");
+            Files.writeString(droppedFx.resolve("ci_loose_obj.mtl"), "newmtl ci_loose\nKd 1 1 1\n");
             Path shaderDir = LDLib2.getAssetsDir().toPath().resolve("photon").resolve("shaders").resolve("core").resolve("ci");
             Files.createDirectories(shaderDir);
             try (var vertex = Photon.class.getResourceAsStream("/assets/photon/shaders/core/particle.vsh");
@@ -2685,10 +2775,24 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("OBJ sampling topology did not preserve shared vertices and edges");
         Photon.LOGGER.info("[obj-sampling-topology-smoke] preserved eight render vertices and four sampling vertices");
         Photon.LOGGER.info("[nested-obj-model-smoke] loaded nested LDLib2 OBJ with {} vertices", nestedMesh.vertexCount());
-        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/block/ci_loose_obj.json");
+        Path adoptedJson = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/ci/ci_loose_obj.json");
         Path adoptedObj = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.obj");
+        Path adoptedMtl = PhotonPaths.getAssetsDir().toPath().resolve("ldlib2/models/obj/ci_loose_obj.mtl");
         Files.deleteIfExists(adoptedJson);
         Files.deleteIfExists(adoptedObj);
+        Files.deleteIfExists(adoptedMtl);
+        // Keep this fixture outside models/block: it is exercised by the direct Photon baker, not registered as a
+        // Minecraft block model. That avoids a concurrent resource reload asking Forge's OBJ loader to bake it.
+        var looseJsonSource = new JsonModelSource(new ResourceLocation("ldlib2", "ci/ci_loose_obj"));
+        if (!looseJsonSource.isObjLoaderModel())
+            throw new IllegalStateException("Loose ldlib2 NeoForge OBJ JSON was not detected");
+        // The JSON can become visible to Forge's model bakery as soon as it is copied into the
+        // workspace pack. Its referenced OBJ must be adopted first, not on a later mesh request.
+        if (!Files.isRegularFile(adoptedJson) || !Files.isRegularFile(adoptedObj) || !Files.isRegularFile(adoptedMtl))
+            throw new IllegalStateException("Loose OBJ and MTL dependencies were not adopted before their model JSON");
+        var looseJsonMesh = looseJsonSource.getMesh();
+        if (looseJsonMesh == null || looseJsonMesh.vertexCount() < 3)
+            throw new IllegalStateException("Loose ldlib2 neoforge:obj JSON outside editor layouts did not produce a Photon mesh");
         var looseObjMesh = new ObjModelSource(new ResourceLocation("ldlib2", "models/obj/ci_loose_obj.obj")).getMesh();
         if (looseObjMesh == null || looseObjMesh.vertexCount() < 3)
             throw new IllegalStateException("Loose ldlib2 OBJ outside editor layouts did not produce a Photon mesh");
@@ -2696,10 +2800,7 @@ public final class PhotonFXEditorSmokeTest {
         if (Math.abs(looseGeometry[0] - 3f) > 0.0001f || Math.abs(looseGeometry[1] - 5f) > 0.0001f
                 || Math.abs(looseGeometry[2] - 7f) > 0.0001f)
             throw new IllegalStateException("Loose ldlib2 OBJ did not keep its dropped-file vertices");
-        var looseJsonMesh = new JsonModelSource(new ResourceLocation("ldlib2", "block/ci_loose_obj")).getMesh();
-        if (looseJsonMesh == null || looseJsonMesh.vertexCount() < 3)
-            throw new IllegalStateException("Loose ldlib2 neoforge:obj JSON outside editor layouts did not produce a Photon mesh");
-        Photon.LOGGER.info("[loose-ldlib2-obj-smoke] adopted dropped OBJ with {} vertices", looseObjMesh.vertexCount());
+        Photon.LOGGER.info("[loose-ldlib2-obj-smoke] adopted dropped OBJ, its MTL, and {} vertices", looseObjMesh.vertexCount());
         var source = new FXProject();
         var emitter = new ParticleEmitter();
         emitter.transform().localPosition(new org.joml.Vector3f(0, 2, 0));

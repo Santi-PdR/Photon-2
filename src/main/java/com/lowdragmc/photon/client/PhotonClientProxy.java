@@ -94,6 +94,7 @@ public class PhotonClientProxy extends PhotonCommonProxy {
             FXHelper.clearCache();
             // files on disk and the packs that serve them both just changed: the loose-texture answers are stale
             LooseTextures.invalidate();
+            com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
             com.lowdragmc.photon.client.fx.timeline.SoundLengthCache.clear();
             FXPreloader.onResourcesReloaded();
         });

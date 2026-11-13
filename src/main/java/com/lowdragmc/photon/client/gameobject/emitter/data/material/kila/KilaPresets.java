@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 /**
  * Starting points: each is a few modules set up the way that kind of effect is usually built. Between them every
- * module and the main options of each are used somewhere ({@code KilaPresetsTest}), so they double as examples.
+ * module and the main options of each are exercised across the catalogue and editor smoke checks, so the presets double as examples.
  */
 @OnlyIn(Dist.CLIENT)
 public final class KilaPresets {
@@ -74,6 +74,24 @@ public final class KilaPresets {
         m.distortion.setEnable(true);
         m.distortion.strength.value = 0.04f;
         m.depth.setEnable(true);
+    });
+
+    /** A soft animated puff using the authored motion sheet instead of ghosting between smoke frames. */
+    public static final Preset SOFT_PUFF = new Preset("soft_puff", Category.FIRE_SMOKE, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.color = new HDRColor(0.78f, 0.8f, 0.84f, 0.85f, 1f);
+        m.main.texture.texture = KilaTextures.SMOKE_FLIP;
+        m.main.flipbook = true;
+        m.main.columns = 4;
+        m.main.rows = 4;
+        m.main.randomRow = true;
+        m.main.frameSource = KilaMainTexture.FrameSource.DRIVER;
+        m.main.frame.bind(KilaDriver.Source.LIFE, 1);
+        m.main.frameBlend = true;
+        m.main.motionVectors = true;
+        m.main.motionTexture.texture = KilaTextures.SMOKE_FLIP_MV;
+        m.depth.setEnable(true);
+        m.lit.setEnable(true);
     });
 
     /** Burns away as the particle's colour-over-lifetime alpha drops — which also works on trails. */
@@ -198,6 +216,21 @@ public final class KilaPresets {
         m.mask1.setEnable(true);
         // the alpha power sharpens the mask too: this leaves it about linear
         m.mask1.power = 0.35f;
+    });
+
+    /** A branching plasma stroke with a soft halo, ready for impact flashes or animated billboard arcs. */
+    public static final Preset ARC_BOLT = new Preset("arc_bolt", Category.MAGIC, m -> {
+        m.blend = BlendMode.Preset.ADDITIVE;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.45f, 0.78f, 1f, 1f, 2.4f);
+        m.main.texture.texture = KilaTextures.LIGHTNING_BOLT;
+        m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
+        m.alphaSharpen = 1.15f;
+        m.distortion.setEnable(true);
+        m.distortion.texture.noise(KilaTexture.Noise.SIMPLE, 5).scroll(0.2f, 0.8f);
+        m.distortion.strength.value = 0.012f;
+        m.depth.setEnable(true);
     });
 
     /** Shimmering air: the scene behind, pushed around by a rising noise. Alpha blend, so the soft edge fades it in. */
@@ -701,8 +734,8 @@ public final class KilaPresets {
     });
 
     public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
-            FIRE, SMOKE, WISP, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
-            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, CHARGE_ORB, ENERGY_TRAIL,
+            FIRE, SMOKE, SOFT_PUFF, WISP, EXPLOSION_SMOKE, LIT_SMOKE, FOG_BALL,
+            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL,
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SCAN_PULSE,
             ENERGY_SHIELD, CRYSTAL, HOLOGRAM, DEBRIS,
             HEAT_HAZE, JET_EXHAUST,

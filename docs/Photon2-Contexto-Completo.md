@@ -195,7 +195,7 @@ Límites en código (`FxPackSync`): **32 packs**, **64 MiB por pack**, **128 MiB
 
 ### 7.2 Lo que NO hace
 
-- No actualiza packs en caliente a jugadores ya conectados (se anuncia en el login).
+- No vigila la carpeta del servidor ni empuja cambios por sí solo a quienes ya están conectados: el login siempre recibe el manifiesto, y para refrescar en línea hay que ejecutar `/photon fxpacks` como operador (permiso 2) o pedir al jugador `/photon_client fxpacks`. La descarga compara hashes y el cliente recarga los recursos automáticamente.
 - No sustituye al mod: sin Photon en el servidor no hay anuncio; sin Photon en el cliente no hay render.
 - No transporta código: solo contenido.
 

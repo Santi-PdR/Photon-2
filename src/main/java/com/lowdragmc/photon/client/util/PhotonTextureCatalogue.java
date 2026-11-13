@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.util;
 
+import com.lowdragmc.photon.client.fx.LooseTextures;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -16,7 +17,15 @@ import java.util.Locale;
  */
 @OnlyIn(Dist.CLIENT)
 public final class PhotonTextureCatalogue {
+    private static volatile List<ResourceLocation> availableCache = List.of();
+    private static volatile long availableCacheAt;
+
     private PhotonTextureCatalogue() {
+    }
+
+    public static void invalidate() {
+        availableCache = List.of();
+        availableCacheAt = 0;
     }
 
     /**
@@ -26,18 +35,31 @@ public final class PhotonTextureCatalogue {
     public static List<ResourceLocation> listLoaded() {
         var manager = Minecraft.getInstance().getResourceManager();
         if (manager == null) return List.of();
-        var found = new ArrayList<ResourceLocation>();
-        manager.listResources("textures", location -> location.getPath().startsWith("textures/")
+        return manager.listResources("textures", location -> location.getPath().startsWith("textures/")
                         && location.getPath().endsWith(".png"))
                 .keySet().stream()
                 .filter(location -> !location.getNamespace().equals("minecraft"))
                 .sorted(Comparator.comparing(ResourceLocation::toString))
-                .forEach(found::add);
-        return found;
+                .toList();
+    }
+
+    /** Mounted pack textures plus author files in Photon/LDLib/resource-pack folders that are not mounted. */
+    public static List<ResourceLocation> listAvailable() {
+        long now = System.nanoTime();
+        var cached = availableCache;
+        if (!cached.isEmpty() && now - availableCacheAt < 5_000_000_000L) return cached;
+        synchronized (PhotonTextureCatalogue.class) {
+            if (!availableCache.isEmpty() && now - availableCacheAt < 5_000_000_000L) return availableCache;
+            var found = new java.util.LinkedHashSet<>(listLoaded());
+            found.addAll(LooseTextures.listLooseTextureIds());
+            availableCache = found.stream().sorted(Comparator.comparing(ResourceLocation::toString)).toList();
+            availableCacheAt = now;
+            return availableCache;
+        }
     }
 
     public static List<ResourceLocation> matching(String query) {
-        var all = listLoaded();
+        var all = listAvailable();
         if (query == null || query.isBlank()) return all;
         var search = query.toLowerCase(Locale.ROOT);
         var matched = new ArrayList<ResourceLocation>();

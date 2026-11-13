@@ -179,6 +179,7 @@ public final class LooseTextures {
         if (Files.isRegularFile(target)) return id;
         Files.createDirectories(target.getParent());
         Files.copy(found, target);
+        com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
         Photon.LOGGER.info("photon: found {} outside the packs at {} and copied it into the Photon workspace",
                 id, found);
         return id;
@@ -338,6 +339,71 @@ public final class LooseTextures {
             }
         }
         return roots.stream().distinct().toList();
+    }
+
+    /**
+     * Adopt a texture selected directly from disk into Photon's workspace. A file picker may point outside every
+     * configured asset root; copying it here makes the chosen resource id immediately usable and portable in FX packs.
+     */
+    @Nullable
+    public static ResourceLocation adoptTextureFile(ResourceLocation id, Path source) {
+        if (id == null || source == null
+                || !id.getPath().toLowerCase(java.util.Locale.ROOT).endsWith(".png")
+                || !Files.isRegularFile(source)) return null;
+        if (packServes(id)) return id;
+        if (BUILTIN.contains(id.getNamespace())) return null;
+        var target = PhotonPaths.getAssetsDir().toPath().resolve(id.getNamespace()).resolve(id.getPath()).normalize();
+        var assets = PhotonPaths.getAssetsDir().toPath().toAbsolutePath().normalize();
+        if (!target.toAbsolutePath().normalize().startsWith(assets)) return null;
+        try {
+            var absoluteSource = source.toAbsolutePath().normalize();
+            if (!absoluteSource.equals(target.toAbsolutePath().normalize())) {
+                Files.createDirectories(target.getParent());
+                Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            RESOLVED.remove(id.toString());
+            COPIED.remove(id.getNamespace());
+            FAILED_UPLOADS.remove(id);
+            var texture = TEMP_TEXTURES.remove(id);
+            if (texture != null && com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) {
+                var manager = Minecraft.getInstance().getTextureManager();
+                if (manager.getTexture(id, null) == texture) manager.release(id);
+            }
+            index = Map.of();
+            searchesSinceRebuild = 0;
+            com.lowdragmc.photon.client.util.PhotonTextureCatalogue.invalidate();
+            return id;
+        } catch (IOException failure) {
+            Photon.LOGGER.warn("photon: could not copy selected texture {} from {}", id, source, failure);
+            return null;
+        }
+    }
+
+    /**
+     * Texture ids found under the loose asset roots. These are not necessarily mounted resource packs, but the picker
+     * can offer them because selection adopts their files into the Photon workspace before drawing.
+     */
+    public static List<ResourceLocation> listLooseTextureIds() {
+        var found = new LinkedHashSet<ResourceLocation>();
+        for (var namespace : buildIndex().keySet()) {
+            if (BUILTIN.contains(namespace)) continue;
+            for (var folder : namespaceFolders(namespace)) {
+                var textures = folder.resolve("textures");
+                if (!Files.isDirectory(textures)) continue;
+                try (Stream<Path> files = Files.walk(textures)) {
+                    files.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".png"))
+                            .forEach(path -> {
+                                var relative = textures.getParent().relativize(path).toString().replace('\\', '/');
+                                var id = ResourceLocation.tryParse(namespace + ":" + relative);
+                                if (id != null) found.add(id);
+                            });
+                } catch (IOException ignored) {
+                    // An unreadable asset folder contributes no choices.
+                }
+            }
+        }
+        return found.stream().sorted(java.util.Comparator.comparing(ResourceLocation::toString)).toList();
     }
 
     /** Whether a loose folder happens to carry this id, for the diagnostics command. */

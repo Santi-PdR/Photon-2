@@ -269,7 +269,9 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     }
 
     public @Nullable ResourceLocation getTextureFromFile(File filePath) {
-        return PhotonAssetPath.fromFile(PhotonPaths.getAssetsDir().toPath(), filePath.toPath());
+        var location = PhotonAssetPath.fromFile(PhotonPaths.getAssetsDir().toPath(), filePath.toPath());
+        return location == null ? null
+                : com.lowdragmc.photon.client.fx.LooseTextures.adoptTextureFile(location, filePath.toPath());
     }
 }
 

@@ -33,6 +33,8 @@ public final class KilaTextures {
     public static final ResourceLocation SLASH = tex("slash");
     public static final ResourceLocation RUNE_CIRCLE = tex("rune_circle");
     public static final ResourceLocation SPARK = tex("spark");
+    /** A branching, soft-edged plasma stroke for bolts and arc impacts. */
+    public static final ResourceLocation LIGHTNING_BOLT = tex("lightning_bolt");
     public static final ResourceLocation NORMAL_NOISE = tex("normal_noise");
     public static final ResourceLocation MATCAP_GLASS = tex("matcap_glass");
     /** six-way lightmaps of one smoke puff, Unity's layout: right, top, back + alpha */
@@ -49,7 +51,7 @@ public final class KilaTextures {
 
     public static final List<ResourceLocation> ALL = List.of(WHITE, SOFT_CIRCLE, RING, GLOW, FLARE, SPARKLE, HEXAGON, RIPPLE,
             SHAFT, CRESCENT, WISP, ARC, NOISE_PERLIN, NOISE_CLOUD, NOISE_CELLS, NOISE_FLOW, FLOW_SWIRL, SPIRAL, VORTEX,
-            STAR_RAYS, GRADIENT_LINEAR, GRADIENT_RADIAL, TRAIL, SLASH, RUNE_CIRCLE, SPARK, NORMAL_NOISE, MATCAP_GLASS,
+            STAR_RAYS, GRADIENT_LINEAR, GRADIENT_RADIAL, TRAIL, SLASH, RUNE_CIRCLE, SPARK, LIGHTNING_BOLT, NORMAL_NOISE, MATCAP_GLASS,
             SMOKE6_POS, SMOKE6_NEG, SMOKE_FLIP, SMOKE_FLIP_MV, SMOKE_BURST, SMOKE_BURST_MV);
 
     private KilaTextures() {

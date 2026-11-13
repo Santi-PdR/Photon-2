@@ -1982,5 +1982,10 @@
   "photon.emitter.config.lights.legacyBloomFullBright": "导入的 Photon 1 泛光效果使用全亮。这不会还原原来的泛光光晕。",
   "photon.configuration.assets": "特效资源",
   "photon.configuration.assets.extra_roots": "额外资源文件夹",
-  "photon.configuration.assets.extra_roots.tooltip": "在游戏目录之外搜索特效图片的文件夹，按 <folder>/assets/<namespace>/... 读取。如果贴图没有显示，把整合包或工作区文件夹加到这里。"
+  "photon.configuration.assets.extra_roots.tooltip": "在游戏目录之外搜索特效图片的文件夹，按 <folder>/assets/<namespace>/... 读取。如果贴图没有显示，把整合包或工作区文件夹加到这里。",
+  "kila.preset.soft_puff": "动态烟团",
+  "kila.preset.arc_bolt": "分叉电弧",
+  "kila.preset.soft_puff.desc": "4 × 4 烟雾翻页动画，随机行并使用运动矢量混合：慢动作流畅且无重影。",
+  "kila.preset.arc_bolt.desc": "带柔和光晕的分叉等离子弧：叠加混合、轻微扭曲，并按深度淡出。",
+  "kila.texture.builtin.lightning_bolt": "分叉闪电"
 }

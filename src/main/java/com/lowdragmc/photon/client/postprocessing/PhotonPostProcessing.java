@@ -123,6 +123,9 @@ public class PhotonPostProcessing {
 
         brightPassShader.setSampler("inputSampler", srcTarget);
         brightPassShader.safeGetUniform("Threshold").set(PhotonConfig.INSTANCE.bloomThreshold.get().floatValue());
+        // The shader's soft-knee uniform defaults to zero in GLSL. Without uploading it, the
+        // threshold is a hard cut and most normally lit FX never enter the bloom chain at all.
+        brightPassShader.safeGetUniform("Knee").set(0.5f);
         // Scene mask: bloom only what this build ADDED to the frame, not the frame itself.
         //
         // On the in-place path DRAW_TARGET is a working copy of the frame plus the FX drawn on top

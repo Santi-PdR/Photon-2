@@ -157,10 +157,15 @@ public class MaterialResource extends Resource<IMaterial> {
                     layout.widthPercent(100);
                     layout.heightPercent(100);
                 }).style(style -> style.backgroundTexture(
+                        com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaSlotPreview.checker()))
+                .addChild(new UIElement().layout(layout -> {
+                    layout.widthPercent(100);
+                    layout.heightPercent(100);
+                }).style(style -> style.backgroundTexture(
                         com.lowdragmc.lowdraglib2.gui.texture.DynamicTexture.of(() -> {
                             var material = editable(provider, path);
                             return material == null ? IGuiTexture.MISSING_TEXTURE : material.preview();
-                        }))));
+                        })))));
         container.setOnEdit((c, path) -> {
             var material = editable(provider, path);
             if (material == null) return;

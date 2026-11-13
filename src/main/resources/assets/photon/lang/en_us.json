@@ -1993,5 +1993,10 @@
   "photon.gui.editor.timeline.edit_clip.exit_mode.drain": "Drain (lets what is showing finish)",
   "photon.gui.editor.timeline.edit_clip.seam_mode": "On a section wrap or jump",
   "photon.gui.editor.timeline.edit_clip.seam_mode.auto": "Auto (keep playing, restart what finished)",
-  "photon.gui.editor.timeline.edit_clip.seam_mode.restart": "Restart every time"
+  "photon.gui.editor.timeline.edit_clip.seam_mode.restart": "Restart every time",
+  "kila.preset.soft_puff": "Animated smoke puff",
+  "kila.preset.arc_bolt": "Branching arc bolt",
+  "kila.preset.soft_puff.desc": "A 4 x 4 smoke flipbook with random rows and motion-vector blending: smooth slow motion without ghosting.",
+  "kila.preset.arc_bolt.desc": "A branching plasma bolt with a soft halo; additive, softly distorted, and depth-faded.",
+  "kila.texture.builtin.lightning_bolt": "Branching lightning bolt"
 }

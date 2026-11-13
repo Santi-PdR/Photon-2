@@ -148,6 +148,8 @@ jobs:
             '[bloom-control-smoke] dragging the scene bar'
             '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously'
             '[editor-open] FXEditor built in'
+            '[kila-texture-assets-smoke] all '
+            '[kila-preset-resources-smoke] '
             '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector'
             '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap'
             '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours'
@@ -158,6 +160,7 @@ jobs:
             '[mixin-smoke] ParticleEngine accessor path is callable'
             '[obj-loader-compat] registered neoforge:obj using Forge'
             '[obj-model-smoke] parsed neoforge:obj through Forge and built'
+            '[loose-ldlib2-obj-smoke] adopted dropped OBJ, its MTL, and '
             '[fxproj-editor-smoke] opened v3 managed-list project and previewed'
             '[tornado-render-smoke] loaded LDLib2 OBJ with legacy UV/brightness attributes'
             '[screen-size-smoke] custom GPU model shader rendered using framebuffer-sized ScreenSize'
@@ -245,6 +248,10 @@ jobs:
       - name: Require built-in Photon material presets in the editor picker
         shell: bash
         run: grep -Fq '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require all built-in Kila texture assets
+        shell: bash
+        run: grep -Fq '[kila-texture-assets-smoke] all ' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require smooth high-speed trails and trail gradients
         shell: bash
