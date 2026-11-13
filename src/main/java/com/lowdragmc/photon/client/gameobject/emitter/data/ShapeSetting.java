@@ -18,7 +18,11 @@ import com.lowdragmc.photon.client.gameobject.emitter.data.shape.IShape;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.util.Mth;
+import org.jetbrains.annotations.NotNull;
 import org.joml.Vector3f;
 import lombok.Getter;
 import lombok.Setter;
@@ -67,6 +71,20 @@ public class ShapeSetting implements IConfigurable, IPersistedSerializable {
         snap.setTips("photon.emitter.config.shape.groundSnap");
         groundSnap.buildConfigurator(snap);
         father.addConfigurator(snap);
+    }
+
+    @Override
+    public void deserializeNBT(HolderLookup.@NotNull Provider provider, @NotNull CompoundTag tag) {
+        IPersistedSerializable.super.deserializeNBT(provider, tag);
+        // Photon 1 recognized pre-NumberFunction3 vectors by position.x being a double.
+        if (tag.getCompound("position").contains("x", Tag.TAG_DOUBLE)) {
+            var pos = tag.getCompound("position");
+            position = new NumberFunction3(pos.getDouble("x"), pos.getDouble("y"), pos.getDouble("z"));
+            var rot = tag.getCompound("rotation");
+            rotation = new NumberFunction3(rot.getDouble("x"), rot.getDouble("y"), rot.getDouble("z"));
+            var sca = tag.getCompound("scale");
+            scale = new NumberFunction3(sca.getDouble("x"), sca.getDouble("y"), sca.getDouble("z"));
+        }
     }
 
     public Runtime createRuntime() {

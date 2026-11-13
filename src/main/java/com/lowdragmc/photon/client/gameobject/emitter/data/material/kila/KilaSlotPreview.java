@@ -50,7 +50,9 @@ public final class KilaSlotPreview implements IGuiTexture {
         // inspector has to do the same or an animated material sits frozen in its own preview.
         shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
         boolean procedural = texture.isProcedural();
-        RenderSystem.setShaderTexture(0, procedural ? KilaTextures.WHITE : texture.getTexture());
+        var location = procedural ? KilaTextures.WHITE
+                : com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture.getTexture());
+        RenderSystem.setShaderTexture(0, location);
         if (uvChain) {
             texture.uploadUv(shader, "KilaPreview");
         } else {
