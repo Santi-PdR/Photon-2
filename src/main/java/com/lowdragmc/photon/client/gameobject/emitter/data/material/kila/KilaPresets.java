@@ -953,7 +953,10 @@ public final class KilaPresets {
         m.alpha.value = 1;
         m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.GLOW;
-        m.main.texture.rotationSpeed = 18;
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.012f;
+        m.uvEffects.rippleFrequency = 5;
+        m.uvEffects.rippleSpeed = 0.8f;
         m.layer.setEnable(true);
         m.layer.blend = KilaLayer.Blend.SCREEN;
         m.layer.texture.texture = KilaTextures.NOISE_CLOUD;
@@ -994,7 +997,7 @@ public final class KilaPresets {
         m.lit.setEnable(true);
     });
 
-    /** A stylized water ring: ripples turn while a slow flow map bends its translucent edge. */
+    /** A stylized water ring: radial waves run outward while a slow flow map bends its translucent edge. */
     public static final Preset WATER_BURST = new Preset("water_burst", Category.STYLIZED, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.worldLight = false;
@@ -1003,8 +1006,11 @@ public final class KilaPresets {
         m.alpha.value = 1;
         m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.RIPPLE;
-        m.main.texture.rotationSpeed = 24;
         m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.02f;
+        m.uvEffects.rippleFrequency = 8;
+        m.uvEffects.rippleSpeed = 1.1f;
         m.layer.setEnable(true);
         m.layer.blend = KilaLayer.Blend.ADD;
         m.layer.texture.texture = KilaTextures.NOISE_FLOW;
@@ -1044,6 +1050,46 @@ public final class KilaPresets {
         m.ramp.mode = KilaRamp.Mode.MULTIPLY;
         m.ramp.gradient.getRgbP().clear();
         m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFFFF5520, 0xFFFFC13D, 0xFFFFFFFF).getRgbP());
+    });
+
+    /** A smoky ember ribbon with a feathered edge; point age dims its red-gold sparks along the Trails renderer. */
+    public static final Preset CINDER_TRAIL = new Preset("cinder_trail", Category.FIRE_SMOKE, Target.TRAIL, m -> {
+        m.blend = BlendMode.Preset.PREMULTIPLIED;
+        m.worldLight = false;
+        m.doubleSided = true;
+        m.color = new HDRColor(0.72f, 0.34f, 0.12f, 0.82f, 1.2f);
+        m.alpha.value = 0;
+        m.alpha.bind(KilaDriver.Source.POINT_T, 1);
+        m.intensity.value = 1.4f;
+        m.intensity.bind(KilaDriver.Source.POINT_LIFE, -1.25f);
+        m.main.texture.texture = KilaTextures.TRAIL;
+        m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.layer.setEnable(true);
+        m.layer.blend = KilaLayer.Blend.MULTIPLY;
+        m.layer.texture.texture = KilaTextures.NOISE_CLOUD;
+        m.layer.texture.tiling(2.5f, 1).scroll(-0.18f, 0.025f);
+        m.layer.strength.value = 0.5f;
+        m.layer2.setEnable(true);
+        m.layer2.blend = KilaLayer.Blend.SCREEN;
+        m.layer2.texture.texture = KilaTextures.NOISE_CELLS;
+        m.layer2.texture.tiling(4, 1).scroll(-0.5f, 0.04f);
+        m.layer2.strength.value = 0.16f;
+        m.mask2.setEnable(true);
+        m.mask2.texture.texture = KilaTextures.GRADIENT_LINEAR;
+        m.mask2.texture.rotation = 90;
+        m.mask2.texture.tiling(2, 1);
+        m.mask2.texture.wrapU = KilaTexture.Wrap.MIRROR;
+        m.uvEffects.setEnable(true);
+        m.uvEffects.waveAmplitude.value = 0.025f;
+        m.uvEffects.waveFrequency = 1.5f;
+        m.uvEffects.waveSpeed = 0.45f;
+        m.ramp.setEnable(true);
+        m.ramp.input = KilaRamp.Input.U;
+        m.ramp.mode = KilaRamp.Mode.MULTIPLY;
+        m.ramp.gradient.getRgbP().clear();
+        m.ramp.gradient.getRgbP().addAll(new GradientColor(0xFF30130D, 0xFF8A2A12, 0xFFE56B22, 0xFFFFD891).getRgbP());
+        m.depth.setEnable(true);
+        m.depth.distance = 0.35f;
     });
 
     /** A rotating void aperture for a sphere mesh, with a crawling edge and a bright view-angle rim. */
@@ -1135,6 +1181,10 @@ public final class KilaPresets {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.color = new HDRColor(0.64f, 0.86f, 1f, 0.55f, 1.1f);
         m.main.texture.texture = KilaTextures.MATCAP_GLASS;
+        m.matcap.setEnable(true);
+        m.matcap.texture.texture = KilaTextures.MATCAP_GLASS;
+        m.matcap.blend = KilaMatcap.Blend.ADD;
+        m.matcap.strength = 0.55f;
         m.shading.setEnable(true);
         m.shading.normal = KilaShading.Normal.MESH;
         m.shading.bump = KilaShading.Bump.HEIGHT;
@@ -1197,7 +1247,7 @@ public final class KilaPresets {
         m.depth.setEnable(true);
     });
 
-    /** A crisp blue ice ring that expands by animation and cools to white along its luminance. */
+    /** A crisp blue ice ring with outward-running radial ripples, cooling to white along its luminance. */
     public static final Preset FROST_RING = new Preset("frost_ring", Category.BASIC, m -> {
         m.blend = BlendMode.Preset.ADDITIVE;
         m.worldLight = false;
@@ -1206,8 +1256,11 @@ public final class KilaPresets {
         m.alpha.value = 1;
         m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.RIPPLE;
-        m.main.texture.rotationSpeed = 10;
         m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.018f;
+        m.uvEffects.rippleFrequency = 7;
+        m.uvEffects.rippleSpeed = 1.4f;
         m.ramp.setEnable(true);
         m.ramp.input = KilaRamp.Input.LUMINANCE;
         m.ramp.gradient.getRgbP().clear();
@@ -1375,7 +1428,7 @@ public final class KilaPresets {
         m.depth.setEnable(true);
     });
 
-    /** A turquoise breaker wave with layered ripples and restrained flow-map bending. */
+    /** A turquoise breaker wave with outward-running radial ripples and restrained flow-map bending. */
     public static final Preset TIDE_SURGE = new Preset("tide_surge", Category.STYLIZED, m -> {
         m.blend = BlendMode.Preset.PREMULTIPLIED;
         m.worldLight = false;
@@ -1384,7 +1437,10 @@ public final class KilaPresets {
         m.alpha.value = 1;
         m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.RIPPLE;
-        m.main.texture.rotationSpeed = -8;
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.016f;
+        m.uvEffects.rippleFrequency = 7;
+        m.uvEffects.rippleSpeed = 0.9f;
         m.layer.setEnable(true);
         m.layer.blend = KilaLayer.Blend.SCREEN;
         m.layer.texture.texture = KilaTextures.NOISE_FLOW;
@@ -1519,6 +1575,10 @@ public final class KilaPresets {
         m.worldLight = false;
         m.color = new HDRColor(0.55f, 0.82f, 1f, 0.3f, 1f);
         m.main.texture.texture = KilaTextures.MATCAP_GLASS;
+        m.matcap.setEnable(true);
+        m.matcap.texture.texture = KilaTextures.MATCAP_GLASS;
+        m.matcap.blend = KilaMatcap.Blend.ADD;
+        m.matcap.strength = 0.4f;
         m.layer.setEnable(true);
         m.layer.blend = KilaLayer.Blend.SCREEN;
         m.layer.texture.texture = KilaTextures.NOISE_CELLS;
@@ -1539,8 +1599,11 @@ public final class KilaPresets {
         m.alpha.value = 1;
         m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.RING;
-        m.main.texture.rotationSpeed = 3;
         m.main.texture.wrap(KilaTexture.Wrap.CLAMP, KilaTexture.Wrap.CLAMP);
+        m.uvEffects.setEnable(true);
+        m.uvEffects.rippleAmplitude = 0.014f;
+        m.uvEffects.rippleFrequency = 6;
+        m.uvEffects.rippleSpeed = 1.2f;
         m.distortion.setEnable(true);
         m.distortion.mode = KilaDistortion.Mode.FLOW_MAP;
         m.distortion.texture.texture = KilaTextures.FLOW_SWIRL;
@@ -1815,7 +1878,8 @@ public final class KilaPresets {
     public static final List<Preset> ALL = List.of(GLOW, FLARE, SPARKLE, SPARKS, DISSOLVE, SLASH, SHOCKWAVE, RIPPLE, SHAFT,
             HEALING_AURA, SOLAR_BEAM,
             FIRE, SMOKE, SOFT_PUFF, WISP, SOUL_FLAME, EXPLOSION_SMOKE, LAVA_BURST, LIT_SMOKE, FOG_BALL, POISON_MIST, DUST_DEVIL,
-            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB, ENERGY_TRAIL, AURORA_TRAIL, COMET_TRAIL, VOID_GATE,
+            MAGIC_CIRCLE, HEXAGON, PORTAL, HUE_SWIRL, SPIRAL, BLACK_HOLE, STAR_BURST, CRESCENT, ARC, LIGHTNING, ARC_BOLT, CHARGE_ORB,
+            ENERGY_TRAIL, AURORA_TRAIL, COMET_TRAIL, CINDER_TRAIL, VOID_GATE,
             GROUND_CIRCLE, SCORCH_MARK, CAUSTICS, SLIME_PUDDLE, SCAN_PULSE, RUNE_FLOOR,
             ENERGY_SHIELD, FROSTED_GLASS, CRYSTAL, HOLOGRAM, EMBER_ROCK, DEBRIS, PRISMATIC_SHIELD, CRYSTAL_SHARD,
             HEAT_HAZE, JET_EXHAUST,

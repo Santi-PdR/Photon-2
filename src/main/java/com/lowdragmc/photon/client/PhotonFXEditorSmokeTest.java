@@ -230,6 +230,9 @@ public final class PhotonFXEditorSmokeTest {
                 if (presetMaterial.alpha.value < 0 || presetMaterial.alpha.value > 1 || endAlpha < 0 || endAlpha > 1) {
                     presetProblems.add(preset.id() + ": opacity driver must stay in [0, 1] over particle life");
                 }
+                if (presetMaterial.alpha.value != 1 || presetMaterial.alpha.scale != -1) {
+                    presetProblems.add(preset.id() + ": LIFE-driven opacity must fade from 1 to 0");
+                }
             }
             if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SOUL_FLAME
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WIND_SLASH
@@ -240,12 +243,38 @@ public final class PhotonFXEditorSmokeTest {
                     presetProblems.add(preset.id() + ": expected dissolve progress 0→1 over particle life");
                 }
             }
+            if ((preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.FROST_RING
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.HEALING_AURA
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WATER_BURST
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.FORCE_PULSE
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.TIDE_SURGE)
+                    && (!presetMaterial.uvEffects.isEnable() || presetMaterial.uvEffects.rippleAmplitude <= 0
+                    || presetMaterial.uvEffects.rippleSpeed <= 0 || presetMaterial.main.texture.rotationSpeed != 0)) {
+                presetProblems.add(preset.id() + ": expected a visible outward-running UV ripple, not rotation of a radial texture");
+            }
+            if ((preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.CRYSTAL_SHARD
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.CRYSTAL_AURA)
+                    && (!presetMaterial.matcap.isEnable()
+                    || !presetMaterial.matcap.texture.texture.equals(
+                    com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTextures.MATCAP_GLASS))) {
+                presetProblems.add(preset.id() + ": expected the bundled glass matcap module");
+            }
+            if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.CINDER_TRAIL) {
+                var pointT = PhotonGpuChannels.byId("addition_gpu_data.point_t");
+                var pointLife = PhotonGpuChannels.byId("addition_gpu_data.point_life");
+                var usedChannels = presetMaterial.getUsedChannelMask();
+                if (preset.target() != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.Target.TRAIL
+                        || presetMaterial.alpha.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.POINT_T
+                        || presetMaterial.alpha.value != 0 || presetMaterial.alpha.scale != 1
+                        || presetMaterial.intensity.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.POINT_LIFE
+                        || presetMaterial.intensity.value != 1.4f || presetMaterial.intensity.scale != -1.25f
+                        || pointT == null || pointLife == null
+                        || (usedChannels & pointT.bit()) == 0 || (usedChannels & pointLife.bit()) == 0) {
+                    presetProblems.add(preset.id() + ": expected trail point channels for tail opacity and cooling sparks");
+                }
+            }
             if (presetMaterial.main.flipbook
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SMOKE
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WISP
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.LIT_SMOKE
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.FOG_BALL) {
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM) {
                 var alpha = presetMaterial.alpha;
                 if (alpha.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
                         || alpha.value != 1 || alpha.scale != -1) {

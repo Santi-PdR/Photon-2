@@ -17,6 +17,7 @@ Photon incluye materiales Kila listos para usar desde el selector de materiales 
 | `poison_mist` | Niebla tóxica | Partícula | Humo animado con textura celular, distorsión sutil y desvanecimiento por vida. |
 | `water_burst` | Estallido de agua | Partícula | Onda translúcida deformada por flujo y desvanecida por vida. |
 | `comet_trail` | Estela de cometa | Trail | Cinta aditiva con cabeza incandescente y gradiente cálido. |
+| `cinder_trail` | Estela de brasas | Trail | Humo rojo-dorado con borde suave y chispas que se apagan al envejecer cada punto. |
 | `void_gate` | Portal del vacío | Mesh | Abertura violeta giratoria con celdas animadas y borde Fresnel. |
 | `solar_beam` | Rayo solar | Partícula | Haz dorado con suavizado de profundidad y degradado cálido. |
 | `rune_floor` | Runas del suelo | Suelo / proyección | Sello rúnico giratorio que se proyecta y desvanece sobre el suelo. |
@@ -63,7 +64,7 @@ Los nombres y descripciones del selector están traducidos al inglés, español 
 - **Suelo/proyección:** los presets de suelo necesitan la configuración de proyección y un emisor orientado hacia la superficie.
 - **Superficie/mesh:** los presets de superficie están diseñados para renderizar un modelo; aplicarlos a un billboard no reproduce el resultado previsto.
 
-La galería de presets integrada muestra cada material según su destino. El smoke test de arranque comprueba IDs únicos, texturas registradas, presupuesto de samplers, round-trip de serialización y variantes de shader por destino para todos los presets; valida también la dirección de disolución, los fades y canales GPU de vida, el rango de reproducción de los flipbooks y la correspondencia entre sus hojas y mapas de movimiento. La galería de desarrollo añade la comprobación visual de los trails en su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
+La galería de presets integrada muestra cada material según su destino. El smoke test de arranque comprueba IDs únicos, texturas registradas, presupuesto de samplers, round-trip de serialización y variantes de shader por destino para todos los presets; valida también la dirección de disolución, los fades y canales GPU de vida, el rango de reproducción de los flipbooks y la correspondencia entre sus hojas y mapas de movimiento. Antes de compilar, CI verifica además que todos los presets estén registrados y tengan nombre y descripción únicos en EN/ES/ZH mediante `.github/scripts/verify_kila_preset_catalog.py`. La galería de desarrollo añade la comprobación visual de los trails en su renderer. La cuadrícula de la galería mantiene las categorías grandes dentro del fondo visible.
 
 ## Archivos de implementación
 
