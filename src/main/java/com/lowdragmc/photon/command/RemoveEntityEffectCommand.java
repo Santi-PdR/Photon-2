@@ -60,6 +60,9 @@ public class RemoveEntityEffectCommand {
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }
+        for (var entity : command.entities) {
+            ActiveEntityEffects.forget(entity, command.location);
+        }
         PhotonNetworking.CHANNEL.send(PacketDistributor.ALL.noArg(), command);
         return Command.SINGLE_SUCCESS;
     }

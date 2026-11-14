@@ -24,6 +24,9 @@ public class RandomConstant implements NumberFunction {
     @Getter
     @Persisted
     private Number a, b;
+    /** Photon 1 integer ranges include the upper endpoint before truncation. */
+    @Persisted
+    private boolean legacyIntegerInclusive;
 
     public RandomConstant() {
         a = 0;
@@ -59,12 +62,15 @@ public class RandomConstant implements NumberFunction {
         var min = Math.min(a.doubleValue(), b.doubleValue());
         var max = Math.max(a.doubleValue(), b.doubleValue());
         if (min == max) return max;
+        if (legacyIntegerInclusive) return (int) (min + lerp.get() * (max + 1 - min));
         return (min + lerp.get() * (max - min));
     }
 
     @Override
     public NumberFunction copy() {
-        return new RandomConstant(a, b);
+        var copied = new RandomConstant(a, b);
+        copied.legacyIntegerInclusive = legacyIntegerInclusive;
+        return copied;
     }
 
     @Override
