@@ -230,10 +230,6 @@ public final class PhotonFXEditorSmokeTest {
                 if (presetMaterial.alpha.value < 0 || presetMaterial.alpha.value > 1 || endAlpha < 0 || endAlpha > 1) {
                     presetProblems.add(preset.id() + ": opacity driver must stay in [0, 1] over particle life");
                 }
-                var lifeChannel = PhotonGpuChannels.byId("addition_gpu_data.t");
-                if (lifeChannel == null || (presetMaterial.getUsedChannelMask() & lifeChannel.bit()) == 0) {
-                    presetProblems.add(preset.id() + ": LIFE-driven opacity did not request the particle lifetime channel");
-                }
             }
             if (preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SOUL_FLAME
                     || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WIND_SLASH
@@ -245,7 +241,11 @@ public final class PhotonFXEditorSmokeTest {
                 }
             }
             if (presetMaterial.main.flipbook
-                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM) {
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.DUST_STORM
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.SMOKE
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.WISP
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.LIT_SMOKE
+                    || preset == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaPresets.FOG_BALL) {
                 var alpha = presetMaterial.alpha;
                 if (alpha.source != com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE
                         || alpha.value != 1 || alpha.scale != -1) {
@@ -277,6 +277,28 @@ public final class PhotonFXEditorSmokeTest {
                 }
             }
             presetMaterial.screenDistortion.stacking = false;
+            var lifetimeChannel = PhotonGpuChannels.byId("addition_gpu_data.t");
+            var hasLifetimeDriver = new boolean[]{false};
+            var lifetimeDriverMask = new long[]{0L};
+            java.util.function.BiConsumer<com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaParam,
+                    com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver> checkLifetimeDriver = (param, driver) -> {
+                if (driver.source == com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaDriver.Source.LIFE) {
+                    hasLifetimeDriver[0] = true;
+                    if (lifetimeChannel != null) lifetimeDriverMask[0] |= lifetimeChannel.bit();
+                }
+            };
+            checkLifetimeDriver.accept(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaParam.ALPHA,
+                    presetMaterial.alpha);
+            checkLifetimeDriver.accept(com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaParam.INTENSITY,
+                    presetMaterial.intensity);
+            var presetLayoutForChannels = presetMaterial.layout();
+            for (var module : presetMaterial.modules()) {
+                if (module.isEnable() && !presetLayoutForChannels.isDropped(module)) module.drivers(checkLifetimeDriver);
+            }
+            if (hasLifetimeDriver[0]
+                    && (lifetimeChannel == null || (presetMaterial.getUsedChannelMask() & lifetimeDriverMask[0]) != lifetimeDriverMask[0])) {
+                presetProblems.add(preset.id() + ": LIFE-driven parameters did not request the particle lifetime channel");
+            }
             for (var module : presetMaterial.modules()) {
                 var moduleTextures = new java.util.ArrayList<com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaTexture>();
                 module.textures(moduleTextures::add);

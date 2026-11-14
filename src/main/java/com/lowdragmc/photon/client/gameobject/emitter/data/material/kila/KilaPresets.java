@@ -66,6 +66,8 @@ public final class KilaPresets {
 
     public static final Preset SMOKE = new Preset("smoke", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.85f, 0.85f, 0.88f, 0.9f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SOFT_CIRCLE;
         m.layer.setEnable(true);
         m.layer.texture.texture = KilaTextures.NOISE_CLOUD;
@@ -417,6 +419,8 @@ public final class KilaPresets {
     /** A rising smoke tendril, a crawling Second Layer and a little UV Distortion. */
     public static final Preset WISP = new Preset("wisp", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.82f, 0.84f, 0.88f, 0.9f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.WISP;
         m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
         m.main.texture.wrap(KilaTexture.Wrap.CLIP, KilaTexture.Wrap.CLIP);
@@ -449,6 +453,8 @@ public final class KilaPresets {
     /** A smoke puff lit by the six lightmaps it was baked with: the key light and the dynamic ones fall on its sides. */
     public static final Preset LIT_SMOKE = new Preset("lit_smoke", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.85f, 0.85f, 0.9f, 1f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.SMOKE6_POS;
         m.shading.setEnable(true);
         m.shading.model = KilaShading.Model.SIX_WAY;
@@ -498,6 +504,8 @@ public final class KilaPresets {
     /** A ball of fog that thins towards its edge from any side, and where the ground cuts it. */
     public static final Preset FOG_BALL = new Preset("fog_ball", Category.FIRE_SMOKE, m -> {
         m.color = new HDRColor(0.8f, 0.85f, 0.8f, 0.8f, 1f);
+        m.alpha.value = 1;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1);
         m.main.texture.texture = KilaTextures.NOISE_CLOUD;
         m.main.texture.colorMode = KilaTexture.ColorMode.LUMINANCE_AS_ALPHA;
         m.main.texture.scroll(0.03f, 0.05f);
