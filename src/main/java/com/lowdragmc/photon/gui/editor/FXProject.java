@@ -138,6 +138,9 @@ public class FXProject implements IProject {
         if (replacePlayable != null) {
             data.putString("replacePlayable", replacePlayable.toString());
         }
+        if (replacePlayable != null) {
+            data.putString("replacePlayable", replacePlayable.toString());
+        }
         return data;
     }
 
@@ -175,6 +178,20 @@ public class FXProject implements IProject {
 
     public void addKnownAs(ResourceLocation id) {
         if (PhotonPaths.isSafeAssetLocation(id)) knownAs.add(id);
+    }
+
+    /**
+     * Gizmo edits of the synthetic editor root (position / rotation / scale of the whole FX)
+     * are not in {@code fxData}. Fold them into the children that actually get written.
+     * Skip while the scene animation overlay is driving the root — that pose is preview-only.
+     */
+    void bakeEditorRoot() {
+        if (editor == null || editor.runtime == null) return;
+        // Always commit world pose so child gizmo / inspector moves persist even while the
+        // animation overlay is driving the synthetic root (that overlay pose is preview-only).
+        editor.runtime.commitWorldTransforms();
+        if (editor.sceneView.fxObjectAnimationView.isPlaying()) return;
+        editor.runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
     }
 
     /**

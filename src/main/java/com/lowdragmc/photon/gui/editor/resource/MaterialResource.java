@@ -87,6 +87,10 @@ public class MaterialResource extends Resource<IMaterial> {
         builtin.addResource("tex/" + name, new TextureMaterial(new ResourceLocation("photon:textures/kila/" + name + ".png")));
     }
 
+    private void addKilaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
+        builtin.addResource("tex/" + name, new TextureMaterial(new ResourceLocation("photon:textures/kila/" + name + ".png")));
+    }
+
     private void addBuiltinShaderMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
         builtin.addResource(name, new CustomShaderMaterial(new ResourceLocation("photon:%s".formatted(name))));
     }
