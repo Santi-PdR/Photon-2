@@ -202,6 +202,13 @@ public final class ShaderGraphRuntime {
         } catch (RuntimeException failure) {
             Photon.LOGGER.warn("Could not inspect sampler defaults for shader graph {}", path, failure);
         }
+        // The built-in starter graph is generated at runtime and its sampler is authored by
+        // ShaderGraph.createDefaultTextureSource(). Keep its known texture visible to diagnostics even
+        // before the builtin resource provider has materialized/serialized that graph.
+        if (path instanceof com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath
+                && "default_particle".equals(path.getResourceName())) {
+            locations.add(Photon.id("textures/particle/circle.png"));
+        }
         return Set.copyOf(locations);
     }
 
