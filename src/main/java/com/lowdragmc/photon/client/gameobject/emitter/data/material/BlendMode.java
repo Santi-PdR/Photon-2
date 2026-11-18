@@ -28,7 +28,7 @@ public class BlendMode {
         }
     }
 
-    /** The blends nearly every effect uses, by name. */
+    /** The blends nearly every effect uses, by name. Keep ordinals in sync with KilaSurfaceModes.y in kila.fsh. */
     public enum Preset {
         ALPHA,
         ADDITIVE,
@@ -52,7 +52,7 @@ public class BlendMode {
         }
 
         public String langKey() {
-            return "photon.blend_preset." + name().toLowerCase();
+            return "photon.blend_preset." + name().toLowerCase(java.util.Locale.ROOT);
         }
 
         // private: a BlendMode is mutable, so these never leave this class
@@ -65,13 +65,16 @@ public class BlendMode {
         /** The preset {@code mode} is, judged by what it does to colour; null when it is none of them. */
         @javax.annotation.Nullable
         public static Preset of(BlendMode mode) {
+            if (mode == null) return null;
             if (!mode.isEnableBlend()) return OPAQUE;
             if (mode.getBlendFunc() != BlendFuc.ADD) return null;
             for (var preset : values()) {
                 if (preset == OPAQUE) continue;
                 var candidate = REFERENCE[preset.ordinal()];
                 if (candidate.getSrcColorFactor() == mode.getSrcColorFactor()
-                        && candidate.getDstColorFactor() == mode.getDstColorFactor()) {
+                        && candidate.getDstColorFactor() == mode.getDstColorFactor()
+                        && candidate.getSrcAlphaFactor() == mode.getSrcAlphaFactor()
+                        && candidate.getDstAlphaFactor() == mode.getDstAlphaFactor()) {
                     return preset;
                 }
             }
@@ -81,16 +84,56 @@ public class BlendMode {
 
     @Configurable(name = "BlendMode.enableBlend")
     private boolean enableBlend;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.srcColorFactor")
     private SourceFactor srcColorFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.dstColorFactor")
     private DestFactor dstColorFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.srcAlphaFactor")
     private SourceFactor srcAlphaFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.dstAlphaFactor")
     private DestFactor dstAlphaFactor;
+    @Getter(lombok.AccessLevel.NONE)
     @Configurable(name = "BlendMode.blendFunc")
     private BlendFuc blendFunc;
+
+    @EqualsAndHashCode.Exclude
+    private transient boolean reportedInvalidState;
+
+    private void reportInvalidState() {
+        if (!reportedInvalidState) {
+            reportedInvalidState = true;
+            com.lowdragmc.photon.Photon.LOGGER.warn("[fx-diagnostic] Invalid or unknown material blend setting; using default for missing fields. Reimport the original Photon 1 FX to recover its blend mode.");
+        }
+    }
+
+    public SourceFactor getSrcColorFactor() {
+        if (srcColorFactor == null) { reportInvalidState(); return SourceFactor.SRC_ALPHA; }
+        return srcColorFactor;
+    }
+
+    public DestFactor getDstColorFactor() {
+        if (dstColorFactor == null) { reportInvalidState(); return DestFactor.ONE_MINUS_SRC_ALPHA; }
+        return dstColorFactor;
+    }
+
+    public SourceFactor getSrcAlphaFactor() {
+        if (srcAlphaFactor == null) { reportInvalidState(); return SourceFactor.ONE; }
+        return srcAlphaFactor;
+    }
+
+    public DestFactor getDstAlphaFactor() {
+        if (dstAlphaFactor == null) { reportInvalidState(); return DestFactor.ZERO; }
+        return dstAlphaFactor;
+    }
+
+    public BlendFuc getBlendFunc() {
+        if (blendFunc == null) { reportInvalidState(); return BlendFuc.ADD; }
+        return blendFunc;
+    }
 
     private BlendMode(boolean enableBlend, SourceFactor srcColorFactor, DestFactor dstColorFactor, SourceFactor srcAlphaFactor, DestFactor dstAlphaFactor, BlendFuc blendFunc) {
         this.srcColorFactor = srcColorFactor;
@@ -120,8 +163,8 @@ public class BlendMode {
         }
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.blendEquation(this.blendFunc.op);
-        RenderSystem.blendFuncSeparate(this.srcColorFactor, this.dstColorFactor, this.srcAlphaFactor, this.dstAlphaFactor);
+        RenderSystem.blendEquation(getBlendFunc().op);
+        RenderSystem.blendFuncSeparate(getSrcColorFactor(), getDstColorFactor(), getSrcAlphaFactor(), getDstAlphaFactor());
     }
 
     public void reset() {

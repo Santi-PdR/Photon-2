@@ -97,6 +97,15 @@ public abstract class LifetimeFXObject extends FXObject {
         return isRunning() || super.isPlaying();
     }
 
+    /**
+     * A draining clip keeps a light or fog volume on until its lifetime ends, so it fades instead of
+     * popping out the moment the clip stops covering it.
+     */
+    @Override
+    public boolean hasVisibleRemnants() {
+        return isRunning() || super.hasVisibleRemnants();
+    }
+
     /** Started, running, shown, and not wiped along with its FX. */
     protected boolean isShowing() {
         return age >= 0 && isRunning() && isVisible() && !isDiscarded();

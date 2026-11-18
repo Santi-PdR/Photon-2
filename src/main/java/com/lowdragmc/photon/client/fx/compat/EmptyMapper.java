@@ -12,6 +12,7 @@ public class EmptyMapper implements Mapper{
 
         //data tag
         dataTag.putString("name", emitterTag.getString("name"));
+        if (emitterTag.contains("enabled")) dataTag.putBoolean("enabled", emitterTag.getBoolean("enabled"));
         dataTag.put("transform", MapperUtils.mapTransformTag(emitterTag.getCompound("transform")));
 
         newEmitterTag.put("data", dataTag);

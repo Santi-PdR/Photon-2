@@ -11,6 +11,10 @@ import net.minecraft.world.phys.Vec3;
  * @implNote EffectCommand
  */
 public abstract class EffectCommand {
+    private static final double MAX_PACKET_OFFSET = 1_000_000.0;
+    private static final double MAX_PACKET_ROTATION = 1_000_000.0;
+    private static final double MAX_PACKET_SCALE = 10_000.0;
+
     @Setter
     protected ResourceLocation location;
     @Setter
@@ -44,12 +48,23 @@ public abstract class EffectCommand {
 
     public void decode(FriendlyByteBuf buf) {
         location = buf.readResourceLocation();
-        offset = new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble());
-        rotation = new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble());
-        scale = new Vec3(buf.readDouble(), buf.readDouble(), buf.readDouble());
-        delay = buf.readVarInt();
+        offset = readBoundedVector(buf, Vec3.ZERO, MAX_PACKET_OFFSET);
+        rotation = readBoundedVector(buf, Vec3.ZERO, MAX_PACKET_ROTATION);
+        scale = readBoundedVector(buf, new Vec3(1, 1, 1), MAX_PACKET_SCALE);
+        delay = Math.max(0, buf.readVarInt());
         forcedDeath = buf.readBoolean();
         allowMulti = buf.readBoolean();
+    }
+
+    private static Vec3 readBoundedVector(FriendlyByteBuf buf, Vec3 fallback, double limit) {
+        return new Vec3(readBounded(buf.readDouble(), fallback.x, limit),
+                readBounded(buf.readDouble(), fallback.y, limit),
+                readBounded(buf.readDouble(), fallback.z, limit));
+    }
+
+    private static double readBounded(double value, double fallback, double limit) {
+        if (!Double.isFinite(value)) return fallback;
+        return Math.max(-limit, Math.min(limit, value));
     }
 
 }

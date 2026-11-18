@@ -3,8 +3,11 @@ package com.lowdragmc.photon.client.gameobject.emitter.data.model;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,37 +28,69 @@ import java.util.Map;
  */
 @OnlyIn(Dist.CLIENT)
 public final class ObjMeshParser {
+    private static final int MAX_LINE_CHARS = 64 * 1024;
+    private static final int MAX_FACE_VERTICES = 256;
+    private static final int MAX_SOURCE_RECORDS = 1_000_000;
     private record SamplingKey(int position, int uv, int normal) {}
 
     private ObjMeshParser() {
     }
 
     public static PhotonMesh parse(InputStream in, boolean flipV) throws IOException {
-        return parseText(new String(in.readAllBytes(), StandardCharsets.UTF_8), flipV);
+        var reader = new BufferedReader(new InputStreamReader(
+                ModelInput.bounded(in, ModelInput.MAX_FILE_BYTES, "OBJ"), StandardCharsets.UTF_8));
+        return parseLines(reader, flipV);
     }
 
     /** Parse OBJ text into an indexed triangle mesh. Package-visible for tests. */
     static PhotonMesh parseText(String text, boolean flipV) {
+        try {
+            return parseLines(new BufferedReader(new StringReader(text)), flipV);
+        } catch (IOException impossible) {
+            throw new IllegalStateException("Could not read in-memory OBJ text", impossible);
+        }
+    }
+
+    private static PhotonMesh parseLines(BufferedReader reader, boolean flipV) throws IOException {
         List<float[]> positions = new ArrayList<>();
         List<float[]> uvs = new ArrayList<>();
         List<float[]> normals = new ArrayList<>();
         List<int[]> faceVerts = new ArrayList<>(); // reused per face: {posIdx, uvIdx, nrmIdx} (0-based, -1 = none)
         var builder = new PhotonMesh.Builder();
         Map<SamplingKey, Integer> sampling = new HashMap<>();
+        int sourceRecords = 0;
+        int lineNumber = 0;
+        String raw;
 
-        for (String raw : text.split("\\r?\\n")) {
+        while ((raw = reader.readLine()) != null) {
+            lineNumber++;
+            if (raw.length() > MAX_LINE_CHARS) {
+                throw new IOException("OBJ line " + lineNumber + " exceeds " + MAX_LINE_CHARS + " characters");
+            }
             String line = raw.trim();
             if (line.isEmpty() || line.charAt(0) == '#') continue;
             String[] tok = line.split("\\s+");
             switch (tok[0]) {
                 case "v" -> {
-                    if (tok.length >= 4) positions.add(new float[]{f(tok[1]), f(tok[2]), f(tok[3])});
+                    if (tok.length >= 4) {
+                        if (++sourceRecords > MAX_SOURCE_RECORDS) throw new IOException("OBJ exceeds the source-record limit");
+                        positions.add(new float[]{f(tok[1]), f(tok[2]), f(tok[3])});
+                    }
                 }
-                case "vt" -> uvs.add(new float[]{tok.length >= 2 ? f(tok[1]) : 0f, tok.length >= 3 ? f(tok[2]) : 0f});
+                case "vt" -> {
+                    if (++sourceRecords > MAX_SOURCE_RECORDS) throw new IOException("OBJ exceeds the source-record limit");
+                    uvs.add(new float[]{tok.length >= 2 ? f(tok[1]) : 0f, tok.length >= 3 ? f(tok[2]) : 0f});
+                }
                 case "vn" -> {
-                    if (tok.length >= 4) normals.add(new float[]{f(tok[1]), f(tok[2]), f(tok[3])});
+                    if (tok.length >= 4) {
+                        if (++sourceRecords > MAX_SOURCE_RECORDS) throw new IOException("OBJ exceeds the source-record limit");
+                        normals.add(new float[]{f(tok[1]), f(tok[2]), f(tok[3])});
+                    }
                 }
                 case "f" -> {
+                    if (tok.length - 1 > MAX_FACE_VERTICES) {
+                        throw new IOException("OBJ face at line " + lineNumber + " exceeds " + MAX_FACE_VERTICES + " vertices");
+                    }
                     faceVerts.clear();
                     for (int i = 1; i < tok.length; i++) {
                         int[] ref = ref(tok[i], positions.size(), uvs.size(), normals.size());

@@ -69,7 +69,9 @@ public class KilaMask extends KilaModule {
         texture.uploadUv(shader, prefix);
         shader.safeGetUniform(prefix + "Opts").set(texture.flags(), 0, 0, 0);
         texture.uploadSource(shader, prefix, scratch);
-        shader.safeGetUniform(prefix + "Params").set(strength, invert ? 1f : 0f, power, affectsColor ? 1f : 0f);
+        shader.safeGetUniform(prefix + "Params").set(
+                finite(strength, 1f, 0f, 1f), invert ? 1f : 0f, finite(power, 1f, 0.01f, 16f),
+                affectsColor ? 1f : 0f);
     }
 
     @Override

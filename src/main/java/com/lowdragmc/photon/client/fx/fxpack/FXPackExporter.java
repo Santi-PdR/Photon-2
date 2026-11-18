@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -163,15 +164,29 @@ public final class FXPackExporter {
 
     /** The id an effect exported into a pack named {@code namespace} as {@code fxName} is loaded by. */
     public static ResourceLocation fxId(String namespace, String fxName) {
-        return new ResourceLocation(sanitize(namespace), sanitize(fxName));
+        return new ResourceLocation(sanitizeNamespace(namespace), sanitizePath(fxName));
     }
 
-    /** Lowercase + replace everything outside {@code [a-z0-9/._-]} so ids are always valid. */
-    private static String sanitize(String name) {
-        var sanitized = name.toLowerCase().replaceAll("[^a-z0-9/._-]", "_");
-        // a name with no usable characters (e.g. a file literally called ".fxpack") must not
-        // produce an empty namespace/path — ResourceLocation would reject it and abort the export
-        return sanitized.isBlank() ? "fx" : sanitized;
+    /** A namespace is one resource-pack directory, never a path; dot segments are reserved too. */
+    private static String sanitizeNamespace(String name) {
+        var sanitized = (name == null ? "" : name.toLowerCase(Locale.ROOT))
+                .replaceAll("[^a-z0-9._-]", "_");
+        // Empty names and exact dot segments cannot name safe assets/<namespace>/ directories.
+        return sanitized.isBlank() || sanitized.equals(".") || sanitized.equals("..") ? "fx" : sanitized;
+    }
+
+    /** Preserve nested effect folders, but replace empty, current, or parent segments before writing to the pack. */
+    private static String sanitizePath(String name) {
+        var sanitized = (name == null ? "" : name.toLowerCase(Locale.ROOT))
+                .replaceAll("[^a-z0-9/._-]", "_");
+        if (sanitized.isBlank()) return "fx";
+        var segments = sanitized.split("/", -1);
+        for (int i = 0; i < segments.length; i++) {
+            if (segments[i].isEmpty() || segments[i].equals(".") || segments[i].equals("..")) {
+                segments[i] = "_";
+            }
+        }
+        return String.join("/", segments);
     }
 
     // ---- the effects FX instances place ------------------------------------------------------------
@@ -449,7 +464,9 @@ public final class FXPackExporter {
             var event = new JsonObject();
             var sounds = new JsonArray();
             var sound = new JsonObject();
-            sound.addProperty("name", eventPath);
+            // SoundManager parses unqualified sound file names in the minecraft namespace,
+            // not the sounds.json namespace. Use the event's namespace explicitly.
+            sound.addProperty("name", eventId.toString());
             sound.addProperty("stream", true);
             sounds.add(sound);
             event.add("sounds", sounds);
