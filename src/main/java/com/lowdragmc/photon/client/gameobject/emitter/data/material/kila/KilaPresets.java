@@ -1896,7 +1896,8 @@ public final class KilaPresets {
         m.uvEffects.setEnable(true);
         m.uvEffects.rippleAmplitude = 0.025f;
         m.uvEffects.rippleFrequency = 8f;
-        m.alpha.bind(KilaDriver.Source.LIFE, -0.7f);
+        m.alpha.value = 1f;
+        m.alpha.bind(KilaDriver.Source.LIFE, -1f);
     });
 
     /** A branching lightning strike with a hot white core and a quick electric-blue fade. */
