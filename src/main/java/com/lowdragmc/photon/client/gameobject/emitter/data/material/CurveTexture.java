@@ -30,14 +30,14 @@ public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwar
     @Configurable(name = "curves", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildCurveConfigurator", addDefaultMethod = "addDefaultCurve")
     private final List<Curve> curves = new ArrayList<>();
-    // runtime
-    private boolean isDirty = false;
+    // Upload once on first use, even when the curve list is empty: shader samplers must never receive null.
+    private boolean isDirty = true;
     @Nullable
     private DynamicTexture curveTexture;
 
     public CurveTexture(int width, int height) {
-        this.width = width;
-        this.height = height;
+        this.width = Math.max(width, 2);
+        this.height = Math.max(height, 1);
     }
 
     public void markAsDirty() {
@@ -64,10 +64,11 @@ public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwar
             curveTexture.close();
             curveTexture = null;
         }
+        isDirty = true;
     }
 
     public void uploadTexture() {
-        if (!isDirty) return;
+        if (!isDirty && curveTexture != null && curveTexture.getPixels() != null) return;
         RenderSystem.assertOnRenderThread();
         if (curveTexture == null || curveTexture.getPixels() == null)  {
             this.curveTexture = new DynamicTexture(width, height, false);
@@ -75,13 +76,11 @@ public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwar
         var pixels = curveTexture.getPixels();
         assert pixels != null;
         for (int h = 0; h < height; h++) {
-            if (h >= curves.size()) {
-//                for (int w = 0; w < width; w++) {
-//                    pixels.setPixelRGBA(w, h, 0);
-//                }
+            var curve = h < curves.size() ? curves.get(h) : null;
+            if (curve == null) {
+                for (int w = 0; w < width; w++) pixels.setPixelRGBA(w, h, 0);
                 continue;
             }
-            var curve = curves.get(h);
             for (int w = 0; w < width; w++) {
                 var y = curve.getCurves().getCurveY(w / (width - 1f));
                 var r = Mth.clamp((int)(y * 255),0, 255);
@@ -107,7 +106,7 @@ public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwar
     private void setCurves(List<Curve> curves) {
         if (curves != this.curves) {
             this.curves.clear();
-            this.curves.addAll(curves);
+            if (curves != null) this.curves.addAll(curves);
         }
         markAsDirty();
     }
@@ -123,8 +122,9 @@ public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwar
     public void deserializeNBT(@Nonnull HolderLookup.Provider provider, @Nonnull ListTag listTag) {
         curves.clear();
         for (Tag tag : listTag) {
+            if (!(tag instanceof CompoundTag compound)) continue;
             var curve = new Curve();
-            curve.deserializeNBT(provider, (CompoundTag) tag);
+            curve.deserializeNBT(provider, compound);
             curves.add(curve);
         }
         markAsDirty();

@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.zip.ZipFile;
 
 /** Client cache and automatic ResourceManager reload for FX packs received from a Photon server. */
 @OnlyIn(Dist.CLIENT)
@@ -32,12 +31,21 @@ public final class ClientFxPackSync {
         return thread;
     });
     private static volatile SyncSession activeSession;
+    private static long lastRequestToken = -1;
 
     private ClientFxPackSync() {}
 
-    public static void begin(List<FxPackSync.PackEntry> entries) {
-        var session = new SyncSession(entries.size());
+    public static void begin(long requestToken, List<FxPackSync.PackEntry> entries) {
+        if (Minecraft.getInstance().getConnection() == null
+                || requestToken < 0 || requestToken <= lastRequestToken) return;
+        lastRequestToken = requestToken;
+        var previous = activeSession;
+        var session = new SyncSession(requestToken, entries.size());
         activeSession = session;
+        IO.execute(() -> {
+            if (previous != null) discardTemporaryFiles(previous);
+            discardOrphanTemporaryFiles();
+        });
         if (entries.isEmpty()) {
             finish(session);
             return;
@@ -49,19 +57,56 @@ public final class ClientFxPackSync {
         }
     }
 
+    private static void discardTemporaryFiles(SyncSession session) {
+        for (var transfer : session.transfers.values()) {
+            try {
+                Files.deleteIfExists(transfer.temp);
+            } catch (IOException | RuntimeException e) {
+                Photon.LOGGER.warn("Could not remove temporary Photon FX pack file {}", transfer.temp, e);
+            }
+        }
+        session.transfers.clear();
+    }
+
+    /** Remove interrupted transfers from a prior process without touching completed server cache packs. */
+    private static void discardOrphanTemporaryFiles() {
+        var directory = FXPacks.getFxPacksDir().toPath();
+        if (!Files.isDirectory(directory)) return;
+        try (var files = Files.list(directory)) {
+            for (var path : files.filter(file -> file.getFileName().toString().startsWith("server-")
+                    && file.getFileName().toString().endsWith(FXPacks.SUFFIX + ".part")
+                    && Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS)).toList()) {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException | RuntimeException e) {
+                    Photon.LOGGER.warn("Could not remove orphaned Photon FX pack transfer {}", path, e);
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            Photon.LOGGER.warn("Could not scan for orphaned Photon FX pack transfers", e);
+        }
+    }
+
     private static void prepare(SyncSession session, FxPackSync.PackEntry entry, Path target) {
         if (activeSession != session) return;
+        var temp = target.resolveSibling(target.getFileName() + ".part");
         try {
             Files.createDirectories(target.getParent());
             if (Files.isRegularFile(target) && Files.size(target) == entry.size()
-                    && sha256(target).equals(entry.sha256()) && isFxPack(target)) {
+                    && sha256(target).equals(entry.sha256())) {
+                var validation = inspectPack(session, target);
+                if (validation.valid()) {
+                    if (activeSession == session) {
+                        session.completed.add(entry.sha256());
+                        finishOne(session);
+                    }
+                    return;
+                }
                 if (activeSession == session) {
-                    session.completed.add(entry.sha256());
-                    finishOne(session);
+                    throw new IOException("Cached server Photon FX pack failed validation");
                 }
                 return;
             }
-            var temp = target.resolveSibling(target.getFileName() + ".part");
             Files.deleteIfExists(temp);
             try (var file = new RandomAccessFile(temp.toFile(), "rw")) {
                 file.setLength(entry.size());
@@ -77,11 +122,18 @@ public final class ClientFxPackSync {
                 Files.deleteIfExists(temp);
                 return;
             }
-            PhotonNetworking.CHANNEL.sendToServer(new FxPackSync.RequestPacket(entry.sha256(), 0));
+            PhotonNetworking.CHANNEL.sendToServer(
+                    new FxPackSync.RequestPacket(session.requestToken, entry.sha256(), 0));
             Photon.LOGGER.info("Downloading Photon FX pack {} from server ({} bytes)", entry.fileName(), entry.size());
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException failure) {
+            session.transfers.remove(entry.sha256());
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException | RuntimeException cleanupFailure) {
+                Photon.LOGGER.warn("Could not remove failed Photon FX pack transfer {}", temp, cleanupFailure);
+            }
             if (activeSession == session) {
-                Photon.LOGGER.error("Could not prepare server Photon FX pack {}", entry.fileName(), e);
+                Photon.LOGGER.error("Could not prepare server Photon FX pack {}", entry.fileName(), failure);
                 finishOne(session);
             }
         }
@@ -89,7 +141,9 @@ public final class ClientFxPackSync {
 
     public static void accept(FxPackSync.ChunkPacket packet) {
         var session = activeSession;
-        if (session != null) IO.execute(() -> writeChunk(session, packet));
+        if (session != null && packet.requestToken() == session.requestToken) {
+            IO.execute(() -> writeChunk(session, packet));
+        }
     }
 
     private static void writeChunk(SyncSession session, FxPackSync.ChunkPacket packet) {
@@ -114,13 +168,16 @@ public final class ClientFxPackSync {
                 if (transfer.received != transfer.entry.size()) {
                     if (activeSession == session) {
                         PhotonNetworking.CHANNEL.sendToServer(
-                                new FxPackSync.RequestPacket(transfer.entry.sha256(), transfer.received));
+                                new FxPackSync.RequestPacket(session.requestToken,
+                                        transfer.entry.sha256(), transfer.received));
                     }
                     return;
                 }
-                if (!sha256(transfer.temp).equals(transfer.entry.sha256()) || !isFxPack(transfer.temp)) {
-                    throw new IOException("Downloaded Photon FX pack failed integrity or format validation");
+                if (!sha256(transfer.temp).equals(transfer.entry.sha256())) {
+                    throw new IOException("Downloaded Photon FX pack failed integrity validation");
                 }
+                var validation = inspectPack(session, transfer.temp);
+                if (!validation.valid()) throw new IOException("Downloaded Photon FX pack failed format validation");
                 if (activeSession != session) {
                     session.transfers.remove(packet.sha256(), transfer);
                     Files.deleteIfExists(transfer.temp);
@@ -137,15 +194,29 @@ public final class ClientFxPackSync {
                 session.transfers.remove(packet.sha256(), transfer);
                 Photon.LOGGER.info("Downloaded Photon FX pack {}", transfer.entry.fileName());
                 finishOne(session);
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException failure) {
                 session.transfers.remove(packet.sha256(), transfer);
-                try { Files.deleteIfExists(transfer.temp); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(transfer.temp);
+                } catch (IOException | RuntimeException cleanupFailure) {
+                    Photon.LOGGER.warn("Could not remove failed Photon FX pack transfer {}",
+                            transfer.temp, cleanupFailure);
+                }
                 if (activeSession == session) {
-                    Photon.LOGGER.error("Photon FX pack transfer failed for {}", transfer.entry.fileName(), e);
+                    Photon.LOGGER.error("Photon FX pack transfer failed for {}", transfer.entry.fileName(), failure);
                     finishOne(session);
                 }
             }
         }
+    }
+
+    private static FxPackSync.FxPackValidation inspectPack(SyncSession session, Path path) {
+        var remaining = FxPackSync.MAX_TOTAL_EXPANDED_PACK_BYTES - session.expandedBytes;
+        if (remaining <= 0) return new FxPackSync.FxPackValidation(false, 0);
+        var validation = FxPackSync.inspectFxPack(path,
+                Math.min(FxPackSync.MAX_EXPANDED_PACK_BYTES, remaining));
+        session.expandedBytes += validation.expandedBytes();
+        return validation;
     }
 
     private static void finishOne(SyncSession session) {
@@ -168,7 +239,10 @@ public final class ClientFxPackSync {
 
     /** Clear server-only assets on disconnect and invalidate any transfer still in flight. */
     public static void onClientLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+        var previous = activeSession;
         activeSession = null;
+        lastRequestToken = -1;
+        if (previous != null) IO.execute(() -> discardTemporaryFiles(previous));
         var minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
             if (activeSession != null || !FXPacks.setActiveServerPacks(List.of())) return;
@@ -179,12 +253,16 @@ public final class ClientFxPackSync {
     }
 
     private static final class SyncSession {
+        private final long requestToken;
         private final Map<String, Transfer> transfers = new ConcurrentHashMap<>();
         private final java.util.Set<String> completed = ConcurrentHashMap.newKeySet();
         private final AtomicInteger remaining;
+        /** Written only by the single-threaded IO executor. */
+        private long expandedBytes;
         private volatile boolean downloaded;
 
-        private SyncSession(int count) {
+        private SyncSession(long requestToken, int count) {
+            this.requestToken = requestToken;
             remaining = new AtomicInteger(count);
         }
     }
@@ -199,15 +277,6 @@ public final class ClientFxPackSync {
             this.entry = entry;
             this.target = target;
             this.temp = temp;
-        }
-    }
-
-    private static boolean isFxPack(Path path) {
-        try (var zip = new ZipFile(path.toFile())) {
-            return zip.stream().anyMatch(entry -> !entry.isDirectory()
-                    && entry.getName().matches("assets/[^/]+/fx/.+\\.fx"));
-        } catch (IOException e) {
-            return false;
         }
     }
 

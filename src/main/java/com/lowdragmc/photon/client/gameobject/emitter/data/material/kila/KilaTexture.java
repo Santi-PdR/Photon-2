@@ -134,18 +134,117 @@ public class KilaTexture implements IPersistedSerializable {
         return texture;
     }
 
+    /** Repair fields that would otherwise make their configurator dereference null or non-finite values. */
+    public void sanitizeForEditor() {
+        getTexture();
+        if (colorMode == null) colorMode = ColorMode.RGBA;
+        if (channel == null) channel = Channel.R;
+        if (uvSource == null) uvSource = UvSource.MESH;
+        if (noise == null) noise = Noise.TEXTURE;
+        if (wrapU == null) wrapU = Wrap.REPEAT;
+        if (wrapV == null) wrapV = Wrap.REPEAT;
+        if (tiling == null) tiling = new Vector2f(1, 1);
+        if (offset == null) offset = new Vector2f();
+        if (scroll == null) scroll = new Vector2f();
+        if (polarCenter == null) polarCenter = new Vector2f(0.5f, 0.5f);
+        tiling.set(finite(tiling.x, 1, 100_000), finite(tiling.y, 1, 100_000));
+        offset.set(finite(offset.x, 0, 100_000), finite(offset.y, 0, 100_000));
+        scroll.set(finite(scroll.x, 0, 100_000), finite(scroll.y, 0, 100_000));
+        polarCenter.set(finite(polarCenter.x, 0.5f, 100_000), finite(polarCenter.y, 0.5f, 100_000));
+        rotation = finite(rotation, 0, 1_000_000);
+        rotationSpeed = finite(rotationSpeed, 0, 1_000_000);
+        polarRadial = finite(polarRadial, 1, 100_000);
+        polarAngular = finite(polarAngular, 1, 100_000);
+        noiseScale = finite(noiseScale, 8, 10_000);
+        noiseMotion = finite(noiseMotion, 1, 10_000);
+    }
+
+    public UvSource effectiveUvSource() {
+        return uvSource == null ? UvSource.MESH : uvSource;
+    }
+
+    public Noise effectiveNoise() {
+        return noise == null ? Noise.TEXTURE : noise;
+    }
+
+    public ColorMode effectiveColorMode() {
+        return colorMode == null ? ColorMode.RGBA : colorMode;
+    }
+
+    public Channel effectiveChannel() {
+        return channel == null ? Channel.R : channel;
+    }
+
+    public Wrap effectiveWrapU() {
+        return wrapU == null ? Wrap.REPEAT : wrapU;
+    }
+
+    public Wrap effectiveWrapV() {
+        return wrapV == null ? Wrap.REPEAT : wrapV;
+    }
+
+    /** Safe authoring vectors for export paths, which build node defaults rather than upload uniforms. */
+    public Vector2f effectiveTiling() {
+        return new Vector2f(finite(tiling == null ? 1 : tiling.x, 1, 100_000),
+                finite(tiling == null ? 1 : tiling.y, 1, 100_000));
+    }
+
+    public Vector2f effectiveOffset() {
+        return new Vector2f(finite(offset == null ? 0 : offset.x, 0, 100_000),
+                finite(offset == null ? 0 : offset.y, 0, 100_000));
+    }
+
+    public Vector2f effectiveScroll() {
+        return new Vector2f(finite(scroll == null ? 0 : scroll.x, 0, 100_000),
+                finite(scroll == null ? 0 : scroll.y, 0, 100_000));
+    }
+
+    public Vector2f effectivePolarCenter() {
+        return new Vector2f(finite(polarCenter == null ? 0.5f : polarCenter.x, 0.5f, 100_000),
+                finite(polarCenter == null ? 0.5f : polarCenter.y, 0.5f, 100_000));
+    }
+
+    public float effectiveRotation() {
+        return finite(rotation, 0, 1_000_000);
+    }
+
+    public float effectiveRotationSpeed() {
+        return finite(rotationSpeed, 0, 1_000_000);
+    }
+
+    public float effectivePolarRadial() {
+        return finite(polarRadial, 1, 100_000);
+    }
+
+    public float effectivePolarAngular() {
+        return finite(polarAngular, 1, 100_000);
+    }
+
+    public float effectiveNoiseScale() {
+        return finite(noiseScale, 8, 10_000);
+    }
+
+    public float effectiveNoiseMotion() {
+        return finite(noiseMotion, 1, 10_000);
+    }
+
+    private static float finite(float value, float fallback, float limit) {
+        if (!Float.isFinite(value)) return fallback;
+        return Math.max(-limit, Math.min(limit, value));
+    }
+
     public int flags() {
         int flags = 0;
         if (polar) flags |= FLAG_POLAR;
-        flags |= uvSource.flag;
-        if (wrapU == Wrap.CLIP) flags |= FLAG_CLIP_U;
-        if (wrapV == Wrap.CLIP) flags |= FLAG_CLIP_V;
+        flags |= effectiveUvSource().flag;
+        if (effectiveWrapU() == Wrap.CLIP) flags |= FLAG_CLIP_U;
+        if (effectiveWrapV() == Wrap.CLIP) flags |= FLAG_CLIP_V;
         return flags;
     }
 
     /** Wrap inside one flipbook cell, u in bits 0-1 and v in 2-3: 0 repeat, 1 clamp, 2 mirror. */
     public int cellWrap() {
-        return cellWrap(wrapU) | cellWrap(wrapV) << 2;
+        return cellWrap(effectiveWrapU()) | cellWrap(effectiveWrapV()) << 2;
     }
 
     private static int cellWrap(Wrap wrap) {
@@ -157,30 +256,42 @@ public class KilaTexture implements IPersistedSerializable {
     }
 
     public boolean isProcedural() {
-        return noise != Noise.TEXTURE;
+        return effectiveNoise() != Noise.TEXTURE;
     }
 
     public boolean usesWorld() {
-        return uvSource.isWorld();
+        return effectiveUvSource().isWorld();
+    }
+
+    /** Upload {@code tiling.xy} and {@code offset.zw} to an already named vec4 uniform. */
+    public void uploadTilingOffset(ShaderInstance shader, String uniform) {
+        shader.safeGetUniform(uniform).set(finite(tiling == null ? 1 : tiling.x, 1, 100_000),
+                finite(tiling == null ? 1 : tiling.y, 1, 100_000), finite(offset == null ? 0 : offset.x, 0, 100_000),
+                finite(offset == null ? 0 : offset.y, 0, 100_000));
     }
 
     /** Uploads {@code <prefix>ST}, {@code <prefix>Anim} and {@code <prefix>Polar}. */
     public void uploadUv(ShaderInstance shader, String prefix) {
-        shader.safeGetUniform(prefix + "ST").set(tiling.x, tiling.y, offset.x, offset.y);
-        shader.safeGetUniform(prefix + "Anim").set(scroll.x, scroll.y,
-                (float) Math.toRadians(rotation), (float) Math.toRadians(rotationSpeed));
-        shader.safeGetUniform(prefix + "Polar").set(polarCenter.x, polarCenter.y, polarRadial, polarAngular);
+        uploadTilingOffset(shader, prefix + "ST");
+        shader.safeGetUniform(prefix + "Anim").set(finite(scroll == null ? 0 : scroll.x, 0, 100_000),
+                finite(scroll == null ? 0 : scroll.y, 0, 100_000),
+                (float) Math.toRadians(finite(rotation, 0, 1_000_000)),
+                (float) Math.toRadians(finite(rotationSpeed, 0, 1_000_000)));
+        shader.safeGetUniform(prefix + "Polar").set(finite(polarCenter == null ? 0.5f : polarCenter.x, 0.5f, 100_000),
+                finite(polarCenter == null ? 0.5f : polarCenter.y, 0.5f, 100_000), finite(polarRadial, 1, 100_000),
+                finite(polarAngular, 1, 100_000));
     }
 
     public void uploadChannel(ShaderInstance shader, String name, float[] scratch) {
-        channel.weights(scratch);
+        effectiveChannel().weights(scratch);
         shader.safeGetUniform(name).set(scratch[0], scratch[1], scratch[2], scratch[3]);
     }
 
     /** {@code <prefix>Noise} for a procedural slot, else {@code <prefix>Channel}. */
     public void uploadSource(ShaderInstance shader, String prefix, float[] scratch) {
         if (isProcedural()) {
-            shader.safeGetUniform(prefix + "Noise").set((float) noise.ordinal(), noiseScale, noiseMotion, 0f);
+            shader.safeGetUniform(prefix + "Noise").set(effectiveNoise().ordinal(),
+                    effectiveNoiseScale(), effectiveNoiseMotion(), 0f);
         } else {
             uploadChannel(shader, prefix + "Channel", scratch);
         }
@@ -188,13 +299,14 @@ public class KilaTexture implements IPersistedSerializable {
 
     public KGSamplerGl.GlSampler glSampler() {
         int filter = nearest ? GL11.GL_NEAREST : GL11.GL_LINEAR;
-        return new KGSamplerGl.GlSampler(filter, filter, wrapU.gl(), wrapV.gl());
+        return new KGSamplerGl.GlSampler(filter, filter, effectiveWrapU().gl(), effectiveWrapV().gl());
     }
 
     /** Two slots with equal keys can share one sampler. */
     public boolean sameSampler(KilaTexture other) {
-        return Objects.equals(getTexture(), other.getTexture()) && nearest == other.nearest
-                && wrapU.gl() == other.wrapU.gl() && wrapV.gl() == other.wrapV.gl();
+        return other != null && Objects.equals(getTexture(), other.getTexture()) && nearest == other.nearest
+                && effectiveWrapU().gl() == other.effectiveWrapU().gl()
+                && effectiveWrapV().gl() == other.effectiveWrapV().gl();
     }
 
     /** What of this slot changes the program variant. Allocation-free: it runs on every draw. */
@@ -203,8 +315,8 @@ public class KilaTexture implements IPersistedSerializable {
         if (isProcedural()) return hash;
         hash = hash * 31 + getTexture().hashCode();
         hash = hash * 31 + (nearest ? 1 : 0);
-        hash = hash * 31 + wrapU.gl();
-        return hash * 31 + wrapV.gl();
+        hash = hash * 31 + effectiveWrapU().gl();
+        return hash * 31 + effectiveWrapV().gl();
     }
 
     public KilaTexture tiling(float u, float v) {

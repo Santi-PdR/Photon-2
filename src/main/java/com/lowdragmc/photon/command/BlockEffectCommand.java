@@ -140,6 +140,11 @@ public class BlockEffectCommand extends EffectCommand {
     private static class Client {
         public static void execute(BlockEffectCommand packet) {
             var level = Minecraft.getInstance().level;
+            Photon.LOGGER.info("[fx-diagnostic] block playback packet fx={} position={}", packet.location, packet.pos);
+            if (level == null || !level.isLoaded(packet.pos)) {
+                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "block-packet", "Client level or target chunk is unavailable", null, null);
+                return;
+            }
             if (level != null && level.isLoaded(packet.pos)) {
                 var fx = FXHelper.getFX(packet.location);
                 if (fx != null) {
@@ -154,7 +159,12 @@ public class BlockEffectCommand extends EffectCommand {
                     effect.setForcedDeath(packet.forcedDeath);
                     effect.setAllowMulti(packet.allowMulti);
                     effect.setCheckState(packet.checkState);
-                    effect.start();
+                    try {
+                        effect.start();
+                    } catch (RuntimeException error) {
+                        com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "block-start", "Playback start threw an exception", null, error);
+                        throw error;
+                    }
                 }
             }
         }

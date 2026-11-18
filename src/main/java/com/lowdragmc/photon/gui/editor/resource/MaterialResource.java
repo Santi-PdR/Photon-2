@@ -46,11 +46,33 @@ public class MaterialResource extends Resource<IMaterial> {
         }
 
         addBuiltinShaderMaterial(provider, "circle");
+        addBuiltinTextureMaterial(provider, "white");
         addBuiltinTextureMaterial(provider, "kila_tail");
         addBuiltinTextureMaterial(provider, "laser");
         addBuiltinTextureMaterial(provider, "smoke");
         addBuiltinTextureMaterial(provider, "thaumcraft");
         addBuiltinTextureMaterial(provider, "ring");
+        addKilaTextureMaterial(provider, "glow");
+        addKilaTextureMaterial(provider, "soft_circle");
+        addKilaTextureMaterial(provider, "smoke_burst");
+        addKilaTextureMaterial(provider, "flow_swirl");
+        addKilaTextureMaterial(provider, "spiral");
+        addKilaTextureMaterial(provider, "vortex");
+        addKilaTextureMaterial(provider, "star_rays");
+        addKilaTextureMaterial(provider, "flare");
+        addKilaTextureMaterial(provider, "hexagon");
+        addKilaTextureMaterial(provider, "ripple");
+        addKilaTextureMaterial(provider, "sparkle");
+        addKilaTextureMaterial(provider, "shaft");
+        addKilaTextureMaterial(provider, "crescent");
+        addKilaTextureMaterial(provider, "wisp");
+        addKilaTextureMaterial(provider, "arc");
+        addKilaTextureMaterial(provider, "slash");
+        addKilaTextureMaterial(provider, "spark");
+        addKilaTextureMaterial(provider, "trail");
+        addKilaTextureMaterial(provider, "rune_circle");
+        addKilaTextureMaterial(provider, "noise_flow");
+        addKilaTextureMaterial(provider, "noise_cloud");
     }
 
     private void addVanillaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
@@ -60,6 +82,11 @@ public class MaterialResource extends Resource<IMaterial> {
     private void addBuiltinTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
         builtin.addResource(name, new TextureMaterial(new ResourceLocation("photon:textures/particle/%s.png".formatted(name))));
     }
+
+    private void addKilaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
+        builtin.addResource("tex/" + name, new TextureMaterial(new ResourceLocation("photon:textures/kila/" + name + ".png")));
+    }
+
 
     private void addBuiltinShaderMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
         builtin.addResource(name, new CustomShaderMaterial(new ResourceLocation("photon:%s".formatted(name))));
@@ -127,14 +154,42 @@ public class MaterialResource extends Resource<IMaterial> {
                 }
             }
         };
-        container.setUiSupplier(path -> new UIElement().layout(layout -> {
-                    layout.widthPercent(100);
-                    layout.heightPercent(100);
-                }).style(style -> style.backgroundTexture(
-                        com.lowdragmc.lowdraglib2.gui.texture.DynamicTexture.of(() -> {
-                            var material = editable(provider, path);
-                            return material == null ? IGuiTexture.MISSING_TEXTURE : material.preview();
-                        }))));
+        container.setUiSupplier(path -> {
+            // Shader-backed previews (especially Kila) may compile a distinct material layout. Keep
+            // resource-browser tiles cheap while scrolling; show the live preview only after a short
+            // hover so opening the material picker does not compile every tile at once.
+            boolean[] hovered = {false};
+            long[] hoverStarted = {0L};
+            // Some preview() implementations allocate a DynamicTexture wrapper; retain it for this hover only.
+            IGuiTexture[] preview = {null};
+            var thumbnail = new UIElement().layout(layout -> {
+                layout.widthPercent(100);
+                layout.heightPercent(100);
+            }).style(style -> style.backgroundTexture(com.lowdragmc.lowdraglib2.gui.texture.DynamicTexture.of(() -> {
+                long since = hoverStarted[0];
+                if (!hovered[0] || System.nanoTime() - since < 250_000_000L) return Icons.MATERIAL;
+                if (preview[0] == null) {
+                    var material = editable(provider, path);
+                    preview[0] = material == null ? IGuiTexture.MISSING_TEXTURE : material.preview();
+                }
+                return preview[0];
+            })));
+            var tile = new UIElement().layout(layout -> {
+                layout.widthPercent(100);
+                layout.heightPercent(100);
+            }).style(style -> style.backgroundTexture(
+                    com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaSlotPreview.checker()))
+                    .addChild(thumbnail);
+            thumbnail.addEventListener(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_ENTER,
+                    event -> { hovered[0] = true; hoverStarted[0] = System.nanoTime(); });
+            thumbnail.addEventListener(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_LEAVE,
+                    event -> { hovered[0] = false; preview[0] = null; });
+            tile.addEventListener(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_ENTER,
+                    event -> { hovered[0] = true; hoverStarted[0] = System.nanoTime(); });
+            tile.addEventListener(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents.MOUSE_LEAVE,
+                    event -> { hovered[0] = false; preview[0] = null; });
+            return tile;
+        });
         container.setOnEdit((c, path) -> {
             var material = editable(provider, path);
             if (material == null) return;

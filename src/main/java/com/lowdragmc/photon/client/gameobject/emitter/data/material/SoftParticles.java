@@ -83,7 +83,9 @@ public class SoftParticles extends ToggleGroup {
         shader.setSampler(PhotonShaderCompiler.SCENE_DEPTH, depthTexture);
         shader.safeGetUniform("U_InverseProjectionMatrix")
                 .set(RenderSystem.getProjectionMatrix().invert(INVERSE_PROJECTION));
+        float safeDistance = Float.isFinite(distance) ? net.minecraft.util.Mth.clamp(distance, 0.001f, 64f) : 1f;
+        float safePower = Float.isFinite(power) ? net.minecraft.util.Mth.clamp(power, 0.01f, 16f) : 1f;
         shader.safeGetUniform("SoftParticleParams")
-                .set(distance, power, fade == Fade.ALPHA_ONLY ? 1f : 0f, 1f);
+                .set(safeDistance, safePower, fade == Fade.ALPHA_ONLY ? 1f : 0f, 1f);
     }
 }

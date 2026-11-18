@@ -526,8 +526,18 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(new PhotonMeshCache.GltfKey(location, flipV), location);
-        try (var in = Minecraft.getInstance().getResourceManager().open(location)) {
-            return GltfMeshParser.parseModel(in, flipV, location);
+        var nested = LDLibModelAssets.resolve(location, location.getPath());
+        if (nested != null) PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.GltfKey(location, flipV), nested.toFile());
+        var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(location).orElse(null) : null;
+        if (nested == null && resource == null) {
+            Photon.LOGGER.warn("glTF {} does not exist", location);
+            return SkinnedModel.EMPTY;
+        }
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested) : resource.open()) {
+            var bytes = ModelInput.readAllBytes(in, "glTF model " + location);
+            var key = new PhotonMeshCache.GltfKey(location, flipV);
+            LDLibModelAssets.trackGltfBuffers(key, location, bytes);
+            return GltfMeshParser.parseModel(bytes, flipV, location);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
             Photon.LOGGER.warn("glTF {} does not exist", location);
@@ -543,7 +553,7 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
         Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", PhotonPaths.getDataDir(), true,
                 node -> {
                     if (!node.getKey().isFile()) return true; // allow directories
-                    var name = node.getKey().getName().toLowerCase();
+                    var name = node.getKey().getName().toLowerCase(java.util.Locale.ROOT);
                     return name.endsWith(".glb") || name.endsWith(".gltf");
                 }, r -> {
                     if (r != null && r.isFile()) {

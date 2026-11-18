@@ -1,5 +1,8 @@
 package com.lowdragmc.photon.client.gameobject;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -9,20 +12,56 @@ import java.util.function.Supplier;
  * read path.
  * <p>
  * Config stays immutable pure data; the runtime object owns these slots and the value-use behaviour.
+ * <p>
+ * The config value is resolved once per {@link #advance epoch} (an object's tick) and reused: a slot is read
+ * for every particle, and each slot's fallback is a lambda of its own, so the call to it never inlines.
+ * Ported from Photon 26.3 (the epoch cache; we do not have 26.3's parallel bake).
  *
  * @param <T> the value type (e.g. {@code NumberFunction}, {@code NumberFunction3}, {@code Integer}).
  */
 public class RuntimeValue<T> {
+    private static final VarHandle CACHED_EPOCH;
+
+    static {
+        try {
+            CACHED_EPOCH = MethodHandles.lookup().findVarHandle(RuntimeValue.class, "cachedEpoch", int.class);
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
+    /** Object ticks can advance the shared cache epoch from parallel engine workers. */
+    private static final AtomicInteger EPOCH = new AtomicInteger();
+
     private final Supplier<T> configFallback;
-    private T override;
+    private volatile T override;
+    private T cached;
+    @SuppressWarnings("unused") // through CACHED_EPOCH: parallel particle updates read the cache too
+    private int cachedEpoch = -1;
 
     public RuntimeValue(Supplier<T> configFallback) {
         this.configFallback = configFallback;
     }
 
+    /** Config values are resolved again from now on: before an object ticks. */
+    public static void advance() {
+        EPOCH.updateAndGet(value -> value == Integer.MAX_VALUE ? 0 : value + 1);
+    }
+
     /** The effective value: the timeline override if set, otherwise the authored config value. */
     public T get() {
-        return override != null ? override : configFallback.get();
+        var value = override;
+        if (value != null) {
+            return value;
+        }
+        var now = EPOCH.get();
+        if ((int) CACHED_EPOCH.getAcquire(this) == now) {
+            return cached;
+        }
+        value = configFallback.get();
+        cached = value;
+        CACHED_EPOCH.setRelease(this, now);
+        return value;
     }
 
     /** The authored config value, ignoring any timeline override (used by record mode so a live

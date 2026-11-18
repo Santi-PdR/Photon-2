@@ -139,12 +139,15 @@ public abstract class PhotonFXRenderPass {
             for (int pass = 0, passes = materialSetting.passes(); pass < passes; pass++) {
                 materialSetting.pre(pass);
                 var material = materialSetting.getMaterial();
-                if (records && readsParticleRecords(material)) {
-                    renderWithCpuRecords(material, vbo);
-                } else {
-                    renderWithMaterial(material, MaterialContext.NORMAL, vbo);
+                try {
+                    if (records && readsParticleRecords(material)) {
+                        renderWithCpuRecords(materialSetting, material, vbo);
+                    } else {
+                        renderWithMaterial(materialSetting, material, MaterialContext.NORMAL, vbo);
+                    }
+                } finally {
+                    materialSetting.post();
                 }
-                materialSetting.post();
             }
         }
 
@@ -285,14 +288,22 @@ public abstract class PhotonFXRenderPass {
         return vbo;
     }
 
-    protected void renderWithMaterial(IMaterial material, MaterialContext context, VertexBuffer vbo) {
-        var shader = material.begin(context);
-        RenderSystem.setShader(() -> shader);
-        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
-        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
-        vbo.draw();
-        shader.clear();
-        material.end(context);
+    protected void renderWithMaterial(MaterialSetting materialSetting, IMaterial material, MaterialContext context, VertexBuffer vbo) {
+        ShaderInstance shader = null;
+        try {
+            shader = materialSetting.beginMaterial(material, context);
+            var activeShader = shader;
+            RenderSystem.setShader(() -> activeShader);
+            com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
+            com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
+            vbo.draw();
+        } finally {
+            try {
+                if (shader != null) shader.clear();
+            } finally {
+                material.end(context);
+            }
+        }
     }
 
     /**
@@ -316,16 +327,24 @@ public abstract class PhotonFXRenderPass {
     }
 
     /** {@code VertexBuffer.drawWithShader}, with the records bound between {@code apply()} and the draw. */
-    protected void renderWithCpuRecords(IMaterial material, VertexBuffer vbo) {
+    protected void renderWithCpuRecords(MaterialSetting materialSetting, IMaterial material, VertexBuffer vbo) {
         var context = MaterialContext.PARTICLE_CPU_DATA;
-        var shader = material.begin(context);
-        RenderSystem.setShader(() -> shader);
-        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
-        com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
-        bindCpuRecords(shader);
-        vbo.draw();
-        shader.clear();
-        material.end(context);
+        ShaderInstance shader = null;
+        try {
+            shader = materialSetting.beginMaterial(material, context);
+            var activeShader = shader;
+            RenderSystem.setShader(() -> activeShader);
+            com.lowdragmc.photon.client.util.PhotonShaderUtils.applyDefaultUniforms(shader);
+            com.lowdragmc.photon.client.util.PhotonShaderUtils.applyPreservingBlend(shader);
+            bindCpuRecords(shader);
+            vbo.draw();
+        } finally {
+            try {
+                if (shader != null) shader.clear();
+            } finally {
+                material.end(context);
+            }
+        }
     }
 
     /**

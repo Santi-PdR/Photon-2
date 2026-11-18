@@ -116,12 +116,21 @@ public final class FXPreloader {
     }
 
     /**
-     * Every texture id an effect names, collected without loading, preparing or drawing anything. This is what a
+     * Every texture id an effect names, collected without loading textures, compiling shaders or drawing anything. This is what a
      * {@code /photon_client textures} answer needs: which images the effect asks for, so each one can be checked
      * against the packs and the loose folders.
      */
     public static Set<ResourceLocation> texturesOf(FX fx) {
         var collected = new HashSet<ResourceLocation>();
+        var visited = Collections.newSetFromMap(new IdentityHashMap<FX, Boolean>());
+        collectTextures(fx, visited, collected);
+        return collected;
+    }
+
+    private static void collectTextures(FX fx, Set<FX> visited, Set<ResourceLocation> collected) {
+        // Effects can spawn one another in a cycle. Track resolved definitions by identity so traversal terminates;
+        // nested FX may be read through FXHelper, but no render-thread preparation job is run here.
+        if (!visited.add(fx)) return;
         walk(fx, new Sink() {
             @Override
             public void texture(ResourceLocation location) {
@@ -134,12 +143,16 @@ public final class FXPreloader {
             }
 
             @Override
+            public boolean collectingTextures() {
+                return true;
+            }
+
+            @Override
             public void fx(ResourceLocation fxLocation) {
                 var nested = FXHelper.getFX(fxLocation);
-                if (nested != null && nested != fx) collected.addAll(texturesOf(nested));
+                if (nested != null) collectTextures(nested, visited, collected);
             }
         });
-        return collected;
     }
 
     private static void walk(FX fx, Sink sink) {
@@ -190,6 +203,10 @@ public final class FXPreloader {
         void render(Runnable job);
 
         void fx(ResourceLocation fxLocation);
+
+        default boolean collectingTextures() {
+            return false;
+        }
     }
 
     private record EffectContext(Sink sink, Map<UUID, Set<String>> animated) implements PreloadContext {
@@ -213,6 +230,11 @@ public final class FXPreloader {
             var paths = animated.get(object.id());
             return paths != null && paths.contains(path);
         }
+
+        @Override
+        public boolean isCollectingTextures() {
+            return sink.collectingTextures();
+        }
     }
 
     private static final class SyncSink implements Sink {
@@ -220,7 +242,10 @@ public final class FXPreloader {
 
         @Override
         public void texture(ResourceLocation location) {
-            render(() -> Minecraft.getInstance().getTextureManager().getTexture(location));
+            render(() -> {
+                LooseTextures.resolveForRender(location);
+                Minecraft.getInstance().getTextureManager().getTexture(location);
+            });
         }
 
         @Override
@@ -321,6 +346,9 @@ public final class FXPreloader {
 
         @Override
         public void texture(ResourceLocation location) {
+            // Adopt loose files and install their temporary texture before a background decode can
+            // observe an unmounted id and replace the material's intended image with MissingTexture.
+            LooseTextures.resolveForRender(location);
             var textureManager = Minecraft.getInstance().getTextureManager();
             if (textureManager.getTexture(location, null) != null || !textures.add(location)) return;
             pending.incrementAndGet();

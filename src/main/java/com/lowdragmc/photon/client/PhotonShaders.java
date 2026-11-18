@@ -94,6 +94,10 @@ public class PhotonShaders {
     }
 
     public static void registerShaders(RegisterShadersEvent registerShadersEvent) {
+        // TextureMaterial variants are independent GL programs, not owned by RegisterShadersEvent.
+        // Drop them before their base shader instances are replaced on this reload.
+        com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial.clearShaderVariants();
+        com.lowdragmc.photon.client.gameobject.emitter.data.material.SpriteMaterial.clearShaderVariants();
         // fires on every resource reload — drop lazily-loaded custom pass shaders so they re-resolve,
         // and compact the mask-group id table (ids are per-frame-resolved, safe to reassign)
         com.lowdragmc.photon.client.postfx.runtime.CustomShaderPass.clearAll();

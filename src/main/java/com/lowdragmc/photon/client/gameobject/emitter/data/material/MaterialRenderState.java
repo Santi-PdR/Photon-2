@@ -10,6 +10,10 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 @OnlyIn(Dist.CLIENT)
 public record MaterialRenderState(BlendMode blendMode, boolean cull, boolean depthTest, boolean depthMask,
                                   boolean backFacesFirst) {
+    public MaterialRenderState {
+        if (blendMode == null) blendMode = new BlendMode();
+    }
+
     public MaterialRenderState(BlendMode blendMode, boolean cull, boolean depthTest, boolean depthMask) {
         this(blendMode, cull, depthTest, depthMask, false);
     }
