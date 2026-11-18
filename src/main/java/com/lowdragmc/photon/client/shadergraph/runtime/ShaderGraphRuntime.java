@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.shadergraph.runtime;
 
+import com.lowdragmc.kilagraph.rendertype.RenderTypeGraphTypes;
 import com.lowdragmc.kilagraph.rendertype.compiler.CompiledShaderGraph;
 import com.lowdragmc.kilagraph.rendertype.format.KGVertexFormat;
 import com.lowdragmc.kilagraph.rendertype.runtime.DynamicShaderSourceRegistry;
@@ -10,6 +11,8 @@ import com.lowdragmc.lowdraglib2.client.shader.LDProgramDefineManager;
 import com.lowdragmc.lowdraglib2.client.shader.LDShaderInstance;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.api.graph.Graph;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.NodeModel;
+import com.lowdragmc.lowdraglib2.nodegraphtookit.model.node.SubgraphNodeModel;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.editor.GraphResource;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.editor.IGraphReferenceResolver;
 import com.lowdragmc.photon.Photon;
@@ -21,13 +24,17 @@ import com.lowdragmc.photon.gui.editor.resource.ShaderGraphResource;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import lombok.Getter;
 import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -164,6 +171,71 @@ public final class ShaderGraphRuntime {
         } finally {
             // create() only clears them on success; a failed compile would leak them into every later one
             variant.forEach(LDProgramDefineManager::removeProgramDefine);
+        }
+    }
+
+    /** Read an already-compiled graph entry without triggering graph loading or compilation. */
+    @Nullable
+    public static Entry peek(@Nullable IResourcePath path) {
+        if (path == null) return null;
+        var entry = CACHE.get(path);
+        if (entry == null) return null;
+        var sourceTag = ShaderGraphResource.INSTANCE.getResourceInstance().getResource(path);
+        return entry.sourceTag == sourceTag ? entry : null;
+    }
+
+    /**
+     * Read sampler locations from the authored graph model and its resolved subgraphs without compiling GLSL
+     * or creating GL programs. Used by the read-only texture diagnostic before the graph has been rendered.
+     */
+    public static Set<ResourceLocation> samplerLocations(@Nullable IResourcePath path) {
+        if (path == null) return Set.of();
+        var locations = new LinkedHashSet<ResourceLocation>();
+        try {
+            var tag = ShaderGraphResource.INSTANCE.getResourceInstance().getResource(path);
+            if (tag == null) return Set.of();
+            var graph = ShaderGraphResource.INSTANCE.deserializeGraph(tag, RESOLVER);
+            var visitedGraphs = Collections.newSetFromMap(new IdentityHashMap<Graph, Boolean>());
+            var visitedResources = new HashSet<GraphResourceKey>();
+            visitedResources.add(new GraphResourceKey(path, graph.getClass()));
+            collectSamplerLocations(graph, visitedGraphs, visitedResources, locations);
+        } catch (RuntimeException failure) {
+            Photon.LOGGER.warn("Could not inspect sampler defaults for shader graph {}", path, failure);
+        }
+        return Set.copyOf(locations);
+    }
+
+    private record GraphResourceKey(IResourcePath path, Class<?> graphType) {}
+
+    /** Traverse graph models and resolved subgraphs; identity and resource-key tracking prevent cycles. */
+    private static void collectSamplerLocations(Graph graph, Set<Graph> visitedGraphs,
+                                                Set<GraphResourceKey> visitedResources,
+                                                Set<ResourceLocation> locations) {
+        if (graph == null || !visitedGraphs.add(graph)) return;
+        for (var model : graph.graphModel.getNodeModels()) {
+            if (model instanceof NodeModel node) {
+                for (var constant : node.getInputConstantsById().values()) {
+                    if (constant.getValue() instanceof RenderTypeGraphTypes.Sampler2DValue sampler) {
+                        var location = ResourceLocation.tryParse(sampler.location());
+                        if (location != null) locations.add(location);
+                    }
+                }
+            }
+            if (model instanceof SubgraphNodeModel subgraph) {
+                var nested = subgraph.getSubgraph();
+                if (nested == null) continue;
+                var externalPath = subgraph.getExternalPath();
+                if (externalPath == null || visitedResources.add(new GraphResourceKey(externalPath, nested.getClass()))) {
+                    collectSamplerLocations(nested, visitedGraphs, visitedResources, locations);
+                }
+            }
+        }
+        for (var variable : graph.graphModel.getGraphVariableModels()) {
+            var defaultValue = variable.tryGetDefaultValue(variable.getDataType()).result().orElse(null);
+            if (defaultValue instanceof RenderTypeGraphTypes.Sampler2DValue sampler) {
+                var location = ResourceLocation.tryParse(sampler.location());
+                if (location != null) locations.add(location);
+            }
         }
     }
 

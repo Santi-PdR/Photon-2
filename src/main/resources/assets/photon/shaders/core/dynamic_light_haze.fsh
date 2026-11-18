@@ -18,7 +18,7 @@ void main() {
     float depth = texelFetch(SceneDepthSampler, pixel, 0).r;
     // a pack's hand is drawn with its own projection, too close for any haze
     if (PackParams.x > 0.5 && depth < 0.56) discard;
-    float z = depth >= 1.0 ? 1e6 : -viewPos((vec2(pixel) + 0.5) / ScreenSize, depth).z;
+    float z = depth >= 1.0 ? 1e6 : -viewPos((vec2(pixel) + 0.5) / photon_safe_screen_size(), depth).z;
     vec4 volume = upsample(VolumeSampler, pixel, z, 1e6);
     fragColor = HazeMode == 1 ? vec4(vec3(volume.a), 1.0) : vec4(1.0 - exp(-volume.rgb), 1.0);
 }

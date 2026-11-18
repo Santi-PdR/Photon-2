@@ -53,6 +53,18 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
     protected final LitParticles litParticles = new LitParticles();
     private static final Map<String, ShaderInstance> spriteHDRParticleShaders = new HashMap<>();
 
+    /** Dispose custom variants before the base sprite program is replaced by a resource reload. */
+    public static void clearShaderVariants() {
+        for (var shader : spriteHDRParticleShaders.values()) {
+            try {
+                shader.close();
+            } catch (RuntimeException failure) {
+                Photon.LOGGER.warn("Failed to dispose a cached sprite shader variant", failure);
+            }
+        }
+        spriteHDRParticleShaders.clear();
+    }
+
     @Nullable
     private SpriteSet getSpriteSet() {
         if (spriteLocation == null) return null;
@@ -87,6 +99,10 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
         }
     }
 
+    private static float finite(float value) {
+        return Float.isFinite(value) ? value : 0f;
+    }
+
     @Override
     public void setupUniform(MaterialContext context) {
         var shader = getShader(context);
@@ -99,11 +115,14 @@ public class SpriteMaterial extends ShaderInstanceMaterial {
             RenderSystem.setShaderTexture(0, spriteTexture.atlasLocation());
             shader.safeGetUniform("U_SpriteUV").set(spriteTexture.getU0(), spriteTexture.getV0(), spriteTexture.getU1(), spriteTexture.getV1());
         }
-        shader.safeGetUniform("DiscardThreshold").set(discardThreshold);
+        float threshold = Float.isFinite(discardThreshold)
+                ? net.minecraft.util.Mth.clamp(discardThreshold, 0f, 1f) : 0.1f;
+        shader.safeGetUniform("DiscardThreshold").set(threshold);
         // the preview thumbnail drops the intensity so a bright emissive material doesn't blow it out
-        var color = context.isRenderingPreview() ? hdr.withIntensity(1f).toVector4fOpaque() : hdr.toVector4fOpaque();
-        shader.safeGetUniform("HDR").set(color.x, color.y, color.z, color.w);
-        shader.safeGetUniform("HDRMode").set(hdrMode.mode);
+        var safeHdr = hdr == null ? HDRColor.black() : hdr;
+        var color = context.isRenderingPreview() ? safeHdr.withIntensity(1f).toVector4fOpaque() : safeHdr.toVector4fOpaque();
+        shader.safeGetUniform("HDR").set(finite(color.x), finite(color.y), finite(color.z), finite(color.w));
+        shader.safeGetUniform("HDRMode").set((hdrMode == null ? TextureMaterial.HDRMode.ADDITIVE : hdrMode).mode);
         softParticles.apply(shader, context);
         litParticles.apply(shader, context);
     }

@@ -1,5 +1,12 @@
 #version 150
 
+// Must match BlendMode.Preset declaration order: Java uploads these values through ordinal().
+#define KILA_BLEND_ALPHA 0
+#define KILA_BLEND_ADDITIVE 1
+#define KILA_BLEND_PREMULTIPLIED 2
+#define KILA_BLEND_MULTIPLY 3
+#define KILA_BLEND_OPAQUE 4
+
 #moj_import <fog.glsl>
 #moj_import <photon:kila_lib.glsl>
 #if defined(KILA_DEPTH) || defined(KILA_SCREEN_DEPTH) || defined(KILA_PROJECTION) || defined(KILA_VOLUME_CLIP)
@@ -654,7 +661,7 @@ uniform vec4 KilaFresnelOffset;
 
 vec4 kila_fresnel(vec4 c) {
     vec3 n = kilaNormal;
-    vec3 v = normalize(normalize(-kilaViewPos) + KilaFresnelOffset.xyz);
+    vec3 v = kila_safe_normalize(kila_safe_normalize(-kilaViewPos, vec3(0.0, 0.0, 1.0)) + KilaFresnelOffset.xyz, vec3(0.0, 0.0, 1.0));
     float f = clamp(KilaFresnel.y * pow(1.0 - abs(dot(n, v)), max(KilaFresnel.x, 1e-3)), 0.0, 1.0);
     float k = clamp(KILA_FRESNEL_STRENGTH, 0.0, 1.0);
     int mode = int(KilaFresnel.z + 0.5);
@@ -706,18 +713,18 @@ void kila_shading_normal() {
     vec3 t;
     vec3 b;
     bool framed = kila_quad_frame(kilaViewPos, t, b);
-    vec3 mesh = normalize(kilaViewNormal);
+    vec3 mesh = kila_safe_normalize(kilaViewNormal, vec3(0.0, 0.0, 1.0));
     if (!gl_FrontFacing) mesh = -mesh;
-    kilaTangent = normalize(t);
-    kilaBitangent = normalize(b);
-    vec3 face = framed ? normalize(cross(t, b)) : mesh;
+    kilaTangent = kila_safe_normalize(t, vec3(1.0, 0.0, 0.0));
+    kilaBitangent = kila_safe_normalize(b, vec3(0.0, -1.0, 0.0));
+    vec3 face = framed ? kila_safe_normalize(cross(t, b), mesh) : mesh;
     if (dot(face, -kilaViewPos) < 0.0) face = -face;
     kilaFace = face;
     vec3 n = mesh;
     if (KilaShadingOpts.x == 1) {
         vec2 p = texCoord0 * 2.0 - 1.0;
-        vec3 sphere = normalize(kilaTangent * p.x + kilaBitangent * p.y + face * sqrt(max(1.0 - dot(p, p), 0.0)));
-        n = normalize(mix(face, sphere, clamp(KilaShadingParams.x, 0.0, 1.0)));
+        vec3 sphere = kila_safe_normalize(kilaTangent * p.x + kilaBitangent * p.y + face * sqrt(max(1.0 - dot(p, p), 0.0)), face);
+        n = kila_safe_normalize(mix(face, sphere, clamp(KilaShadingParams.x, 0.0, 1.0)), face);
     }
 #ifdef KILA_BUMP
     int flags = KilaBumpOpts.x;
@@ -735,13 +742,13 @@ void kila_shading_normal() {
     vec3 r1 = cross(sy, n);
     vec3 r2 = cross(n, sx);
     float det = dot(sx, r1);
-    n = normalize(abs(det) * n - sign(det) * (dFdx(h) * r1 + dFdy(h) * r2));
+    n = kila_safe_normalize(abs(det) * n - sign(det) * (dFdx(h) * r1 + dFdy(h) * r2), n);
 #else
     vec3 m = texture(KILA_TEX_BUMP, uv).rgb * 2.0 - 1.0;
     if (KilaShadingOpts.w == 1) m.y = -m.y;
     m.xy *= KilaShadingParams.y;
     // green points up the texture, against v
-    n = normalize(kilaTangent * m.x - kilaBitangent * m.y + n * max(m.z, 1e-3));
+    n = kila_safe_normalize(kilaTangent * m.x - kilaBitangent * m.y + n * max(m.z, 1e-3), n);
 #endif
 #endif
     kilaNormal = n;
@@ -817,7 +824,7 @@ float kila_volume() {
     if (!kila_quad_frame(kilaViewPos, t, b)) return 0.0;
     vec3 centre = kilaViewPos + t * (0.5 - texCoord0.x) + b * (0.5 - texCoord0.y);
     float radius = 0.5 * length(t) * KilaVolume.x;
-    vec3 rd = normalize(kilaViewPos);
+    vec3 rd = kila_safe_normalize(kilaViewPos, vec3(0.0, 0.0, -1.0));
     float far = 1e6;
 #ifdef KILA_VOLUME_CLIP
     if (KilaVolume.w > 0.5) {
@@ -983,7 +990,7 @@ void main() {
     float phase = fract(kila_time() * KilaFlowMap.x);
     kilaFlowPhase = vec3(phase, fract(phase + 0.5), abs(1.0 - 2.0 * phase));
 #endif
-    kilaNormal = normalize(kilaViewNormal);
+    kilaNormal = kila_safe_normalize(kilaViewNormal, vec3(0.0, 0.0, 1.0));
 #ifdef KILA_SHADING
     kila_shading_normal();
 #endif
@@ -1179,18 +1186,19 @@ void main() {
     float stackCoverage = clamp(c.a, 0.0, 1.0);
 #endif
     int preset = KilaSurfaceModes.y;
-    if (preset == 2) {
+    if (preset == KILA_BLEND_PREMULTIPLIED) {
         c = vec4(c.rgb * c.a, c.a * (1.0 - clamp(KilaOutput.x, 0.0, 1.0)));
-    } else if (preset == 3) {
+    } else if (preset == KILA_BLEND_MULTIPLY) {
         c.rgb = mix(vec3(1.0), c.rgb, c.a);
-    } else if (preset == 4) {
+    } else if (preset == KILA_BLEND_OPAQUE) {
         c.a = 1.0;
     }
 #ifdef KILA_SCREEN_STACK
     // rg = push by coverage, a = eye depth, b = 1 - what the preset's blend leaves of the bent scene:
     // src * tint + dst, with the bent scene standing in for both (negative brightens)
-    float stackSrc = preset <= 1 ? c.a : 1.0;
-    float stackDst = preset == 1 ? 1.0 : preset == 0 || preset == 2 ? 1.0 - c.a : 0.0;
+    float stackSrc = preset <= KILA_BLEND_ADDITIVE ? c.a : 1.0;
+    float stackDst = preset == KILA_BLEND_ADDITIVE ? 1.0
+            : preset == KILA_BLEND_ALPHA || preset == KILA_BLEND_PREMULTIPLIED ? 1.0 - c.a : 0.0;
     fragColor = vec4(stackPush * stackCoverage, 1.0 - stackSrc * kila_luma(max(c.rgb, 0.0)) - stackDst, -kilaViewPos.z);
 #else
     fragColor = c;

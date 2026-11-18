@@ -50,7 +50,9 @@ public class KilaVolume extends KilaModule {
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
         boolean bound = clip && KilaDepth.bindSceneDepth(shader, context);
-        shader.safeGetUniform("KilaVolume").set(Math.max(size, 0.01f), density, power, bound ? 1f : 0f);
+        shader.safeGetUniform("KilaVolume").set(
+                finite(size, 1f, 0.01f, 4f), finite(density, 1f, 0f, 16f),
+                finite(power, 1f, 0.05f, 16f), bound ? 1f : 0f);
     }
 
     @Override

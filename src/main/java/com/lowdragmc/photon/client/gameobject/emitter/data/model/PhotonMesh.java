@@ -257,6 +257,9 @@ public final class PhotonMesh {
      * face added.
      */
     public static final class Builder {
+        /** Prevent malformed or unexpectedly dense models from allocating unbounded CPU/GPU mesh buffers. */
+        public static final int MAX_VERTICES = 1_000_000;
+
         private final FloatArrayList geometry = new FloatArrayList();
         private final FloatArrayList attributes = new FloatArrayList();
         private final FloatArrayList spriteBounds = new FloatArrayList();
@@ -279,15 +282,18 @@ public final class PhotonMesh {
         public int vertex(float x, float y, float z, float u, float v,
                           float nx, float ny, float nz, float shade) {
             int index = attributes.size() / FLOATS_PER_ATTRIBUTE;
-            geometry.add(x);
-            geometry.add(y);
-            geometry.add(z);
-            geometry.add(nx);
-            geometry.add(ny);
-            geometry.add(nz);
-            attributes.add(u);
-            attributes.add(v);
-            attributes.add(shade);
+            if (index >= MAX_VERTICES) {
+                throw new IllegalStateException("model exceeds the " + MAX_VERTICES + " vertex limit");
+            }
+            geometry.add(finiteOrZero(x));
+            geometry.add(finiteOrZero(y));
+            geometry.add(finiteOrZero(z));
+            geometry.add(finiteOrZero(nx));
+            geometry.add(finiteOrZero(ny));
+            geometry.add(finiteOrZero(nz));
+            attributes.add(finiteOrZero(u));
+            attributes.add(finiteOrZero(v));
+            attributes.add(finiteOrZero(shade));
             spriteBounds.add(0f);
             spriteBounds.add(0f);
             spriteBounds.add(1f);
@@ -376,12 +382,16 @@ public final class PhotonMesh {
         /** glTF's {@code TANGENT}, whose vec4 is already Photon's convention. All or nothing. */
         public Builder tangent(int vertex, float tx, float ty, float tz, float w) {
             int off = tangentOffset(vertex);
-            tangents.set(off, tx);
-            tangents.set(off + 1, ty);
-            tangents.set(off + 2, tz);
-            tangents.set(off + 3, w);
+            tangents.set(off, finiteOrZero(tx));
+            tangents.set(off + 1, finiteOrZero(ty));
+            tangents.set(off + 2, finiteOrZero(tz));
+            tangents.set(off + 3, finiteOrZero(w));
             taggedTangents++;
             return this;
+        }
+
+        private static float finiteOrZero(float value) {
+            return Float.isFinite(value) ? value : 0f;
         }
 
         private int addCorner(float[] corner, float shade) {

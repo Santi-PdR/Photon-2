@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material.kila;
 
-import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.lowdraglib2.configurator.accessors.Vector2fAccessor;
 import com.lowdragmc.lowdraglib2.configurator.accessors.Vector3fAccessor;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
@@ -22,6 +21,8 @@ import com.lowdragmc.lowdraglib2.math.GradientColor;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib2.utils.LocalizationUtils;
 import com.lowdragmc.photon.client.gameobject.emitter.data.number.color.GradientColorConfigurator;
+import com.lowdragmc.photon.client.util.PhotonAssetPath;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -87,7 +88,7 @@ public final class KilaUI {
     public static <E extends Enum<E>> SelectorConfigurator<E> choice(ConfiguratorGroup group, String key, E[] values,
                                                                     Supplier<E> getter, Consumer<E> setter) {
         return add(group, new SelectorConfigurator<>(key, getter, setter, values[0], true, Arrays.asList(values),
-                e -> key + "." + e.name().toLowerCase()), key);
+                e -> key + "." + e.name().toLowerCase(java.util.Locale.ROOT)), key);
     }
 
     public static Configurator vec3(ConfiguratorGroup group, String key, Supplier<Vector3f> getter, Consumer<Vector3f> setter) {
@@ -147,7 +148,7 @@ public final class KilaUI {
 
         var binding = new ConfiguratorGroup().hideTitle().setCollapse(false);
         binding.addClass("__kila-driver_binding__");
-        add(binding, new SelectorConfigurator<>("kila.driver.source", () -> driver.source, source -> bind(driver, source),
+        add(binding, new SelectorConfigurator<>("kila.driver.source", driver::effectiveSource, source -> bind(driver, source),
                 KilaDriver.Source.CONSTANT, true, Arrays.asList(KilaDriver.Source.values()), KilaDriver.Source::langKey),
                 "kila.driver.source");
         add(binding, numberRow("kila.driver.scale", () -> driver.scale, v -> driver.scale = v, 1, -100, 100), "kila.driver.scale");
@@ -161,7 +162,7 @@ public final class KilaUI {
 
     private static void bind(KilaDriver driver, KilaDriver.Source source) {
         // a scale of 0 would make the binding look broken
-        if (driver.source == KilaDriver.Source.CONSTANT && source != KilaDriver.Source.CONSTANT && driver.scale == 0) {
+        if (driver.effectiveSource() == KilaDriver.Source.CONSTANT && source != KilaDriver.Source.CONSTANT && driver.scale == 0) {
             driver.scale = 1;
         }
         driver.source = source;
@@ -170,7 +171,7 @@ public final class KilaUI {
     private static TreeBuilder.Menu sourceMenu(Configurator row, KilaDriver driver) {
         var menu = TreeBuilder.Menu.start();
         for (var source : KilaDriver.Source.values()) {
-            menu.leaf(source == driver.source ? Icons.CHECK_SPRITE : IGuiTexture.EMPTY, source.langKey(), () -> {
+            menu.leaf(source == driver.effectiveSource() ? Icons.CHECK_SPRITE : IGuiTexture.EMPTY, source.langKey(), () -> {
                 bind(driver, source);
                 row.notifyChanges();
             });
@@ -192,33 +193,34 @@ public final class KilaUI {
     /** A texture slot, what it reads, then its uv chain; a {@code procedural} slot can also be a shader noise. */
     public static KilaTextureField texture(ConfiguratorGroup group, String key, KilaTexture texture, TextureKind kind,
                                            boolean uvChain, boolean procedural) {
+        texture.sanitizeForEditor();
         var field = add(group, new KilaTextureField(key, texture, kind, procedural), key);
         if (kind == TextureKind.COLOR) {
-            choice(group, "kila.texture.color_mode", KilaTexture.ColorMode.values(), () -> texture.colorMode,
+            choice(group, "kila.texture.color_mode", KilaTexture.ColorMode.values(), texture::effectiveColorMode,
                     v -> texture.colorMode = v);
         } else if (kind == TextureKind.SCALAR) {
-            showWhen(group, choice(group, "kila.texture.channel", KilaTexture.Channel.values(), () -> texture.channel,
+            showWhen(group, choice(group, "kila.texture.channel", KilaTexture.Channel.values(), texture::effectiveChannel,
                     v -> texture.channel = v), () -> !texture.isProcedural());
         }
         if (procedural) {
             showWhen(group, number(group, "kila.texture.noise_scale", () -> texture.noiseScale,
                     v -> texture.noiseScale = v, 8, 0.01f, 256), texture::isProcedural);
             showWhen(group, number(group, "kila.texture.noise_motion", () -> texture.noiseMotion,
-                    v -> texture.noiseMotion = v, 1, -64, 64), () -> texture.noise == KilaTexture.Noise.VORONOI);
+                    v -> texture.noiseMotion = v, 1, -64, 64), () -> texture.effectiveNoise() == KilaTexture.Noise.VORONOI);
         }
         if (!uvChain) return field;
         vec2(group, "kila.texture.tiling", () -> texture.tiling, v -> texture.tiling = v);
         vec2(group, "kila.texture.offset", () -> texture.offset, v -> texture.offset = v);
         vec2(group, "kila.texture.scroll", () -> texture.scroll, v -> texture.scroll = v);
         var details = subGroup(group, "kila.texture.details", true);
-        choice(details, "kila.texture.uv_source", KilaTexture.UvSource.values(), () -> texture.uvSource,
+        choice(details, "kila.texture.uv_source", KilaTexture.UvSource.values(), texture::effectiveUvSource,
                 v -> texture.uvSource = v);
         number(details, "kila.texture.rotation", () -> texture.rotation, v -> texture.rotation = v, 0, -360, 360);
         number(details, "kila.texture.rotation_speed", () -> texture.rotationSpeed, v -> texture.rotationSpeed = v,
                 0, -3600, 3600);
         // kept for a noise too: clip still cuts it off outside the unit square
-        choice(details, "kila.texture.wrap_u", KilaTexture.Wrap.values(), () -> texture.wrapU, v -> texture.wrapU = v);
-        choice(details, "kila.texture.wrap_v", KilaTexture.Wrap.values(), () -> texture.wrapV, v -> texture.wrapV = v);
+        choice(details, "kila.texture.wrap_u", KilaTexture.Wrap.values(), texture::effectiveWrapU, v -> texture.wrapU = v);
+        choice(details, "kila.texture.wrap_v", KilaTexture.Wrap.values(), texture::effectiveWrapV, v -> texture.wrapV = v);
         showWhen(details, bool(details, "kila.texture.nearest", () -> texture.nearest, v -> texture.nearest = v),
                 () -> !texture.isProcedural());
         bool(details, "kila.texture.polar", () -> texture.polar, v -> texture.polar = v);
@@ -252,13 +254,8 @@ public final class KilaUI {
     @Nullable
     public static ResourceLocation textureFromFile(@Nullable File file) {
         if (file == null || !file.isFile()) return null;
-        var path = file.getPath().replace('\\', '/');
-        int assets = path.indexOf("assets/");
-        if (assets < 0) return null;
-        var relative = path.substring(assets + "assets/".length());
-        int slash = relative.indexOf('/');
-        if (slash < 0) return null;
-        var location = relative.substring(0, slash) + ":" + relative.substring(slash + 1);
-        return LDLib2.isValidResourceLocation(location) ? new ResourceLocation(location) : null;
+        var location = PhotonAssetPath.fromFile(PhotonPaths.getAssetsDir().toPath(), file.toPath());
+        return location == null ? null
+                : com.lowdragmc.photon.client.fx.LooseTextures.adoptTextureFile(location, file.toPath());
     }
 }

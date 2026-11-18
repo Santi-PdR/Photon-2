@@ -33,6 +33,18 @@ public class KilaFresnel extends KilaModule {
     @Persisted(subPersisted = true)
     public final KilaDriver strength = new KilaDriver(1);
 
+    public Mode effectiveMode() {
+        return mode == null ? Mode.RIM : mode;
+    }
+
+    public HDRColor effectiveColor() {
+        return color == null ? new HDRColor(0.4f, 0.8f, 1f, 1f, 2f) : color;
+    }
+
+    public Vector3f effectiveOffset() {
+        return offset == null ? new Vector3f() : offset;
+    }
+
     @Override
     public String id() {
         return "fresnel";
@@ -51,10 +63,15 @@ public class KilaFresnel extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        shader.safeGetUniform("KilaFresnel").set(power, scale, (float) mode.ordinal(), 0f);
-        var rim = color.toVector4fOpaque();
-        shader.safeGetUniform("KilaFresnelColor").set(rim.x, rim.y, rim.z, 1f);
-        shader.safeGetUniform("KilaFresnelOffset").set(offset.x, offset.y, offset.z, 0f);
+        shader.safeGetUniform("KilaFresnel").set(
+                finite(power, 2f, 0.01f, 16f), finite(scale, 1f, 0f, 16f),
+                (float) effectiveMode().ordinal(), 0f);
+        var rim = effectiveColor().toVector4fOpaque();
+        shader.safeGetUniform("KilaFresnelColor").set(
+                KilaMaterial.finite(rim.x), KilaMaterial.finite(rim.y), KilaMaterial.finite(rim.z), 1f);
+        var safeOffset = effectiveOffset();
+        shader.safeGetUniform("KilaFresnelOffset").set(
+                KilaMaterial.finite(safeOffset.x), KilaMaterial.finite(safeOffset.y), KilaMaterial.finite(safeOffset.z), 0f);
     }
 
     @Override
@@ -64,11 +81,11 @@ public class KilaFresnel extends KilaModule {
 
     @Override
     public void buildModuleConfigurator(ConfiguratorGroup group) {
-        KilaUI.choice(group, "kila.fresnel.mode", Mode.values(), () -> mode, v -> mode = v);
+        KilaUI.choice(group, "kila.fresnel.mode", Mode.values(), this::effectiveMode, v -> mode = v);
         KilaUI.driver(group, "kila.fresnel.strength", strength, 0, 1);
         KilaUI.number(group, "kila.fresnel.power", () -> power, v -> power = v, 2, 0.01f, 16);
         KilaUI.number(group, "kila.fresnel.scale", () -> scale, v -> scale = v, 1, 0, 16);
-        KilaUI.hdr(group, "kila.fresnel.color", () -> color, v -> color = v, false);
-        KilaUI.vec3(group, "kila.fresnel.offset", () -> offset, v -> offset = v);
+        KilaUI.hdr(group, "kila.fresnel.color", this::effectiveColor, v -> color = v, false);
+        KilaUI.vec3(group, "kila.fresnel.offset", this::effectiveOffset, v -> offset = v);
     }
 }

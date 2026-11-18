@@ -39,11 +39,11 @@ void main() {
         return;
     }
 
-    vec3 p = viewPos((vec2(pixel) + 0.5) / ScreenSize, depth);
+    vec3 p = viewPos((vec2(pixel) + 0.5) / photon_safe_screen_size(), depth);
     vec4 light = upsample(IrradianceSampler, pixel, -p.z, 1e9);
 
     mat3 viewToWorld = mat3(IViewMat);
-    vec3 nw = normalize(viewToWorld * reconstructNormal(pixel, p));
+    vec3 nw = photon_safe_normalize(viewToWorld * reconstructNormal(pixel, p), vec3(0.0, 1.0, 0.0));
     vec3 an = abs(nw);
     float major = max(an.x, max(an.y, an.z));
     // undo vanilla's per-face shading, which is baked into the colour we estimate the albedo from

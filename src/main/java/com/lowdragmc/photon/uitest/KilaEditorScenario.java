@@ -109,7 +109,9 @@ public class KilaEditorScenario implements UIScenario {
                 });
 
         clickOn(s, "the preset button", ctx -> label(ctx, "Browse Presets..."));
-        s.waitUntil("the preset gallery is open", ctx -> dialogLabel(ctx, "Fire") != null);
+        s.waitUntil("the preset gallery is open", ctx -> dialogLabel(ctx, "Basics") != null);
+        clickOn(s, "Fire & Smoke in the preset categories", ctx -> dialogLabel(ctx, "Fire & Smoke"));
+        s.waitUntil("the Fire & Smoke category is open", ctx -> dialogLabel(ctx, "Fire") != null);
         clickOn(s, "Fire in the gallery", ctx -> dialogLabel(ctx, "Fire"));
         s.frames(5)
                 .screenshot("fire_preset")
