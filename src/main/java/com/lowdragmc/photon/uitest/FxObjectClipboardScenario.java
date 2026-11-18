@@ -485,7 +485,7 @@ public class FxObjectClipboardScenario implements UIScenario {
 
     /** Tags the row so the hit-tested click resolves to it. */
     private static void clickRow(ScenarioBuilder s, String name) {
-        var id = "row-" + name.toLowerCase();
+        var id = "row-" + name.toLowerCase(java.util.Locale.ROOT);
         s.step("find the " + name + " row", ctx -> rowLabel(ctx, name).setId(id));
         s.click("#" + id);
     }

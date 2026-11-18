@@ -83,7 +83,7 @@ public final class GltfMeshParser {
     }
 
     public static PhotonMesh parse(InputStream in, boolean flipV) throws IOException {
-        return parse(in.readAllBytes(), flipV);
+        return parse(ModelInput.readAllBytes(in, "glTF"), flipV);
     }
 
     public static PhotonMesh parse(InputStream in, boolean flipV, ResourceLocation modelLocation) throws IOException {
@@ -96,16 +96,20 @@ public final class GltfMeshParser {
     }
 
     public static SkinnedModel parseModel(InputStream in, boolean flipV) throws IOException {
-        return parseModel(in.readAllBytes(), flipV);
+        return parseModel(ModelInput.readAllBytes(in, "glTF"), flipV);
     }
 
     public static SkinnedModel parseModel(InputStream in, boolean flipV, ResourceLocation modelLocation) throws IOException {
-        return parseModel(in.readAllBytes(), flipV, uri -> openRelativeBuffer(modelLocation, uri));
+        return parseModel(ModelInput.readAllBytes(in, "glTF"), flipV, modelLocation);
+    }
+
+    public static SkinnedModel parseModel(byte[] bytes, boolean flipV, ResourceLocation modelLocation) throws IOException {
+        return parseModel(bytes, flipV, uri -> openRelativeBuffer(modelLocation, uri));
     }
 
     /** Package-visible for tests. */
     static SkinnedModel parseModel(byte[] bytes, boolean flipV) throws IOException {
-        return parseModel(bytes, flipV, null);
+        return parseModel(bytes, flipV, (ExternalBufferResolver) null);
     }
 
     private static SkinnedModel parseModel(byte[] bytes, boolean flipV,
@@ -169,8 +173,16 @@ public final class GltfMeshParser {
 
     private static byte[] openRelativeBuffer(ResourceLocation model, String value) throws IOException {
         ResourceLocation buffer = resolveRelativeBufferLocation(model, value);
+        // Resolve loose editor/workspace sidecars directly from disk. Copying them into the workspace
+        // does not mount them until a resource reload, but the model preview should work immediately.
+        var nested = LDLibModelAssets.resolve(buffer, buffer.getPath());
+        if (nested != null) {
+            try (InputStream input = java.nio.file.Files.newInputStream(nested)) {
+                return ModelInput.readAllBytes(input, "glTF external buffer " + buffer);
+            }
+        }
         try (InputStream input = Minecraft.getInstance().getResourceManager().open(buffer)) {
-            return input.readAllBytes();
+            return ModelInput.readAllBytes(input, "glTF external buffer " + buffer);
         } catch (IOException e) {
             throw new IOException("could not load external buffer '" + buffer + "' referenced by '" + model + "'", e);
         }
@@ -232,6 +244,7 @@ public final class GltfMeshParser {
         private final ExternalBufferResolver externalBuffers;
         private final PhotonMesh.Builder builder = new PhotonMesh.Builder();
         private final List<byte[]> buffers = new ArrayList<>();
+        private long bufferBytes;
 
         // reused per triangle corner so a large mesh doesn't allocate per vertex; x,y,z,u,v,nx,ny,nz,
         // which is what PhotonMesh.Builder's fresh-vertex overloads take
@@ -911,7 +924,7 @@ public final class GltfMeshParser {
                 if (!buffer.has("uri")) {
                     // No uri = the GLB binary chunk, which by spec can only be buffer 0.
                     if (i == 0 && glbBin != null) {
-                        buffers.add(glbBin);
+                        addBuffer(glbBin);
                         continue;
                     }
                     throw new IOException("buffer " + i + " has no uri and there is no glb binary chunk");
@@ -922,15 +935,23 @@ public final class GltfMeshParser {
                         throw new IOException("buffer " + i + " points at external file '" + uri
                                 + "' but no model resource location was supplied");
                     }
-                    buffers.add(externalBuffers.load(uri));
+                    addBuffer(externalBuffers.load(uri));
                     continue;
                 }
                 int comma = uri.indexOf(',');
                 if (comma < 0 || uri.lastIndexOf("base64", comma) < 0) {
                     throw new IOException("buffer " + i + " uses a non-base64 data uri");
                 }
-                buffers.add(Base64.getDecoder().decode(uri.substring(comma + 1)));
+                addBuffer(Base64.getDecoder().decode(uri.substring(comma + 1)));
             }
+        }
+
+        private void addBuffer(byte[] data) throws IOException {
+            if (data.length > ModelInput.MAX_FILE_BYTES - bufferBytes) {
+                throw new IOException("glTF decoded buffers exceed the " + ModelInput.MAX_FILE_BYTES + " byte limit");
+            }
+            bufferBytes += data.length;
+            buffers.add(data);
         }
 
         /** An accessor's values as floats, {@code components} per element, or null if unreadable. */
@@ -942,7 +963,7 @@ public final class GltfMeshParser {
             int count = accessor.get("count").getAsInt();
             int componentType = accessor.get("componentType").getAsInt();
             int declared = componentsOf(accessor.get("type").getAsString());
-            if (declared != components || count <= 0) return null;
+            if (declared != components || count <= 0 || count > PhotonMesh.Builder.MAX_VERTICES) return null;
             boolean normalized = accessor.has("normalized") && accessor.get("normalized").getAsBoolean();
             int componentSize = componentSize(componentType);
             if (componentSize == 0) return null;
@@ -974,7 +995,7 @@ public final class GltfMeshParser {
             int count = accessor.get("count").getAsInt();
             int componentType = accessor.get("componentType").getAsInt();
             int componentSize = componentSize(componentType);
-            if (componentSize == 0 || count <= 0) return null;
+            if (componentSize == 0 || count <= 0 || count > PhotonMesh.Builder.MAX_VERTICES * 3) return null;
             var view = bufferView(accessor);
             if (view == null) return null;
             int stride = view.stride() > 0 ? view.stride() : componentSize;

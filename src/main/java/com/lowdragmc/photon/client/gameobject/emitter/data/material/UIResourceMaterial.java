@@ -6,12 +6,18 @@ import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
 import com.lowdragmc.photon.client.fx.PreloadContext;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.gui.editor.resource.MaterialResource;
 import net.minecraft.client.renderer.ShaderInstance;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * A <b>live reference</b> to a material in the resource library. Resolution happens on every access
@@ -24,6 +30,8 @@ import java.util.Objects;
  */
 @LDLRegisterClient(name = "ui_resource_material", registry = "photon:material")
 public final class UIResourceMaterial implements IMaterial {
+    private static final Set<String> REPORTED_CYCLES = ConcurrentHashMap.newKeySet();
+
     @Persisted
     private IResourcePath resourcePath = new BuiltinPath("");
 
@@ -48,55 +56,78 @@ public final class UIResourceMaterial implements IMaterial {
     }
 
     public IMaterial getRawMaterial() {
-        var material = getInternalMaterial();
-        if (material instanceof UIResourceMaterial resourceMaterial) return resourceMaterial.getRawMaterial();
-        return material;
+        var current = getInternalMaterial();
+        if (!(current instanceof UIResourceMaterial)) return current;
+        return resolveChain(this, current, UIResourceMaterial::getInternalMaterial);
+    }
+
+    /** Cycle-safe indirection resolver, separated so malformed reference chains can be tested without a resource pack. */
+    static IMaterial resolveChain(UIResourceMaterial origin, IMaterial current,
+                                  Function<UIResourceMaterial, IMaterial> resolve) {
+        var visited = Collections.newSetFromMap(new IdentityHashMap<UIResourceMaterial, Boolean>());
+        visited.add(origin);
+        while (current instanceof UIResourceMaterial reference) {
+            if (!visited.add(reference)) {
+                var path = reference.getResourcePath().getPathWithType();
+                if (REPORTED_CYCLES.add(path)) {
+                    Photon.LOGGER.warn("photon: cyclic material resource reference at {}; using the missing material", path);
+                }
+                return IMaterial.MISSING;
+            }
+            current = resolve.apply(reference);
+        }
+        return current == null ? IMaterial.MISSING : current;
     }
 
     @Override
     public ShaderInstance begin(@Nonnull MaterialContext context) {
-        return getInternalMaterial().begin(context);
+        return getRawMaterial().begin(context);
+    }
+
+    @Override
+    public ShaderInstance begin(@Nonnull MaterialContext context, BlendMode slotBlend, boolean slotOwnsRenderState) {
+        return getRawMaterial().begin(context, slotBlend, slotOwnsRenderState);
     }
 
     @Override
     public void end(@Nonnull MaterialContext context) {
-        getInternalMaterial().end(context);
+        getRawMaterial().end(context);
     }
 
     @Override
     public void preload(MaterialContext context, PreloadContext preload) {
-        getInternalMaterial().preload(context, preload);
+        getRawMaterial().preload(context, preload);
     }
 
     @Override
     public IGuiTexture preview() {
-        return getInternalMaterial().preview();
+        return getRawMaterial().preview();
     }
 
     @Override
     public long getUsedChannelMask() {
-        return getInternalMaterial().getUsedChannelMask();
+        return getRawMaterial().getUsedChannelMask();
     }
 
     @Override
     public boolean usesCustomData() {
-        return getInternalMaterial().usesCustomData();
+        return getRawMaterial().usesCustomData();
     }
 
     @Override
     public boolean usesSceneColor() {
-        return getInternalMaterial().usesSceneColor();
+        return getRawMaterial().usesSceneColor();
     }
 
     @Override
     public int[] requiredCustomChannels() {
-        return getInternalMaterial().requiredCustomChannels();
+        return getRawMaterial().requiredCustomChannels();
     }
 
     @Nullable
     @Override
     public MaterialRenderState getPreferredRenderState() {
-        return getInternalMaterial().getPreferredRenderState();
+        return getRawMaterial().getPreferredRenderState();
     }
 
     @Override

@@ -35,6 +35,7 @@ public final class AudioAssetImporter {
                 .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9/._-]", "_");
         if (baseName.isBlank()) baseName = "sound";
         var soundPath = "user/" + baseName;
+        var id = new ResourceLocation(NAMESPACE, soundPath);
         var assets = PhotonPaths.getAssetsDir().toPath();
         var ogg = assets.resolve(NAMESPACE).resolve("sounds").resolve(soundPath + ".ogg");
         Files.createDirectories(ogg.getParent());
@@ -45,18 +46,59 @@ public final class AudioAssetImporter {
         JsonObject root = Files.isRegularFile(soundsJson)
                 ? JsonParser.parseString(Files.readString(soundsJson, StandardCharsets.UTF_8)).getAsJsonObject()
                 : new JsonObject();
+        qualifyLegacySoundNames(root);
+        root.add(soundPath, soundDefinition(id));
+        Files.writeString(soundsJson, root.toString(), StandardCharsets.UTF_8);
+
+        Photon.LOGGER.info("Imported Photon audio {} from {}", id, source.getName());
+        return id;
+    }
+
+    /** Repair custom sounds written by earlier Photon builds, before the workspace pack is mounted. */
+    public static void repairLegacySoundDefinitions() {
+        var soundsJson = PhotonPaths.getAssetsDir().toPath().resolve(NAMESPACE).resolve("sounds.json");
+        if (!Files.isRegularFile(soundsJson)) return;
+        try {
+            var root = JsonParser.parseString(Files.readString(soundsJson, StandardCharsets.UTF_8)).getAsJsonObject();
+            if (qualifyLegacySoundNames(root)) {
+                Files.writeString(soundsJson, root.toString(), StandardCharsets.UTF_8);
+                Photon.LOGGER.info("Repaired legacy Photon custom sound paths in {}", soundsJson);
+            }
+        } catch (IOException | RuntimeException failure) {
+            Photon.LOGGER.warn("Could not repair legacy Photon custom sound paths in {}", soundsJson, failure);
+        }
+    }
+
+    static boolean qualifyLegacySoundNames(JsonObject root) {
+        var changed = false;
+        for (var event : root.entrySet()) {
+            var eventPath = event.getKey();
+            if (!eventPath.startsWith("user/") || !event.getValue().isJsonObject()) continue;
+            var sounds = event.getValue().getAsJsonObject().getAsJsonArray("sounds");
+            if (sounds == null) continue;
+            for (var value : sounds) {
+                if (!value.isJsonObject()) continue;
+                var sound = value.getAsJsonObject();
+                var name = sound.get("name");
+                if (name != null && name.isJsonPrimitive() && name.getAsString().equals(eventPath)) {
+                    sound.addProperty("name", new ResourceLocation(NAMESPACE, eventPath).toString());
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
+    static JsonObject soundDefinition(ResourceLocation id) {
         var definition = new JsonObject();
         var sounds = new JsonArray();
         var sound = new JsonObject();
-        sound.addProperty("name", soundPath);
+        // A bare sound name is resolved in the minecraft namespace by SoundManager, even when
+        // this sounds.json belongs to Photon. Qualify it so assets/photon/sounds/... is found.
+        sound.addProperty("name", id.toString());
         sound.addProperty("stream", true);
         sounds.add(sound);
         definition.add("sounds", sounds);
-        root.add(soundPath, definition);
-        Files.writeString(soundsJson, root.toString(), StandardCharsets.UTF_8);
-
-        var id = new ResourceLocation(NAMESPACE, soundPath);
-        Photon.LOGGER.info("Imported Photon audio {} from {}", id, source.getName());
-        return id;
+        return definition;
     }
 }

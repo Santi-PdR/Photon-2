@@ -29,14 +29,14 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
     @Configurable(name = "gradients", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildGradientConfigurator", addDefaultMethod = "addDefaultGradient")
     private final List<GradientColor> gradients = new ArrayList<>();
-    // runtime
-    private boolean isDirty = false;
+    // Upload once on first use, even when the gradient list is empty: shader samplers must never receive null.
+    private boolean isDirty = true;
     @Nullable
     private DynamicTexture gradientTexture;
 
     public GradientTexture(int width, int height) {
-        this.width = width;
-        this.height = height;
+        this.width = Math.max(width, 2);
+        this.height = Math.max(height, 1);
     }
 
     public void markAsDirty() {
@@ -63,10 +63,11 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
             gradientTexture.close();
             gradientTexture = null;
         }
+        isDirty = true;
     }
 
     public void uploadTexture() {
-        if (!isDirty) return;
+        if (!isDirty && gradientTexture != null && gradientTexture.getPixels() != null) return;
         RenderSystem.assertOnRenderThread();
         if (gradientTexture == null || gradientTexture.getPixels() == null)  {
             this.gradientTexture = new DynamicTexture(width, height, false);
@@ -74,13 +75,11 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
         var pixels = gradientTexture.getPixels();
         assert pixels != null;
         for (int h = 0; h < height; h++) {
-            if (h >= gradients.size()) {
-//                for (int w = 0; w < width; w++) {
-//                    pixels.setPixelRGBA(w, h, 0);
-//                }
+            var gradient = h < gradients.size() ? gradients.get(h) : null;
+            if (gradient == null) {
+                for (int w = 0; w < width; w++) pixels.setPixelRGBA(w, h, 0);
                 continue;
             }
-            var gradient = gradients.get(h);
             for (int w = 0; w < width; w++) {
                 int argb = gradient.getColor(w / (width - 1f));
                 pixels.setPixelRGBA(w, h, FastColor.ABGR32.color(FastColor.ARGB32.alpha(argb),
@@ -106,7 +105,7 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
     private void setGradients(List<GradientColor> gradients) {
         if (gradients != this.gradients) {
             this.gradients.clear();
-            this.gradients.addAll(gradients);
+            if (gradients != null) this.gradients.addAll(gradients);
         }
         markAsDirty();
     }
@@ -122,8 +121,9 @@ public class GradientTexture implements AutoCloseable, IConfigurable, IProviderA
     public void deserializeNBT(@Nonnull HolderLookup.Provider provider, @Nonnull ListTag listTag) {
         gradients.clear();
         for (Tag tag : listTag) {
+            if (!(tag instanceof CompoundTag compound)) continue;
             var gradientColor = new GradientColor();
-            gradientColor.deserializeNBT(provider, (CompoundTag) tag);
+            gradientColor.deserializeNBT(provider, compound);
             gradients.add(gradientColor);
         }
         markAsDirty();

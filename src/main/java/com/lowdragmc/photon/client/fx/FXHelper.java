@@ -4,7 +4,6 @@ import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.gui.editor.FXProject;
-import net.minecraft.nbt.NbtAccounter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.client.Minecraft;
@@ -23,7 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.io.IOException;
 import java.io.DataInputStream;
+import java.io.FilterInputStream;
+import java.io.InputStream;
 import java.io.PushbackInputStream;
+import java.util.zip.GZIPInputStream;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +48,8 @@ public class FXHelper {
     private static volatile List<ResourceLocation> idCache = null;
     private static final AtomicInteger generation = new AtomicInteger();
     public static final String FX_PATH = "fx/";
+    /** Maximum uncompressed NBT payload for a single effect, including legacy raw-NBT files. */
+    private static final long MAX_FX_NBT_BYTES = 64L * 1024 * 1024;
 
     public static int clearCache() {
         var count = CACHE.size();
@@ -221,19 +225,48 @@ public class FXHelper {
             return tag;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
+            FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation, null, e);
             return null;
         }
     }
 
-    private static CompoundTag readNbt(java.io.InputStream input) throws IOException {
+    public static CompoundTag readNbt(InputStream input) throws IOException {
         var buffered = new PushbackInputStream(input, 2);
         int first = buffered.read();
         int second = buffered.read();
         if (second >= 0) buffered.unread(second);
         if (first >= 0) buffered.unread(first);
-        return first == 0x1f && second == 0x8b
-                ? NbtIo.readCompressed(buffered)
-                : NbtIo.read(new DataInputStream(buffered));
+        InputStream payload = first == 0x1f && second == 0x8b ? new GZIPInputStream(buffered) : buffered;
+        var limited = new LimitedInputStream(payload, MAX_FX_NBT_BYTES);
+        // The stream cap also limits gzipped payloads after decompression; use the 1.20.1-safe NBT reader.
+        return NbtIo.read(new DataInputStream(limited));
+    }
+
+    /** Caps the bytes presented to the NBT parser, including bytes expanded from a gzip stream. */
+    private static final class LimitedInputStream extends FilterInputStream {
+        private long remaining;
+
+        private LimitedInputStream(InputStream input, long limit) {
+            super(input);
+            remaining = limit;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining <= 0) return -1;
+            int value = super.read();
+            if (value >= 0) remaining--;
+            return value;
+        }
+
+        @Override
+        public int read(byte[] bytes, int offset, int length) throws IOException {
+            if (length == 0) return 0;
+            if (remaining <= 0) return -1;
+            int read = super.read(bytes, offset, (int) Math.min(length, remaining));
+            if (read > 0) remaining -= read;
+            return read;
+        }
     }
 
     /** Render thread only: a custom shader material compiles while it deserializes. */
@@ -253,9 +286,16 @@ public class FXHelper {
             var fx = new FX();
             fx.setFxLocation(fxLocation);
             fx.deserializeNBT(Platform.getFrozenRegistry(), tag);
+            var expected = tag.getCompound("fxData").getList("fxObjects", Tag.TAG_COMPOUND).size();
+            var loaded = fx.getFxData().objects().size();
+            if (loaded < expected && !com.lowdragmc.photon.client.fx.instance.InstanceBaker.hasInstances(tag.getCompound("fxData"))) {
+                FXDiagnostics.failure(fxLocation, "decode", "Loaded " + loaded + " of " + expected
+                        + " objects; see preceding object decode messages", tag, null);
+            }
             return fx;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {}", fxLocation, e);
+            FXDiagnostics.failure(fxLocation, "decode", "Effect deserialization threw an exception", tag, e);
             return null;
         }
     }
@@ -266,7 +306,27 @@ public class FXHelper {
      * versions and the deserializers' inline legacy fallbacks already handle them — running the
      * V1→current fixers on data of unknown true version would risk double-migration.
      */
+    /**
+     * An {@code .fx} that was overwritten with a Photon 2 editor project ({@code meta} + {@code data.fx}).
+     * Opening or playing that file used to yield an empty effect because the definition sits under
+     * {@code data.fx}, not at the root.
+     */
+    public static boolean isProjectDocument(CompoundTag tag) {
+        return tag.contains("meta", Tag.TAG_COMPOUND)
+                && tag.contains("data", Tag.TAG_COMPOUND)
+                && tag.getCompound("data").contains("fx", Tag.TAG_COMPOUND);
+    }
+
     public static CompoundTag applyVersionFixes(CompoundTag tag) {
+        // A project saved over an .fx still has to play: unwrap to the definition.
+        if (isProjectDocument(tag)) {
+            var fx = tag.getCompound("data").getCompound("fx").copy();
+            var meta = tag.getCompound("meta");
+            if (meta.contains("version_num", Tag.TAG_INT) && !fx.contains("version", Tag.TAG_INT)) {
+                fx.putInt("version", meta.getInt("version_num"));
+            }
+            tag = fx;
+        }
         // Photon 1 used {fx:{mainFX:{fxObjects:[...]}}}; recognize that exact
         // shape before the versioned Photon 2 fixer. Conversion only changes
         // this in-memory tag and never overwrites the author's original file.

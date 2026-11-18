@@ -12,10 +12,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 /** External geometry buffers used by glTF models; shared by pack export and GC. */
-final class GltfAssetReferences {
+public final class GltfAssetReferences {
     private GltfAssetReferences() {}
 
-    static List<ResourceLocation> buffers(ResourceLocation model, byte[] bytes) throws IOException {
+    public static List<ResourceLocation> buffers(ResourceLocation model, byte[] bytes) throws IOException {
         int offset = 0;
         int length = bytes.length;
         if (model.getPath().endsWith(".glb")) {

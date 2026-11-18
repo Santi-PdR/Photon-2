@@ -37,6 +37,10 @@ public class KilaProjection extends KilaModule {
     @Persisted
     public boolean facingOnly = true;
 
+    public Orientation effectiveOrientation() {
+        return orientation == null ? Orientation.GROUND : orientation;
+    }
+
     @Override
     public String id() {
         return "projection";
@@ -57,13 +61,16 @@ public class KilaProjection extends KilaModule {
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
         boolean bound = KilaDepth.bindSceneDepth(shader, context);
-        shader.safeGetUniform("KilaProjection").set(Math.max(depth, 0.01f), fade, facingOnly ? 1f : 0f, bound ? 1f : 0f);
-        shader.safeGetUniform("KilaProjectionShape").set((float) orientation.ordinal(), size, 0f, 0f);
+        shader.safeGetUniform("KilaProjection").set(
+                finite(depth, 1.5f, 0.01f, 64f), finite(fade, 0.6f, 0f, 1f),
+                facingOnly ? 1f : 0f, bound ? 1f : 0f);
+        shader.safeGetUniform("KilaProjectionShape").set(
+                (float) effectiveOrientation().ordinal(), finite(size, 0.5f, 0.01f, 1f), 0f, 0f);
     }
 
     @Override
     public void buildModuleConfigurator(ConfiguratorGroup group) {
-        KilaUI.choice(group, "kila.projection.orientation", Orientation.values(), () -> orientation, v -> orientation = v);
+        KilaUI.choice(group, "kila.projection.orientation", Orientation.values(), this::effectiveOrientation, v -> orientation = v);
         KilaUI.number(group, "kila.projection.size", () -> size, v -> size = v, 0.5f, 0.01f, 1);
         KilaUI.number(group, "kila.projection.depth", () -> depth, v -> depth = v, 1.5f, 0.01f, 64);
         KilaUI.number(group, "kila.projection.fade", () -> fade, v -> fade = v, 0.6f, 0, 1);

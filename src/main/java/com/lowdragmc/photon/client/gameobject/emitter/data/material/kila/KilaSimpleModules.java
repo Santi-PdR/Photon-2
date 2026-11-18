@@ -38,7 +38,8 @@ public final class KilaSimpleModules {
 
         @Override
         public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-            shader.safeGetUniform("KilaCameraFade").set(near, range, 0f, 0f);
+            shader.safeGetUniform("KilaCameraFade").set(
+                    finite(near, 0.5f, 0f, 64f), finite(range, 2f, 0.01f, 64f), 0f, 0f);
         }
 
         @Override
@@ -113,8 +114,11 @@ public final class KilaSimpleModules {
 
         @Override
         public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-            shader.safeGetUniform("KilaColorAdjust").set((float) Math.toRadians(hue), saturation, contrast, brightness);
-            shader.safeGetUniform("KilaPosterize").set((float) posterize, 0f, 0f, 0f);
+            shader.safeGetUniform("KilaColorAdjust").set(
+                    (float) Math.toRadians(finite(hue, 0f, -180f, 180f)),
+                    finite(saturation, 1f, 0f, 4f), finite(contrast, 1f, 0f, 4f),
+                    finite(brightness, 1f, 0f, 16f));
+            shader.safeGetUniform("KilaPosterize").set((float) net.minecraft.util.Mth.clamp(posterize, 0, 64), 0f, 0f, 0f);
         }
 
         @Override
@@ -149,7 +153,7 @@ public final class KilaSimpleModules {
 
         @Override
         public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-            shader.safeGetUniform("KilaPixelate").set((float) Math.max(pixels, 1), 0f, 0f, 0f);
+            shader.safeGetUniform("KilaPixelate").set((float) net.minecraft.util.Mth.clamp(pixels, 1, 1024), 0f, 0f, 0f);
         }
 
         @Override
