@@ -5162,9 +5162,10 @@ public final class PhotonFXEditorSmokeTest {
             Photon.LOGGER.info("[mesh-cache-smoke] nested load and invalidation with colliding keys succeeded");
 
             var fileKey = new CollidingKey("file-stamp");
-            var trackedFile = java.nio.file.Files.createTempFile("photon-mesh-cache-", ".obj");
+            java.nio.file.Path trackedFile = null;
             var loads = new int[1];
             try {
+                trackedFile = java.nio.file.Files.createTempFile("photon-mesh-cache-", ".obj");
                 java.nio.file.Files.writeString(trackedFile, "v 0 0 0\n");
                 var originalTime = java.nio.file.Files.getLastModifiedTime(trackedFile);
                 cache.trackFile(fileKey, trackedFile.toFile());
@@ -5188,7 +5189,7 @@ public final class PhotonFXEditorSmokeTest {
             } finally {
                 cache.invalidate(fileKey);
                 try {
-                    java.nio.file.Files.deleteIfExists(trackedFile);
+                    if (trackedFile != null) java.nio.file.Files.deleteIfExists(trackedFile);
                 } catch (java.io.IOException ignored) {
                 }
             }
