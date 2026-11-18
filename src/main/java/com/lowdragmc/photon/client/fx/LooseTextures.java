@@ -315,7 +315,7 @@ public final class LooseTextures {
             if (manager.getTexture(id, null) == texture) manager.release(id);
         };
         if (RenderSystem.isOnRenderThread()) release.run();
-        else RenderSystem.recordRenderCall(release);
+        else RenderSystem.recordRenderCall(() -> release.run());
     }
 
     /**

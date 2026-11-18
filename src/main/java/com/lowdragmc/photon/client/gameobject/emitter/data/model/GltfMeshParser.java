@@ -109,7 +109,7 @@ public final class GltfMeshParser {
 
     /** Package-visible for tests. */
     static SkinnedModel parseModel(byte[] bytes, boolean flipV) throws IOException {
-        return parseModel(bytes, flipV, null);
+        return parseModel(bytes, flipV, (ExternalBufferResolver) null);
     }
 
     private static SkinnedModel parseModel(byte[] bytes, boolean flipV,

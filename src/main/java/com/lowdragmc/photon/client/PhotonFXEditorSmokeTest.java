@@ -4592,9 +4592,9 @@ public final class PhotonFXEditorSmokeTest {
         leftoverBeamSparse.put("width", leftoverConstant.copy());
         leftoverBeamSparse.put("color", leftoverConstant.copy());
         var repairedBeamSparse = com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(leftoverBeamSparse);
-        if (!(repairedBeamSparse instanceof CompoundTag sparseBeamTag) || leftoverBeamSparse.contains("end")
-                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 3f
-                || sparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 0f) {
+        if (!(repairedBeamSparse instanceof CompoundTag repairedSparseBeamTag) || leftoverBeamSparse.contains("end")
+                || repairedSparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(0) != 3f
+                || repairedSparseBeamTag.getList("end", Tag.TAG_FLOAT).getFloat(2) != 0f) {
             throw new IllegalStateException("Photon 1 beam without end did not default to +X");
         }
         var leftoverFlatEmitter = new CompoundTag();

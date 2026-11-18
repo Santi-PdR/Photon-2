@@ -4,7 +4,6 @@ import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
 import com.lowdragmc.photon.gui.editor.FXProject;
-import net.minecraft.nbt.NbtAccounter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.client.Minecraft;
@@ -239,7 +238,8 @@ public class FXHelper {
         if (first >= 0) buffered.unread(first);
         InputStream payload = first == 0x1f && second == 0x8b ? new GZIPInputStream(buffered) : buffered;
         var limited = new LimitedInputStream(payload, MAX_FX_NBT_BYTES);
-        return NbtIo.read(new DataInputStream(limited), NbtAccounter.create(MAX_FX_NBT_BYTES));
+        // The stream cap also limits gzipped payloads after decompression; use the 1.20.1-safe NBT reader.
+        return NbtIo.read(new DataInputStream(limited));
     }
 
     /** Caps the bytes presented to the NBT parser, including bytes expanded from a gzip stream. */
