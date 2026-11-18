@@ -80,6 +80,10 @@ public class FXProject implements IProject {
     private final Resources resources;
     @Getter
     private final FX fx = new FX();
+
+    public FX getFx() {
+        return fx;
+    }
     /** The fx ids this project was converted from or exported to: an FX instance leading back to one is a cycle. */
     @Getter
     private final Set<ResourceLocation> knownAs = new LinkedHashSet<>();
@@ -178,20 +182,6 @@ public class FXProject implements IProject {
 
     public void addKnownAs(ResourceLocation id) {
         if (PhotonPaths.isSafeAssetLocation(id)) knownAs.add(id);
-    }
-
-    /**
-     * Gizmo edits of the synthetic editor root (position / rotation / scale of the whole FX)
-     * are not in {@code fxData}. Fold them into the children that actually get written.
-     * Skip while the scene animation overlay is driving the root — that pose is preview-only.
-     */
-    void bakeEditorRoot() {
-        if (editor == null || editor.runtime == null) return;
-        // Always commit world pose so child gizmo / inspector moves persist even while the
-        // animation overlay is driving the synthetic root (that overlay pose is preview-only).
-        editor.runtime.commitWorldTransforms();
-        if (editor.sceneView.fxObjectAnimationView.isPlaying()) return;
-        editor.runtime.bakeRootIntoChildren(FXEditor.SCENE_ROOT_POSITION);
     }
 
     /**

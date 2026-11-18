@@ -107,8 +107,12 @@ public class SceneView extends View implements FXSceneOptions {
         this.getLayout().heightPercent(100.0F);
         this.fxEditor = fxEditor;
         effect.setDefinitionSupplier(() -> fxEditor.getCurrentProject() instanceof FXProject project ? project.getFx() : null);
-        effect.setDiagnosticLabel(() -> fxEditor.getCurrentProjectFile() == null
-                ? "unsaved-editor-project" : "editor:" + fxEditor.getCurrentProjectFile().getName());
+        effect.setDiagnosticLabel(() -> {
+            if (fxEditor.getCurrentProject() instanceof FXProject project && project.getFx().getFxLocation() != null) {
+                return "editor:" + project.getFx().getFxLocation();
+            }
+            return "unsaved-editor-project";
+        });
         level.setParticleManager(particleManager);
         particleManager.setLevel(level);
 
