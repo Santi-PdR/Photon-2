@@ -1152,6 +1152,8 @@
   "photon.emitter.config.physics.collidedFriction": "Friction while a particle slides along a surface: the share of its sliding speed kept per tick.",
   "SamplerCurve": "Sampler Curve",
   "SamplerGradient": "Sampler Gradient",
+  "CurveTexture.curves": "Curves",
+  "GradientTexture.gradients": "Gradients",
   "photon.gui.editor.timeline.play.tip": "Play / pause the preview",
   "photon.gui.editor.timeline.stop.tip": "Stop and rewind to the start",
   "photon.gui.editor.timeline.step_back.tip": "Step back one tick",

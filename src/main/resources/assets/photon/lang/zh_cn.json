@@ -1149,6 +1149,8 @@
   "photon.emitter.config.physics.collidedFriction": "沿表面滑动时的摩擦：每 tick 保留的滑动速度比例。",
   "SamplerCurve": "曲线采样",
   "SamplerGradient": "渐变采样",
+  "CurveTexture.curves": "曲线",
+  "GradientTexture.gradients": "渐变",
   "keymap.category.photon.scene": "场景",
   "keymap.category.photon.playback": "播放",
   "keymap.photon.scene.gizmo_none": "操作轴：无",

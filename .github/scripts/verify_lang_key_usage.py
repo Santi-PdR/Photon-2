@@ -14,6 +14,11 @@ so the exception stays reviewed:
 - literals ending in ``.``: dynamic prefixes such as
   ``"photon.configuration.collision." + key`` whose full keys are assembled at
   runtime and therefore checked through the family they build.
+
+Inspector labels are checked too: every ``@Configurable(name = ..., tips = ...)``
+string literal is a translation key LDLib2 renders verbatim when it is missing
+(the Custom Shader material once listed its curves under a raw "curves" row),
+whatever namespace it uses (``ParticleConfig.duration``, ``photon.*``, ...).
 """
 import json
 import re
@@ -45,10 +50,30 @@ for literal in sorted(literals):
         continue
     missing.append(literal)
 
-if missing:
+# @Configurable(name = "...", tips = "..." | {"...", "..."}) labels: rendered raw by LDLib2 when untranslated
+ANNOTATION = re.compile(r"@Configurable\s*\(([^)]*)\)", re.S)
+ATTRIBUTE = re.compile(r"\b(name|tips)\s*=\s*(?:\"([^\"]*)\"|\{([^}]*)\})")
+annotation_keys = 0
+annotation_missing = []
+for path in sorted((ROOT / "src/main/java").rglob("*.java")):
+    source = path.read_text(encoding="utf-8", errors="replace")
+    for annotation in ANNOTATION.finditer(source):
+        line = source.count("\n", 0, annotation.start()) + 1
+        for attribute in ATTRIBUTE.finditer(annotation.group(1)):
+            keys = [attribute.group(2)] if attribute.group(2) is not None else re.findall(r'"([^"]*)"', attribute.group(3))
+            for key in keys:
+                if not key:
+                    continue
+                annotation_keys += 1
+                if key not in en_keys:
+                    annotation_missing.append(f"{path.relative_to(ROOT)}:{line}: @Configurable {attribute.group(1)} = \"{key}\"")
+
+if missing or annotation_missing:
     print("[lang-key-usage] FAILED: code references translation keys that no language provides:")
     for key in missing:
         print(" -", key)
+    for entry in annotation_missing:
+        print(" -", entry)
     sys.exit(1)
-print(f"[lang-key-usage] OK: {len(literals)} referenced photon.* literals all resolve "
-      f"({len(KNOWN_STATE_KEYS)} reviewed state-key exceptions)")
+print(f"[lang-key-usage] OK: {len(literals)} referenced photon.* literals and {annotation_keys} @Configurable "
+      f"name/tips keys all resolve ({len(KNOWN_STATE_KEYS)} reviewed state-key exceptions)")

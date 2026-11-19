@@ -372,6 +372,8 @@
   "BlendMode.blendFunc": "Función de mezcla",
   "SamplerCurve": "Curvas",
   "SamplerGradient": "Degradados",
+  "CurveTexture.curves": "Curvas",
+  "GradientTexture.gradients": "Degradados",
   "TextureMaterial.texture": "Textura",
   "TextureMaterial.discardThreshold": "Umbral de descarte",
   "TextureMaterial.hdr": "Color HDR",
