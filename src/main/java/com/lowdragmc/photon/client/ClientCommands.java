@@ -130,7 +130,11 @@ public class ClientCommands {
                                 })))
                         .then(createLiteral("textures").executes(context -> textureStatus()))
                         .then(createLiteral("reload").executes(context -> reloadResources("requested")))
-                        .then(createLiteral("fxpacks").executes(context -> refreshServerPacks())),
+                        .then(createLiteral("fxpacks").executes(context -> refreshServerPacks()))
+                        .then(createLiteral("export_ldlib2_assets").executes(context -> {
+                            com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.exportLocal();
+                            return 1;
+                        })),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be
                 // characterised by loading it and running "status".

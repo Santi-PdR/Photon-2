@@ -15,7 +15,7 @@ import java.util.Optional;
 import net.minecraftforge.network.NetworkDirection;
 
 public class PhotonNetworking {
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "5";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Photon.MOD_ID, "main"), () -> PROTOCOL,
             PROTOCOL::equals, PROTOCOL::equals);
@@ -50,6 +50,22 @@ public class PhotonNetworking {
         CHANNEL.registerMessage(6, FxPackSync.ChunkPacket.class, FxPackSync.ChunkPacket::encode,
                 FxPackSync.ChunkPacket::decode, (packet, context) -> handle(context.get(),
                         () -> FxPackSync.handleChunk(packet)), Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(9, FxPackSync.UploadPromptPacket.class, FxPackSync.UploadPromptPacket::encode,
+                FxPackSync.UploadPromptPacket::decode, (packet, context) -> handle(context.get(),
+                        () -> FxPackSync.handleUploadPrompt(packet)), Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(10, FxPackSync.UploadStartPacket.class, FxPackSync.UploadStartPacket::encode,
+                FxPackSync.UploadStartPacket::decode, (packet, context) -> {
+                    var ctx = context.get();
+                    handle(ctx, () -> FxPackSync.handleUploadStart(packet, ctx.getSender()));
+                }, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(11, FxPackSync.UploadChunkPacket.class, FxPackSync.UploadChunkPacket::encode,
+                FxPackSync.UploadChunkPacket::decode, (packet, context) -> {
+                    var ctx = context.get();
+                    handle(ctx, () -> FxPackSync.handleUploadChunk(packet, ctx.getSender()));
+                }, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(12, FxPackSync.UploadStatusPacket.class, FxPackSync.UploadStatusPacket::encode,
+                FxPackSync.UploadStatusPacket::decode, (packet, context) -> handle(context.get(),
+                        () -> FxPackSync.handleUploadStatus(packet)), Optional.of(NetworkDirection.PLAY_TO_CLIENT));
     }
 
     private static void handle(net.minecraftforge.network.NetworkEvent.Context context, Runnable work) {

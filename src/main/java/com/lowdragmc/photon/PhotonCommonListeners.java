@@ -19,6 +19,7 @@ public class PhotonCommonListeners {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         ActiveEntityEffects.clear();
+        com.lowdragmc.photon.command.ActiveWorldEffects.clear();
         com.lowdragmc.photon.network.FxPackSync.onServerStopping();
     }
 
@@ -68,6 +69,12 @@ public class PhotonCommonListeners {
         if (event.getEntity() instanceof ServerPlayer player) {
             ActiveEntityEffects.replayTo(player, event.getTarget());
         }
+    }
+
+    /** Re-send persistent block FX when a player starts watching its chunk. */
+    @SubscribeEvent
+    public static void onChunkWatch(net.minecraftforge.event.level.ChunkWatchEvent.Watch event) {
+        com.lowdragmc.photon.command.ActiveWorldEffects.replayTo(event.getPlayer(), event.getLevel(), event.getPos());
     }
 
     @SubscribeEvent

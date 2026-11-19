@@ -52,6 +52,12 @@ public class EntityEffectCommand extends EffectCommand {
     private int[] ids = new int[0];
     @Setter
     private EntityEffectExecutor.AutoRotate autoRotate = EntityEffectExecutor.AutoRotate.NONE;
+    /** True for server replays; clients use it to avoid restarting one-shot effects for late trackers. */
+    private boolean replay;
+
+    void setReplay(boolean replay) {
+        this.replay = replay;
+    }
 
     public static class AutoRotateType implements ArgumentType<EntityEffectExecutor.AutoRotate> {
         private static final Collection<String> EXAMPLES = Arrays.asList("none", "forward", "look", "xrot");
@@ -205,6 +211,7 @@ public class EntityEffectCommand extends EffectCommand {
         for (Entity entity : entities) {
             buf.writeVarInt(entity.getId());
         }
+        buf.writeBoolean(replay);
     }
 
     @Override
@@ -212,6 +219,7 @@ public class EntityEffectCommand extends EffectCommand {
         super.decode(buf);
         autoRotate = buf.readEnum(EntityEffectExecutor.AutoRotate.class);
         ids = EntityIdListCodec.read(buf, 0);
+        replay = buf.readBoolean();
     }
 
     public static EntityEffectCommand decodePacket(FriendlyByteBuf buf) {
@@ -237,7 +245,7 @@ public class EntityEffectCommand extends EffectCommand {
             }
             if (level != null) {
                 var fx = FXHelper.getFX(packet.location);
-                if (fx != null) {
+                if (fx != null && (!packet.replay || com.lowdragmc.photon.client.fx.FXLooping.hasLoopingContent(fx))) {
                     for (var id : packet.ids) {
                         var entity = level.getEntity(id);
                         if (entity != null) {

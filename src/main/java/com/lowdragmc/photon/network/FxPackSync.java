@@ -9,11 +9,13 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -28,29 +30,40 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipFile;
 
-/** Server-to-client distribution of author-provided Photon FX packs. */
+/** Server-to-client delivery of public FX packs and recipient-private LDLib2 resource packs. */
 public final class FxPackSync {
     public static final String PACK_DIRECTORY = "photon/fxpacks";
+    public static final String PRIVATE_PACK_DIRECTORY = "photon/private-fxpacks";
     public static final String SUFFIX = ".fxpack";
     public static final int CHUNK_BYTES = 24 * 1024;
-    public static final long MAX_PACK_BYTES = 64L * 1024 * 1024;
-    public static final long MAX_TOTAL_BYTES = 128L * 1024 * 1024;
-    public static final long MAX_EXPANDED_PACK_BYTES = 256L * 1024 * 1024;
+    /** Large-workspace ceiling for one compressed pack transfer. */
+    public static final long MAX_PACK_BYTES = 512L * 1024 * 1024;
+    public static final long MAX_TOTAL_BYTES = 3L * 1024 * 1024 * 1024;
+    public static final long MAX_EXPANDED_PACK_BYTES = 2L * 1024 * 1024 * 1024;
     /** Bound aggregate decompression work even when a manifest contains many small compressed archives. */
-    public static final long MAX_TOTAL_EXPANDED_PACK_BYTES = 512L * 1024 * 1024;
+    public static final long MAX_TOTAL_EXPANDED_PACK_BYTES = 8L * 1024 * 1024 * 1024;
     private static final int MAX_ZIP_ENTRIES = 20_000;
     private static final int MAX_PACK_CANDIDATES = 4_096;
     private static final Pattern FX_ENTRY = Pattern.compile("assets/[^/]+/fx/.+\\.fx");
-    private static final int MAX_PACKS = 32;
+    private static final int MAX_SERVER_PACKS = 32;
+    private static final int MAX_PRIVATE_PACKS = 16;
+    private static final int MAX_PACKS = MAX_SERVER_PACKS + MAX_PRIVATE_PACKS;
+    private static final long MAX_PRIVATE_PACK_BYTES = 2L * 1024 * 1024 * 1024;
+    private static final long MAX_SERVER_PACK_BYTES = 512L * 1024 * 1024;
     private static final long REFRESH_COOLDOWN_NANOS = 5_000_000_000L;
     private static final Map<UUID, Map<String, PackEntry>> OFFERED = new ConcurrentHashMap<>();
+    private static final Map<UUID, Map<String, Path>> OFFERED_FILES = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, Long>> NEXT_CHUNK_OFFSETS = new ConcurrentHashMap<>();
+    private static final Map<UUID, UploadRequest> UPLOAD_REQUESTS = new ConcurrentHashMap<>();
+    private static final Map<UUID, UploadState> UPLOADS = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> LAST_REFRESH_NANOS = new ConcurrentHashMap<>();
     /** Token of the manifest currently accepted for chunk requests. */
     private static final Map<UUID, Long> OFFER_TOKENS = new ConcurrentHashMap<>();
     /** Token of the newest scan request; an unfinished scan must not invalidate a working transfer. */
     private static final Map<UUID, Long> LATEST_OFFER_TOKENS = new ConcurrentHashMap<>();
     private static final java.util.concurrent.atomic.AtomicLong NEXT_OFFER_TOKEN =
+            new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_UPLOAD_TOKEN =
             new java.util.concurrent.atomic.AtomicLong();
     /** Validated expansion sizes keyed by content hash, so repeat offers avoid decompressing unchanged packs. */
     private static final Map<String, Long> VALIDATED_PACK_EXPANSIONS = new ConcurrentHashMap<>();
@@ -73,6 +86,153 @@ public final class FxPackSync {
         offer(player, true);
     }
 
+    /** Ask this player's client to upload its local {@code <gameDir>/ldlib2/assets} tree for one recipient. */
+    public static boolean beginLocalResourceUpload(ServerPlayer sender, ServerPlayer recipient) {
+        if (sender == null || recipient == null || sender.getServer() == null
+                || sender.getServer() != recipient.getServer()) return false;
+        var token = NEXT_UPLOAD_TOKEN.incrementAndGet();
+        UPLOAD_REQUESTS.put(sender.getUUID(), new UploadRequest(token, recipient.getUUID(), System.nanoTime()));
+        deleteUpload(UPLOADS.remove(sender.getUUID()));
+        PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> sender),
+                new UploadPromptPacket(token, recipient.getUUID(), recipient.getGameProfile().getName()));
+        return true;
+    }
+
+    public static void handleUploadStart(UploadStartPacket packet, ServerPlayer sender) {
+        if (sender == null) return;
+        if (packet.token() < 0 || packet.size() <= 0 || packet.size() > MAX_PACK_BYTES
+                || !packet.sha256().matches("[0-9a-f]{64}")) {
+            sendUploadStatus(sender, false, "The upload metadata is invalid or exceeds 512 MiB.");
+            return;
+        }
+        var request = UPLOAD_REQUESTS.get(sender.getUUID());
+        if (request == null || request.token != packet.token()) return;
+        if (System.nanoTime() - request.createdAtNanos > java.util.concurrent.TimeUnit.MINUTES.toNanos(10)) {
+            UPLOAD_REQUESTS.remove(sender.getUUID(), request);
+            sendUploadStatus(sender, false, "The transfer took too long to prepare; run the send command again.");
+            return;
+        }
+        var server = sender.getServer();
+        var target = server == null ? null : server.getPlayerList().getPlayer(request.recipient);
+        if (target == null) {
+            UPLOAD_REQUESTS.remove(sender.getUUID(), request);
+            sendUploadStatus(sender, false, "Recipient is no longer online.");
+            return;
+        }
+        var tempDirectory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
+        var temp = tempDirectory.resolve(sender.getUUID() + "-" + packet.token() + ".part").normalize();
+        try {
+            Files.createDirectories(tempDirectory);
+            if (!temp.getParent().equals(tempDirectory.normalize())) return;
+            try (var file = new RandomAccessFile(temp.toFile(), "rw")) {
+                file.setLength(0);
+            }
+            UPLOAD_REQUESTS.remove(sender.getUUID(), request);
+            var old = UPLOADS.put(sender.getUUID(), new UploadState(packet.token(), request.recipient,
+                    packet.size(), packet.sha256(), temp));
+            deleteUpload(old);
+        } catch (IOException | RuntimeException failure) {
+            UPLOAD_REQUESTS.remove(sender.getUUID(), request);
+            deleteUpload(new UploadState(packet.token(), request.recipient, packet.size(), packet.sha256(), temp));
+            sendUploadStatus(sender, false, "Could not prepare the server upload file.");
+            Photon.LOGGER.warn("Could not prepare private Photon FX pack upload from {}", sender.getGameProfile().getName(), failure);
+        }
+    }
+
+    public static void handleUploadChunk(UploadChunkPacket packet, ServerPlayer sender) {
+        if (sender == null || packet.bytes().length == 0 || packet.bytes().length > CHUNK_BYTES) return;
+        var state = UPLOADS.get(sender.getUUID());
+        if (state == null || packet.token() != state.token) return;
+        if (packet.offset() != state.received || packet.bytes().length > state.size - state.received) {
+            UPLOADS.remove(sender.getUUID(), state);
+            deleteUpload(state);
+            sendUploadStatus(sender, false, "The resource upload arrived out of order; please retry.");
+            return;
+        }
+        try (var file = new RandomAccessFile(state.temp.toFile(), "rw")) {
+            file.seek(state.received);
+            file.write(packet.bytes());
+            state.received += packet.bytes().length;
+        } catch (IOException failure) {
+            UPLOADS.remove(sender.getUUID(), state);
+            deleteUpload(state);
+            sendUploadStatus(sender, false, "The upload failed while writing data on the server.");
+            Photon.LOGGER.warn("Could not receive private Photon FX pack from {}", sender.getGameProfile().getName(), failure);
+            return;
+        }
+        if (state.received == state.size) completeUpload(sender, state);
+    }
+
+    private static void completeUpload(ServerPlayer sender, UploadState state) {
+        UPLOADS.remove(sender.getUUID(), state);
+        var server = sender.getServer();
+        var recipient = server == null ? null : server.getPlayerList().getPlayer(state.recipient);
+        try {
+            if (Files.size(state.temp) != state.size || !sha256(state.temp).equals(state.sha256)
+                    || !inspectFxPack(state.temp, MAX_EXPANDED_PACK_BYTES).valid()) {
+                sendUploadStatus(sender, false, "The archive is invalid or does not contain a Photon FX.");
+                return;
+            }
+            if (recipient == null) {
+                sendUploadStatus(sender, false, "Recipient went offline before the transfer completed.");
+                return;
+            }
+            var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
+                    .resolve(state.recipient.toString()).normalize();
+            Files.createDirectories(directory);
+            var target = directory.resolve(state.sha256 + SUFFIX).normalize();
+            if (!target.getParent().equals(directory)) throw new IOException("Invalid private pack target");
+            boolean reusable = Files.isRegularFile(target, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                    && Files.size(target) == state.size && sha256(target).equals(state.sha256);
+            if (!reusable) {
+                long existingBytes = 0;
+                int existingFiles = 0;
+                try (var files = Files.list(directory)) {
+                    for (var file : files.filter(path -> !path.equals(target)
+                            && Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)).toList()) {
+                        existingFiles++;
+                        existingBytes += Files.size(file);
+                    }
+                }
+                if (existingFiles >= MAX_PRIVATE_PACKS || existingBytes + state.size > MAX_PRIVATE_PACK_BYTES) {
+                    sendUploadStatus(sender, false, "That player's private FX pack storage is full.");
+                    return;
+                }
+                Files.deleteIfExists(target);
+                try {
+                    Files.move(state.temp, target, StandardCopyOption.ATOMIC_MOVE);
+                } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+                    Files.move(state.temp, target);
+                }
+            }
+            Photon.LOGGER.info("Stored private Photon FX pack {} for {} from {}", state.sha256,
+                    recipient.getGameProfile().getName(), sender.getGameProfile().getName());
+            sendUploadStatus(sender, true, "Sent your ldlib2/assets resources to "
+                    + recipient.getGameProfile().getName() + ". They will reload automatically.");
+            recipient.sendSystemMessage(net.minecraft.network.chat.Component.literal("Photon: received FX/resources from "
+                    + sender.getGameProfile().getName() + "; reloading assets."));
+            offer(recipient, false);
+        } catch (IOException | RuntimeException failure) {
+            sendUploadStatus(sender, false, "Could not validate or store the resource pack on the server.");
+            Photon.LOGGER.warn("Could not finalize private Photon FX pack upload", failure);
+        } finally {
+            deleteUpload(state);
+        }
+    }
+
+    private static void sendUploadStatus(ServerPlayer player, boolean success, String message) {
+        PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new UploadStatusPacket(success, message));
+    }
+
+    private static void deleteUpload(@Nullable UploadState state) {
+        if (state == null) return;
+        try {
+            Files.deleteIfExists(state.temp);
+        } catch (IOException | RuntimeException failure) {
+            Photon.LOGGER.warn("Could not remove temporary Photon FX upload {}", state.temp, failure);
+        }
+    }
+
     private static void offer(ServerPlayer player, boolean requested) {
         if (requested) {
             var now = System.nanoTime();
@@ -92,6 +252,11 @@ public final class FxPackSync {
         var offerToken = NEXT_OFFER_TOKEN.incrementAndGet();
         LATEST_OFFER_TOKENS.put(playerId, offerToken);
         scanAsync(server).whenComplete((entries, failure) -> {
+            long globalExpanded = failure == null ? entries.stream()
+                    .mapToLong(entry -> VALIDATED_PACK_EXPANSIONS.getOrDefault(entry.sha256(), 0L)).sum() : 0;
+            var personalPacks = failure == null
+                    ? scanPrivatePacks(server, playerId, Math.max(0, MAX_TOTAL_EXPANDED_PACK_BYTES - globalExpanded))
+                    : List.<PrivatePack>of();
             try {
                 server.execute(() -> {
                     if (server.getPlayerList().getPlayer(playerId) != player
@@ -100,17 +265,30 @@ public final class FxPackSync {
                         Photon.LOGGER.error("Could not scan server Photon FX packs", failure);
                         return;
                     }
+                    var allEntries = new ArrayList<PackEntry>(entries);
                     var offered = new ConcurrentHashMap<String, PackEntry>();
-                    entries.forEach(entry -> offered.put(entry.sha256(), entry));
+                    var filesByHash = new ConcurrentHashMap<String, Path>();
+                    var globalDirectory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY).normalize();
+                    entries.forEach(entry -> {
+                        offered.put(entry.sha256(), entry);
+                        filesByHash.put(entry.sha256(), globalDirectory.resolve(entry.fileName()).normalize());
+                    });
+                    for (var personal : personalPacks) {
+                        if (offered.putIfAbsent(personal.entry.sha256(), personal.entry) == null) {
+                            allEntries.add(personal.entry);
+                            filesByHash.put(personal.entry.sha256(), personal.path);
+                        }
+                    }
                     var nextOffsets = new ConcurrentHashMap<String, Long>();
-                    entries.forEach(entry -> nextOffsets.put(entry.sha256(), 0L));
+                    allEntries.forEach(entry -> nextOffsets.put(entry.sha256(), 0L));
                     PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                            new ManifestPacket(offerToken, entries));
+                            new ManifestPacket(offerToken, allEntries));
                     OFFERED.put(playerId, Map.copyOf(offered));
+                    OFFERED_FILES.put(playerId, Map.copyOf(filesByHash));
                     NEXT_CHUNK_OFFSETS.put(playerId, nextOffsets);
                     OFFER_TOKENS.put(playerId, offerToken);
                     Photon.LOGGER.info("{} {} Photon FX pack(s) to {}", requested ? "Re-offered" : "Offered",
-                            entries.size(), player.getGameProfile().getName());
+                            allEntries.size(), player.getGameProfile().getName());
                 });
             } catch (RuntimeException schedulingFailure) {
                 Photon.LOGGER.warn("Could not queue Photon FX pack manifest for {}", playerId, schedulingFailure);
@@ -136,7 +314,10 @@ public final class FxPackSync {
 
     public static void onPlayerLogout(ServerPlayer player) {
         OFFERED.remove(player.getUUID());
+        OFFERED_FILES.remove(player.getUUID());
         NEXT_CHUNK_OFFSETS.remove(player.getUUID());
+        UPLOAD_REQUESTS.remove(player.getUUID());
+        deleteUpload(UPLOADS.remove(player.getUUID()));
         LAST_REFRESH_NANOS.remove(player.getUUID());
         OFFER_TOKENS.remove(player.getUUID());
         LATEST_OFFER_TOKENS.remove(player.getUUID());
@@ -144,7 +325,11 @@ public final class FxPackSync {
 
     public static void onServerStopping() {
         OFFERED.clear();
+        OFFERED_FILES.clear();
         NEXT_CHUNK_OFFSETS.clear();
+        UPLOAD_REQUESTS.clear();
+        UPLOADS.values().forEach(FxPackSync::deleteUpload);
+        UPLOADS.clear();
         LAST_REFRESH_NANOS.clear();
         OFFER_TOKENS.clear();
         LATEST_OFFER_TOKENS.clear();
@@ -177,13 +362,13 @@ public final class FxPackSync {
             }
             for (var path : candidates.stream().limit(MAX_PACK_CANDIDATES).toList()) {
                 try {
-                    if (result.size() >= MAX_PACKS) break;
+                    if (result.size() >= MAX_SERVER_PACKS) break;
                     var size = Files.size(path);
-                    if (size <= 0 || size > MAX_PACK_BYTES || totalBytes + size > MAX_TOTAL_BYTES) {
+                    if (size <= 0 || size > MAX_PACK_BYTES || totalBytes + size > MAX_SERVER_PACK_BYTES) {
                         Photon.LOGGER.warn("Photon FX sync skipped {} (size {} exceeds limits)", path.getFileName(), size);
                         continue;
                     }
-                    if (scannedBytes > MAX_TOTAL_BYTES - size) {
+                    if (scannedBytes > MAX_SERVER_PACK_BYTES - size) {
                         Photon.LOGGER.warn("Photon FX sync stopped scanning after reaching the pack validation byte budget");
                         break;
                     }
@@ -222,6 +407,35 @@ public final class FxPackSync {
         } catch (IOException e) {
             throw new java.util.concurrent.CompletionException(
                     "Could not scan server Photon FX packs in " + directory, e);
+        }
+        return List.copyOf(result);
+    }
+
+    /** Only the addressed recipient's private packs are added to their manifest; they never enter the public directory. */
+    private static List<PrivatePack> scanPrivatePacks(MinecraftServer server, UUID recipient, long expandedBudget) {
+        var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
+                .resolve(recipient.toString()).normalize();
+        if (!Files.isDirectory(directory)) return List.of();
+        var result = new ArrayList<PrivatePack>();
+        long total = 0;
+        long expandedTotal = 0;
+        try (var files = Files.list(directory)) {
+            for (var path : files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                    .filter(file -> file.getFileName().toString().endsWith(SUFFIX)).sorted().toList()) {
+                if (result.size() >= MAX_PRIVATE_PACKS) break;
+                var size = Files.size(path);
+                if (size <= 0 || size > MAX_PACK_BYTES || total + size > MAX_PRIVATE_PACK_BYTES) continue;
+                var hash = sha256(path);
+                var remainingExpanded = MAX_TOTAL_EXPANDED_PACK_BYTES - expandedTotal;
+                if (remainingExpanded <= 0) break;
+                var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingExpanded));
+                if (!validation.valid()) continue;
+                expandedTotal += validation.expandedBytes();
+                total += size;
+                result.add(new PrivatePack(new PackEntry("private-" + hash + SUFFIX, size, hash), path));
+            }
+        } catch (IOException | RuntimeException failure) {
+            Photon.LOGGER.warn("Could not scan private Photon FX packs for {}", recipient, failure);
         }
         return List.copyOf(result);
     }
@@ -345,9 +559,8 @@ public final class FxPackSync {
                 || packet.offset() >= entry.size()) return;
         var server = player.getServer();
         if (server == null) return;
-        var directory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY).normalize();
-        var path = directory.resolve(entry.fileName()).normalize();
-        if (!path.getParent().equals(directory)) return;
+        var path = OFFERED_FILES.getOrDefault(uuid, Map.of()).get(packet.sha256());
+        if (path == null || !Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return;
         try (var file = new RandomAccessFile(path.toFile(), "r")) {
             if (file.length() != entry.size()) return;
             file.seek(packet.offset());
@@ -379,6 +592,91 @@ public final class FxPackSync {
     public static void handleChunk(ChunkPacket packet) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
                 com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.accept(packet));
+    }
+
+    private record PrivatePack(PackEntry entry, Path path) {
+    }
+
+    private record UploadRequest(long token, UUID recipient, long createdAtNanos) {
+    }
+
+    private static final class UploadState {
+        private final long token;
+        private final UUID recipient;
+        private final long size;
+        private final String sha256;
+        private final Path temp;
+        private long received;
+
+        private UploadState(long token, UUID recipient, long size, String sha256, Path temp) {
+            this.token = token;
+            this.recipient = recipient;
+            this.size = size;
+            this.sha256 = sha256;
+            this.temp = temp;
+        }
+    }
+
+    public static void handleUploadPrompt(UploadPromptPacket packet) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
+                com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.begin(packet));
+    }
+
+    public static void handleUploadStatus(UploadStatusPacket packet) {
+        DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
+                com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.status(packet));
+    }
+
+    public record UploadPromptPacket(long token, UUID recipient, String recipientName) {
+        public static void encode(UploadPromptPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.token());
+            buf.writeUUID(packet.recipient());
+            buf.writeUtf(packet.recipientName(), 64);
+        }
+        public static UploadPromptPacket decode(FriendlyByteBuf buf) {
+            var token = buf.readVarLong();
+            var recipient = buf.readUUID();
+            var name = buf.readUtf(64);
+            if (token < 0) throw new IllegalArgumentException("Invalid resource upload token");
+            return new UploadPromptPacket(token, recipient, name);
+        }
+    }
+
+    public record UploadStartPacket(long token, long size, String sha256) {
+        public static void encode(UploadStartPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.token());
+            buf.writeVarLong(packet.size());
+            buf.writeUtf(packet.sha256(), 64);
+        }
+        public static UploadStartPacket decode(FriendlyByteBuf buf) {
+            return new UploadStartPacket(buf.readVarLong(), buf.readVarLong(), buf.readUtf(64));
+        }
+    }
+
+    public record UploadChunkPacket(long token, long offset, byte[] bytes) {
+        public static void encode(UploadChunkPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.token());
+            buf.writeVarLong(packet.offset());
+            buf.writeByteArray(packet.bytes());
+        }
+        public static UploadChunkPacket decode(FriendlyByteBuf buf) {
+            var token = buf.readVarLong();
+            var offset = buf.readVarLong();
+            var bytes = buf.readByteArray(CHUNK_BYTES);
+            if (token < 0 || offset < 0 || bytes.length == 0 || bytes.length > CHUNK_BYTES)
+                throw new IllegalArgumentException("Invalid resource upload chunk");
+            return new UploadChunkPacket(token, offset, bytes);
+        }
+    }
+
+    public record UploadStatusPacket(boolean success, String message) {
+        public static void encode(UploadStatusPacket packet, FriendlyByteBuf buf) {
+            buf.writeBoolean(packet.success());
+            buf.writeUtf(packet.message(), 256);
+        }
+        public static UploadStatusPacket decode(FriendlyByteBuf buf) {
+            return new UploadStatusPacket(buf.readBoolean(), buf.readUtf(256));
+        }
     }
 
     public record PackEntry(String fileName, long size, String sha256) {

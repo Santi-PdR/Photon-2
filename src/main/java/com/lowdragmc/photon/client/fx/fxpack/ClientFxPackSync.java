@@ -239,6 +239,7 @@ public final class ClientFxPackSync {
 
     /** Clear server-only assets on disconnect and invalidate any transfer still in flight. */
     public static void onClientLogout(net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+        LocalFxResourceUpload.onClientLogout();
         var previous = activeSession;
         activeSession = null;
         lastRequestToken = -1;

@@ -34,6 +34,11 @@ public abstract class LifetimeFXObject extends FXObject {
 
     protected abstract boolean looping();
 
+    /** The authored/runtime loop state, exposed for late-join replay filtering. */
+    public final boolean isLoopingEffect() {
+        return looping();
+    }
+
     protected abstract void attach(Level level);
 
     protected abstract void detach(Level level);

@@ -99,6 +99,7 @@ public final class ActiveEntityEffects {
             command.setAllowMulti(allowMulti);
             command.setAutoRotate(autoRotate);
             command.setEntities(List.of(entity));
+            command.setReplay(true);
             return command;
         }
     }
