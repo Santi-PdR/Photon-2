@@ -98,11 +98,14 @@ dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     // Automatic audio → Ogg Vorbis conversion for timeline audio clips (pure-Java codecs, no ffmpeg).
     // jVorbisEnc (libvorbis encoder port) and jLayer (mp3) come from JitPack; JAAD decodes AAC/MP4.
-    implementation('com.github.umjammer:jVorbisEnc:0.0.2') {
+    // Plain libraries must go through FG's minecraftLibrary configuration to reach the dev game
+    // classpath (the minecraft_classpath token) — plain implementation only reaches compilation —
+    // while jarJar embeds them in the -all jar for production.
+    minecraftLibrary('com.github.umjammer:jVorbisEnc:0.0.2') {
         exclude group: 'com.github.umjammer', module: 'vavi-commons' // test-only in jVorbisEnc
     }
-    implementation 'com.github.umjammer:jlayer:1.0.6'
-    implementation 'io.vacco.jaad:jaad:0.8.8-MILESTONE-202111270642'
+    minecraftLibrary 'com.github.umjammer:jlayer:1.0.6'
+    minecraftLibrary 'io.vacco.jaad:jaad:0.8.8-MILESTONE-202111270642'
     jarJar('com.github.umjammer:jVorbisEnc:0.0.2') {
         exclude group: 'com.github.umjammer', module: 'vavi-commons'
     }
