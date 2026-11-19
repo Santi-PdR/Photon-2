@@ -53,7 +53,7 @@ public class EntityEffectCommand extends EffectCommand {
     @Setter
     private EntityEffectExecutor.AutoRotate autoRotate = EntityEffectExecutor.AutoRotate.NONE;
     /** True for server replays; clients use it to avoid restarting one-shot effects for late trackers. */
-    private boolean replay;
+    boolean replay;
 
     void setReplay(boolean replay) {
         this.replay = replay;

@@ -159,7 +159,8 @@ public final class LocalFxResourceUpload {
         }
     }
 
-    private static Path createArchive() throws IOException {
+    /** Package-private for the upload-archive regression; the flow calls it after a chat confirmation. */
+    static Path createArchive() throws IOException {
         var gamePath = Platform.getGamePath();
         var assets = gamePath.resolve("ldlib2").resolve("assets").normalize();
         if (!Files.isDirectory(assets, LinkOption.NOFOLLOW_LINKS)) {
