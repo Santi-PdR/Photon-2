@@ -169,6 +169,7 @@ public final class LocalFxResourceUpload {
         try {
             long expandedBytes = 0;
             int entries = 0;
+            int skipped = 0;
             try (var paths = Files.walk(assets);
                  var output = new ZipOutputStream(Files.newOutputStream(archive))) {
                 output.putNextEntry(new ZipEntry("pack.mcmeta"));
@@ -177,13 +178,20 @@ public final class LocalFxResourceUpload {
                 output.closeEntry();
                 for (var file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
                     if (Files.isSymbolicLink(file)) continue;
+                    var relative = assets.relativize(file).toString().replace(file.getFileSystem().getSeparator(), "/");
+                    // server-side pack validation rejects unsafe ZIP entry names (backslashes, colons, control
+                    // characters); one oddly named file must not fail the whole transfer with a misleading error
+                    if (!isSafeEntryName(relative)) {
+                        skipped++;
+                        Photon.LOGGER.warn("ldlib2/assets: skipping {} — its name cannot travel in an .fxpack", file);
+                        continue;
+                    }
                     if (++entries > MAX_ENTRIES) throw new IOException("ldlib2/assets has too many files to transfer");
                     var size = Files.size(file);
                     if (size < 0 || expandedBytes + size > MAX_EXPANDED_BYTES) {
                         throw new IOException("ldlib2/assets exceeds the 2 GiB expanded resource limit");
                     }
                     expandedBytes += size;
-                    var relative = assets.relativize(file).toString().replace(file.getFileSystem().getSeparator(), "/");
                     var zipEntry = new ZipEntry("assets/" + relative);
                     zipEntry.setTime(0L);
                     output.putNextEntry(zipEntry);
@@ -198,13 +206,24 @@ public final class LocalFxResourceUpload {
             }
             var size = Files.size(archive);
             if (size <= 0 || size > MAX_ARCHIVE_BYTES || !FxPackSync.isValidFxPack(archive)) {
-                throw new IOException("The assets folder has no valid FX, or its archive failed validation");
+                throw new IOException("The assets folder has no valid FX, or its archive failed validation"
+                        + (skipped > 0 ? " (" + skipped + " file(s) with unsafe names were skipped; see the log)" : ""));
             }
             return archive;
         } catch (IOException | RuntimeException failure) {
             deleteTemporary(archive);
             throw failure;
         }
+    }
+
+    /** Mirror of {@code FxPackSync.isSafeZipEntryName} for a relative path about to become {@code assets/<path>}. */
+    private static boolean isSafeEntryName(String relative) {
+        if (relative == null || relative.isBlank() || relative.indexOf('\\') >= 0 || relative.indexOf(':') >= 0
+                || relative.chars().anyMatch(ch -> ch == 0 || ch < 0x20 || ch == 0x7f)) return false;
+        for (var segment : relative.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
+        }
+        return true;
     }
 
     public static void status(FxPackSync.UploadStatusPacket status) {
