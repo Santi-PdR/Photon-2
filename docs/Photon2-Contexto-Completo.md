@@ -4,7 +4,7 @@
 > portado, qué se arregló y por qué, cómo se verifica, cómo se distribuye, y qué queda pendiente.
 > Si alguien (Santi, Alex u otra persona o IA) retoma esto sin el historial del chat, empieza aquí.
 >
-> Actualizado: **2026-11-06** · sincronización de FX en loop y transferencia/exportación de `ldlib2/assets`; CI `44446628854` ✅ · preview `preview-44446628854-1`.
+> Actualizado: **2026-11-06** · persistencia de FX en loop, transferencia/exportación de `ldlib2/assets` con confirmación previa; build CI `44449444574` ✅ · preview `preview-44449444574-1`.
 
 ---
 
@@ -247,9 +247,10 @@ gh run download <RUN_ID> -R Santi-PdR/Photon-2 -n photon-forge-1.20.1
 | **Ronda 2 (picker + control de bloom + guía)** | `0fbf2ad` | run `42384055373` (build **#526**) ✅ | `photon-forge-1.20.1` id `13578638461` (13 378 526 B) · diagnóstico `13578569377` |
 | Docs y limpieza de repo | `c5bf27b` | run `42386451673` ✅ | — (solo documentación) |
 | **Merge del port a `main`** | `61fcf63` | PR #1 ✅ | build lanzado desde `main` |
-| **FX en loop + envío privado/exportación LDLib2** | `520bd2f` | run `44446628854` ✅ | [`preview-44446628854-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) |
+| **FX en loop + envío privado/exportación LDLib2** | `520bd2f` | run `44446628854` ✅ | preview inicial [`preview-44446628854-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) |
+| **Consentimiento previo + documentación** | `0d107e4` | run de PR `44449444574` ✅ | [`preview-44449444574-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44449444574-1) |
 
-- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44446628854-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44446628854).
+- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44449444574-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44449444574-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44449444574).
 - Los artifacts de GitHub caducan a los **90 días**.
 - En `mods/` debe quedar **un solo** `photon-…-all.jar`; borrar duplicados tipo `…-all (2).jar` antes de probar.
 
