@@ -206,6 +206,8 @@ Auditoría de texturas/materiales (204 recursos versionados): los 35 PNG Kila + 
 
 Idiomas: `en_us` 2099 claves · `zh_cn` 2101 (1 añadida esta ronda; 3 sobrantes sin uso: `photon.gui.editor.timeline.channel_mode{,.curve,.expression}`) · `es_es` **1370 — faltan 729 claves** (caen a inglés en pantalla). El catálogo de presets Kila sí está completo en los tres idiomas (verificado por `verify_kila_preset_catalog.py`). Completar `es_es` queda como pendiente de volumen, no de corrección puntual.
 
+**Verificación de esta ronda:** los tres scripts Python (`verify_kila_preset_catalog.py`, `verify_kila_blend_ordinals.py`, `verify_shader_normal_safety.py`) y `git diff --check` pasaron en local; sin Java en el sandbox, GitHub Actions compiló el JAR y ejecutó el smoke completo (servidor dedicado + cliente headless, ~25 greps): runs [`44458049882`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458049882) y [`44458368154`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458368154) ✅ (PR #12). Nada de esto sustituye la prueba multicliente manual, que sigue pendiente.
+
 ---
 
 ## 7. Cómo funciona `.fxpack` (resumen técnico)
@@ -358,7 +360,7 @@ La tabla siguiente es el registro de la limpieza anterior al port y no describe 
 
 ### Auditoría y mejoras solicitadas
 
-**Hecho en la ronda 2026-11-19** (detalle en la sección 6.5): recorrido de código, recursos, shaders y red; 7 hallazgos corregidos con cambios acotados (rendimiento del escaneo de packs privados, presupuesto agregado de descompresión, nombres de archivo inseguros en la exportación LDLib2, temporales huérfanos, endurecimiento de decodificación de paquetes, código muerto y una clave de idioma); auditoría de texturas/materiales sin hallazgos que corregir (todo referenciado, sin huérfanos, formatos válidos). Los verificadores Python y `git diff --check` pasan en local; la compilación + smokes se verifican por GitHub Actions (no hay Java en el sandbox).
+**Hecho en la ronda 2026-11-19** (detalle en la sección 6.5): recorrido de código, recursos, shaders y red; 8 hallazgos corregidos con cambios acotados (rendimiento del escaneo de packs privados, presupuesto agregado de descompresión, nombres de archivo inseguros en la exportación LDLib2, temporales huérfanos, endurecimiento de decodificación de paquetes y de profundidad de NBT, código muerto y una clave de idioma); auditoría de texturas/materiales sin hallazgos que corregir (todo referenciado, sin huérfanos, formatos válidos). Los verificadores Python y `git diff --check` pasan en local; GitHub Actions compiló y pasó el smoke completo (servidor dedicado + cliente headless) en los runs [`44458049882`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458049882) y [`44458368154`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458368154) ✅ (PR #12; no hay Java en el sandbox).
 
 Pendientes reales tras esa ronda:
 
