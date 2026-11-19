@@ -164,6 +164,7 @@ jobs:
             '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously'
             '[editor-open] FXEditor built in'
             '[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely'
+            '[material-persistence-smoke] created materials persist on disk and travel inside the project file'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '

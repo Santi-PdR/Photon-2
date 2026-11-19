@@ -2,7 +2,9 @@ package com.lowdragmc.photon.gui.editor;
 
 import com.lowdragmc.lowdraglib2.editor.project.IProject;
 import com.lowdragmc.lowdraglib2.editor.project.ProjectType;
+import com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath;
 import com.lowdragmc.lowdraglib2.editor.resource.ColorsResource;
+import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.lowdraglib2.editor.resource.Resources;
 import com.lowdragmc.photon.client.PhotonIcons;
 import com.lowdragmc.photon.client.util.PhotonPaths;
@@ -10,6 +12,8 @@ import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXRuntime;
 import com.lowdragmc.photon.client.fx.instance.InstanceIds;
 import com.lowdragmc.photon.client.gameobject.emitter.data.fixer.PhotonFXProjectDataFixer;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial;
 import com.lowdragmc.photon.gui.editor.resource.PhotonShaderFunctionGraphResource;
 import com.lowdragmc.photon.gui.editor.resource.FullscreenShaderGraphResource;
 import com.lowdragmc.photon.gui.editor.resource.RenderGraphResource;
@@ -142,9 +146,7 @@ public class FXProject implements IProject {
         if (replacePlayable != null) {
             data.putString("replacePlayable", replacePlayable.toString());
         }
-        if (replacePlayable != null) {
-            data.putString("replacePlayable", replacePlayable.toString());
-        }
+        embedLibraryMaterials(data);
         return data;
     }
 
@@ -156,9 +158,110 @@ public class FXProject implements IProject {
             var id = ResourceLocation.tryParse(ids.getString(i));
             if (PhotonPaths.isSafeAssetLocation(id)) knownAs.add(id);
         }
+        restoreLibraryMaterials(nbt);
         fx.deserializeNBT(provider, nbt.getCompound("fx"), knownAs);
         setReplacePlayable(nbt.contains("replacePlayable", Tag.TAG_STRING)
                 ? ResourceLocation.tryParse(nbt.getString("replacePlayable")) : null);
+    }
+
+    /**
+     * Materials one creates in the editor live in the resource library (the global file provider), and
+     * every material slot in the fx only references one by path. A project shared to another machine —
+     * or opened after the library file is gone — resolved those references to the missing material and
+     * the fx silently lost its look. Snapshot every referenced non-builtin material (following
+     * {@link UIResourceMaterial} chains) into the project file; {@link #restoreLibraryMaterials}
+     * re-registers any that no longer resolve on load.
+     */
+    private void embedLibraryMaterials(CompoundTag data) {
+        var instance = MaterialResource.INSTANCE.getResourceInstance();
+        try {
+            // flush pending library edits so the snapshot is the material being edited, not an older save
+            instance.saveResource();
+        } catch (RuntimeException failure) {
+            com.lowdragmc.photon.Photon.LOGGER.warn("Failed to flush the material library before project save", failure);
+        }
+        var embedded = new ListTag();
+        collectMaterials(data.getCompound("fx"), embedded, new HashSet<>());
+        if (!embedded.isEmpty()) data.put("libraryMaterials", embedded);
+    }
+
+    private static void collectMaterials(Tag tag, ListTag out, Set<String> seen) {
+        if (tag instanceof CompoundTag compound) {
+            if ("ui_resource_material".equals(compound.getString("type")) && compound.contains("data", Tag.TAG_COMPOUND)) {
+                embedChain(compound.getCompound("data").getString("resourcePath"), out, seen);
+            }
+            for (var key : compound.getAllKeys()) collectMaterials(compound.get(key), out, seen);
+        } else if (tag instanceof ListTag list) {
+            for (var child : list) collectMaterials(child, out, seen);
+        }
+    }
+
+    private static void embedChain(String pathString, ListTag out, Set<String> seen) {
+        var instance = MaterialResource.INSTANCE.getResourceInstance();
+        var path = IResourcePath.parse(pathString);
+        // bounded: a cyclic reference chain is already rejected at resolve time
+        for (int hop = 0; path != null && !(path instanceof BuiltinPath) && hop < 16; hop++) {
+            if (!seen.add(path.getPathWithType())) return;
+            var material = instance.getResource(path);
+            if (material == null) return; // not in the library: nothing to embed
+            var wrapper = material.serializeWrapper();
+            if (wrapper == null) return;
+            var entry = new CompoundTag();
+            entry.putString("path", path.getPathWithType());
+            entry.put("material", wrapper);
+            out.add(entry);
+            path = material instanceof UIResourceMaterial reference ? reference.getResourcePath() : null;
+        }
+    }
+
+    /**
+     * Re-register embedded materials whose library copy no longer resolves. The local library always
+     * wins; an embedded copy is only used to heal a reference that would otherwise fall back to the
+     * missing material. When the saved path is not writable here (it points into another machine's
+     * game directory), the material gets a fresh home in this machine's global library and the fx's
+     * references are repointed at it before the objects deserialize.
+     */
+    private void restoreLibraryMaterials(CompoundTag data) {
+        if (!data.contains("libraryMaterials", Tag.TAG_LIST)) return;
+        var instance = MaterialResource.INSTANCE.getResourceInstance();
+        var global = instance.getGlobalProvider();
+        for (var entry : data.getList("libraryMaterials", Tag.TAG_COMPOUND)) {
+            var compound = (CompoundTag) entry;
+            var path = IResourcePath.parse(compound.getString("path"));
+            if (path == null || path instanceof BuiltinPath) continue;
+            if (instance.getResource(path) != null) continue; // the local library wins
+            var material = IMaterial.deserializeWrapper(compound.getCompound("material"));
+            var restoredAt = path;
+            if (!global.addResource(path, material)) {
+                restoredAt = global.createSubPath(path.getResourceName());
+                if (!global.addResource(restoredAt, material)) continue;
+                rewriteReferences(data.getCompound("fx"), path.getPathWithType(), restoredAt.getPathWithType());
+            }
+            com.lowdragmc.photon.Photon.LOGGER.info("Restored missing project material {} as {}",
+                    path.getPathWithType(), restoredAt.getPathWithType());
+        }
+    }
+
+    private static void rewriteReferences(Tag tag, String from, String to) {
+        if (tag instanceof CompoundTag compound) {
+            for (var key : compound.getAllKeys()) {
+                var child = compound.get(key);
+                if (child instanceof StringTag string && from.equals(string.getAsString())) {
+                    compound.putString(key, to);
+                } else {
+                    rewriteReferences(child, from, to);
+                }
+            }
+        } else if (tag instanceof ListTag list) {
+            for (int i = 0; i < list.size(); i++) {
+                var child = list.get(i);
+                if (child instanceof StringTag string && from.equals(string.getAsString())) {
+                    list.set(i, StringTag.valueOf(to));
+                } else {
+                    rewriteReferences(child, from, to);
+                }
+            }
+        }
     }
 
     /**
