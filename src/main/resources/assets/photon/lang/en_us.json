@@ -10,8 +10,6 @@
   "photon.configuration.bloom_mip_level.tooltip": "How many downsample steps the bloom pyramid takes. Higher means a wider, softer glow at a higher cost. Clamped to what the current framebuffer size allows.",
   "photon.configuration.bloom_threshold": "Bloom Threshold",
   "photon.configuration.bloom_threshold.tooltip": "Brightness cutoff for the glow. Lower values make more of the effect glow; the default works with ordinary bright colors. Higher values limit glow to HDR highlights.",
-  "photon.configuration.bloom_intensity": "Bloom Intensity",
-  "photon.configuration.bloom_intensity.tooltip": "How strongly the blurred bloom is added back onto the frame.",
   "photon.configuration.enable_bloom_with_iris_shader": "Enable Bloom with Iris shader",
   "photon.configuration.enable_bloom_with_iris_shader.tooltip": "Run Photon's own bloom while a shader pack is active. Only consulted when the FX layer is composited into the pack's colour target, where the pack's bloom will process it as well - leaving this on means both apply. Ignored (Photon's bloom always runs) when the layer is held back until after the pack's passes, because nothing else would ever bloom those pixels.",
   "photon.configuration.fx_composite_mode": "FX composite mode",

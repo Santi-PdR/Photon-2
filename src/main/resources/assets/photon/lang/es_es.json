@@ -6,8 +6,6 @@
   "photon.configuration.bloom_mip_level.tooltip": "Controla el ancho y suavidad del halo; valores mayores cuestan más rendimiento.",
   "photon.configuration.bloom_threshold": "Umbral de bloom",
   "photon.configuration.bloom_threshold.tooltip": "Brillo mínimo para generar el halo. El valor predeterminado funciona con colores brillantes normales; un valor mayor limita el bloom a luces HDR.",
-  "photon.configuration.bloom_intensity": "Intensidad de bloom",
-  "photon.configuration.bloom_intensity.tooltip": "Fuerza del halo que se mezcla con la imagen.",
   "photon.configuration.enable_bloom_with_iris_shader": "Activar bloom con Iris",
   "photon.configuration.enable_bloom_with_iris_shader.tooltip": "Permite el bloom de Photon al usar shaders Iris cuando la capa de FX se mezcla con el objetivo de color del shader.",
   "photon.is_bloom_visible": "Bloom de este FX (B)",
