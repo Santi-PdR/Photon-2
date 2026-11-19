@@ -178,6 +178,9 @@ public final class AudioConverter {
                 out[i * 2] = (byte) (sample & 0xFF);
                 out[i * 2 + 1] = (byte) ((sample >>> 8) & 0xFF);
             }
+            // JLayer's SampleBuffer accumulates across frames unless cleared; the next
+            // decodeNextFrame would otherwise append past the end of the buffer.
+            buffer.clearBuffer();
             return out;
         }
 
