@@ -12,8 +12,9 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider;
 import com.lowdragmc.lowdraglib2.gui.util.DrawerHelper;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
-import com.lowdragmc.photon.client.fx.timeline.AudioClip;
 import com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter;
+import com.lowdragmc.photon.client.fx.timeline.AudioClip;
+import com.lowdragmc.photon.client.fx.timeline.AudioConverter;
 import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
 import com.lowdragmc.photon.client.fx.timeline.Track;
@@ -68,27 +69,29 @@ public class AudioTrackEditor extends ClipTrackEditor {
             layout.gapAll(2);
         });
         header.addChild(buildTargetSlot(ctx, track, true));
-        // One click from the track itself imports an OGG and creates a clip at the playhead; users
+        // One click from the track itself imports a sound and creates a clip at the playhead; users
         // no longer need to create an empty clip first and discover the import button in the inspector.
-        header.addChild(new Button().setText("OGG+").setOnClick(event -> {
+        // mp3/wav/mp4/… are converted to Ogg Vorbis automatically on import.
+        header.addChild(new Button().setText("\u266A+").setOnClick(event -> {
             var mui = event.currentElement.getModularUI();
-            if (mui != null) importOggAsClip(ctx, track, mui.ui.rootElement);
+            if (mui != null) importSoundAsClip(ctx, track, mui.ui.rootElement);
         }).layout(layout -> layout.width(34).heightPercent(100))
-                .style(style -> style.tooltips("photon.gui.editor.timeline.audio.import_ogg")));
+                .style(style -> style.tooltips("photon.gui.editor.timeline.audio.import_audio")));
         return header;
     }
 
-    private static void importOggAsClip(TimelineContext ctx, Track track, UIElement host) {
-        Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
-                new File(System.getProperty("user.home")), true, Dialog.suffixFilter(".ogg"), file -> {
+    private static void importSoundAsClip(TimelineContext ctx, Track track, UIElement host) {
+        Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_audio",
+                new File(System.getProperty("user.home")), true,
+                Dialog.suffixFilter(AudioConverter.supportedSuffixes()), file -> {
                     if (file == null || !file.isFile()) return;
                     try {
-                        var sound = AudioAssetImporter.importOgg(file);
+                        var sound = AudioAssetImporter.importSound(file);
                         Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
                                 Minecraft.getInstance().execute(() -> {
                                     if (failure != null) {
                                         com.lowdragmc.photon.Photon.LOGGER.error(
-                                                "Failed to register imported Photon OGG", failure);
+                                                "Failed to register imported Photon audio", failure);
                                         return;
                                     }
                                     double duration = SoundLengthCache.getTicks(sound);
@@ -99,9 +102,19 @@ public class AudioTrackEditor extends ClipTrackEditor {
                                     ctx.refreshPreview();
                                 }));
                     } catch (Exception exception) {
-                        com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
+                        com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon audio {}", file, exception);
+                        reportImportFailure(exception);
                     }
                 }).show(host);
+    }
+
+    /** Tells the user why their file could not be imported instead of only logging it. */
+    private static void reportImportFailure(Exception exception) {
+        var player = Minecraft.getInstance().player;
+        if (player == null) return;
+        var reason = exception.getMessage() == null ? exception.toString() : exception.getMessage();
+        player.displayClientMessage(Component.translatable(
+                "photon.gui.editor.timeline.audio.import_failed", reason), false);
     }
 
     @Override
@@ -163,29 +176,30 @@ public class AudioTrackEditor extends ClipTrackEditor {
         importedSoundButton.layout(layout -> layout.flex(1));
         var oggConfigurator = new Configurator("photon.gui.editor.timeline.audio.ogg")
                 .addInlineChild(importedSoundButton)
-                .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_ogg", true)
+                .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_audio", true)
                         .setOnClick(event -> {
                             var mui = event.currentElement.getModularUI();
                             if (mui == null) return;
-                            Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
+                            Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_audio",
                                     new File(System.getProperty("user.home")), true,
-                                    Dialog.suffixFilter(".ogg"), file -> {
+                                    Dialog.suffixFilter(AudioConverter.supportedSuffixes()), file -> {
                                         if (file == null || !file.isFile()) return;
                                         try {
-                                            audio.sound(AudioAssetImporter.importOgg(file));
+                                            audio.sound(AudioAssetImporter.importSound(file));
                                             ctx.refreshPreview();
                                             Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
                                                     Minecraft.getInstance().execute(() -> {
                                                         if (failure != null) {
                                                             com.lowdragmc.photon.Photon.LOGGER.error(
-                                                                    "Failed to load imported Photon OGG", failure);
+                                                                    "Failed to load imported Photon audio", failure);
                                                         } else {
                                                             importedSoundButton.setText(Component.literal(audio.sound().toString()));
                                                             ctx.refreshPreview();
                                                         }
                                                     }));
                                         } catch (Exception exception) {
-                                            com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
+                                            com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon audio {}", file, exception);
+                                            reportImportFailure(exception);
                                         }
                                     }).show(mui.ui.rootElement);
                         }).layout(layout -> layout.flex(1)));
