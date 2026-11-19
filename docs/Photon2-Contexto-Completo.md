@@ -4,7 +4,7 @@
 > portado, qué se arregló y por qué, cómo se verifica, cómo se distribuye, y qué queda pendiente.
 > Si alguien (Santi, Alex u otra persona o IA) retoma esto sin el historial del chat, empieza aquí.
 >
-> Actualizado: **2026-11-06** · integra el contexto del chat, la transferencia/exportación de recursos con consentimiento previo y los merges PR #9/#10. CI: `44449444574` y `44450496049` ✅ · [JAR preview](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44450489962-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar).
+> Actualizado: **2026-11-19** · integra el contexto del chat, la transferencia/exportación de recursos con consentimiento previo, los merges PR #9/#10/#11, la ronda de auditoría de la rama `arena/2db16c95-photon-2` (sección 6.5) y su cierre: regresiones de codec/ZIP, traducción `es_es` completa y gate de paridad de idiomas en CI. CI: `44449444574`, `44450496049`, `44458049882`, `44458368154`, `44460817801` ✅ · [JAR preview](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44460817801-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar).
 
 ---
 
@@ -14,7 +14,7 @@
 - El JAR distributivo (`-all.jar`) **incluye LDLib2 y KilaGraph**; LDLib 1 sigue siendo dependencia externa.
 - Ya funciona: editor visual, FX/materiales, bloom, sincronización pública de `.fxpack`, transferencia privada de `ldlib2/assets` a un jugador y exportación local de un pack compartible.
 - Se arreglaron bugs reportados por Alex: bloom lavado, materiales animados, trails a alta velocidad, shaders ausentes, y el **selector de FX** (lista congelada).
-- Estado verificado al cierre del chat: PR #9 (funcionalidad + consentimiento + guías) y PR #10 (actualización del handoff/JAR) están mergeados en `main`; merge commits `e774dec` y `1064853`. La rama Arena activa de esta nueva sesión es `arena/cd0a1dc2-photon-2`, basada en `10648539c62b2c354ca88c8939efcd4d4a9e8f99`.
+- Estado verificado al cierre del chat: PR #9 (funcionalidad + consentimiento + guías) y PR #10 (actualización del handoff/JAR) están mergeados en `main`; merge commits `e774dec` y `1064853`. Después se mergeó PR #11 (handoff completo + guías de verificación, merge `36df1b3`). La rama Arena activa de esta sesión de auditoría es `arena/2db16c95-photon-2`, basada en `36df1b3117ab83ec087857c1814a9f7a65bdfa80`; los hallazgos corregidos están en la sección 6.5.
 
 ---
 
@@ -114,9 +114,9 @@ Rutas relativas a `src/main/java/com/lowdragmc/photon/`.
 
 | Archivo | Función |
 | --- | --- |
-| `gui/editor/view/scene/SceneView.java` | Vista de escena; barra superior con toggles (bloom, efectos, luces, máscara, shape, cull, colisión, vistas) y el **control de intensidad de bloom**. |
+| `gui/editor/view/scene/SceneView.java` | Vista de escena; barra superior con toggles (bloom, efectos, luces, máscara, shape, cull, colisión, vistas) y el **control de intensidad de bloom**. El toggle de bloom y la tecla `B` escriben `FXData.bloomEnabled` del FX abierto. |
 | `gui/editor/view/scene/SceneToggleBuilder.java` | Constructor de toggles con icono/tooltip. |
-| `gui/editor/view/scene/SceneBloomIntensityControl.java` | **Nuevo**: slider `0.00`–`2.00` + lectura numérica que escribe `bloom_intensity`. |
+| `gui/editor/view/scene/SceneBloomIntensityControl.java` | Slider `0.00`–`2.00` + lectura numérica que escribe `bloomIntensity` **del FX abierto** (`FXData`; propiedad por efecto, viaja al exportar). No toca la config del cliente. |
 | `gui/editor/view/scene/FXObjectInfoView.java` | Panel flotante de información de escena (tiempo, pausa, seed, timers). |
 | `gui/editor/view/FXHierarchyView.java` | Jerarquía y menú contextual (Add FX Object / Add FX Instance…). |
 
@@ -167,7 +167,7 @@ Cientos de commits adaptando APIs NeoForge → Forge 1.20.1: NBT, modelos OBJ (l
 | **"Sigue sin funcionar el cosito de elegir partículas"** (1.ª vez) | Los buscadores (`SearchComponentConfigurator`) copiaban los candidatos **una sola vez** al construir el configurador y nunca se refrescaban → lista vacía si el panel se abrió antes de la primera carga de recursos o después de una recarga | `FXHelper.searchFX(...)` lee la lista (cacheada) **en cada búsqueda**; lo usan sub-emisores, `FXInstanceStyle.pickFx` y `IdLists` |
 | **"Lo de las partículas y la lista de fx siguen igual"** (2.ª vez) | La lista de candidatos estaba bien; el fallo era del **widget** de búsqueda de LDLib 2.2.39: al abrirse busca con el texto que el campo ya tiene, que es el nombre del valor **ya elegido**. El desplegable mostraba una sola línea (o ninguna la primera vez), y teclear **concatenaba** al nombre viejo (`nombreElegidoX`), así que no encontraba nada. LDLib lo arregló en 2.2.39.8, versión que no se puede usar aquí | `SearchComponentMixin` (nuevo): repite la búsqueda en vacío al abrir y selecciona el texto, para que la primera tecla reemplace el nombre en vez de sumarse. Arregla **todos** los selectores que usan ese widget de una sola vez. Candado: `[search-box-smoke]` |
 | Slider de bloom que "volvía" a 0.18 | La migración de defaults antiguos corría en trabajo diferido y comparaba por valor: pasar el slider por **1.0** (un default viejo) devolvía el valor a 0.18 | La migración es ahora **una sola vez**, al arrancar, antes del trabajo diferido |
-| Pedido: botón para cambiar intensidad de bloom | Solo existía en la pantalla de config | `SceneBloomIntensityControl` en la barra de escena: slider 0..2 + valor, sincronizado con la config, **sin tocar el default** |
+| Pedido: botón para cambiar intensidad de bloom | Solo existía en la pantalla de config | `SceneBloomIntensityControl` en la barra de escena: slider 0..2 + valor. **Actualización posterior:** la intensidad se rehízo como propiedad por FX (`FXData.bloomIntensity`, default 0.18) y el slider escribe esa; el `bloom_intensity` de la config quedó obsoleto y se quitó de la pantalla de config. El pase usa la intensidad más alta entre los FX con bloom activo; `enable_bloom`/`bloom_threshold`/`bloom_mip_level` siguen globales |
 
 ### 6.3 Pedido de Alex: explicar `.fxpack` y el flujo de servidor
 
@@ -186,6 +186,29 @@ Decisiones y resultado, en el orden en que se acordaron:
 7. Solicitud actual de continuidad: documentar íntegramente este contexto y preparar un prompt general para revisar el repositorio, encontrar bugs/errores y luego mejorar texturas y materiales. El prompt reutilizable está en la sección 12.
 
 **Verificación:** tres scripts locales (`verify_kila_preset_catalog.py`, `verify_kila_blend_ordinals.py`, `verify_shader_normal_safety.py`) y `git diff --check` pasaron. CI en GitHub compiló el JAR, inició servidor Forge dedicado y cliente headless con pruebas de humo; runs `44449444574` y `44450496049` terminaron exitosamente. En el sandbox no había Java local. Queda pendiente validación manual visual/multicliente.
+
+### 6.5 Ronda de auditoría 2026-11-19 (rama `arena/2db16c95-photon-2`, base `36df1b3` = PR #11)
+
+Auditoría de código (lógica, lifecycle, networking, permisos, límites/ZIP, serialización, UI, shaders, rendimiento, compatibilidad Forge) y de texturas/materiales. Hallazgos corregidos en esta rama:
+
+| Hallazgo | Ubicación | Impacto | Corrección |
+| --- | --- | --- | --- |
+| El escaneo de packs privados re-descomprimía y re-validaba todos los packs del destinatario (hasta 2 GiB) en **cada** login/respawn/cambio de dimensión/refresco, sin usar la caché de expansiones ya validadas | `network/FxPackSync.scanPrivatePacks` | Rendimiento del servidor: trabajo de fondo repetido en el pool compartido; con packs grandes podía entorpecer otras tareas | Se reutiliza `VALIDATED_PACK_EXPANSIONS` (por hash de contenido) y se memoiza el hash por `tamaño+mtime`, de modo que packs sin cambios no se re-leen ni re-descomprimen |
+| El presupuesto agregado de descompresión por manifiesto (8 GiB, documentado) se ignoraba entre packs públicos y privados: `scanPrivatePacks` recibía `expandedBudget` y no lo usaba | `network/FxPackSync.scanPrivatePacks` | Límite de seguridad/DoS: un manifiesto podía superar el trabajo de validación documentado | El presupuesto restante tras los packs públicos se aplica ahora a los privados; los packs que lo exceden se omiten con el mismo criterio que los públicos |
+| Un archivo cuyo nombre contiene `\`, `:` o caracteres de control en `ldlib2/assets` producía un ZIP que la validación rechazaba entero, con un mensaje engañoso («no valid FX») | `client/fx/fxpack/LocalFxResourceUpload.createArchive` | Exportación y envío privado podían fallar en bloque por un solo archivo con nombre raro (posible en Linux) | El empaquetado omite esos archivos (aviso en el log con la ruta) y el error final indica cuántos se omitieron; el resto del pack viaja y valida |
+| Archivos `.part` huérfanos de subidas interrumpidas por un crash del servidor quedaban en `photon/private-fxpacks/.incoming/` para siempre (hasta 512 MiB cada uno) | `network/FxPackSync` | Espacio en disco | Barrido al arrancar el servidor (nadie puede estar subiendo) y al pararlo; se registra cada borrado |
+| `EntityEffectCommand.decode` reservaba 0 bytes de cola al validar la lista de entidades, pero el paquete lleva un byte más (`replay`) | `command/EntityEffectCommand` | Endurecimiento mínimo; la comprobación de límite era más laxa de lo previsto | `EntityIdListCodec.read(buf, 1)` |
+| El lector NBT de 1.20.1 no limita la profundidad de anidado (solo bytes): un `.fx` de un pack poco fiable con miles de compuestos anidados desborda la pila al parsear/serializar y crashea el cliente; los `catch (Exception)` de los límites de carga no contenían el `StackOverflowError` | `client/fx/FXHelper.readTag`/`deserialize`, `client/fx/fxpack/FXPacks.gc` | Endurecimiento: un pack del servidor podía tirar el cliente de quien lo descarga (no ejecución de código) | `StackOverflowError` se contiene en los tres límites: la carga falla con un aviso de una línea (sin traza enorme) y el gc conserva todo en vez de barrer con marca incompleta |
+| `MaterialResource.addVanillaTextureMaterial` (sin uso) construía IDs `minecraft:textures/particle/…` inválidos (sin namespace propio) | `gui/editor/resource/MaterialResource` | Código muerto con trampa latente | Eliminado |
+| `zh_cn.json` le faltaba `photon.material.pick_texture_as_material` (usado por el selector de materiales) | `assets/photon/lang/zh_cn.json` | Texto sin traducir en la UI china | Clave añadida |
+
+Auditoría de texturas/materiales (204 recursos versionados): los 35 PNG Kila + `ui/checker` cuadran con `KilaTextures.ALL`; los 33 iconos de `textures/gui/icon` tienen todos uso; `particle/*`, `icon.png` y los modelos OBJ/shaders referenciados existen; no hay IDs con mayúsculas ni namespaces inválidos; todos los PNG son 8-bit no entrelazados; el smoke `[kila-texture-assets-smoke]` valida siluetas de alpha (esquina transparente, núcleo opaco) y `[kila-flipbook-sheets-smoke]` valida pares hoja/motion-vector de flipbooks. Sin recursos huérfanos ni faltantes. Observaciones sin cambio (no hay forma de verificar el resultado visual en este sandbox): `particle/ring.png` es 1000×1000 (no potencia de dos, 104 KB) y `particle/kila_tail.png` es 2048×2048 (598 KB) — dimensiones válidas para GL3 pero atípicas; `thaumcraft.png` (256×112) usa `blur: true` en su `.mcmeta`, que el cargador aplica.
+
+Idiomas: `en_us` 2099 claves · `zh_cn` 2099 · `es_es` **2099 — traducción completa** (los tres en paridad exacta de claves, con placeholders `%s`/`%d` verificados). El catálogo de presets Kila está completo en los tres idiomas (`verify_kila_preset_catalog.py`). La paridad se mantiene con `verify_lang_parity.py`, enganchado al workflow (paso «Verify language file parity» y el gate de rebuild de `verify_*.py`): exige el mismo juego de claves que `en_us` en cada idioma (ni faltantes ni huérfanas) y que cada placeholder de la cadena inglesa aparezca en la traducción. En esta misma tandas se borraron de `zh_cn` las 3 claves huérfanas sin uso (`photon.gui.editor.timeline.channel_mode{,.curve,.expression}`) y se añadieron las 729 claves que faltaban en `es_es` (nodos de shader graph, config de emisor, trails, colisiones, fuerzas, luces, niebla y settings de model source), con el estilo «tú» técnico del archivo y los términos shader/FX sin traducir.
+
+**Trabajo posterior a la ronda (misma rama):** (a) pruebas de regresión para los arreglos de la ronda en `FXPackDependencyRegression` — `verifyEffectCommandCodecBounds` (la lista de ids de `EntityEffectCommand` ahora se acota a `readableBytes - 1` reservando el byte `replay`; un count mentiroso debe lanzar `DecoderException` en vez de leer fuera del buffer) y `verifyUnsafeEntryNameParity` (`LocalFxResourceUpload.isSafeEntryName`, hecho package-private, acepta `ns/fx/a.fx`, `nombre-único`, `..hidden` y rechaza `\`, `:`, `..`, `.`, vacío/espacio, `//`, control — exactamente lo que `FxPackSync.isValidFxPack` rechaza como entradas ZIP; paridad export↔validación). Ambas corren bajo el marker requerido `[fxpack-stream-validation-smoke]`. (b) Traducción completa de `es_es` + verificador de paridad de idiomas (arriba). (c) **Persistencia de materiales creados en el editor** (auditoría + corrección): los materiales que uno crea viven en la biblioteca de recursos (file provider global `<gameDir>/photon/resources/global/`, escrito al instante por `addResource` y refrescado por el tick del panel) y los slots de material de un fx solo guardan una **referencia por ruta** (`ui_resource_material` → `resourcePath`). Verificado: `.fxproj` y `.fx` guardan solo referencias; `.fxpack` **sí incrusta** los materiales (`assets/photon_fx/material/<hash>.material.nbt`, referencias reescritas a `file(...)`); la conversión de proyectos Photon 1 descarta la biblioteca embebida con aviso (limitación conocida) y desempaqueta las referencias `photon_fx` a `<project>_resources/`. **Corrección**: `FXProject` ahora incrusta una instantánea de cada material de usuario referenciado (siguiendo cadenas `UIResourceMaterial`, tope 16 saltos) en el `.fxproj` (`data.libraryMaterials`) y, al cargar, **restaura** los que ya no resuelvan (la biblioteca local siempre gana; si la ruta guardada no es escribible aquí — otro juego/máquina —, se recrea en la biblioteca global local y las referencias del fx se reapuntan antes de deserializar). `FileResourceProvider.addResource` escribe el archivo al instante (verificado en el bytecode de LDLib2), así que la creación persiste sin depender del tick del panel. `[material-persistence-smoke]` (`MaterialPersistenceRegression`, enganchada al editor smoke y al CI): crea un material → llega a disco y hace round-trip → un proyecto que lo referencia lo incrusta → borrada la copia de la biblioteca, la carga del proyecto lo restaura y el slot resuelve. (d) Auditoría de materiales existentes con evidencia (decode PNG programático): `ring.png` 1000×1000 NPOT — forma puramente en alfa sobre blanco (49% transparente, margen ~38 px), sano; `thaumcraft.png` 256×112 con `blur: true` y alfa disperso, sano; `kila_tail.png` 2048×2048 **opaca con máscara de intensidad en RGB** (fondo negro 68%, centro gris) — pensada para blending **aditivo**; con ALPHA dibujaría un rectángulo negro (nota para artistas, sin cambio de píxeles). Sin texturas rotas ni huérfanas; ningún píxel modificado.
+
+**Verificación de esta ronda:** los cuatro scripts Python (`verify_kila_preset_catalog.py`, `verify_kila_blend_ordinals.py`, `verify_shader_normal_safety.py`, `verify_lang_parity.py`) y `git diff --check` pasaron en local; sin Java en el sandbox, GitHub Actions compiló el JAR y ejecutó el smoke completo (servidor dedicado + cliente headless, ~25 greps): runs [`44458049882`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458049882) y [`44458368154`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458368154) ✅ (PR #12). El commit de regresiones y la paridad de idiomas se cierran en los runs siguientes de la misma rama. Nada de esto sustituye la prueba multicliente manual, que sigue pendiente.
 
 ---
 
@@ -302,9 +325,10 @@ PR #9 integró sincronización FX, envío/exportación LDLib2, consentimiento y 
 
 | Rama | Estado |
 | --- | --- |
-| `main` | Incluye PR #9 y #10; base actual `10648539`. |
-| `arena/cd0a1dc2-photon-2` | Rama Arena activa de esta sesión, branched desde `10648539c62b2c354ca88c8939efcd4d4a9e8f99`; usarla para este trabajo, sin cambiar de rama. |
-| `arena/747b04a3-photon-2` | Rama de la sesión anterior que produjo PR #9/#10; ya integrada. |
+| `main` | Incluye PR #9, #10 y #11; base actual `36df1b31`. |
+| `arena/2db16c95-photon-2` | Rama Arena activa de esta sesión (auditoría), branched desde `36df1b3117ab83ec087857c1814a9f7a65bdfa80`; usarla para este trabajo, sin cambiar de rama. |
+| `arena/cd0a1dc2-photon-2` | Rama de la sesión anterior que produjo PR #11; ya integrada. |
+| `arena/747b04a3-photon-2` | Rama de la sesión que produjo PR #9/#10; ya integrada. |
 
 ### 10.2 Historial de limpieza de ramas
 
@@ -338,7 +362,18 @@ La tabla siguiente es el registro de la limpieza anterior al port y no describe 
 
 ### Auditoría y mejoras solicitadas
 
-Después de leer el documento completo y recorrer el repo, comenzar una auditoría activa: buscar errores y bugs (lógica, estados, networking, límites, seguridad de ZIP/rutas, permisos, lifecycle, rendimiento, shaders, serialización y compatibilidad Forge/Java), corregir hallazgos reproducibles y añadir pruebas apropiadas. Luego revisar texturas/materiales: recursos faltantes/no referenciados, IDs/casing, formatos y dimensiones, alpha/UV/animaciones, shader-uniform/material bindings, presets y calidad visual dentro del juego/editor. Mejorar los recursos o sus valores cuando haya evidencia visual/técnica; evitar reemplazos masivos o degradar assets existentes sin comparación/validación. La sección 12 contiene el prompt general reutilizable.
+**Hecho en la ronda 2026-11-19** (detalle en la sección 6.5): recorrido de código, recursos, shaders y red; 8 hallazgos corregidos con cambios acotados (rendimiento del escaneo de packs privados, presupuesto agregado de descompresión, nombres de archivo inseguros en la exportación LDLib2, temporales huérfanos, endurecimiento de decodificación de paquetes y de profundidad de NBT, código muerto y una clave de idioma); auditoría de texturas/materiales sin hallazgos que corregir (todo referenciado, sin huérfanos, formatos válidos). Los verificadores Python y `git diff --check` pasan en local; GitHub Actions compiló y pasó el smoke completo (servidor dedicado + cliente headless) en los runs [`44458049882`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458049882) y [`44458368154`](https://github.com/Santi-PdR/Photon-2/actions/runs/44458368154) ✅ (PR #12; no hay Java en el sandbox).
+
+Pendientes reales tras esa ronda (actualizado con el trabajo posterior, ver §6.5):
+
+1. **Pruebas manuales multicliente** (siguen sin hacerse; ver arriba) — no presentar como verificado el envío privado, la exportación ni el replay hasta probarlos.
+2. ~~**Completar `es_es.json`**~~ **HECHO**: los tres idiomas quedan en paridad exacta (2099 claves) y `verify_lang_parity.py` la mantiene en CI. Las 3 claves huérfanas de `zh_cn` (`photon.gui.editor.timeline.channel_mode*`) también se borraron.
+3. **Verificación visual en juego** de las observaciones de assets (§6.5): `particle/ring.png` 1000×1000, `particle/kila_tail.png` 2048×2048, `thaumcraft.png` con `blur: true`. No cambiar sin comparar en pantalla.
+4. Limpieza menor pendiente: claves `photon.configuration.bloom_intensity*` sin uso en los tres idiomas (quitarlas solo si se confirma que nada las lee).
+5. (b) de la ronda, sin implementar: watchdog/timeout de validación de packs en `ClientFxPackSync` (el servidor corta a los 10 min, pero un cliente puede dejar un validador colgado). Spots sin re-auditar: `EffectSectionCommand` y `FXProjectConverter` (líneas ~140-264 — **auditado en la tandas de materiales**: `Unpacker` correcto y con guarda de ciclos; la biblioteca embebida de Photon 1 se descarta con aviso, limitación conocida). Huecos de smoke: replay tardío de FX en loop y el flujo de subida `LocalFxResourceUpload` (flujos manuales).
+6. Nota de materiales (sin cambio de píxeles): `kila_tail.png` es una máscara de intensidad aditiva (fondo negro, sin alfa) — usarla con blend ALPHA dibuja un rectángulo negro; documentar en las guías de artistas si se publican. La verificación **visual** en juego de `ring.png`/`kila_tail.png`/`thaumcraft.png` sigue pendiente.
+
+La sección 12 contiene el prompt general reutilizable para la siguiente ronda.
 
 ---
 
