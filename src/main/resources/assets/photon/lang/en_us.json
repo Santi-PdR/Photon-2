@@ -1783,6 +1783,7 @@
   "photon.blend_preset.opaque": "Opaque",
   "photon.blend_preset.custom": "Custom",
   "photon.material.pick_loaded_texture": "Loaded textures",
+  "photon.material.pick_texture_as_material": "Use a PNG texture as material",
   "photon.material.pick_loaded_texture.empty": "No loaded textures besides vanilla",
   "photon.material.pick_loaded_texture.limit": "Showing the first %s results; narrow the search to find more.",
   "photon.material.convert_to_kila": "Convert to Kila Material",

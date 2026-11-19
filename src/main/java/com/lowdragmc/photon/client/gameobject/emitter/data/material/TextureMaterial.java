@@ -269,7 +269,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
      * Textures already in the resource manager (Photon, other mods, mounted FX packs) so an author
      * can reuse one another effect already draws, without copying the file into the workspace.
      */
-    private static void openLoadedTexturePicker(com.lowdragmc.lowdraglib2.gui.ui.UIElement host,
+    public static void openLoadedTexturePicker(com.lowdragmc.lowdraglib2.gui.ui.UIElement host,
                                                 Consumer<ResourceLocation> onPick) {
         var dialog = new Dialog().windowMode(
                 host.getPositionX() + 20, host.getPositionY() + 20, 280, 260);

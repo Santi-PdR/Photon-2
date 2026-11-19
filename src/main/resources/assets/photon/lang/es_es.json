@@ -783,6 +783,7 @@
   "photon.material.export_shader_graph.no_target": "No hay una ubicación para guardar el graph y su material: abre un proyecto o agrega a la biblioteca una carpeta con permisos de escritura.",
   "photon.material.export_shader_graph.skipped": "Se omitieron estas funciones, porque un shader graph no puede reproducirlas como Kila:",
   "photon.material.pick_loaded_texture": "Texturas cargadas",
+  "photon.material.pick_texture_as_material": "Usar un PNG como material",
   "photon.material.pick_loaded_texture.empty": "No hay texturas cargadas aparte de las de vanilla",
   "photon.material.pick_loaded_texture.limit": "Se muestran los primeros %s resultados; afina la búsqueda para encontrar más.",
   "photon.material_requirements.fix": "Corregir",
