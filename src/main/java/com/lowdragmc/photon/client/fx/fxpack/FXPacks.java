@@ -20,6 +20,7 @@ import com.lowdragmc.lowdraglib2.editor.resource.FilePath;
 import com.lowdragmc.lowdraglib2.editor.resource.IResourcePath;
 import com.lowdragmc.photon.client.fx.FX;
 import com.lowdragmc.photon.client.fx.FXHelper;
+import com.lowdragmc.photon.client.util.PhotonPaths;
 import com.lowdragmc.photon.core.mixins.accessor.FilePackResourcesAccessor;
 import com.lowdragmc.photon.core.mixins.accessor.SharedZipFileAccessAccessor;
 import net.minecraft.nbt.CompoundTag;
@@ -77,6 +78,9 @@ import java.util.function.Consumer;
 @OnlyIn(Dist.CLIENT)
 public final class FXPacks {
     public static final String SUFFIX = ".fxpack";
+    private static final int MAX_PACK_PATHS_TO_INDEX = 20_000;
+    private static final int MAX_FX_DEFINITIONS_TO_LIST = 10_000;
+    private static final int MAX_PACK_ASSETS_TO_SWEEP = 20_000;
     private static volatile Set<String> activeServerPacks = Set.of();
 
     private FXPacks() {
@@ -224,12 +228,27 @@ public final class FXPacks {
 
     /** Copy a mod-shipped {@code .fxpack} out of the jar, content-addressed so it re-extracts only on change. */
     private static File extractToCache(String modId, String name, Path source) throws IOException {
-        var bytes = Files.readAllBytes(source);
+        var hash = fnv1a64(source);
         var target = new File(getModCacheDir(), "%s-%s-%s%s".formatted(modId,
-                name.substring(0, name.length() - SUFFIX.length()), Long.toHexString(fnv1a64(bytes)), SUFFIX));
-        if (!target.isFile()) {
-            target.getParentFile().mkdirs();
-            Files.write(target.toPath(), bytes);
+                name.substring(0, name.length() - SUFFIX.length()), Long.toHexString(hash), SUFFIX));
+        var targetPath = target.toPath();
+        if (!target.isFile() || fnv1a64(targetPath) != hash) {
+            Files.createDirectories(targetPath.getParent());
+            var temporary = targetPath.resolveSibling(targetPath.getFileName() + ".tmp");
+            try {
+                Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+                if (fnv1a64(temporary) != hash) {
+                    throw new IOException("FX pack changed while it was copied from " + source);
+                }
+                try {
+                    Files.move(temporary, targetPath, StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException ignored) {
+                    Files.move(temporary, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(temporary);
+            }
         }
         return target;
     }
@@ -251,6 +270,22 @@ public final class FXPacks {
         for (byte b : bytes) {
             hash ^= b & 0xff;
             hash *= 0x100000001b3L;
+        }
+        return hash;
+    }
+
+    /** Stream large mod-bundled archives; resource reload must not allocate their full size on the heap. */
+    private static long fnv1a64(Path path) throws IOException {
+        long hash = 0xcbf29ce484222325L;
+        try (var input = Files.newInputStream(path)) {
+            var buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                for (int i = 0; i < count; i++) {
+                    hash ^= buffer[i] & 0xff;
+                    hash *= 0x100000001b3L;
+                }
+            }
         }
         return hash;
     }
@@ -356,7 +391,7 @@ public final class FXPacks {
     public static List<ResourceLocation> listFx(File fxpackFile) throws IOException {
         var result = new ArrayList<ResourceLocation>();
         try (var zip = FileSystems.newFileSystem(fxpackFile.toPath())) {
-            for (var entry : listFxEntries(zip)) {
+            for (var entry : listFxEntries(zip).entries()) {
                 result.add(entry.id());
             }
         }
@@ -375,8 +410,16 @@ public final class FXPacks {
         FXHelper.invalidate(List.of(fxId));
     }
 
-    /** Where a resource lives inside a pack's zip file system. */
+    /** Whether a resource id can be mapped below {@code assets/<namespace>} without escaping that pack tree. */
+    public static boolean isSafePackLocation(ResourceLocation location) {
+        return PhotonPaths.isSafeAssetLocation(location);
+    }
+
+    /** Where a resource lives inside a pack's zip file system; reject IDs that could leave the assets tree. */
     public static Path entryPath(FileSystem zip, ResourceLocation location) {
+        if (!isSafePackLocation(location)) {
+            throw new IllegalArgumentException("Unsafe resource location for an FX pack: " + location);
+        }
         return zip.getPath("assets", location.getNamespace(), location.getPath());
     }
 
@@ -440,25 +483,49 @@ public final class FXPacks {
     private record FxEntry(ResourceLocation id, Path path) {
     }
 
-    private static List<FxEntry> listFxEntries(FileSystem zip) throws IOException {
+    private record FxEntryListing(List<FxEntry> entries, boolean truncated) {
+    }
+
+    private static FxEntryListing listFxEntries(FileSystem zip) throws IOException {
         var result = new ArrayList<FxEntry>();
         var assets = zip.getPath("assets");
-        if (!Files.isDirectory(assets)) return result;
+        if (!Files.isDirectory(assets)) return new FxEntryListing(List.of(), false);
+        int inspected = 0;
+        boolean truncated = false;
         try (var namespaces = Files.list(assets)) {
-            for (var namespaceDir : namespaces.toList()) {
+            var namespaceIterator = namespaces.iterator();
+            while (namespaceIterator.hasNext()) {
+                if (inspected >= MAX_PACK_PATHS_TO_INDEX) {
+                    truncated = true;
+                    break;
+                }
+                var namespaceDir = namespaceIterator.next();
+                inspected++;
                 var namespace = stripSlash(namespaceDir.getFileName().toString());
                 var fxDir = namespaceDir.resolve("fx");
                 if (!Files.isDirectory(fxDir)) continue;
                 try (var walk = Files.walk(fxDir)) {
-                    for (var path : walk.filter(p -> p.toString().endsWith(FX.SUFFIX)).toList()) {
+                    var paths = walk.iterator();
+                    while (paths.hasNext()) {
+                        if (inspected >= MAX_PACK_PATHS_TO_INDEX || result.size() >= MAX_FX_DEFINITIONS_TO_LIST) {
+                            truncated = true;
+                            break;
+                        }
+                        var path = paths.next();
+                        inspected++;
+                        if (!Files.isRegularFile(path) || !path.toString().endsWith(FX.SUFFIX)) continue;
                         var name = stripSlash(fxDir.relativize(path).toString());
-                        result.add(new FxEntry(new ResourceLocation(namespace,
-                                name.substring(0, name.length() - FX.SUFFIX.length())), path));
+                        var id = ResourceLocation.tryParse(namespace + ":"
+                                + name.substring(0, name.length() - FX.SUFFIX.length()));
+                        if (isSafePackLocation(id)) result.add(new FxEntry(id, path));
                     }
                 }
+                if (truncated) break;
             }
         }
-        return result;
+        if (truncated) Photon.LOGGER.warn("fxpack: stopped indexing {} after {} paths / {} FX definitions",
+                zip, inspected, result.size());
+        return new FxEntryListing(List.copyOf(result), truncated);
     }
 
     private static String stripSlash(String name) {
@@ -479,9 +546,14 @@ public final class FXPacks {
      * here, or its files are swept immediately after being written.
      */
     static void gc(FileSystem zip) throws IOException {
+        var entries = listFxEntries(zip);
+        if (entries.truncated()) {
+            Photon.LOGGER.warn("fxpack gc: skipped sweep because FX indexing was truncated");
+            return; // sweeping from a partial effect list could delete resources still in use
+        }
         var referenced = new HashSet<String>(); // normalized "assets/<ns>/<path>" strings
         var visited = new HashSet<String>();
-        for (var entry : listFxEntries(zip)) {
+        for (var entry : entries.entries()) {
             referenced.add(entryKey(entry.id().getNamespace(), "fx/" + entry.id().getPath() + FX.SUFFIX));
             try (var in = Files.newInputStream(entry.path())) {
                 mark(NbtIo.readCompressed(in), zip, referenced, visited);
@@ -492,14 +564,25 @@ public final class FXPacks {
         }
         var assets = zip.getPath("assets");
         if (!Files.isDirectory(assets)) return;
+        List<Path> assetFiles;
         try (var walk = Files.walk(assets)) {
-            for (var path : walk.filter(Files::isRegularFile).toList()) {
-                var key = stripSlash(path.toString()).replaceFirst("^/", "");
-                if (!referenced.contains(key)) {
-                    Files.delete(path);
-                    Photon.LOGGER.info("fxpack gc: removed orphaned {}", key);
-                }
-            }
+            assetFiles = walk.filter(Files::isRegularFile)
+                    .limit(MAX_PACK_ASSETS_TO_SWEEP + 1L).toList();
+        }
+        if (assetFiles.size() > MAX_PACK_ASSETS_TO_SWEEP) {
+            Photon.LOGGER.warn("fxpack gc: skipped sweep after exceeding the {}-asset inspection limit",
+                    MAX_PACK_ASSETS_TO_SWEEP);
+            return; // do not sweep from a truncated asset listing
+        }
+        var orphaned = new ArrayList<Path>();
+        for (var path : assetFiles) {
+            var key = stripSlash(path.toString()).replaceFirst("^/", "");
+            if (!referenced.contains(key)) orphaned.add(path);
+        }
+        for (var path : orphaned) {
+            Files.delete(path);
+            Photon.LOGGER.info("fxpack gc: removed orphaned {}",
+                    stripSlash(path.toString()).replaceFirst("^/", ""));
         }
     }
 
@@ -508,6 +591,9 @@ public final class FXPacks {
     }
 
     private static String entryKey(ResourceLocation location) {
+        if (!isSafePackLocation(location)) {
+            throw new IllegalArgumentException("Unsafe resource location in fxpack: " + location);
+        }
         return entryKey(location.getNamespace(), location.getPath());
     }
 
@@ -581,17 +667,19 @@ public final class FXPacks {
             if (!Files.isRegularFile(path)) return;
             try (var in = new DataInputStream(Files.newInputStream(path))) {
                 var nested = NbtIo.read(in);
-                if (nested != null) {
-                    mark(nested, zip, referenced, visited);
-                }
+                if (nested == null) throw new IOException("Library file contains no NBT root");
+                mark(nested, zip, referenced, visited);
             } catch (IOException e) {
-                Photon.LOGGER.warn("fxpack gc: failed to read library file {}", key, e);
+                throw new IllegalStateException("Cannot safely trace library dependencies " + key, e);
             }
         }
     }
 
     private static void markCoreShader(ResourceLocation shaderId, FileSystem zip, Set<String> referenced,
                                        Set<String> visited) {
+        if (!isSafePackLocation(shaderId)) {
+            throw new IllegalArgumentException("Unsafe shader resource location in fxpack: " + shaderId);
+        }
         var jsonKey = entryKey(shaderId.getNamespace(), "shaders/core/" + shaderId.getPath() + ".json");
         referenced.add(jsonKey);
         var jsonPath = zip.getPath(jsonKey);
@@ -602,6 +690,9 @@ public final class FXPacks {
                 if (!json.has(stage[0])) continue;
                 var programId = ResourceLocation.tryParse(json.get(stage[0]).getAsString());
                 if (programId != null) {
+                    if (!isSafePackLocation(programId)) {
+                        throw new IllegalArgumentException("Unsafe shader stage location in fxpack: " + programId);
+                    }
                     var stageLocation = new ResourceLocation(programId.getNamespace(),
                             "shaders/core/" + programId.getPath() + stage[1]);
                     var path = stageLocation.getPath();
@@ -609,7 +700,7 @@ public final class FXPacks {
                 }
             }
         } catch (Exception e) {
-            Photon.LOGGER.warn("fxpack gc: failed to parse shader json {}", jsonKey, e);
+            throw new IllegalStateException("Cannot safely trace shader dependencies " + jsonKey, e);
         }
     }
 

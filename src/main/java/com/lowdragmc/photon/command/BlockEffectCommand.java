@@ -40,6 +40,8 @@ public class BlockEffectCommand extends EffectCommand {
     protected BlockPos pos;
     @Setter
     protected boolean checkState;
+    protected ResourceLocation dimension;
+    protected boolean replay;
 
     public BlockEffectCommand() {
         super();
@@ -85,6 +87,7 @@ public class BlockEffectCommand extends EffectCommand {
         var command = new BlockEffectCommand();
         command.setLocation(ResourceLocationArgument.getId(context, "location"));
         command.setPos(BlockPosArgument.getLoadedBlockPos(context, "pos"));
+        command.dimension = context.getSource().getLevel().dimension().location();
         if (offset) {
             command.setOffset(Vec3Argument.getVec3(context, "offset"));
         }
@@ -106,6 +109,7 @@ public class BlockEffectCommand extends EffectCommand {
         if (checkState) {
             command.setCheckState(BoolArgumentType.getBool(context, "check state"));
         }
+        ActiveWorldEffects.remember(command);
         PhotonNetworking.CHANNEL.send(PacketDistributor.TRACKING_CHUNK.with(() -> context.getSource().getLevel().getChunkAt(command.pos)), command);
         return Command.SINGLE_SUCCESS;
     }
@@ -113,15 +117,19 @@ public class BlockEffectCommand extends EffectCommand {
     @Override
     public void encode(FriendlyByteBuf buf) {
         super.encode(buf);
+        buf.writeResourceLocation(dimension);
         buf.writeBlockPos(pos);
         buf.writeBoolean(checkState);
+        buf.writeBoolean(replay);
     }
 
     @Override
     public void decode(FriendlyByteBuf buf) {
         super.decode(buf);
+        dimension = buf.readResourceLocation();
         pos = buf.readBlockPos();
         checkState = buf.readBoolean();
+        replay = buf.readBoolean();
     }
 
     public static BlockEffectCommand decodePacket(FriendlyByteBuf buf) {
@@ -140,9 +148,14 @@ public class BlockEffectCommand extends EffectCommand {
     private static class Client {
         public static void execute(BlockEffectCommand packet) {
             var level = Minecraft.getInstance().level;
+            Photon.LOGGER.info("[fx-diagnostic] block playback packet fx={} position={}", packet.location, packet.pos);
+            if (level == null || !level.dimension().location().equals(packet.dimension) || !level.isLoaded(packet.pos)) {
+                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "block-packet", "Client level or target chunk is unavailable", null, null);
+                return;
+            }
             if (level != null && level.isLoaded(packet.pos)) {
                 var fx = FXHelper.getFX(packet.location);
-                if (fx != null) {
+                if (fx != null && (!packet.replay || com.lowdragmc.photon.client.fx.FXLooping.hasLoopingContent(fx))) {
                     var effect = new BlockEffectExecutor(fx, level, packet.pos);
                     var offset = packet.offset;
                     var rotation = packet.rotation;
@@ -154,7 +167,12 @@ public class BlockEffectCommand extends EffectCommand {
                     effect.setForcedDeath(packet.forcedDeath);
                     effect.setAllowMulti(packet.allowMulti);
                     effect.setCheckState(packet.checkState);
-                    effect.start();
+                    try {
+                        effect.start();
+                    } catch (RuntimeException error) {
+                        com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "block-start", "Playback start threw an exception", null, error);
+                        throw error;
+                    }
                 }
             }
         }

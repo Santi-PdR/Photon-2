@@ -17,7 +17,8 @@ vec3 octDecode(vec2 uv) {
     vec3 n = vec3(f, 1.0 - abs(f.x) - abs(f.y));
     float t = max(-n.z, 0.0);
     n.xy += vec2(n.x >= 0.0 ? -t : t, n.y >= 0.0 ? -t : t);
-    return normalize(n);
+    float lengthSquared = dot(n, n);
+    return lengthSquared > 1e-16 && lengthSquared < 1e30 ? n * inversesqrt(lengthSquared) : vec3(0.0, 0.0, 1.0);
 }
 
 void main() {

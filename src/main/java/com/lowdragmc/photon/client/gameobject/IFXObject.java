@@ -48,7 +48,58 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
 
     @Nullable
     static IFXObject deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null);
+        var result = CODEC.parse(NbtOps.INSTANCE, fixLegacyBlendNames(fixOldIdentityRotation(
+                com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(tag))));
+        result.error().ifPresent(error -> com.lowdragmc.photon.Photon.LOGGER.warn(
+                "[fx-diagnostic] could not decode FX object type={}: {}",
+                tag instanceof CompoundTag compound ? compound.getString("type") : "unknown", error.message()));
+        return result.result().orElse(null);
+    }
+
+    /** Previously converted objects may still contain Photon 1 blend names. Repair a copy at load,
+     * including nested trail/material data; never modify the source file. */
+    private static Tag fixLegacyBlendNames(Tag tag) {
+        var copy = tag.copy();
+        return normalizeLegacyBlendNames(copy) ? copy : tag;
+    }
+
+    private static boolean normalizeLegacyBlendNames(Tag tag) {
+        boolean changed = false;
+        if (tag instanceof CompoundTag compound) {
+            if (compound.contains("blendMode", Tag.TAG_COMPOUND)) {
+                var blend = compound.getCompound("blendMode");
+                switch (blend.getString("blendFunc")) {
+                    case "sub" -> { blend.putString("blendFunc", "SUB"); changed = true; }
+                    case "REVERSE_sub" -> { blend.putString("blendFunc", "REVERSE_SUB"); changed = true; }
+                }
+            }
+            for (var key : compound.getAllKeys()) changed |= normalizeLegacyBlendNames(compound.get(key));
+        } else if (tag instanceof net.minecraft.nbt.ListTag list) {
+            for (var entry : list) changed |= normalizeLegacyBlendNames(entry);
+        }
+        return changed;
+    }
+
+    /**
+     * An earlier Photon 1 converter saved an absent rotation as [0,0,0] rather than the four-component
+     * identity quaternion. Those already-converted files are marked current, so the versioned datafixer
+     * cannot repair them. Fix only that exact identity shape on a copy, at the common object decoder used
+     * by effects, nested effects and projects; never rewrite the author's file or guess nonzero rotations.
+     */
+    private static Tag fixOldIdentityRotation(Tag tag) {
+        if (!(tag instanceof CompoundTag wrapper) || !wrapper.contains("data", Tag.TAG_COMPOUND)) return tag;
+        var data = wrapper.getCompound("data");
+        if (!data.contains("transform", Tag.TAG_COMPOUND)) return tag;
+        var transform = data.getCompound("transform");
+        if (!transform.contains("localRotation", Tag.TAG_LIST)) return tag;
+        var rotation = transform.getList("localRotation", Tag.TAG_FLOAT);
+        if (rotation.size() != 3 || rotation.getFloat(0) != 0f || rotation.getFloat(1) != 0f
+                || rotation.getFloat(2) != 0f) return tag;
+        var fixed = wrapper.copy();
+        var quaternion = rotation.copy();
+        quaternion.add(net.minecraft.nbt.FloatTag.valueOf(1f));
+        fixed.getCompound("data").getCompound("transform").put("localRotation", quaternion);
+        return fixed;
     }
 
     default IGuiTexture getIcon() {
@@ -143,7 +194,7 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
     boolean isSelfActive();
 
     /** This node's own playback-speed multiplier (timeline-driven by the speed track, not persisted,
-     *  default 1). Clamped {@code >=0} when composed; {@code 0} freezes the node. */
+     *  default 1). Non-finite input resets to 1; composed speed is bounded to {@code 0..16}. */
     void setSelfTimeScale(float timeScale);
 
     float getSelfTimeScale();
@@ -154,10 +205,10 @@ public interface IFXObject extends ISceneObject, IPersistedSerializable, IConfig
      * {@link #isActive()}/{@link #isVisible()}.
      */
     default float timeScale() {
-        var self = Math.max(0, getSelfTimeScale());
+        var self = FXObject.sanitizeTimeScale(getSelfTimeScale());
         var parent = transform().parent();
         if (parent != null && parent.sceneObject() instanceof IFXObject ifxObject) {
-            return self * ifxObject.timeScale();
+            return FXObject.sanitizeTimeScale(self * ifxObject.timeScale());
         }
         return self;
     }

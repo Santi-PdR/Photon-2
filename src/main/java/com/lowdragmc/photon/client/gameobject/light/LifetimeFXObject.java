@@ -34,6 +34,11 @@ public abstract class LifetimeFXObject extends FXObject {
 
     protected abstract boolean looping();
 
+    /** The authored/runtime loop state, exposed for late-join replay filtering. */
+    public final boolean isLoopingEffect() {
+        return looping();
+    }
+
     protected abstract void attach(Level level);
 
     protected abstract void detach(Level level);
@@ -95,6 +100,15 @@ public abstract class LifetimeFXObject extends FXObject {
     @Override
     public boolean isPlaying() {
         return isRunning() || super.isPlaying();
+    }
+
+    /**
+     * A draining clip keeps a light or fog volume on until its lifetime ends, so it fades instead of
+     * popping out the moment the clip stops covering it.
+     */
+    @Override
+    public boolean hasVisibleRemnants() {
+        return isRunning() || super.hasVisibleRemnants();
     }
 
     /** Started, running, shown, and not wiped along with its FX. */

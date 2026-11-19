@@ -41,7 +41,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     public record GltfKey(ResourceLocation location, boolean flipV) {
     }
 
-    private record FileStamp(File file, long lastModified) {
+    private record FileStamp(File file, long lastModified, long size) {
     }
 
     private final ConcurrentHashMap<Object, PhotonMesh> cache = new ConcurrentHashMap<>();
@@ -97,7 +97,7 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     public void trackFile(Object key, File file) {
         var stamps = fileStamps.computeIfAbsent(key, k -> ConcurrentHashMap.newKeySet());
         stamps.removeIf(stamp -> stamp.file.equals(file));
-        stamps.add(new FileStamp(file, file.lastModified()));
+        stamps.add(new FileStamp(file, file.lastModified(), file.length()));
     }
 
     /**
@@ -105,11 +105,32 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
      * so a file caught half-written is reloaded once it is complete.
      */
     public void trackAssetFile(Object key, ResourceLocation location) {
-        var relative = location.getNamespace() + "/" + location.getPath();
-        var photonFile = new File(PhotonPaths.getAssetsDir(), relative);
-        if (photonFile.isFile()) trackFile(key, photonFile);
-        var legacyFile = new File(LDLib2.getAssetsDir(), relative);
-        if (legacyFile.isFile()) trackFile(key, legacyFile);
+        if (!PhotonPaths.isSafeAssetLocation(location)) return;
+        var relative = java.nio.file.Path.of(location.getNamespace()).resolve(location.getPath());
+        trackAssetFile(key, PhotonPaths.getAssetsDir().toPath(), relative);
+        trackAssetFile(key, LDLib2.getAssetsDir().toPath(), relative);
+    }
+
+    private void trackAssetFile(Object key, java.nio.file.Path root, java.nio.file.Path relative) {
+        var normalizedRoot = root.toAbsolutePath().normalize();
+        var candidate = normalizedRoot.resolve(relative).normalize();
+        if (!candidate.startsWith(normalizedRoot)) return;
+        try {
+            var canonicalRoot = normalizedRoot.toRealPath();
+            if (java.nio.file.Files.isRegularFile(candidate)) {
+                var canonicalCandidate = candidate.toRealPath();
+                if (canonicalCandidate.startsWith(canonicalRoot)) trackFile(key, canonicalCandidate.toFile());
+                return;
+            }
+            // Track a missing asset too: creating the workspace copy later should invalidate a cached
+            // EMPTY mesh without requiring a resource-pack reload. Verify its nearest existing parent
+            // still belongs to the configured root before watching the path.
+            var ancestor = candidate.getParent();
+            while (ancestor != null && !java.nio.file.Files.exists(ancestor)) ancestor = ancestor.getParent();
+            if (ancestor != null && ancestor.toRealPath().startsWith(canonicalRoot)) trackFile(key, candidate.toFile());
+        } catch (java.io.IOException | SecurityException ignored) {
+            // An inaccessible editor copy is not a trackable mesh dependency.
+        }
     }
 
     /** {@code key} was built from {@code dependency}, so dropping the dependency drops it too. */
@@ -143,7 +164,8 @@ public final class PhotonMeshCache implements ResourceManagerReloadListener {
     /** Invalidate every entry whose tracked disk file changed (or vanished) since it was loaded. */
     public void pollFileChanges() {
         for (var entry : fileStamps.entrySet()) {
-            if (entry.getValue().stream().anyMatch(stamp -> stamp.file.lastModified() != stamp.lastModified)) {
+            if (entry.getValue().stream().anyMatch(stamp -> stamp.file.lastModified() != stamp.lastModified
+                    || stamp.file.length() != stamp.size)) {
                 invalidate(entry.getKey());
             }
         }

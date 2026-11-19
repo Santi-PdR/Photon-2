@@ -7,12 +7,27 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /** Exercises the same dependency traversal that runs after each fxpack rewrite. */
 public final class FXPackDependencyRegression {
     private FXPackDependencyRegression() {}
 
     public static void verify() throws Exception {
+        verifySyncPacketTokens();
+        var traversalId = FXPackExporter.fxId("../unsafe", "../../../../pack.mcmeta");
+        var rawTraversalId = new net.minecraft.resources.ResourceLocation("test", "../../pack.mcmeta");
+        var fxDirectory = Path.of("assets").resolve(traversalId.getNamespace()).resolve("fx").normalize();
+        var fxEntry = fxDirectory.resolve(traversalId.getPath() + ".fx").normalize();
+        if (traversalId.getNamespace().contains("/") || traversalId.getNamespace().equals(".")
+                || traversalId.getNamespace().equals("..") || !fxEntry.startsWith(fxDirectory)
+                || FXPacks.isSafePackLocation(rawTraversalId)
+                || !FXPacks.isSafePackLocation(FXPackExporter.fxId("Example-Pack", "spells/fire blast"))
+                || !FXPackExporter.fxId("Example-Pack", "spells/fire blast").toString()
+                .equals("example-pack:spells/fire_blast")) {
+            throw new IllegalStateException("FX pack export ids were not safely sanitized: " + traversalId);
+        }
         var json = "{\"buffers\":[{\"uri\":\"../buffers/mesh.bin\"}]}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         int padded = (json.length + 3) & ~3;
         var glb = java.nio.ByteBuffer.allocate(20 + padded).order(java.nio.ByteOrder.LITTLE_ENDIAN);
@@ -23,8 +38,16 @@ public final class FXPackDependencyRegression {
             throw new IllegalStateException("GLB external buffer reference was not resolved: " + glbRefs);
         var directory = Files.createTempDirectory("photon-pack-deps-");
         var archive = directory.resolve("test.fxpack");
+        var unsafeArchive = directory.resolve("unsafe.fxpack");
         try {
             try (var zip = FileSystems.newFileSystem(java.net.URI.create("jar:" + archive.toUri()), Map.of("create", "true"))) {
+                boolean rejectedTraversal = false;
+                try {
+                    FXPacks.entryPath(zip, rawTraversalId);
+                } catch (IllegalArgumentException expected) {
+                    rejectedTraversal = true;
+                }
+                if (!rejectedTraversal) throw new IllegalStateException("FX pack path accepted a traversal resource id");
                 var fx = zip.getPath("assets/test/fx/effect.fx");
                 Files.createDirectories(fx.getParent());
                 var root = new CompoundTag();
@@ -68,10 +91,103 @@ public final class FXPackDependencyRegression {
                 }
                 if (Files.exists(zip.getPath("assets/test/unused.bin")))
                     throw new IllegalStateException("FX pack GC retained an unrelated file");
+                var shaderJson = zip.getPath("assets/test/shaders/core/ci/example.json");
+                put(zip.getPath("assets/test/unused.bin"), "keep if marking fails");
+                Files.writeString(shaderJson, "{malformed shader json");
+                FXPacks.gc(zip);
+                if (!Files.exists(zip.getPath("assets/test/unused.bin"))) {
+                    throw new IllegalStateException("FX pack GC swept files after shader dependency tracing failed");
+                }
+                // Simulate a hand-built pack entry with an invalid resource path. Listing should skip it,
+                // not throw while opening the pack contents dialog.
+                put(zip.getPath("assets/test/fx/bad name.fx"), "not an effect");
+            }
+            var listed = FXPacks.listFx(archive.toFile());
+            if (!listed.equals(java.util.List.of(new net.minecraft.resources.ResourceLocation("test", "effect")))) {
+                throw new IllegalStateException("FX pack listing did not filter invalid resource ids: " + listed);
+            }
+            var expandedBytes = com.lowdragmc.photon.network.FxPackSync.expandedFxPackBytes(archive,
+                    com.lowdragmc.photon.network.FxPackSync.MAX_EXPANDED_PACK_BYTES);
+            if (expandedBytes < 0 || !com.lowdragmc.photon.network.FxPackSync.isValidFxPack(archive)) {
+                throw new IllegalStateException("A valid generated FX pack failed streaming validation");
+            }
+            if (expandedBytes > 0 && com.lowdragmc.photon.network.FxPackSync.expandedFxPackBytes(
+                    archive, expandedBytes - 1) >= 0) {
+                throw new IllegalStateException("FX pack validation exceeded its caller-supplied expansion bound");
+            }
+            try (var zip = new ZipOutputStream(Files.newOutputStream(unsafeArchive))) {
+                zip.putNextEntry(new ZipEntry("assets/test/fx/effect.fx"));
+                zip.write(new byte[]{1, 2, 3});
+                zip.closeEntry();
+                zip.putNextEntry(new ZipEntry("assets/test/../../outside.txt"));
+                zip.write(new byte[]{4});
+                zip.closeEntry();
+            }
+            var unsafeValidation = com.lowdragmc.photon.network.FxPackSync.inspectFxPack(unsafeArchive, 1024);
+            if (unsafeValidation.valid() || unsafeValidation.expandedBytes() <= 0
+                    || unsafeValidation.expandedBytes() > 1024
+                    || com.lowdragmc.photon.network.FxPackSync.isValidFxPack(unsafeArchive)) {
+                throw new IllegalStateException("FX pack validation accepted a traversal entry or lost its bounded work count");
             }
         } finally {
             Files.deleteIfExists(archive);
+            Files.deleteIfExists(unsafeArchive);
             Files.deleteIfExists(directory);
+        }
+    }
+
+    private static void verifySyncPacketTokens() {
+        var pack = new com.lowdragmc.photon.network.FxPackSync.PackEntry(
+                "test.fxpack", 3, "0".repeat(64));
+        var manifest = new com.lowdragmc.photon.network.FxPackSync.ManifestPacket(17, java.util.List.of(pack));
+        var manifestBuffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            com.lowdragmc.photon.network.FxPackSync.ManifestPacket.encode(manifest, manifestBuffer);
+            var decoded = com.lowdragmc.photon.network.FxPackSync.ManifestPacket.decode(manifestBuffer);
+            if (decoded.requestToken() != 17 || !decoded.entries().equals(java.util.List.of(pack))) {
+                throw new IllegalStateException("FX pack manifest request token did not survive packet encoding");
+            }
+        } finally {
+            manifestBuffer.release();
+        }
+
+        var request = new com.lowdragmc.photon.network.FxPackSync.RequestPacket(17, pack.sha256(), 24);
+        var requestBuffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            com.lowdragmc.photon.network.FxPackSync.RequestPacket.encode(request, requestBuffer);
+            var decoded = com.lowdragmc.photon.network.FxPackSync.RequestPacket.decode(requestBuffer);
+            if (!decoded.equals(request)) {
+                throw new IllegalStateException("FX pack request token did not survive packet encoding");
+            }
+        } finally {
+            requestBuffer.release();
+        }
+
+        var refresh = com.lowdragmc.photon.network.FxPackSync.refreshRequest();
+        var refreshBuffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            com.lowdragmc.photon.network.FxPackSync.RequestPacket.encode(refresh, refreshBuffer);
+            var decoded = com.lowdragmc.photon.network.FxPackSync.RequestPacket.decode(refreshBuffer);
+            if (!decoded.isRefresh() || !decoded.equals(refresh)) {
+                throw new IllegalStateException("FX pack refresh request did not survive packet encoding");
+            }
+        } finally {
+            refreshBuffer.release();
+        }
+
+        var chunk = new com.lowdragmc.photon.network.FxPackSync.ChunkPacket(
+                17, pack.sha256(), 0, pack.size(), new byte[]{1, 2, 3});
+        var chunkBuffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            com.lowdragmc.photon.network.FxPackSync.ChunkPacket.encode(chunk, chunkBuffer);
+            var decoded = com.lowdragmc.photon.network.FxPackSync.ChunkPacket.decode(chunkBuffer);
+            if (decoded.requestToken() != chunk.requestToken() || !decoded.sha256().equals(chunk.sha256())
+                    || decoded.offset() != chunk.offset() || decoded.totalSize() != chunk.totalSize()
+                    || !java.util.Arrays.equals(decoded.bytes(), chunk.bytes())) {
+                throw new IllegalStateException("FX pack chunk request token did not survive packet encoding");
+            }
+        } finally {
+            chunkBuffer.release();
         }
     }
 

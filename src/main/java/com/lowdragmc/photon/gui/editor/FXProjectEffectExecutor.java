@@ -24,6 +24,20 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
     private long seed = 0;
     @Setter
     private Supplier<FX> definitionSupplier = () -> null;
+    @Setter
+    private Supplier<String> diagnosticLabel = () -> "unsaved-editor-project";
+
+    public void setDefinitionSupplier(Supplier<FX> definitionSupplier) {
+        this.definitionSupplier = definitionSupplier == null ? () -> null : definitionSupplier;
+    }
+
+    public void setDiagnosticLabel(Supplier<String> diagnosticLabel) {
+        this.diagnosticLabel = diagnosticLabel == null ? () -> "unsaved-editor-project" : diagnosticLabel;
+    }
+
+    public String diagnosticLabel() {
+        return diagnosticLabel.get();
+    }
     @Getter
     public final RandomSource randomSource = RandomSource.create(seed);
 

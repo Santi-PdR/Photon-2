@@ -68,6 +68,14 @@ public class KilaMainTexture extends KilaModule {
     // not saved: the particle's random number, always
     private final KilaDriver seed = new KilaDriver(0).bind(KilaDriver.Source.RANDOM, 1);
 
+    public FrameSource effectiveFrameSource() {
+        return frameSource == null ? FrameSource.TIME : frameSource;
+    }
+
+    public Vector2f effectiveDispersionDirection() {
+        return dispersionDirection == null ? new Vector2f(1, 0) : dispersionDirection;
+    }
+
     public KilaMainTexture() {
         setEnable(true);
     }
@@ -92,7 +100,7 @@ public class KilaMainTexture extends KilaModule {
 
     @Override
     public long structure() {
-        return (flipbook ? 1 : 0) | (frameBlend ? 2 : 0) | (dispersion ? 4 : 0) | (randomised() ? 8 : 0)
+        return (flipbook ? 1 : 0) | (flipbook && frameBlend ? 2 : 0) | (dispersion ? 4 : 0) | (randomised() ? 8 : 0)
                 | (motion() ? 16 : 0);
     }
 
@@ -112,15 +120,20 @@ public class KilaMainTexture extends KilaModule {
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
         texture.uploadUv(shader, "KilaMain");
-        shader.safeGetUniform("KilaMainOpts").set(texture.flags(), texture.colorMode.ordinal(),
-                frameSource == FrameSource.DRIVER ? 1 : 0, texture.cellWrap());
+        shader.safeGetUniform("KilaMainOpts").set(texture.flags(), texture.effectiveColorMode().ordinal(),
+                effectiveFrameSource() == FrameSource.DRIVER ? 1 : 0, texture.cellWrap());
         if (flipbook) {
-            shader.safeGetUniform("KilaFlipbook").set((float) Math.max(columns, 1), (float) Math.max(rows, 1), fps, startFrame);
+            shader.safeGetUniform("KilaFlipbook").set(
+                    (float) net.minecraft.util.Mth.clamp(columns, 1, 64),
+                    (float) net.minecraft.util.Mth.clamp(rows, 1, 64),
+                    finite(fps, 12f, -240f, 240f), finite(startFrame, 0f, 0f, 4096f));
             if (randomised()) shader.safeGetUniform("KilaFlipbookOpts").set(randomRow ? 1 : 0, randomStart ? 1 : 0, 0, 0);
-            if (motion()) shader.safeGetUniform("KilaFlipbookMotion").set(motionStrength, 0f, 0f, 0f);
+            if (motion()) shader.safeGetUniform("KilaFlipbookMotion").set(finite(motionStrength, 1f, -4f, 4f), 0f, 0f, 0f);
         }
         if (dispersion) {
-            shader.safeGetUniform("KilaDispersion").set(dispersionDirection.x, dispersionDirection.y,
+            var direction = effectiveDispersionDirection();
+            shader.safeGetUniform("KilaDispersion").set(
+                    finite(direction.x, 1f, -1f, 1f), finite(direction.y, 0f, -1f, 1f),
                     dispersionRadial ? 1f : 0f, 0f);
         }
     }
@@ -135,7 +148,7 @@ public class KilaMainTexture extends KilaModule {
     public void drivers(BiConsumer<KilaParam, KilaDriver> out) {
         out.accept(KilaParam.MAIN_OFFSET_U, offsetU);
         out.accept(KilaParam.MAIN_OFFSET_V, offsetV);
-        if (flipbook && frameSource == FrameSource.DRIVER) out.accept(KilaParam.MAIN_FRAME, frame);
+        if (flipbook && effectiveFrameSource() == FrameSource.DRIVER) out.accept(KilaParam.MAIN_FRAME, frame);
         if (dispersion) out.accept(KilaParam.DISPERSION_AMOUNT, dispersionAmount);
         if (randomised()) out.accept(KilaParam.FLIPBOOK_SEED, seed);
     }
@@ -149,7 +162,7 @@ public class KilaMainTexture extends KilaModule {
         KilaUI.bool(sheet, "kila.main.flipbook.enable", () -> flipbook, v -> flipbook = v);
         KilaUI.integer(sheet, "kila.main.flipbook.columns", () -> columns, v -> columns = v, 4, 1, 64);
         KilaUI.integer(sheet, "kila.main.flipbook.rows", () -> rows, v -> rows = v, 4, 1, 64);
-        KilaUI.choice(sheet, "kila.main.flipbook.source", FrameSource.values(), () -> frameSource, v -> frameSource = v);
+        KilaUI.choice(sheet, "kila.main.flipbook.source", FrameSource.values(), this::effectiveFrameSource, v -> frameSource = v);
         KilaUI.number(sheet, "kila.main.flipbook.fps", () -> fps, v -> fps = v, 12, -240, 240);
         KilaUI.number(sheet, "kila.main.flipbook.start", () -> startFrame, v -> startFrame = v, 0, 0, 4096);
         KilaUI.driver(sheet, "kila.main.flipbook.frame", frame, 0, 1);
@@ -166,6 +179,6 @@ public class KilaMainTexture extends KilaModule {
         KilaUI.bool(split, "kila.main.dispersion.enable", () -> dispersion, v -> dispersion = v);
         KilaUI.driver(split, "kila.main.dispersion.amount", dispersionAmount, -0.2f, 0.2f);
         KilaUI.bool(split, "kila.main.dispersion.radial", () -> dispersionRadial, v -> dispersionRadial = v);
-        KilaUI.vec2(split, "kila.main.dispersion.direction", () -> dispersionDirection, v -> dispersionDirection = v);
+        KilaUI.vec2(split, "kila.main.dispersion.direction", this::effectiveDispersionDirection, v -> dispersionDirection = v);
     }
 }

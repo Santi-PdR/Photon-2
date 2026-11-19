@@ -25,6 +25,12 @@ import java.util.List;
 @OnlyIn(Dist.CLIENT)
 public final class KilaSlotPreview implements IGuiTexture {
     public static final ResourceLocation CHECKER = Photon.id("textures/kila/ui/checker.png");
+    private static final IGuiTexture CHECKER_TEXTURE = (graphics, mouseX, mouseY, x, y, width, height, partialTicks) -> {
+        int w = Math.max(1, Math.round(width));
+        int h = Math.max(1, Math.round(height));
+        graphics.blit(CHECKER, Math.round(x), Math.round(y), w, h,
+                0, 0, Math.max(1, w / 4), Math.max(1, h / 4), 2, 2);
+    };
     private static final int PREVIEW_FLAGS = KilaTexture.FLAG_POLAR | KilaTexture.FLAG_CLIP_U | KilaTexture.FLAG_CLIP_V;
 
     private final KilaTexture texture;
@@ -45,45 +51,52 @@ public final class KilaSlotPreview implements IGuiTexture {
         var shader = PhotonShaders.getKilaPreviewShader();
         if (shader == null) return;
         graphics.flush();
-        // The thumbnail runs the same uv chain as the material, and that chain is time driven
-        // (scroll, spin, noise motion). KilaMaterial uploads GameTime on every material draw, so the
-        // inspector has to do the same or an animated material sits frozen in its own preview.
-        shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
-        boolean procedural = texture.isProcedural();
-        RenderSystem.setShaderTexture(0, procedural ? KilaTextures.WHITE : texture.getTexture());
-        if (uvChain) {
-            texture.uploadUv(shader, "KilaPreview");
-        } else {
-            shader.safeGetUniform("KilaPreviewST").set(1f, 1f, 0f, 0f);
-            shader.safeGetUniform("KilaPreviewAnim").set(0f, 0f, 0f, 0f);
-            shader.safeGetUniform("KilaPreviewPolar").set(0.5f, 0.5f, 1f, 1f);
-        }
-        int flags = uvChain ? texture.flags() & PREVIEW_FLAGS : 0;
-        shader.safeGetUniform("KilaPreviewOpts").set(flags, kind.ordinal(), texture.colorMode.ordinal(), procedural ? 1 : 0);
-        texture.channel.weights(scratch);
-        shader.safeGetUniform("KilaPreviewChannel").set(scratch[0], scratch[1], scratch[2], scratch[3]);
-        shader.safeGetUniform("KilaPreviewNoise").set((float) texture.noise.ordinal(), texture.noiseScale, texture.noiseMotion, 0f);
-        bindings.clear();
-        bindings.add(new KGSamplerGl.Binding(0, texture.glSampler()));
-        KGSamplerBinder.stage(shader, bindings);
+        try {
+            // The thumbnail runs the same uv chain as the material, and that chain is time driven
+            // (scroll, spin, noise motion). KilaMaterial uploads GameTime on every material draw, so the
+            // inspector has to do the same or an animated material sits frozen in its own preview.
+            shader.safeGetUniform("GameTime").set(RenderSystem.getShaderGameTime());
+            boolean procedural = texture.isProcedural();
+            var location = procedural ? KilaTextures.WHITE
+                    : com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture.getTexture());
+            RenderSystem.setShaderTexture(0, location);
+            if (uvChain) {
+                texture.uploadUv(shader, "KilaPreview");
+            } else {
+                shader.safeGetUniform("KilaPreviewST").set(1f, 1f, 0f, 0f);
+                shader.safeGetUniform("KilaPreviewAnim").set(0f, 0f, 0f, 0f);
+                shader.safeGetUniform("KilaPreviewPolar").set(0.5f, 0.5f, 1f, 1f);
+            }
+            int flags = uvChain ? texture.flags() & PREVIEW_FLAGS : 0;
+            shader.safeGetUniform("KilaPreviewOpts").set(flags, kind.ordinal(), texture.effectiveColorMode().ordinal(), procedural ? 1 : 0);
+            texture.uploadChannel(shader, "KilaPreviewChannel", scratch);
+            shader.safeGetUniform("KilaPreviewNoise").set(texture.effectiveNoise().ordinal(),
+                    texture.effectiveNoiseScale(), texture.effectiveNoiseMotion(), 0f);
+            bindings.clear();
+            bindings.add(new KGSamplerGl.Binding(0, texture.glSampler()));
+            KGSamplerBinder.stage(shader, bindings);
 
-        var pose = graphics.pose().last().pose();
-        var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(Tesselator.getInstance(),VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        buffer.vertex(pose, x, y + height, 0).uv(0, 1).endVertex();
-        buffer.vertex(pose, x + width, y + height, 0).uv(1, 1).endVertex();
-        buffer.vertex(pose, x + width, y, 0).uv(1, 0).endVertex();
-        buffer.vertex(pose, x, y, 0).uv(0, 0).endVertex();
-        RenderSystem.setShader(() -> shader);
-        BufferUploader.drawWithShader(buffer.end());
+            var pose = graphics.pose().last().pose();
+            var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(
+                    Tesselator.getInstance(), VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+            buffer.vertex(pose, x, y + height, 0).uv(0, 1).endVertex();
+            buffer.vertex(pose, x + width, y + height, 0).uv(1, 1).endVertex();
+            buffer.vertex(pose, x + width, y, 0).uv(1, 0).endVertex();
+            buffer.vertex(pose, x, y, 0).uv(0, 0).endVertex();
+            RenderSystem.setShader(() -> shader);
+            BufferUploader.drawWithShader(buffer.end());
+        } finally {
+            try {
+                shader.clear();
+            } finally {
+                KGSamplerBinder.onClear();
+            }
+        }
     }
 
     /** The transparency backdrop: grey squares four pixels across. */
     public static IGuiTexture checker() {
-        return (graphics, mouseX, mouseY, x, y, width, height, partialTicks) -> {
-            int w = Math.max(1, Math.round(width));
-            int h = Math.max(1, Math.round(height));
-            graphics.blit(CHECKER, Math.round(x), Math.round(y), w, h, 0, 0, Math.max(1, w / 4), Math.max(1, h / 4), 2, 2);
-        };
+        return CHECKER_TEXTURE;
     }
 }
 
