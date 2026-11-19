@@ -71,25 +71,27 @@ LDLib2. Son portables a mano:
 
 | Feature | Archivos upstream | Estado en este port | Veredicto |
 | --- | --- | --- | --- |
-| **Timeline sections** (start/loop/end con nombre, `FXRuntime.sections()`, `/photon fx section`) | `fx/timeline/TimelineSection.java`, `SectionClock.java` (442 l.), `SectionControl.java`, `command/EffectSectionCommand.java`, `gui/editor/view/timeline/SectionStrip.java` | no existe | **el más valioso**: es lo que separa un efecto "una vez" de uno usable en combate. Port grande (≈700 l. + UI + comando) |
-| **Release sections** (parar sin forzar reproduce un cierre) | `TimelineSection` + `Emitter`/`FXObject` | no existe | medio, depende del anterior |
-| **Exit mode `Drain`** en control clips (deja de emitir y las partículas se apagan) | `Emitter` (+340 en 26.3; en 2.2.x es más chico) | no existe | **barato y visible**, buen primer paso |
-| **Lifetime `Loop` / `PingPong`** por partícula | `gameobject/particle/ParticleLifetime.java` (48 l.) | no existe | **el más barato de todos**: un enum + una función de fase; 48 líneas y una opción de config |
-| Fix: efectos parados sin forzar revivían objetos, partículas con Start Lifetime 0 no morían, luces se apagaban antes | varios | no existe el bug (no hay parada suave) | llega con release sections |
-| Fix: animaciones del timeline tartamudeaban con rate ≠ 1 | `TimelinePlayer` | **puede afectarnos**: `SceneView.simulateTo`/rate está portado | verificar |
-| Fix: `/photon fx remove entity` saltaba los siguientes objetivos | comando | **puede afectarnos**: nuestro `ClientCommands`/comando de servidor recorre entidades | verificar |
+| **Timeline sections** (start/loop/end con nombre, `FXRuntime.sections()`, `/photon fx section`) | `fx/timeline/TimelineSection.java`, `SectionClock.java`, `SectionControl.java`, `command/EffectSectionCommand.java`, `gui/editor/view/timeline/SectionStrip.java` | runtime + comando + menú de regla **sí**; banda gráfica `SectionStrip` **sí** (port 26.3 → LDLib2 2.2.x) | el más valioso para efectos de combate |
+| **Release sections** (parar sin forzar reproduce un cierre) | `TimelineSection` + `Emitter`/`FXObject` | sí (con sections) | medio |
+| **Exit mode `Drain`** en control clips (deja de emitir y las partículas se apagan) | `Emitter` | sí | barato y visible |
+| **Lifetime `Loop` / `PingPong`** por partícula | `gameobject/particle/ParticleLifetime.java` | sí | barato |
+| Fix: efectos parados sin forzar revivían objetos, partículas con Start Lifetime 0 no morían, luces se apagaban antes | `FXRuntime.isTracked`, `FXObject.isDiscarded`, `FXInstanceObject.windDown`, `TileParticle.endAge` | **sí** | luces/partículas siguen en pantalla durante el fade |
+| Fix: animaciones del timeline tartamudeaban con rate ≠ 1 | `TimelinePlayer.frame` (`partialTicks * frameRate`) | **sí** | interpolación al rate del último tick |
+| Fix: `/photon fx remove entity` saltaba los siguientes objetivos | `EffectRemoval` (`continue`) | **sí** | no corta el resto de entidades |
 
-De `26.2.2.10` (entre nuestra base y 26.3) también quedan cosas portables que **no** están aquí:
+De `26.2.2.10` (entre nuestra base y 26.3), el port ya cubre lo portable:
 
-- crear un `ParticleEmitter` directamente desde un `ParticleConfig` (API pública);
-- glTF que no recargaba al editar el archivo (nosotros tenemos `FXHelper.invalidate` + pack watcher:
-  conviene comprobar si el caso está cubierto);
-- billboards que no giraban con rotation-over-lifetime en world/custom space (nuestro
-  `PhotonBuffers`/renderer puede tener el mismo bug);
-- el gestor de FXPack que se desbordaba con muchos efectos → ventana redimensionable y con scroll;
-- pegar sobre un campo de curva que revertía;
-- la opción *Revert* de una instancia FX que faltaba en el menú del override;
-- traducciones y etiquetas de editor que faltaban.
+- `ParticleEmitter(ParticleConfig)` público;
+- glTF recarga por `PhotonMeshCache.pollFileChanges` / `invalidate`;
+- billboards world/custom en `TileParticleRenderer.applyOuterRotation`;
+- FXPack manager con `ScrollerView` 360×240;
+- pegar sobre curva no revierte (`CurveConfigurator.setPastable(false)`);
+- *Revert* de instancia FX en jerarquía y diálogo de overrides;
+- traducciones de 26.2 completas; claves de Drain/Seam del clip de control añadidas.
+- lecturas de pose/color/UV de partícula escriben en un vector del caller (`getReal*(dest)`), como 26.3
+  para no allocar por partícula en el bake de CPU. No se porta el instancing GPU ni OIT.
+- muestreo de color/profundidad en un editor desanclado: `ScreenSize` sigue el `UISurface` (2.2.10;
+  en 1.20.1 no existe `setDefaultUniforms`, el mixin actúa en `ShaderInstance.apply`).
 
 ## Recomendación de orden
 

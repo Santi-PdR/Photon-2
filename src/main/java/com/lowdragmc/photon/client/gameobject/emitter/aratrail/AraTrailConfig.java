@@ -261,8 +261,11 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
                 for (MaterialSetting materialSetting : materials) {
                     for (int pass = 0, passes = materialSetting.passes(); pass < passes; pass++) {
                         materialSetting.pre(pass);
-                        renderInstanceWithMaterial(materialSetting.getMaterial(), context);
-                        materialSetting.post();
+                        try {
+                            renderInstanceWithMaterial(materialSetting, context);
+                        } finally {
+                            materialSetting.post();
+                        }
                     }
                 }
                 drew = true;
@@ -274,11 +277,15 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
             return drew;
         }
 
-        private void renderInstanceWithMaterial(IMaterial material, MaterialContext context) {
-            var shader = material.begin(context);
-            RenderSystem.setShader(() -> shader);
-            trailRenderer.drawInstanced(shader);
-            material.end(context);
+        private void renderInstanceWithMaterial(MaterialSetting materialSetting, MaterialContext context) {
+            var material = materialSetting.getMaterial();
+            try {
+                var shader = materialSetting.beginMaterial(material, context);
+                RenderSystem.setShader(() -> shader);
+                trailRenderer.drawInstanced(shader);
+            } finally {
+                material.end(context);
+            }
         }
 
         private AraTrailConfig owner() {

@@ -107,7 +107,8 @@ public class Curve implements NumberFunction {
 
     @Override
     public void createConfigurator(NumberFunctionConfigurator configurator) {
-        configurator.inlineContainer.addChildren(new CurveConfigurator("", () -> this, curves -> configurator.updateValue(this), this, true));
+        configurator.inlineContainer.addChildren(new CurveConfigurator("", () -> this, curves -> configurator.updateValue(this), this, true)
+                .setPastable(type -> false, pasted -> {}));
     }
 }
 

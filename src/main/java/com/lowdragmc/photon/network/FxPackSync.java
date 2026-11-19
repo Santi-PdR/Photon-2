@@ -2,6 +2,7 @@ package com.lowdragmc.photon.network;
 
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
+import net.minecraft.Util;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,12 +17,14 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipFile;
 
@@ -32,10 +35,28 @@ public final class FxPackSync {
     public static final int CHUNK_BYTES = 24 * 1024;
     public static final long MAX_PACK_BYTES = 64L * 1024 * 1024;
     public static final long MAX_TOTAL_BYTES = 128L * 1024 * 1024;
-    private static final long MAX_EXPANDED_PACK_BYTES = 256L * 1024 * 1024;
+    public static final long MAX_EXPANDED_PACK_BYTES = 256L * 1024 * 1024;
+    /** Bound aggregate decompression work even when a manifest contains many small compressed archives. */
+    public static final long MAX_TOTAL_EXPANDED_PACK_BYTES = 512L * 1024 * 1024;
     private static final int MAX_ZIP_ENTRIES = 20_000;
+    private static final int MAX_PACK_CANDIDATES = 4_096;
+    private static final Pattern FX_ENTRY = Pattern.compile("assets/[^/]+/fx/.+\\.fx");
     private static final int MAX_PACKS = 32;
+    private static final long REFRESH_COOLDOWN_NANOS = 5_000_000_000L;
     private static final Map<UUID, Map<String, PackEntry>> OFFERED = new ConcurrentHashMap<>();
+    private static final Map<UUID, Map<String, Long>> NEXT_CHUNK_OFFSETS = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> LAST_REFRESH_NANOS = new ConcurrentHashMap<>();
+    /** Token of the manifest currently accepted for chunk requests. */
+    private static final Map<UUID, Long> OFFER_TOKENS = new ConcurrentHashMap<>();
+    /** Token of the newest scan request; an unfinished scan must not invalidate a working transfer. */
+    private static final Map<UUID, Long> LATEST_OFFER_TOKENS = new ConcurrentHashMap<>();
+    private static final java.util.concurrent.atomic.AtomicLong NEXT_OFFER_TOKEN =
+            new java.util.concurrent.atomic.AtomicLong();
+    /** Validated expansion sizes keyed by content hash, so repeat offers avoid decompressing unchanged packs. */
+    private static final Map<String, Long> VALIDATED_PACK_EXPANSIONS = new ConcurrentHashMap<>();
+    /** Concurrent login/refresh offers share one disk scan for a server. */
+    private static MinecraftServer scanServer;
+    private static CompletableFuture<List<PackEntry>> activeScan;
 
     private FxPackSync() {}
 
@@ -53,79 +74,236 @@ public final class FxPackSync {
     }
 
     private static void offer(ServerPlayer player, boolean requested) {
+        if (requested) {
+            var now = System.nanoTime();
+            var allowed = new java.util.concurrent.atomic.AtomicBoolean();
+            LAST_REFRESH_NANOS.compute(player.getUUID(), (uuid, previous) -> {
+                if (previous == null || now - previous >= REFRESH_COOLDOWN_NANOS) {
+                    allowed.set(true);
+                    return now;
+                }
+                return previous;
+            });
+            if (!allowed.get()) return;
+        }
         var server = player.getServer();
         if (server == null) return;
-        // every offer re-scans the folder: a pack added a minute ago is on disk now, and the hash is what decides
-        var entries = scan(server);
-        var offered = new ConcurrentHashMap<String, PackEntry>();
-        entries.forEach(entry -> offered.put(entry.sha256(), entry));
-        OFFERED.put(player.getUUID(), Map.copyOf(offered));
-        PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new ManifestPacket(entries));
-        Photon.LOGGER.info("{} {} Photon FX pack(s) to {}", requested ? "Re-offered" : "Offered", entries.size(),
-                player.getGameProfile().getName());
+        var playerId = player.getUUID();
+        var offerToken = NEXT_OFFER_TOKEN.incrementAndGet();
+        LATEST_OFFER_TOKENS.put(playerId, offerToken);
+        scanAsync(server).whenComplete((entries, failure) -> {
+            try {
+                server.execute(() -> {
+                    if (server.getPlayerList().getPlayer(playerId) != player
+                            || !Objects.equals(LATEST_OFFER_TOKENS.get(playerId), offerToken)) return;
+                    if (failure != null) {
+                        Photon.LOGGER.error("Could not scan server Photon FX packs", failure);
+                        return;
+                    }
+                    var offered = new ConcurrentHashMap<String, PackEntry>();
+                    entries.forEach(entry -> offered.put(entry.sha256(), entry));
+                    var nextOffsets = new ConcurrentHashMap<String, Long>();
+                    entries.forEach(entry -> nextOffsets.put(entry.sha256(), 0L));
+                    PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                            new ManifestPacket(offerToken, entries));
+                    OFFERED.put(playerId, Map.copyOf(offered));
+                    NEXT_CHUNK_OFFSETS.put(playerId, nextOffsets);
+                    OFFER_TOKENS.put(playerId, offerToken);
+                    Photon.LOGGER.info("{} {} Photon FX pack(s) to {}", requested ? "Re-offered" : "Offered",
+                            entries.size(), player.getGameProfile().getName());
+                });
+            } catch (RuntimeException schedulingFailure) {
+                Photon.LOGGER.warn("Could not queue Photon FX pack manifest for {}", playerId, schedulingFailure);
+            }
+        });
+    }
+
+    private static synchronized CompletableFuture<List<PackEntry>> scanAsync(MinecraftServer server) {
+        if (activeScan != null && scanServer == server && !activeScan.isDone()) return activeScan;
+        scanServer = server;
+        var scan = CompletableFuture.supplyAsync(() -> scan(server), Util.backgroundExecutor());
+        activeScan = scan;
+        scan.whenComplete((entries, failure) -> {
+            synchronized (FxPackSync.class) {
+                if (activeScan == scan) {
+                    activeScan = null;
+                    scanServer = null;
+                }
+            }
+        });
+        return scan;
     }
 
     public static void onPlayerLogout(ServerPlayer player) {
         OFFERED.remove(player.getUUID());
+        NEXT_CHUNK_OFFSETS.remove(player.getUUID());
+        LAST_REFRESH_NANOS.remove(player.getUUID());
+        OFFER_TOKENS.remove(player.getUUID());
+        LATEST_OFFER_TOKENS.remove(player.getUUID());
     }
 
+    public static void onServerStopping() {
+        OFFERED.clear();
+        NEXT_CHUNK_OFFSETS.clear();
+        LAST_REFRESH_NANOS.clear();
+        OFFER_TOKENS.clear();
+        LATEST_OFFER_TOKENS.clear();
+        synchronized (FxPackSync.class) {
+            activeScan = null;
+            scanServer = null;
+        }
+    }
+
+    /** Bounded disk and ZIP inspection; called from the background executor via {@link #scanAsync}. */
     private static List<PackEntry> scan(MinecraftServer server) {
         var directory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY);
         try {
             Files.createDirectories(directory);
         } catch (IOException e) {
-            Photon.LOGGER.error("Could not create Photon FX pack directory {}", directory, e);
-            return List.of();
+            throw new java.util.concurrent.CompletionException(
+                    "Could not create Photon FX pack directory " + directory, e);
         }
         var result = new ArrayList<PackEntry>();
         var seenHashes = new HashSet<String>();
         long totalBytes = 0;
+        long scannedBytes = 0;
+        long totalExpandedBytes = 0;
         try (var files = Files.list(directory)) {
-            for (var path : files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS))
-                    .filter(file -> file.getFileName().toString().endsWith(SUFFIX)
-                            && file.getFileName().toString().length() <= 128).sorted().toList()) {
-                if (result.size() >= MAX_PACKS) break;
-                var size = Files.size(path);
-                if (size <= 0 || size > MAX_PACK_BYTES || totalBytes + size > MAX_TOTAL_BYTES) {
-                    Photon.LOGGER.warn("Photon FX sync skipped {} (size {} exceeds limits)", path.getFileName(), size);
-                    continue;
+            var candidates = files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                    .filter(file -> isSafePackFileName(file.getFileName().toString()))
+                    .limit(MAX_PACK_CANDIDATES + 1L).sorted().toList();
+            if (candidates.size() > MAX_PACK_CANDIDATES) {
+                Photon.LOGGER.warn("Photon FX pack scan limited to {} candidate files", MAX_PACK_CANDIDATES);
+            }
+            for (var path : candidates.stream().limit(MAX_PACK_CANDIDATES).toList()) {
+                try {
+                    if (result.size() >= MAX_PACKS) break;
+                    var size = Files.size(path);
+                    if (size <= 0 || size > MAX_PACK_BYTES || totalBytes + size > MAX_TOTAL_BYTES) {
+                        Photon.LOGGER.warn("Photon FX sync skipped {} (size {} exceeds limits)", path.getFileName(), size);
+                        continue;
+                    }
+                    if (scannedBytes > MAX_TOTAL_BYTES - size) {
+                        Photon.LOGGER.warn("Photon FX sync stopped scanning after reaching the pack validation byte budget");
+                        break;
+                    }
+                    scannedBytes += size;
+                    var hash = sha256(path);
+                    if (!seenHashes.add(hash)) continue;
+                    var expandedBytes = VALIDATED_PACK_EXPANSIONS.get(hash);
+                    if (expandedBytes == null) {
+                        var remainingBudget = MAX_TOTAL_EXPANDED_PACK_BYTES - totalExpandedBytes;
+                        if (remainingBudget <= 0) break;
+                        var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingBudget));
+                        totalExpandedBytes += validation.expandedBytes();
+                        if (!validation.valid() || !hash.equals(sha256(path))) {
+                            Photon.LOGGER.warn("Photon FX sync skipped invalid or concurrently changed pack {}", path.getFileName());
+                            if (totalExpandedBytes >= MAX_TOTAL_EXPANDED_PACK_BYTES) break;
+                            continue;
+                        }
+                        expandedBytes = validation.expandedBytes();
+                        var previous = VALIDATED_PACK_EXPANSIONS.putIfAbsent(hash, expandedBytes);
+                        if (previous != null) expandedBytes = previous;
+                        if (VALIDATED_PACK_EXPANSIONS.size() > 512) VALIDATED_PACK_EXPANSIONS.clear();
+                    } else {
+                        if (totalExpandedBytes > MAX_TOTAL_EXPANDED_PACK_BYTES - expandedBytes) {
+                            Photon.LOGGER.warn("Photon FX sync skipped {} (aggregate expanded pack data exceeds limit)",
+                                    path.getFileName());
+                            continue;
+                        }
+                        totalExpandedBytes += expandedBytes;
+                    }
+                    result.add(new PackEntry(path.getFileName().toString(), size, hash));
+                    totalBytes += size;
+                } catch (IOException e) {
+                    Photon.LOGGER.warn("Photon FX sync could not read pack {}; skipping it", path.getFileName(), e);
                 }
-                if (!isFxPack(path)) {
-                    Photon.LOGGER.warn("Photon FX sync skipped invalid pack {}", path.getFileName());
-                    continue;
-                }
-                var hash = sha256(path);
-                if (!seenHashes.add(hash)) continue;
-                result.add(new PackEntry(path.getFileName().toString(), size, hash));
-                totalBytes += size;
             }
         } catch (IOException e) {
-            Photon.LOGGER.error("Could not scan server Photon FX packs in {}", directory, e);
+            throw new java.util.concurrent.CompletionException(
+                    "Could not scan server Photon FX packs in " + directory, e);
         }
         return List.copyOf(result);
     }
 
-    private static boolean isFxPack(Path path) {
+    /** Result of streaming an untrusted archive; {@code expandedBytes} is actual work already performed. */
+    public record FxPackValidation(boolean valid, long expandedBytes) {}
+
+    /** Validate an untrusted pack without trusting ZIP central-directory sizes. */
+    public static boolean isValidFxPack(Path path) {
+        return inspectFxPack(path, MAX_EXPANDED_PACK_BYTES).valid();
+    }
+
+    /** Return the actual expanded byte count, or {@code -1} when the pack is invalid. */
+    public static long expandedFxPackBytes(Path path, long maxExpandedBytes) {
+        var validation = inspectFxPack(path, maxExpandedBytes);
+        return validation.valid() ? validation.expandedBytes() : -1;
+    }
+
+    /**
+     * Stream and validate a pack against a caller-supplied byte budget (plus at most one byte to detect overflow).
+     * For invalid archives, the result still reports how many bytes were expanded before rejection, allowing callers
+     * validating multiple packs to enforce a global work limit even when an archive fails late in its contents.
+     */
+    public static FxPackValidation inspectFxPack(Path path, long maxExpandedBytes) {
+        if (path == null || maxExpandedBytes <= 0) return new FxPackValidation(false, 0);
+        long expanded = 0;
         try (var zip = new ZipFile(path.toFile())) {
             var entries = zip.entries();
+            var names = new HashSet<String>();
+            var buffer = new byte[16 * 1024];
             int count = 0;
-            long expanded = 0;
             boolean hasFx = false;
             while (entries.hasMoreElements()) {
                 var entry = entries.nextElement();
                 var name = entry.getName();
-                if (++count > MAX_ZIP_ENTRIES || name.startsWith("/") || name.contains("\\")
-                        || name.contains("../") || name.equals("..")) return false;
-                if (entry.getSize() > 0) {
-                    expanded += entry.getSize();
-                    if (expanded > MAX_EXPANDED_PACK_BYTES) return false;
+                if (++count > MAX_ZIP_ENTRIES || !isSafeZipEntryName(name) || !names.add(name)) {
+                    return new FxPackValidation(false, expanded);
                 }
-                if (!entry.isDirectory() && name.matches("assets/[^/]+/fx/.+\\.fx")) hasFx = true;
+                if (!entry.isDirectory()) {
+                    if (FX_ENTRY.matcher(name).matches()) hasFx = true;
+                    try (var input = zip.getInputStream(entry)) {
+                        int read;
+                        while (true) {
+                            var remaining = maxExpandedBytes - expanded;
+                            // At most probe one byte past the limit, so an archive exactly on the boundary remains
+                            // valid while decompression work cannot overshoot the caller's budget by a whole buffer.
+                            var request = remaining < buffer.length ? (int) remaining + 1 : buffer.length;
+                            read = input.read(buffer, 0, request);
+                            if (read < 0) break;
+                            if (read == 0) continue;
+                            if (read > remaining) {
+                                return new FxPackValidation(false, expanded + read);
+                            }
+                            expanded += read;
+                        }
+                    }
+                }
             }
-            return hasFx;
-        } catch (IOException e) {
-            return false;
+            return new FxPackValidation(hasFx, expanded);
+        } catch (IOException | RuntimeException e) {
+            return new FxPackValidation(false, expanded);
         }
+    }
+
+    private static boolean isSafePackFileName(String name) {
+        return name != null && !name.isBlank() && !name.equals(".") && !name.equals("..")
+                && name.endsWith(SUFFIX) && name.length() <= 128
+                && name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 128
+                && !name.contains("/") && !name.contains("\\") && !name.contains(":")
+                && name.chars().noneMatch(ch -> ch < 0x20 || ch == 0x7f);
+    }
+
+    private static boolean isSafeZipEntryName(String name) {
+        if (name == null || name.isBlank() || name.startsWith("/") || name.startsWith("\\")
+                || name.indexOf('\\') >= 0 || name.indexOf(':') >= 0
+                || name.chars().anyMatch(ch -> ch == 0 || ch < 0x20 || ch == 0x7f)) return false;
+        var path = name.endsWith("/") ? name.substring(0, name.length() - 1) : name;
+        if (path.isEmpty()) return false;
+        for (var segment : path.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
+        }
+        return true;
     }
 
     private static String sha256(Path path) throws IOException {
@@ -148,19 +326,23 @@ public final class FxPackSync {
 
     public static void handleManifest(ManifestPacket packet) {
         DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () ->
-                com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.begin(packet.entries()));
+                com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.begin(packet.requestToken(), packet.entries()));
     }
 
     public static void handleRequest(RequestPacket packet, ServerPlayer player) {
         if (player == null) return;
         if (packet.isRefresh()) {
-            Photon.LOGGER.info("Photon FX pack refresh requested by {}", player.getGameProfile().getName());
             onRefreshRequest(player);
             return;
         }
-        if (packet.offset() < 0 || !packet.sha256().matches("[0-9a-f]{64}")) return;
-        var entry = OFFERED.getOrDefault(player.getUUID(), Map.of()).get(packet.sha256());
-        if (entry == null || packet.offset() >= entry.size()) return;
+        if (packet.requestToken() < 0 || packet.offset() < 0 || !packet.sha256().matches("[0-9a-f]{64}")) return;
+        var uuid = player.getUUID();
+        if (!Objects.equals(OFFER_TOKENS.get(uuid), packet.requestToken())) return;
+        var entry = OFFERED.getOrDefault(uuid, Map.of()).get(packet.sha256());
+        var nextOffsets = NEXT_CHUNK_OFFSETS.get(uuid);
+        var expectedOffset = nextOffsets == null ? null : nextOffsets.get(packet.sha256());
+        if (entry == null || expectedOffset == null || expectedOffset.longValue() != packet.offset()
+                || packet.offset() >= entry.size()) return;
         var server = player.getServer();
         if (server == null) return;
         var directory = server.getServerDirectory().toPath().resolve(PACK_DIRECTORY).normalize();
@@ -171,8 +353,9 @@ public final class FxPackSync {
             file.seek(packet.offset());
             var bytes = new byte[(int) Math.min(CHUNK_BYTES, entry.size() - packet.offset())];
             file.readFully(bytes);
+            if (!nextOffsets.replace(packet.sha256(), packet.offset(), packet.offset() + bytes.length)) return;
             PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                    new ChunkPacket(entry.sha256(), packet.offset(), entry.size(), bytes));
+                    new ChunkPacket(packet.requestToken(), entry.sha256(), packet.offset(), entry.size(), bytes));
         } catch (IOException e) {
             Photon.LOGGER.warn("Could not stream Photon FX pack {} to {}", entry.fileName(),
                     player.getGameProfile().getName(), e);
@@ -181,7 +364,7 @@ public final class FxPackSync {
 
     /** Asks the server for the current pack list, for the client command, without the offset/chunk machinery. */
     public static RequestPacket refreshRequest() {
-        return new RequestPacket("", -1);
+        return new RequestPacket(-1, "", -1);
     }
 
     /**
@@ -210,15 +393,18 @@ public final class FxPackSync {
         }
     }
 
-    public record ManifestPacket(List<PackEntry> entries) {
+    public record ManifestPacket(long requestToken, List<PackEntry> entries) {
         public ManifestPacket { entries = List.copyOf(entries); }
 
         public static void encode(ManifestPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.requestToken());
             buf.writeVarInt(packet.entries().size());
             packet.entries().forEach(entry -> PackEntry.encode(buf, entry));
         }
 
         public static ManifestPacket decode(FriendlyByteBuf buf) {
+            long requestToken = buf.readVarLong();
+            if (requestToken < 0) throw new IllegalArgumentException("Invalid Photon FX manifest token");
             int count = buf.readVarInt();
             if (count < 0 || count > MAX_PACKS) throw new IllegalArgumentException("Invalid Photon FX pack count");
             var entries = new ArrayList<PackEntry>(count);
@@ -226,8 +412,8 @@ public final class FxPackSync {
             long total = 0;
             for (int i = 0; i < count; i++) {
                 var entry = PackEntry.decode(buf);
-                if (entry.fileName().isBlank() || entry.fileName().contains("/") || entry.fileName().contains("\\")
-                        || !entry.fileName().endsWith(SUFFIX) || entry.size() <= 0 || entry.size() > MAX_PACK_BYTES
+                if (!isSafePackFileName(entry.fileName())
+                        || entry.size() <= 0 || entry.size() > MAX_PACK_BYTES
                         || !entry.sha256().matches("[0-9a-f]{64}")) {
                     throw new IllegalArgumentException("Invalid Photon FX pack manifest entry");
                 }
@@ -236,42 +422,46 @@ public final class FxPackSync {
                 if (total > MAX_TOTAL_BYTES) throw new IllegalArgumentException("Photon FX manifest exceeds limit");
                 entries.add(entry);
             }
-            return new ManifestPacket(entries);
+            return new ManifestPacket(requestToken, entries);
         }
     }
 
-    public record RequestPacket(String sha256, long offset) {
+    public record RequestPacket(long requestToken, String sha256, long offset) {
         /** A request with no hash and a negative offset asks for the manifest, not for a chunk. */
         public boolean isRefresh() {
             return offset < 0 && sha256.isEmpty();
         }
 
         public static void encode(RequestPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.requestToken());
             buf.writeUtf(packet.sha256(), 64);
             buf.writeVarLong(packet.offset());
         }
         public static RequestPacket decode(FriendlyByteBuf buf) {
-            return new RequestPacket(buf.readUtf(64), buf.readVarLong());
+            return new RequestPacket(buf.readVarLong(), buf.readUtf(64), buf.readVarLong());
         }
     }
 
-    public record ChunkPacket(String sha256, long offset, long totalSize, byte[] bytes) {
+    public record ChunkPacket(long requestToken, String sha256, long offset, long totalSize, byte[] bytes) {
         public static void encode(ChunkPacket packet, FriendlyByteBuf buf) {
+            buf.writeVarLong(packet.requestToken());
             buf.writeUtf(packet.sha256(), 64);
             buf.writeVarLong(packet.offset());
             buf.writeVarLong(packet.totalSize());
             buf.writeByteArray(packet.bytes());
         }
         public static ChunkPacket decode(FriendlyByteBuf buf) {
+            var requestToken = buf.readVarLong();
             var sha = buf.readUtf(64);
             var offset = buf.readVarLong();
             var total = buf.readVarLong();
             var bytes = buf.readByteArray(CHUNK_BYTES);
-            if (!sha.matches("[0-9a-f]{64}") || offset < 0 || total <= 0 || total > MAX_PACK_BYTES
+            if (requestToken < 0 || !sha.matches("[0-9a-f]{64}") || offset < 0
+                    || total <= 0 || total > MAX_PACK_BYTES
                     || bytes.length == 0 || bytes.length > CHUNK_BYTES || offset > total - bytes.length) {
                 throw new IllegalArgumentException("Invalid Photon FX pack chunk");
             }
-            return new ChunkPacket(sha, offset, total, bytes);
+            return new ChunkPacket(requestToken, sha, offset, total, bytes);
         }
     }
 }

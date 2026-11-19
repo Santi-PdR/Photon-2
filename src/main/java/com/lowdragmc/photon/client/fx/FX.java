@@ -32,6 +32,10 @@ public class FX {
     private final FXData fxData;
     private final Map<String, FX> legacySubFXs = new LinkedHashMap<>();
 
+    public Map<String, FX> getLegacySubFXs() {
+        return legacySubFXs;
+    }
+
     public FX() {
         fxData = new FXData();
     }

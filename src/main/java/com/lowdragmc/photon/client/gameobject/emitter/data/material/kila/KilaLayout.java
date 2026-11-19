@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ public final class KilaLayout {
     public final List<Texture> textures;
     /** Modules left out of this variant because they did not fit the sampler budget. */
     public final List<KilaModule> dropped;
+    private final Set<KilaModule> droppedLookup;
     /** Which {@code KILA_P<group>} parameter groups the variant carries. */
     public final boolean[] groups;
     /** Whether a slot maps in world space, which reads {@code KilaCameraPos}. */
@@ -81,8 +83,16 @@ public final class KilaLayout {
         this.samplers = List.copyOf(samplers);
         this.textures = List.copyOf(builder.textures);
         this.dropped = List.copyOf(dropped);
+        var droppedLookup = Collections.newSetFromMap(new IdentityHashMap<KilaModule, Boolean>());
+        droppedLookup.addAll(dropped);
+        this.droppedLookup = Collections.unmodifiableSet(droppedLookup);
         this.groups = builder.groups.clone();
         this.world = defines.contains("KILA_WORLD_UV");
+    }
+
+    /** Constant-time identity lookup for the draw path; the ordered list remains available for diagnostics. */
+    public boolean isDropped(KilaModule module) {
+        return droppedLookup.contains(module);
     }
 
     @Nullable

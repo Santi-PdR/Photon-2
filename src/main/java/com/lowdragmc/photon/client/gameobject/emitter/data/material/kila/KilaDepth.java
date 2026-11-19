@@ -80,6 +80,18 @@ public class KilaDepth extends KilaModule {
     public final KilaTexture contactNoise = new KilaTexture(KilaTextures.NOISE_CLOUD).noise(KilaTexture.Noise.GRADIENT, 6)
             .scroll(0, 0.3f);
 
+    public ContactMode effectiveContactMode() {
+        return contactMode == null ? ContactMode.ADD : contactMode;
+    }
+
+    public Measure effectiveMeasure() {
+        return measure == null ? Measure.VIEW : measure;
+    }
+
+    public HDRColor effectiveContactColor() {
+        return contactColor == null ? new HDRColor(0.6f, 0.9f, 1f, 1f, 2f) : contactColor;
+    }
+
     private static final Matrix4f INVERSE_PROJECTION = new Matrix4f();
 
     private final SoftParticles softParticles = new SoftParticles();
@@ -95,13 +107,30 @@ public class KilaDepth extends KilaModule {
         return Category.ALPHA;
     }
 
+    // The gradient and breakup noise cost samplers: do not reserve them when the width/strength cannot glow.
+    private boolean canProducePositive(KilaDriver driver) {
+        return driver.safeValue() > 0f || (driver.isDriven() && driver.safeScale() != 0f);
+    }
+
+    private boolean contactGlowPossible() {
+        return canProducePositive(contactWidth) && canProducePositive(contactStrength);
+    }
+
+    private float effectiveContactBreakup() {
+        return contactGlowPossible() ? finite(contactBreakup, 0f, 0f, 1f) : 0f;
+    }
+
     private boolean breakup() {
-        return contactBreakup > 0;
+        return effectiveContactBreakup() > 0f;
+    }
+
+    private boolean contactGradientEnabled() {
+        return contactGlowPossible() && contactGradient;
     }
 
     @Override
     public long structure() {
-        return (measure == Measure.SURFACE ? 1 : 0) | (contactGradient ? 2 : 0) | (breakup() ? 4 : 0);
+        return (effectiveMeasure() == Measure.SURFACE ? 1 : 0) | (contactGradientEnabled() ? 2 : 0) | (breakup() ? 4 : 0);
     }
 
     @Override
@@ -110,8 +139,8 @@ public class KilaDepth extends KilaModule {
                 .ivec4("KilaDepthOpts").vec4("KilaContactColor").vec4("KilaContactShape", 1, 0, 0, 0)
                 .vec4("KilaContactPulse").float1("GameTime", 0).sampler(PhotonShaderCompiler.SCENE_DEPTH)
                 .params(KilaParam.CONTACT_STRENGTH, KilaParam.CONTACT_WIDTH);
-        if (measure == Measure.SURFACE) layout.define("KILA_REL_POS");
-        if (contactGradient) layout.define("KILA_CONTACT_RAMP").dynamicTexture("CONTACT_RAMP", bakedGradient::textureId);
+        if (effectiveMeasure() == Measure.SURFACE) layout.define("KILA_REL_POS");
+        if (contactGradientEnabled()) layout.define("KILA_CONTACT_RAMP").dynamicTexture("CONTACT_RAMP", bakedGradient::textureId);
         if (breakup()) {
             layout.define("KILA_CONTACT_BREAKUP").fragmentUvChain("KilaContact")
                     .source("CONTACT", "KilaContact", contactNoise, true);
@@ -120,16 +149,20 @@ public class KilaDepth extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
+        // Depth is also required by the independent contact-glow feature when soft fading is disabled.
         softParticles.setEnable(true);
-        softParticles.distance = distance;
-        softParticles.power = power;
+        softParticles.distance = finite(distance, 1f, 0.001f, 64f);
+        softParticles.power = finite(power, 1f, 0.01f, 16f);
         softParticles.apply(shader, context);
-        shader.safeGetUniform("KilaDepthOpts").set(soft ? 1 : 0, measure.ordinal(), contactMode.ordinal(),
+        shader.safeGetUniform("KilaDepthOpts").set(soft ? 1 : 0, effectiveMeasure().ordinal(), effectiveContactMode().ordinal(),
                 contactFollowsShape ? 1 : 0);
-        var glow = contactColor.toVector4fOpaque();
-        shader.safeGetUniform("KilaContactColor").set(glow.x, glow.y, glow.z, 0f);
-        shader.safeGetUniform("KilaContactShape").set(contactPower, contactHardness, contactBreakup, (float) contactPulses);
-        shader.safeGetUniform("KilaContactPulse").set(contactPulseSpeed, 0f, 0f, 0f);
+        var glow = effectiveContactColor().toVector4fOpaque();
+        shader.safeGetUniform("KilaContactColor").set(
+                KilaMaterial.finite(glow.x), KilaMaterial.finite(glow.y), KilaMaterial.finite(glow.z), 0f);
+        shader.safeGetUniform("KilaContactShape").set(
+                finite(contactPower, 1f, 0.05f, 16f), finite(contactHardness, 0f, 0f, 0.99f),
+                effectiveContactBreakup(), (float) net.minecraft.util.Mth.clamp(contactPulses, 0, 32));
+        shader.safeGetUniform("KilaContactPulse").set(finite(contactPulseSpeed, 1f, -16f, 16f), 0f, 0f, 0f);
         if (breakup()) {
             contactNoise.uploadUv(shader, "KilaContact");
             shader.safeGetUniform("KilaContactOpts").set(contactNoise.flags(), 0, 0, 0);
@@ -177,12 +210,12 @@ public class KilaDepth extends KilaModule {
         var contact = KilaUI.subGroup(group, "kila.depth.contact", false);
         KilaUI.driver(contact, "kila.depth.contact.width", contactWidth, 0, 16);
         KilaUI.driver(contact, "kila.depth.contact.strength", contactStrength, 0, 1);
-        KilaUI.hdr(contact, "kila.depth.contact.color", () -> contactColor, v -> contactColor = v, false);
-        KilaUI.choice(contact, "kila.depth.contact.mode", ContactMode.values(), () -> contactMode, v -> contactMode = v);
+        KilaUI.hdr(contact, "kila.depth.contact.color", this::effectiveContactColor, v -> contactColor = v, false);
+        KilaUI.choice(contact, "kila.depth.contact.mode", ContactMode.values(), this::effectiveContactMode, v -> contactMode = v);
         KilaUI.number(contact, "kila.depth.contact.power", () -> contactPower, v -> contactPower = v, 1, 0.05f, 16);
         KilaUI.number(contact, "kila.depth.contact.hardness", () -> contactHardness, v -> contactHardness = v, 0, 0, 0.99f);
         KilaUI.bool(contact, "kila.depth.contact.follow_shape", () -> contactFollowsShape, v -> contactFollowsShape = v);
-        KilaUI.choice(contact, "kila.depth.contact.measure", Measure.values(), () -> measure, v -> measure = v);
+        KilaUI.choice(contact, "kila.depth.contact.measure", Measure.values(), this::effectiveMeasure, v -> measure = v);
         KilaUI.bool(contact, "kila.depth.contact.gradient", () -> contactGradient, v -> contactGradient = v);
         KilaUI.showWhen(contact, KilaUI.gradient(contact, "kila.depth.contact.gradient_colors",
                 contactGradientColors::copy, v -> KilaBakedGradient.copy(v, contactGradientColors)), () -> contactGradient);

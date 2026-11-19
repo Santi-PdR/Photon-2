@@ -1,12 +1,16 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.material.kila;
 
+import com.lowdragmc.lowdraglib2.gui.texture.DynamicTexture;
+import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.photon.Photon;
 import net.minecraft.network.chat.Component;
-import net.minecraft.client.Minecraft;
+import com.lowdragmc.photon.client.util.PhotonTextureCatalogue;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -15,13 +19,13 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
-import java.util.TreeMap;
 import java.util.function.BooleanSupplier;
 
 /** A texture slot's picker: a click applies at once so the material preview shows it, a double click also closes. */
 @OnlyIn(Dist.CLIENT)
 public final class KilaTexturePicker {
     private static final int TILE = 40;
+    private static final int MAX_RESOURCE_TILES = 128;
     private static final int RECENT_LIMIT = 8;
     private static final Deque<ResourceLocation> RECENT = new ArrayDeque<>();
     public static final List<ResourceLocation> PARTICLES = List.of(
@@ -40,6 +44,7 @@ public final class KilaTexturePicker {
 
     /** A starting scale that shows the noise's character. */
     static float defaultScale(KilaTexture.Noise noise) {
+        if (noise == null) return 6;
         return switch (noise) {
             case SIMPLE -> 12;
             case GRADIENT -> 5;
@@ -50,8 +55,9 @@ public final class KilaTexturePicker {
     public static Dialog open(KilaTextureField field, float x, float y) {
         var texture = field.texture;
         var original = texture.getTexture();
-        var originalNoise = texture.noise;
+        var originalNoise = texture.effectiveNoise();
         var originalScale = texture.noiseScale;
+        if (!texture.isProcedural()) remember(original);
 
         var list = KilaDialogs.list();
         list.addClass("__kila-picker__");
@@ -65,8 +71,8 @@ public final class KilaTexturePicker {
                 var candidate = new KilaTexture(KilaTextures.WHITE).noise(noise, defaultScale(noise));
                 candidate.noiseMotion = 0;
                 noises.addChild(tile(dialog, field, candidate,
-                        Component.translatable("kila.texture.noise." + noise.name().toLowerCase()),
-                        () -> texture.noise == noise, () -> field.pick(noise)));
+                        Component.translatable("kila.texture.noise." + noise.name().toLowerCase(java.util.Locale.ROOT)),
+                        () -> texture.effectiveNoise() == noise, () -> field.pick(noise)));
             }
         }
         if (!RECENT.isEmpty()) {
@@ -85,29 +91,45 @@ public final class KilaTexturePicker {
         }
 
         // Resource ids retain the `textures/...png` path expected by Minecraft's texture manager.
-        // Enumerate non-vanilla assets so textures from Photon and installed mods/server FX packs
-        // are selectable without copying them into LDLib's editor directory. The vanilla namespace
-        // is intentionally omitted here because it contains thousands of block/model textures.
+        // Keep mounted/loose mod textures searchable rather than constructing an unbounded grid of
+        // preview widgets for every texture in a large modpack. Builtins, particles and recents are
+        // already visible above; searching adds at most MAX_RESOURCE_TILES more cells.
         var alreadyShown = new HashSet<ResourceLocation>();
         alreadyShown.addAll(KilaTextures.ALL);
         alreadyShown.addAll(PARTICLES);
         alreadyShown.addAll(RECENT);
-        var byNamespace = new TreeMap<String, List<ResourceLocation>>();
-        Minecraft.getInstance().getResourceManager().listResources("textures",
-                location -> location.getPath().startsWith("textures/") && location.getPath().endsWith(".png"))
-                .keySet().stream()
-                .filter(location -> !location.getNamespace().equals("minecraft"))
-                .filter(alreadyShown::add)
-                .sorted()
-                .forEach(location -> byNamespace.computeIfAbsent(location.getNamespace(), key -> new java.util.ArrayList<>())
-                        .add(location));
-        for (var entry : byNamespace.entrySet()) {
-            var resources = KilaDialogs.section(list, Component.literal(entry.getKey()));
-            for (var location : entry.getValue()) {
-                resources.addChild(textureTile(dialog, field, location));
+        var resources = KilaDialogs.section(list, "kila.picker.resources");
+        var search = new TextField();
+        search.setId("kila_texture_picker_search");
+        search.layout(layout -> layout.widthPercent(100).height(16));
+        Runnable refillResources = () -> {
+            resources.clearAllChildren();
+            var query = search.getText().trim();
+            if (query.isEmpty()) {
+                resources.addChild(new Label().setText("kila.picker.search_hint"));
+                return;
             }
-        }
+            var found = PhotonTextureCatalogue.matching(query, MAX_RESOURCE_TILES + 1,
+                    location -> !alreadyShown.contains(location));
+            int shown = Math.min(found.size(), MAX_RESOURCE_TILES);
+            for (int i = 0; i < shown; i++) {
+                resources.addChild(textureTile(dialog, field, found.get(i)));
+            }
+            if (shown == 0) {
+                resources.addChild(new Label().setText("kila.picker.search_empty"));
+            } else if (found.size() > MAX_RESOURCE_TILES) {
+                resources.addChild(new Label().setText(Component.translatable(
+                        "kila.picker.search_limit", MAX_RESOURCE_TILES)));
+            }
+            if (PhotonTextureCatalogue.isCatalogueIncomplete()) {
+                resources.addChild(new Label().setText("photon.texture_catalogue.incomplete"));
+            }
+        };
+        search.setTextResponder(word -> refillResources.run());
+        refillResources.run();
 
+        dialog.addContent(new Label().setText("kila.picker.search"));
+        dialog.addContent(search);
         dialog.addContent(list);
         dialog.addButton(new Button().setText("kila.texture.file").setOnClick(e -> {
             dialog.close();
@@ -132,10 +154,29 @@ public final class KilaTexturePicker {
 
     private static UIElement tile(Dialog dialog, KilaTextureField field, KilaTexture candidate, Component name,
                                   BooleanSupplier selected, Runnable pick) {
-        candidate.channel = field.texture.channel;
-        candidate.colorMode = field.texture.colorMode;
+        candidate.channel = field.texture.effectiveChannel();
+        candidate.colorMode = field.texture.effectiveColorMode();
         candidate.nearest = field.texture.nearest;
-        var cell = KilaDialogs.cell(KilaDialogs.fill(new KilaSlotPreview(candidate, field.kind, false)), name, TILE, selected);
+        boolean[] hovered = {false};
+        long[] hoverStarted = {0L};
+        KilaSlotPreview[] preview = {null};
+        var previewWidget = KilaDialogs.fill(DynamicTexture.of(() -> {
+            if (!hovered[0] || System.nanoTime() - hoverStarted[0] < 250_000_000L) return Icons.MATERIAL;
+            if (preview[0] == null) preview[0] = new KilaSlotPreview(candidate, field.kind, false);
+            return preview[0];
+        }));
+        var thumbnail = KilaDialogs.fill(KilaSlotPreview.checker()).addChild(previewWidget);
+        var cell = KilaDialogs.cell(thumbnail, name, TILE, selected);
+        previewWidget.addEventListener(UIEvents.MOUSE_ENTER, event -> {
+            hovered[0] = true;
+            hoverStarted[0] = System.nanoTime();
+        });
+        previewWidget.addEventListener(UIEvents.MOUSE_LEAVE, event -> hovered[0] = false);
+        cell.addEventListener(UIEvents.MOUSE_ENTER, event -> {
+            hovered[0] = true;
+            hoverStarted[0] = System.nanoTime();
+        });
+        cell.addEventListener(UIEvents.MOUSE_LEAVE, event -> hovered[0] = false);
         cell.style(style -> style.tooltips(name));
         cell.addEventListener(UIEvents.MOUSE_DOWN, event -> {
             if (event.button == 0) pick.run();

@@ -335,7 +335,7 @@ public class ParticleEmitter extends Emitter {
         this(new ParticleConfig());
     }
 
-    protected ParticleEmitter(ParticleConfig config) {
+    public ParticleEmitter(ParticleConfig config) {
         this.config = config;
     }
 
@@ -868,6 +868,19 @@ public class ParticleEmitter extends Emitter {
     }
 
     @Override
+    protected boolean wrapsProgress() {
+        // Photon 1 wrapped emitter progress even for a non-looping emitter's last tick.
+        return config.emission.isLegacyTickEmission() || super.wrapsProgress();
+    }
+
+    @Override
+    protected boolean hasReachedEnd() {
+        // Photon 1 emitted at age == duration before its post-update removal. Keep that
+        // final tick for imported effects (not for Photon 2's existing duration semantics).
+        return config.emission.isLegacyTickEmission() ? ageF > getLifetime() : super.hasReachedEnd();
+    }
+
+    @Override
     public void update(float dt) {
         if (!hasFirstUpdate) {
             hasFirstUpdate = true;
@@ -1000,6 +1013,11 @@ public class ParticleEmitter extends Emitter {
     }
 
     @Override
+    public void inheritDuration(int duration) {
+        runtime().duration.set(duration);
+    }
+
+    @Override
     public int getLifetime() {
         return runtime().duration.get();
     }
@@ -1111,6 +1129,15 @@ public class ParticleEmitter extends Emitter {
         registerLights(null);
         collisionScene = null;
         collisionWorld = null;
+    }
+
+    /**
+     * A draining emitter is done when it holds no particles at all: the ones in flight finished and nothing new is
+     * being spawned, since winding down stops new work.
+     */
+    @Override
+    public boolean hasVisibleRemnants() {
+        return !waitToAdded.isEmpty() || getParticleAmount() > 0 || super.hasVisibleRemnants();
     }
 
     @Override

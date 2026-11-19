@@ -22,6 +22,10 @@ public class KilaMatcap extends KilaModule {
     @Persisted
     public float strength = 1;
 
+    public Blend effectiveBlend() {
+        return blend == null ? Blend.ADD : blend;
+    }
+
     @Override
     public String id() {
         return "matcap";
@@ -39,7 +43,8 @@ public class KilaMatcap extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        shader.safeGetUniform("KilaMatcap").set(strength, (float) blend.ordinal(), 0f, 0f);
+        shader.safeGetUniform("KilaMatcap").set(
+                finite(strength, 1f, 0f, 16f), (float) effectiveBlend().ordinal(), 0f, 0f);
     }
 
     @Override
@@ -52,7 +57,7 @@ public class KilaMatcap extends KilaModule {
         // the lookup reads rgb only: no colour mode row
         KilaUI.add(group, new KilaTextureField("kila.matcap.texture", texture, KilaUI.TextureKind.COLOR, false),
                 "kila.matcap.texture");
-        KilaUI.choice(group, "kila.matcap.blend", Blend.values(), () -> blend, v -> blend = v);
+        KilaUI.choice(group, "kila.matcap.blend", Blend.values(), this::effectiveBlend, v -> blend = v);
         KilaUI.number(group, "kila.matcap.strength", () -> strength, v -> strength = v, 1, 0, 16);
     }
 }
