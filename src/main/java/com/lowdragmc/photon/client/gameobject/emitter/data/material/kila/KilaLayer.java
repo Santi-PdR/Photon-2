@@ -66,6 +66,10 @@ public class KilaLayer extends KilaModule {
         return index == 1;
     }
 
+    public Blend effectiveBlend() {
+        return blend == null ? (first() ? Blend.MULTIPLY : Blend.ADD) : blend;
+    }
+
     @Override
     public void declare(KilaLayout.Builder layout) {
         layout.define(define).fragmentUvChain(prefix).texture(slot, texture);
@@ -79,7 +83,7 @@ public class KilaLayer extends KilaModule {
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
         texture.uploadUv(shader, prefix);
-        shader.safeGetUniform(prefix + "Opts").set(texture.flags(), texture.colorMode.ordinal(), blend.ordinal(),
+        shader.safeGetUniform(prefix + "Opts").set(texture.flags(), texture.effectiveColorMode().ordinal(), effectiveBlend().ordinal(),
                 (affectsColor ? 1 : 0) | (affectsAlpha ? 2 : 0));
     }
 
@@ -102,7 +106,7 @@ public class KilaLayer extends KilaModule {
     @Override
     public void buildModuleConfigurator(ConfiguratorGroup group) {
         KilaUI.texture(group, "kila.layer.texture", texture, KilaUI.TextureKind.COLOR, true);
-        KilaUI.choice(group, "kila.layer.blend", Blend.values(), () -> blend, v -> blend = v);
+        KilaUI.choice(group, "kila.layer.blend", Blend.values(), this::effectiveBlend, v -> blend = v);
         KilaUI.driver(group, "kila.layer.strength", strength, 0, 1);
         KilaUI.bool(group, "kila.layer.affects_color", () -> affectsColor, v -> affectsColor = v);
         KilaUI.bool(group, "kila.layer.affects_alpha", () -> affectsAlpha, v -> affectsAlpha = v);

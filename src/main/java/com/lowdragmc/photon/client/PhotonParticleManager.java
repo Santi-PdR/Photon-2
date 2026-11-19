@@ -82,6 +82,15 @@ public class PhotonParticleManager extends ParticleManager implements ParticleTi
     private long time = 0;
     @Getter @Setter
     private long timeOffset = 0;
+
+    /** Explicit zero-argument accessor; Lombok suppresses it because the partial-tick overload shares its name. */
+    public long getTime() {
+        return time;
+    }
+
+    public void setTime(long time) {
+        this.time = time;
+    }
     @Getter
     private boolean isPlaying;
     private final long[] lastCPUTimes = new long[60];

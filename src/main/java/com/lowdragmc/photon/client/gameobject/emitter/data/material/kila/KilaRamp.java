@@ -33,6 +33,14 @@ public class KilaRamp extends KilaModule {
     @Persisted(subPersisted = true)
     public final KilaDriver offset = new KilaDriver(0);
 
+    public Input effectiveInput() {
+        return input == null ? Input.LUMINANCE : input;
+    }
+
+    public Mode effectiveMode() {
+        return mode == null ? Mode.REPLACE : mode;
+    }
+
     private final KilaBakedGradient baked = new KilaBakedGradient(gradient);
 
     @Override
@@ -53,8 +61,8 @@ public class KilaRamp extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        shader.safeGetUniform("KilaRamp").set(intensity, 0f, 0f, 0f);
-        shader.safeGetUniform("KilaRampOpts").set(input.ordinal(), mode.ordinal(), 0, 0);
+        shader.safeGetUniform("KilaRamp").set(finite(intensity, 1f, 0f, 64f), 0f, 0f, 0f);
+        shader.safeGetUniform("KilaRampOpts").set(effectiveInput().ordinal(), effectiveMode().ordinal(), 0, 0);
     }
 
     @Override
@@ -66,8 +74,8 @@ public class KilaRamp extends KilaModule {
     public void buildModuleConfigurator(ConfiguratorGroup group) {
         KilaUI.gradient(group, "kila.ramp.gradient", gradient::copy, v -> KilaBakedGradient.copy(v, gradient));
         KilaUI.number(group, "kila.ramp.intensity", () -> intensity, v -> intensity = v, 1, 0, 64);
-        KilaUI.choice(group, "kila.ramp.input", Input.values(), () -> input, v -> input = v);
-        KilaUI.choice(group, "kila.ramp.mode", Mode.values(), () -> mode, v -> mode = v);
+        KilaUI.choice(group, "kila.ramp.input", Input.values(), this::effectiveInput, v -> input = v);
+        KilaUI.choice(group, "kila.ramp.mode", Mode.values(), this::effectiveMode, v -> mode = v);
         KilaUI.driver(group, "kila.ramp.offset", offset, -1, 1);
     }
 }

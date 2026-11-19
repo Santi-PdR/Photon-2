@@ -9,4 +9,10 @@ public class ToggleGroup implements IToggleConfigurable {
     @Setter
     protected boolean enable;
 
+    // A disabled module still owns authored settings. LDLib's default drops them on both
+    // serialization and deserialization, losing Photon 1 imports and native edits alike.
+    @Override
+    public boolean skipDisableSerialize() {
+        return false;
+    }
 }

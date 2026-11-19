@@ -33,6 +33,7 @@ public class RemoveBlockEffectCommand {
     public static final ResourceLocation ID = Photon.id("remove_block_effect_command");
 
     protected BlockPos pos;
+    protected ResourceLocation dimension;
     @Setter
     protected boolean force;
     @Nullable
@@ -52,16 +53,19 @@ public class RemoveBlockEffectCommand {
     private static int execute(CommandContext<CommandSourceStack> context, boolean force, boolean location) throws CommandSyntaxException {
         var command = new RemoveBlockEffectCommand();
         command.pos = BlockPosArgument.getLoadedBlockPos(context, "pos");
+        command.dimension = context.getSource().getLevel().dimension().location();
         // Explicit false keeps graceful draining; an unqualified remove is immediate.
         command.setForce(!force || BoolArgumentType.getBool(context, "force"));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }
+        ActiveWorldEffects.forget(command.dimension, command.pos, command.location);
         PhotonNetworking.CHANNEL.send(PacketDistributor.TRACKING_CHUNK.with(() -> context.getSource().getLevel().getChunkAt(command.pos)), command);
         return Command.SINGLE_SUCCESS;
     }
 
     public void encode(FriendlyByteBuf buf) {
+        buf.writeResourceLocation(dimension);
         buf.writeBlockPos(pos);
         buf.writeBoolean(force);
         buf.writeBoolean(location != null);
@@ -71,6 +75,7 @@ public class RemoveBlockEffectCommand {
     }
 
     public void decode(FriendlyByteBuf buf) {
+        dimension = buf.readResourceLocation();
         pos = buf.readBlockPos();
         force = buf.readBoolean();
         if (buf.readBoolean()) {
@@ -93,6 +98,8 @@ public class RemoveBlockEffectCommand {
     @OnlyIn(Dist.CLIENT)
     private static class Client {
         public static void execute(RemoveBlockEffectCommand packet) {
+            var level = Minecraft.getInstance().level;
+            if (level == null || !level.dimension().location().equals(packet.dimension)) return;
             EffectRemoval.removeMatching(List.of(packet.pos), BlockEffectExecutor.CACHE,
                     effect -> packet.location == null || packet.location.equals(effect.getFx().getFxLocation()),
                     effect -> {

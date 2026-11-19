@@ -112,7 +112,7 @@ public final class KilaGraphExport {
         this.w = new GraphWriter(graph);
         this.dropped = Set.copyOf(material.layout().dropped);
         for (var module : dropped) skipped.add(module.langKey());
-        this.flowMap = on(material.distortion) && material.distortion.mode == KilaDistortion.Mode.FLOW_MAP;
+        this.flowMap = on(material.distortion) && material.distortion.effectiveMode() == KilaDistortion.Mode.FLOW_MAP;
     }
 
     private boolean on(KilaModule module) {
@@ -122,25 +122,38 @@ public final class KilaGraphExport {
     @Nullable
     private ShaderGraphMaterial.RenderState renderState() {
         if (m.slotRenderState) return null;
-        return new ShaderGraphMaterial.RenderState(m.blend, m.doubleSided, m.backFacesFirst, m.depthTest, m.depthWrite);
+        return new ShaderGraphMaterial.RenderState(m.effectiveBlend(), m.doubleSided, m.backFacesFirst, m.depthTest, m.depthWrite);
     }
 
     // ---- building blocks ---------------------------------------------------------------------------
 
+    static float safeGraphFloat(float value) {
+        if (!Float.isFinite(value)) return 0f;
+        return net.minecraft.util.Mth.clamp(value, -1_000_000f, 1_000_000f);
+    }
+
     private PortModel number(String name, float value) {
-        return w.variable(name, TypeHandles.FLOAT, value);
+        return w.variable(name, TypeHandles.FLOAT, safeGraphFloat(value));
     }
 
     private PortModel vector(String name, Vector2f value) {
-        return w.variable(name, RenderTypeGraphTypes.VEC2, new Vector2f(value));
+        var safe = value == null ? new Vector2f() : new Vector2f(safeGraphFloat(value.x), safeGraphFloat(value.y));
+        return w.variable(name, RenderTypeGraphTypes.VEC2, safe);
     }
 
     private PortModel vector(String name, Vector3f value) {
-        return w.variable(name, RenderTypeGraphTypes.VEC3, new Vector3f(value));
+        var safe = value == null ? new Vector3f() : new Vector3f(safeGraphFloat(value.x), safeGraphFloat(value.y), safeGraphFloat(value.z));
+        return w.variable(name, RenderTypeGraphTypes.VEC3, safe);
+    }
+
+    static HDRColor safeGraphColor(HDRColor value) {
+        if (value == null) return HDRColor.white();
+        return new HDRColor(safeGraphFloat(value.getR()), safeGraphFloat(value.getG()), safeGraphFloat(value.getB()),
+                safeGraphFloat(value.getA()), safeGraphFloat(value.getIntensity()));
     }
 
     private PortModel color(String name, HDRColor value) {
-        return w.variable(name, RenderTypeGraphTypes.HDR_COLOR, value.copy());
+        return w.variable(name, RenderTypeGraphTypes.HDR_COLOR, safeGraphColor(value));
     }
 
     private PortModel gradient(String name, GradientColor value) {
@@ -265,7 +278,7 @@ public final class KilaGraphExport {
     }
 
     private PortModel uvEffects(KilaUvEffects fx, PortModel uv) {
-        var center = vector("Twirl Center", fx.twirlCenter);
+        var center = vector("Twirl Center", fx.effectiveTwirlCenter());
         if (fx.twirl.isDriven() || fx.twirl.value != 0) {
             var twirl = w.node(TwirlNode.class);
             w.wire(twirl, "uv", uv);
@@ -273,13 +286,14 @@ public final class KilaGraphExport {
             w.wire(twirl, "strength", driver("Twirl", fx.twirl));
             uv = out(twirl, "out");
         }
-        if (fx.shear.x != 0 || fx.shear.y != 0) {
+        var shear = fx.effectiveShear();
+        if (shear.x != 0 || shear.y != 0) {
             uv = expr("sheared", VEC2, "vec2 d = uv - center;\nsheared = uv + vec2(d.y, -d.x) * dot(d, d) * shear;",
-                    in("uv", VEC2, uv), in("center", VEC2, center), in("shear", VEC2, vector("Shear", fx.shear)));
+                    in("uv", VEC2, uv), in("center", VEC2, center), in("shear", VEC2, vector("Shear", shear)));
         }
         float tau = (float) (Math.PI * 2);
         if (fx.waveAmplitude.isDriven() || fx.waveAmplitude.value != 0) {
-            boolean alongU = fx.waveAxis == KilaUvEffects.WaveAxis.U;
+            boolean alongU = fx.effectiveWaveAxis() == KilaUvEffects.WaveAxis.U;
             uv = expr("waved", VEC2, "float wave = sin(uv." + (alongU ? "x" : "y") + " * frequency + t * speed) * amplitude;\n"
                             + "waved = " + (alongU ? "vec2(uv.x, uv.y + wave)" : "vec2(uv.x + wave, uv.y)") + ";",
                     in("uv", VEC2, uv), in("t", FLOAT, time()), in("amplitude", FLOAT, driver("Wave", fx.waveAmplitude)),
@@ -310,7 +324,7 @@ public final class KilaGraphExport {
     }
 
     private PortModel source(KilaDriver driver) {
-        return switch (driver.source) {
+        return switch (driver.effectiveSource()) {
             case VERTEX_R -> split(vertexColor(), "r");
             case VERTEX_G -> split(vertexColor(), "g");
             case VERTEX_B -> split(vertexColor(), "b");
@@ -346,10 +360,11 @@ public final class KilaGraphExport {
 
     /** Kila's uv chain: base, polar, rotation, tiling and offset, scroll, then the driven offset. */
     private PortModel slotUv(String name, KilaTexture t, @Nullable PortModel offset) {
-        return slotUv(name, t, offset, switch (t.uvSource) {
+        var source = t.effectiveUvSource();
+        return slotUv(name, t, offset, switch (source) {
             case MESH -> meshUv();
             case SCREEN -> screenUv();
-            case WORLD_XZ, WORLD_XY, WORLD_ZY -> plane(t.uvSource, world());
+            case WORLD_XZ, WORLD_XY, WORLD_ZY -> plane(source, world());
         });
     }
 
@@ -366,18 +381,18 @@ public final class KilaGraphExport {
         if (t.polar) {
             var polar = w.node(PolarCoordinatesNode.class);
             w.wire(polar, "uv", uv);
-            w.wire(polar, "center", vector(name + " Polar Center", t.polarCenter));
-            w.wire(polar, "radialScale", number(name + " Polar Radial", t.polarRadial));
-            w.wire(polar, "lengthScale", number(name + " Polar Angular", t.polarAngular));
+            w.wire(polar, "center", vector(name + " Polar Center", t.effectivePolarCenter()));
+            w.wire(polar, "radialScale", number(name + " Polar Radial", t.effectivePolarRadial()));
+            w.wire(polar, "lengthScale", number(name + " Polar Angular", t.effectivePolarAngular()));
             uv = out(polar, "out");
         }
-        if (t.rotation != 0 || t.rotationSpeed != 0) {
+        if (t.effectiveRotation() != 0 || t.effectiveRotationSpeed() != 0) {
             var rotate = w.node(RotateNode.class);
             w.wire(rotate, "uv", uv);
-            var angle = number(name + " Rotation", (float) Math.toRadians(t.rotation));
-            if (t.rotationSpeed != 0) {
+            var angle = number(name + " Rotation", (float) Math.toRadians(t.effectiveRotation()));
+            if (t.effectiveRotationSpeed() != 0) {
                 angle = expr("angle", FLOAT, "angle = start + speed * t;", in("start", FLOAT, angle),
-                        in("speed", FLOAT, number(name + " Rotation Speed", (float) Math.toRadians(t.rotationSpeed))),
+                        in("speed", FLOAT, number(name + " Rotation Speed", (float) Math.toRadians(t.effectiveRotationSpeed()))),
                         in("t", FLOAT, time()));
             }
             w.wire(rotate, "rotation", angle);
@@ -385,12 +400,13 @@ public final class KilaGraphExport {
         }
         var tiling = w.node(TilingAndOffsetNode.class);
         w.wire(tiling, "uv", uv);
-        w.wire(tiling, "tiling", vector(name + " Tiling", t.tiling));
-        w.wire(tiling, "offset", vector(name + " Offset", t.offset));
+        w.wire(tiling, "tiling", vector(name + " Tiling", t.effectiveTiling()));
+        w.wire(tiling, "offset", vector(name + " Offset", t.effectiveOffset()));
         uv = out(tiling, "out");
-        if (t.scroll.x != 0 || t.scroll.y != 0) {
+        var scroll = t.effectiveScroll();
+        if (scroll.x != 0 || scroll.y != 0) {
             uv = expr("scrolled", VEC2, "scrolled = uv + scroll * t;", in("uv", VEC2, uv),
-                    in("scroll", VEC2, vector(name + " Scroll", t.scroll)), in("t", FLOAT, time()));
+                    in("scroll", VEC2, vector(name + " Scroll", scroll)), in("t", FLOAT, time()));
         }
         if (offset != null) uv = add(uv, offset);
         return uv;
@@ -428,8 +444,8 @@ public final class KilaGraphExport {
 
     /** {@code value} with its alpha (or itself) 0 where a clipped axis leaves 0..1. */
     private PortModel clip(KilaTexture t, PortModel uv, PortModel value, GlslType type) {
-        boolean u = t.wrapU == KilaTexture.Wrap.CLIP;
-        boolean v = t.wrapV == KilaTexture.Wrap.CLIP;
+        boolean u = t.effectiveWrapU() == KilaTexture.Wrap.CLIP;
+        boolean v = t.effectiveWrapV() == KilaTexture.Wrap.CLIP;
         if (!u && !v) return value;
         var outside = (u ? "uv.x < 0.0 || uv.x > 1.0" : "") + (u && v ? " || " : "") + (v ? "uv.y < 0.0 || uv.y > 1.0" : "");
         String body = type == VEC4 ? "kept = value;\nif (" + outside + ") kept.a = 0.0;"
@@ -438,7 +454,7 @@ public final class KilaGraphExport {
     }
 
     private PortModel colorMode(KilaTexture t, PortModel texel) {
-        return switch (t.colorMode) {
+        return switch (t.effectiveColorMode()) {
             case RGBA -> texel;
             case RED_AS_ALPHA -> expr("mode", VEC4, "mode = vec4(c.rgb, c.r);", in("c", VEC4, texel));
             case ALPHA_ONLY -> expr("mode", VEC4, "mode = vec4(1.0, 1.0, 1.0, c.a);", in("c", VEC4, texel));
@@ -457,10 +473,10 @@ public final class KilaGraphExport {
             this.name = name;
             this.t = t;
             if (t.isProcedural()) {
-                scale = number(name + " Noise Scale", t.noiseScale);
-                if (t.noise == KilaTexture.Noise.VORONOI) motion = number(name + " Noise Motion", t.noiseMotion);
+                scale = number(name + " Noise Scale", t.effectiveNoiseScale());
+                if (t.effectiveNoise() == KilaTexture.Noise.VORONOI) motion = number(name + " Noise Motion", t.effectiveNoiseMotion());
             } else {
-                var address = clamped(t.wrapU) && clamped(t.wrapV) ? RenderTypeGraphTypes.SamplerAddress.CLAMP
+                var address = clamped(t.effectiveWrapU()) && clamped(t.effectiveWrapV()) ? RenderTypeGraphTypes.SamplerAddress.CLAMP
                         : RenderTypeGraphTypes.SamplerAddress.REPEAT;
                 var value = new RenderTypeGraphTypes.Sampler2DValue(t.getTexture().toString(), RenderTypeGraphTypes.SamplerMode.CUSTOM,
                         t.nearest ? RenderTypeGraphTypes.SamplerFilter.NEAREST : RenderTypeGraphTypes.SamplerFilter.LINEAR,
@@ -481,10 +497,12 @@ public final class KilaGraphExport {
          * in so repeat filtering doesn't bleed the far edge in.
          */
         private PortModel wrapUv(PortModel uv) {
-            if (clamped(t.wrapU) && clamped(t.wrapV)) return uv;
-            if (t.wrapU == KilaTexture.Wrap.REPEAT && t.wrapV == KilaTexture.Wrap.REPEAT) return uv;
+            var wrapU = t.effectiveWrapU();
+            var wrapV = t.effectiveWrapV();
+            if (clamped(wrapU) && clamped(wrapV)) return uv;
+            if (wrapU == KilaTexture.Wrap.REPEAT && wrapV == KilaTexture.Wrap.REPEAT) return uv;
             return expr("wrapped", VEC2, "vec2 h = 0.5 / vec2(textureSize(tex, 0));\nwrapped = vec2("
-                            + axis(t.wrapU, "uv.x", "h.x") + ", " + axis(t.wrapV, "uv.y", "h.y") + ");",
+                            + axis(wrapU, "uv.x", "h.x") + ", " + axis(wrapV, "uv.y", "h.y") + ");",
                     in("uv", VEC2, uv), in("tex", SAMPLER2D, sampler));
         }
 
@@ -493,11 +511,11 @@ public final class KilaGraphExport {
         }
 
         PortModel value(PortModel uv) {
-            return t.isProcedural() ? noise(uv) : channel(texel(uv), t.channel);
+            return t.isProcedural() ? noise(uv) : channel(texel(uv), t.effectiveChannel());
         }
 
         PortModel noise(PortModel uv) {
-            return switch (t.noise) {
+            return switch (t.effectiveNoise()) {
                 case SIMPLE, TEXTURE -> {
                     var node = w.node(SimpleNoiseNode.class);
                     w.wire(node, "uv", uv);
@@ -570,7 +588,7 @@ public final class KilaGraphExport {
         var source = new Source("Main", main.texture);
         Sheet sheet = null;
         if (main.flipbook) {
-            boolean driven = main.frameSource == KilaMainTexture.FrameSource.DRIVER;
+            boolean driven = main.effectiveFrameSource() == KilaMainTexture.FrameSource.DRIVER;
             boolean motion = main.frameBlend && main.motionVectors;
             sheet = new Sheet(vector("Flipbook Grid", new Vector2f(Math.max(main.columns, 1), Math.max(main.rows, 1))),
                     number("Flipbook FPS", main.fps), number("Flipbook Start Frame", main.startFrame),
@@ -582,7 +600,7 @@ public final class KilaGraphExport {
         var split = main.dispersion ? expr("split", VEC2, "split = " + (main.dispersionRadial ? "(uv - 0.5)" : "direction")
                         + " * amount;", main.dispersionRadial ? List.of(in("uv", VEC2, meshUv()),
                         in("amount", FLOAT, driver("Dispersion", main.dispersionAmount)))
-                        : List.of(in("direction", VEC2, vector("Dispersion Direction", main.dispersionDirection)),
+                        : List.of(in("direction", VEC2, vector("Dispersion Direction", main.effectiveDispersionDirection())),
                         in("amount", FLOAT, driver("Dispersion", main.dispersionAmount))))
                 : null;
         var finalSheet = sheet;
@@ -629,8 +647,8 @@ public final class KilaGraphExport {
                 float now = once ? min(floor(frame), span - 1.0) : floor(frame);
                 float next = once ? min(now + 1.0, span - 1.0) : now + 1.0;
                 """);
-        body.append("vec2 cell = vec2(").append(cellWrap(main.texture.wrapU, "uv.x")).append(", ")
-                .append(cellWrap(main.texture.wrapV, "uv.y")).append(");\n");
+        body.append("vec2 cell = vec2(").append(cellWrap(main.texture.effectiveWrapU(), "uv.x")).append(", ")
+                .append(cellWrap(main.texture.effectiveWrapV(), "uv.y")).append(");\n");
         body.append("""
                 float fa = mod(first + mod(now, span), g.x * g.y);
                 vec2 a = (cell + vec2(mod(fa, g.x), floor(fa / g.x))) / g;
@@ -682,14 +700,14 @@ public final class KilaGraphExport {
         if (on(m.ramp)) c = ramp(c);
 
         w.row("Surface");
-        c = expr("tinted", VEC4, "tinted = c * tint * modulator;", in("c", VEC4, c), in("tint", VEC4, color("Color", m.color)),
+        c = expr("tinted", VEC4, "tinted = c * tint * modulator;", in("c", VEC4, c), in("tint", VEC4, color("Color", m.effectiveColor())),
                 in("modulator", VEC4, out(w.node(DynamicTransformsUboNode.class), "ColorModulator")));
-        if (!m.backColor.equals(HDRColor.white())) {
+        if (!m.effectiveBackColor().equals(HDRColor.white())) {
             c = expr("faced", VEC4, "faced = front ? c : vec4(c.rgb * back.rgb, c.a);", in("c", VEC4, c),
                     in("front", GlslType.BOOL, out(w.node(FrontFacingNode.class), "out")),
-                    in("back", VEC4, color("Back Color", m.backColor)));
+                    in("back", VEC4, color("Back Color", m.effectiveBackColor())));
         }
-        c = switch (m.vertexColor) {
+        c = switch (m.effectiveVertexColor()) {
             case MULTIPLY -> expr("colored", VEC4, "colored = c * vc;", in("c", VEC4, c), in("vc", VEC4, vertexColor()));
             case ALPHA_ONLY -> expr("colored", VEC4, "colored = vec4(c.rgb, c.a * vc.a);", in("c", VEC4, c), in("vc", VEC4, vertexColor()));
             case RGB_ONLY -> expr("colored", VEC4, "colored = vec4(c.rgb * vc.rgb, c.a);", in("c", VEC4, c), in("vc", VEC4, vertexColor()));
@@ -700,7 +718,7 @@ public final class KilaGraphExport {
         c = sceneShown ? screen(c) : light(c);
         w.row("Intensity");
         c = expr("glowing", VEC4, "glowing = vec4(c.rgb * intensity + emission.rgb, c.a);", in("c", VEC4, c),
-                in("intensity", FLOAT, driver("Intensity", m.intensity)), in("emission", VEC4, color("Emission", m.emission)));
+                in("intensity", FLOAT, driver("Intensity", m.intensity)), in("emission", VEC4, color("Emission", m.effectiveEmission())));
         if (on(m.matcap)) c = matcap(c);
 
         if (on(m.mask1)) c = mask("Mask 1", m.mask1, c, flowFor(m.distortion.mask1));
@@ -749,7 +767,7 @@ public final class KilaGraphExport {
     private void skipUnsupported() {
         if (on(m.projection)) skipped.add(m.projection.langKey());
         if (on(m.volume)) skipped.add(m.volume.langKey());
-        if (on(m.shading) && m.shading.model == KilaShading.Model.SIX_WAY) skipped.add("kila.export.skipped.six_way");
+        if (on(m.shading) && m.shading.effectiveModel() == KilaShading.Model.SIX_WAY) skipped.add("kila.export.skipped.six_way");
         if (on(m.depth) && (m.depth.contactWidth.isDriven() || m.depth.contactWidth.value > 0)) {
             skipped.add("kila.export.skipped.contact_glow");
         }
@@ -760,7 +778,7 @@ public final class KilaGraphExport {
     private PortModel layer(String name, KilaLayer layer, PortModel c, @Nullable PortModel offset, @Nullable PortModel flow) {
         w.row(name);
         var texel = colorSlot(name, layer.texture, offset, flow);
-        String blended = switch (layer.blend) {
+        String blended = switch (layer.effectiveBlend()) {
             case MULTIPLY -> "c * layer";
             // add and screen keep alpha: an opaque layer must not fill the quad
             case ADD -> "vec4(c.rgb + layer.rgb * layer.a, c.a)";
@@ -776,7 +794,7 @@ public final class KilaGraphExport {
     private PortModel ramp(PortModel c) {
         var ramp = m.ramp;
         w.row("Color Ramp");
-        String input = switch (ramp.input) {
+        String input = switch (ramp.effectiveInput()) {
             case LUMINANCE -> "dot(c.rgb, " + LUMA + ")";
             case RED -> "c.r";
             case ALPHA -> "c.a";
@@ -788,7 +806,7 @@ public final class KilaGraphExport {
         var sample = w.node(SampleGradientNode.class);
         w.wire(sample, "gradient", gradient("Ramp", ramp.gradient));
         w.wire(sample, "time", x);
-        String mode = switch (ramp.mode) {
+        String mode = switch (ramp.effectiveMode()) {
             case REPLACE -> "vec4(r.rgb, c.a)";
             case MULTIPLY -> "vec4(c.rgb * r.rgb, c.a)";
             case REPLACE_ALPHA -> "vec4(r.rgb, c.a * r.a)";
@@ -825,23 +843,32 @@ public final class KilaGraphExport {
                     b = (dpy * dux.x - dpx * duy.x) / det;
                     framed = length(cross(t, b)) > 1e-8;
                 }
-                vec3 mesh = normalize(meshNormal);
+                float meshLen2 = dot(meshNormal, meshNormal);
+                vec3 mesh = meshLen2 > 1e-16 && meshLen2 < 1e30 ? meshNormal * inversesqrt(meshLen2) : vec3(0.0, 0.0, 1.0);
                 if (!front) mesh = -mesh;
-                vec3 tangent = normalize(t);
-                vec3 bitangent = normalize(b);
-                vec3 face = framed ? normalize(cross(t, b)) : mesh;
+                float tangentLen2 = dot(t, t);
+                vec3 tangent = tangentLen2 > 1e-16 && tangentLen2 < 1e30 ? t * inversesqrt(tangentLen2) : vec3(1.0, 0.0, 0.0);
+                float bitangentLen2 = dot(b, b);
+                vec3 bitangent = bitangentLen2 > 1e-16 && bitangentLen2 < 1e30 ? b * inversesqrt(bitangentLen2) : vec3(0.0, -1.0, 0.0);
+                vec3 rawFace = cross(t, b);
+                float faceLen2 = dot(rawFace, rawFace);
+                vec3 face = framed && faceLen2 > 1e-16 && faceLen2 < 1e30 ? rawFace * inversesqrt(faceLen2) : mesh;
                 if (dot(face, -p) < 0.0) face = -face;
                 vec3 n = mesh;
                 """);
-        if (s.normal == KilaShading.Normal.SPHERE) {
+        if (s.effectiveNormal() == KilaShading.Normal.SPHERE) {
             inputs.add(in("bulge", FLOAT, number("Sphere Bulge", s.bulge)));
             body.append("""
                     vec2 q = uv * 2.0 - 1.0;
-                    vec3 sphere = normalize(tangent * q.x + bitangent * q.y + face * sqrt(max(1.0 - dot(q, q), 0.0)));
-                    n = normalize(mix(face, sphere, clamp(bulge, 0.0, 1.0)));
+                    vec3 rawSphere = tangent * q.x + bitangent * q.y + face * sqrt(max(1.0 - dot(q, q), 0.0));
+                    float sphereLen2 = dot(rawSphere, rawSphere);
+                    vec3 sphere = sphereLen2 > 1e-16 && sphereLen2 < 1e30 ? rawSphere * inversesqrt(sphereLen2) : face;
+                    vec3 rawBulge = mix(face, sphere, clamp(bulge, 0.0, 1.0));
+                    float bulgeLen2 = dot(rawBulge, rawBulge);
+                    n = bulgeLen2 > 1e-16 && bulgeLen2 < 1e30 ? rawBulge * inversesqrt(bulgeLen2) : face;
                     """);
         }
-        if (s.bump == KilaShading.Bump.HEIGHT) {
+        if (s.effectiveBump() == KilaShading.Bump.HEIGHT) {
             var height = new Source("Bump", s.height);
             inputs.add(in("h", FLOAT, height.value(slotUv("Bump", s.height, null))));
             inputs.add(in("strength", FLOAT, number("Bump Strength", s.bumpStrength)));
@@ -851,16 +878,19 @@ public final class KilaGraphExport {
                     vec3 r1 = cross(dpy, n);
                     vec3 r2 = cross(n, dpx);
                     float d = dot(dpx, r1);
-                    n = normalize(abs(d) * n - sign(d) * (dFdx(hh) * r1 + dFdy(hh) * r2));
+                    vec3 bumped = abs(d) * n - sign(d) * (dFdx(hh) * r1 + dFdy(hh) * r2);
+                    float bumpedLen2 = dot(bumped, bumped);
+                    n = bumpedLen2 > 1e-16 && bumpedLen2 < 1e30 ? bumped * inversesqrt(bumpedLen2) : n;
                     """);
-        } else if (s.bump == KilaShading.Bump.NORMAL_MAP) {
+        } else if (s.effectiveBump() == KilaShading.Bump.NORMAL_MAP) {
             var map = new Source("Normal Map", s.normalMap);
             inputs.add(in("m", VEC4, map.texel(slotUv("Normal Map", s.normalMap, null))));
             inputs.add(in("strength", FLOAT, number("Bump Strength", s.bumpStrength)));
             body.append("vec3 mm = m.rgb * 2.0 - 1.0;\n");
             if (s.flipGreen) body.append("mm.y = -mm.y;\n");
             // green points up the texture, against v
-            body.append("mm.xy *= strength;\nn = normalize(tangent * mm.x - bitangent * mm.y + n * max(mm.z, 1e-3));\n");
+            body.append("mm.xy *= strength;\nvec3 mapped = tangent * mm.x - bitangent * mm.y + n * max(mm.z, 1e-3);\n"
+                    + "float mappedLen2 = dot(mapped, mapped);\nn = mappedLen2 > 1e-16 && mappedLen2 < 1e30 ? mapped * inversesqrt(mappedLen2) : n;\n");
         }
         body.append("shaded = n;");
         return expr("shaded", VEC3, body.toString(), inputs);
@@ -880,12 +910,13 @@ public final class KilaGraphExport {
             var s = m.shading;
             c = expr("keyed", VEC4, """
                             vec3 l = mat3(view) * direction;
-                            if (dot(l, l) > 1e-8) l = normalize(l);
+                            float lightLen2 = dot(l, l);
+                            l = lightLen2 > 1e-16 && lightLen2 < 1e30 ? l * inversesqrt(lightLen2) : vec3(0.0, 1.0, 0.0);
                             float weight = clamp((dot(n, l) + wrap) / (1.0 + wrap), 0.0, 1.0);
                             keyed = vec4(c.rgb * key.rgb * mix(ambient, 1.0, weight), c.a);""",
                     in("c", VEC4, c), in("n", VEC3, normal()), in("view", GlslType.MAT4, modelView()),
-                    in("direction", VEC3, vector("Key Light Direction", s.lightDirection)),
-                    in("key", VEC4, color("Key Light Color", s.lightColor)), in("wrap", FLOAT, number("Light Wrap", s.wrap)),
+                    in("direction", VEC3, vector("Key Light Direction", s.effectiveLightDirection())),
+                    in("key", VEC4, color("Key Light Color", s.effectiveLightColor())), in("wrap", FLOAT, number("Light Wrap", s.wrap)),
                     in("ambient", FLOAT, number("Ambient", s.ambient)));
         }
         if (on(m.lit)) {
@@ -909,7 +940,7 @@ public final class KilaGraphExport {
         var source = new Source("Matcap", cap.texture);
         // v runs down the texture, so the normal's y is flipped
         var texel = source.texel(expr("capUv", VEC2, "capUv = vec2(n.x, -n.y) * 0.5 + 0.5;", in("n", VEC3, normal())));
-        String blend = switch (cap.blend) {
+        String blend = switch (cap.effectiveBlend()) {
             case ADD -> "c.rgb + cap.rgb * strength";
             case MULTIPLY -> "c.rgb * mix(vec3(1.0), cap.rgb, strength)";
             case REPLACE -> "mix(c.rgb, cap.rgb, clamp(strength, 0.0, 1.0))";
@@ -926,7 +957,7 @@ public final class KilaGraphExport {
         w.row("Screen Distortion");
         var strength = driver("Screen Strength", screen.strength);
         PortModel push;
-        if (screen.source == KilaScreenDistortion.Source.NORMAL) {
+        if (screen.effectiveSource() == KilaScreenDistortion.Source.NORMAL) {
             push = expr("push", VEC2, "push = n.xy * strength;", in("n", VEC3, normal()), in("strength", FLOAT, strength));
         } else {
             var source = new Source("Screen", screen.texture);
@@ -972,15 +1003,15 @@ public final class KilaGraphExport {
         var d = m.distortion;
         w.row("UV Distortion");
         var n = new Source("Distortion", d.texture).pair(slotUv("Distortion", d.texture, null));
-        String mask = switch (d.mask) {
+        String mask = switch (d.effectiveMask()) {
             case NONE -> "1.0";
             case U -> "uv.x";
             case V -> "uv.y";
             case RADIAL -> "(1.0 - clamp(length(uv - 0.5) * 2.0, 0.0, 1.0))";
         };
-        var inputs = new ArrayList<>(List.of(in("n", VEC2, n), in("amount", VEC2, vector("Distortion Amount", d.amount)),
+        var inputs = new ArrayList<>(List.of(in("n", VEC2, n), in("amount", VEC2, vector("Distortion Amount", d.effectiveAmount())),
                 in("strength", FLOAT, driver("Distortion Strength", d.strength))));
-        if (d.mask != KilaDistortion.Mask.NONE) inputs.add(in("uv", VEC2, meshUv()));
+        if (d.effectiveMask() != KilaDistortion.Mask.NONE) inputs.add(in("uv", VEC2, meshUv()));
         flow = expr("flow", VEC2, (d.bidirectional ? "vec2 m = n * 2.0 - 1.0;" : "vec2 m = n;")
                 + "\nflow = m * amount * strength * " + mask + ";", inputs);
         if (flowMap) {
@@ -1010,20 +1041,21 @@ public final class KilaGraphExport {
                 in("progress", FLOAT, driver("Dissolve Progress", d.progress)), in("softness", FLOAT, softness),
                 in("edgeWidth", FLOAT, edgeWidth)));
         var body = new StringBuilder("value = pow(clamp(n, 0.0, 1.0), max(sharpen, 1e-3));\n");
-        if (d.direction != KilaDissolve.Direction.NONE) {
-            String g = switch (d.direction) {
+        if (d.effectiveDirection() != KilaDissolve.Direction.NONE) {
+            String g = switch (d.effectiveDirection()) {
                 case U -> "uv.x";
                 case V -> "uv.y";
                 case RADIAL -> "clamp(length(uv - 0.5) * 2.0, 0.0, 1.0)";
                 case TEXTURE, NONE -> "sweep";
             };
-            if (d.direction == KilaDissolve.Direction.TEXTURE) {
+            if (d.effectiveDirection() == KilaDissolve.Direction.TEXTURE) {
                 var tiling = w.node(TilingAndOffsetNode.class);
                 w.wire(tiling, "uv", meshUv());
-                w.wire(tiling, "tiling", vector("Dissolve Direction Tiling", d.directionTexture.tiling));
-                w.wire(tiling, "offset", vector("Dissolve Direction Offset", d.directionTexture.offset));
+                w.wire(tiling, "tiling", vector("Dissolve Direction Tiling", d.directionTexture.effectiveTiling()));
+                w.wire(tiling, "offset", vector("Dissolve Direction Offset", d.directionTexture.effectiveOffset()));
                 var source = new Source("Dissolve Direction", d.directionTexture);
-                inputs.add(in("sweep", FLOAT, channel(source.texel(out(tiling, "out")), d.directionTexture.channel)));
+                inputs.add(in("sweep", FLOAT, channel(source.texel(out(tiling, "out")),
+                        d.directionTexture.effectiveChannel())));
             } else {
                 inputs.add(in("uv", VEC2, meshUv()));
             }
@@ -1043,7 +1075,7 @@ public final class KilaGraphExport {
 
         var finish = new ArrayList<>(List.of(in("c", VEC4, c), in("v", FLOAT, out(cut, "value")), in("cut", FLOAT, out(cut, "cut")),
                 in("softness", FLOAT, softness), in("edgeWidth", FLOAT, edgeWidth),
-                in("edgeColor", VEC4, color("Dissolve Edge Color", d.edgeColor))));
+                in("edgeColor", VEC4, color("Dissolve Edge Color", d.effectiveEdgeColor()))));
         var edge = new StringBuilder("""
                 float soft = max(softness, 1e-4);
                 float width = max(edgeWidth, 0.0);
@@ -1063,7 +1095,7 @@ public final class KilaGraphExport {
             finish.add(in("vc", VEC4, vertexColor()));
             edge.append("    tint *= vc.rgb;\n");
         }
-        edge.append(d.edge == KilaDissolve.Edge.REPLACE ? "    c.rgb = mix(c.rgb, tint, edge);\n" : "    c.rgb += tint * edge;\n");
+        edge.append(d.effectiveEdge() == KilaDissolve.Edge.REPLACE ? "    c.rgb = mix(c.rgb, tint, edge);\n" : "    c.rgb += tint * edge;\n");
         edge.append("}\nc.a *= smoothstep(cut, cut + soft, v);\ndissolved = c;");
         return expr("dissolved", VEC4, edge.toString(), finish);
     }
@@ -1071,17 +1103,22 @@ public final class KilaGraphExport {
     private PortModel fresnel(PortModel c) {
         var f = m.fresnel;
         w.row("Fresnel");
-        String apply = switch (f.mode) {
+        String apply = switch (f.effectiveMode()) {
             case RIM -> "c.rgb += rim.rgb * f * k;";
             case FADE_EDGES -> "c.a *= mix(1.0, 1.0 - f, k);";
             case FADE_CENTER -> "c.a *= mix(1.0, f, k);";
         };
         var inputs = new ArrayList<>(List.of(in("c", VEC4, c), in("n", VEC3, normal()), in("p", VEC3, viewPos()),
-                in("lean", VEC3, vector("Fresnel Offset", f.offset)), in("power", FLOAT, number("Fresnel Power", f.power)),
+                in("lean", VEC3, vector("Fresnel Offset", f.effectiveOffset())), in("power", FLOAT, number("Fresnel Power", f.power)),
                 in("scale", FLOAT, number("Fresnel Scale", f.scale)), in("strength", FLOAT, driver("Fresnel Strength", f.strength))));
-        if (f.mode == KilaFresnel.Mode.RIM) inputs.add(in("rim", VEC4, color("Fresnel Color", f.color)));
+        if (f.effectiveMode() == KilaFresnel.Mode.RIM) inputs.add(in("rim", VEC4, color("Fresnel Color", f.effectiveColor())));
         return expr("rimmed", VEC4, """
-                vec3 v = normalize(normalize(-p) + lean);
+                vec3 rawView = -p;
+                float viewLen2 = dot(rawView, rawView);
+                vec3 viewDirection = viewLen2 > 1e-16 && viewLen2 < 1e30 ? rawView * inversesqrt(viewLen2) : vec3(0.0, 0.0, 1.0);
+                vec3 rawViewLean = viewDirection + lean;
+                float viewLeanLen2 = dot(rawViewLean, rawViewLean);
+                vec3 v = viewLeanLen2 > 1e-16 && viewLeanLen2 < 1e30 ? rawViewLean * inversesqrt(viewLeanLen2) : viewDirection;
                 float f = clamp(scale * pow(1.0 - abs(dot(n, v)), max(power, 1e-3)), 0.0, 1.0);
                 float k = clamp(strength, 0.0, 1.0);
                 """ + apply + "\nrimmed = c;", inputs);
@@ -1108,7 +1145,7 @@ public final class KilaGraphExport {
 
     /** What the blend preset asks of the colour: premultiplied, pulled towards white, opaque. */
     private PortModel blendOutput(PortModel c) {
-        return switch (m.blend) {
+        return switch (m.effectiveBlend()) {
             case PREMULTIPLIED -> expr("blended", VEC4, "blended = vec4(c.rgb * c.a, c.a * (1.0 - clamp(additive, 0.0, 1.0)));",
                     in("c", VEC4, c), in("additive", FLOAT, number("Additive", m.additive)));
             case MULTIPLY -> expr("blended", VEC4, "blended = vec4(mix(vec3(1.0), c.rgb, c.a), c.a);", in("c", VEC4, c));
@@ -1132,9 +1169,10 @@ public final class KilaGraphExport {
         try {
             var data = w.node(ParticleDataNode.class);
             var t = v.texture;
-            var uv = slotUv("Vertex Offset", t, null, switch (t.uvSource) {
+            var source = t.effectiveUvSource();
+            var uv = slotUv("Vertex Offset", t, null, switch (source) {
                 case MESH, SCREEN -> rawUv();
-                case WORLD_XZ, WORLD_XY, WORLD_ZY -> plane(t.uvSource, world());
+                case WORLD_XZ, WORLD_XY, WORLD_ZY -> plane(source, world());
             });
             var inputs = new ArrayList<>(List.of(in("p", VEC3, out(data, "position")), in("uv", VEC2, uv),
                     in("meshUv", VEC2, rawUv()), in("amount", FLOAT, driver("Vertex Offset", v.strength))));
@@ -1144,7 +1182,7 @@ public final class KilaGraphExport {
                 body.append("float push = value;\n");
             } else {
                 var weights = new float[4];
-                t.channel.weights(weights);
+                t.effectiveChannel().weights(weights);
                 inputs.add(in("tex", SAMPLER2D, new Source("Vertex Offset", t).sampler));
                 body.append("float push = dot(textureLod(tex, uv, 0.0), ").append(vec4(weights)).append(");\n");
             }
@@ -1153,8 +1191,8 @@ public final class KilaGraphExport {
                 inputs.add(in("fade", FLOAT, number("Vertex Offset Edge Fade", v.edgeFade)));
                 body.append("push *= smoothstep(0.0, fade, meshUv.y) * smoothstep(0.0, fade, 1.0 - meshUv.y);\n");
             }
-            if (v.direction == KilaVertexOffset.Direction.AXIS) {
-                inputs.add(in("direction", VEC3, vector("Vertex Offset Axis", v.axis)));
+            if (v.effectiveDirection() == KilaVertexOffset.Direction.AXIS) {
+                inputs.add(in("direction", VEC3, vector("Vertex Offset Axis", v.effectiveAxis())));
             } else {
                 inputs.add(in("direction", VEC3, out(data, "normal")));
             }

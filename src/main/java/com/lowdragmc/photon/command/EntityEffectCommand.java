@@ -52,9 +52,18 @@ public class EntityEffectCommand extends EffectCommand {
     private int[] ids = new int[0];
     @Setter
     private EntityEffectExecutor.AutoRotate autoRotate = EntityEffectExecutor.AutoRotate.NONE;
+    /** True for server replays; clients use it to avoid restarting one-shot effects for late trackers. */
+    private boolean replay;
+
+    void setReplay(boolean replay) {
+        this.replay = replay;
+    }
 
     public static class AutoRotateType implements ArgumentType<EntityEffectExecutor.AutoRotate> {
         private static final Collection<String> EXAMPLES = Arrays.asList("none", "forward", "look", "xrot");
+        private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType INVALID_VALUE =
+                new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
+                        net.minecraft.network.chat.Component.literal("Expected none, forward, look, or xrot"));
 
         public AutoRotateType() {
         }
@@ -65,7 +74,12 @@ public class EntityEffectCommand extends EffectCommand {
 
         @Override
         public EntityEffectExecutor.AutoRotate parse(final StringReader reader) throws CommandSyntaxException {
-            return EntityEffectExecutor.AutoRotate.valueOf(reader.readString().toUpperCase());
+            String value = reader.readString();
+            try {
+                return EntityEffectExecutor.AutoRotate.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException invalid) {
+                throw INVALID_VALUE.createWithContext(reader);
+            }
         }
 
         @Override
@@ -129,7 +143,13 @@ public class EntityEffectCommand extends EffectCommand {
                                ) throws CommandSyntaxException {
         var command = new EntityEffectCommand();
         command.setLocation(ResourceLocationArgument.getId(context, "location"));
-        command.setEntities(EntityArgument.getEntities(context, "entities").stream().map(e -> (Entity) e).toList());
+        var selected = EntityArgument.getEntities(context, "entities");
+        if (selected.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
+            context.getSource().sendFailure(net.minecraft.network.chat.Component.literal(
+                    "Photon: entity FX commands support at most " + EntityIdListCodec.MAX_ENTITY_IDS + " entities"));
+            return 0;
+        }
+        command.setEntities(selected.stream().map(e -> (Entity) e).toList());
         if (offset) {
             command.setOffset(Vec3Argument.getVec3(context, "offset"));
         }
@@ -151,28 +171,55 @@ public class EntityEffectCommand extends EffectCommand {
         if (autoRotate) {
             command.setAutoRotate(AutoRotateType.getValue(context, "auto rotate"));
         }
-        PhotonNetworking.CHANNEL.send(PacketDistributor.ALL.noArg(), command);
+        // Players who do not currently track the entity never get a usable start packet
+        // (their client has no entity id). Remember the FX and send it only to trackers;
+        // StartTracking replays it when someone comes back into range.
+        for (var entity : command.entities) {
+            ActiveEntityEffects.remember(entity, command);
+            var packet = command.copyFor(entity);
+            PhotonNetworking.CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> entity), packet);
+        }
         return Command.SINGLE_SUCCESS;
+    }
+
+    EntityEffectExecutor.AutoRotate autoRotate() {
+        return autoRotate;
+    }
+
+    EntityEffectCommand copyFor(Entity entity) {
+        var copy = new EntityEffectCommand();
+        copy.setLocation(location);
+        copy.setOffset(offset);
+        copy.setRotation(rotation);
+        copy.setScale(scale);
+        copy.setDelay(delay);
+        copy.setForcedDeath(forcedDeath);
+        copy.setAllowMulti(allowMulti);
+        copy.setAutoRotate(autoRotate);
+        copy.setEntities(List.of(entity));
+        return copy;
     }
 
     @Override
     public void encode(FriendlyByteBuf buf) {
+        if (entities.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
+            throw new IllegalArgumentException("Entity FX packet exceeds the target limit");
+        }
         super.encode(buf);
         buf.writeEnum(autoRotate);
         buf.writeVarInt(entities.size());
         for (Entity entity : entities) {
             buf.writeVarInt(entity.getId());
         }
+        buf.writeBoolean(replay);
     }
 
     @Override
     public void decode(FriendlyByteBuf buf) {
         super.decode(buf);
         autoRotate = buf.readEnum(EntityEffectExecutor.AutoRotate.class);
-        ids = new int[buf.readVarInt()];
-        for (int i = 0; i < ids.length; i++) {
-            ids[i] = buf.readVarInt();
-        }
+        ids = EntityIdListCodec.read(buf, 0);
+        replay = buf.readBoolean();
     }
 
     public static EntityEffectCommand decodePacket(FriendlyByteBuf buf) {
@@ -191,9 +238,14 @@ public class EntityEffectCommand extends EffectCommand {
     private static class Client {
         public static void execute(EntityEffectCommand packet) {
             var level = Minecraft.getInstance().level;
+            Photon.LOGGER.info("[fx-diagnostic] entity playback packet fx={} targets={}", packet.location, packet.ids.length);
+            if (level == null) {
+                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-packet", "No client level", null, null);
+                return;
+            }
             if (level != null) {
                 var fx = FXHelper.getFX(packet.location);
-                if (fx != null) {
+                if (fx != null && (!packet.replay || com.lowdragmc.photon.client.fx.FXLooping.hasLoopingContent(fx))) {
                     for (var id : packet.ids) {
                         var entity = level.getEntity(id);
                         if (entity != null) {
@@ -207,7 +259,14 @@ public class EntityEffectCommand extends EffectCommand {
                             effect.setDelay(packet.delay);
                             effect.setForcedDeath(packet.forcedDeath);
                             effect.setAllowMulti(packet.allowMulti);
-                            effect.start();
+                            try {
+                                effect.start();
+                            } catch (RuntimeException error) {
+                                com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-start", "Playback start threw an exception", null, error);
+                                throw error;
+                            }
+                        } else {
+                            com.lowdragmc.photon.client.fx.FXDiagnostics.failure(packet.location, "entity-target", "Entity id " + id + " is not present on the client", null, null);
                         }
                     }
                 }

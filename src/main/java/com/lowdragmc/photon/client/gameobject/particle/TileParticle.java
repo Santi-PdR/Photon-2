@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.gameobject.particle;
 import com.lowdragmc.lowdraglib2.utils.ColorUtils;
 import com.lowdragmc.photon.client.PhotonParticleManager;
 import com.lowdragmc.photon.client.collision.ContactMemory;
+import com.lowdragmc.photon.client.gameobject.FXObject;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
 import com.lowdragmc.photon.client.gameobject.emitter.data.CustomSpace;
@@ -67,6 +68,11 @@ public class TileParticle implements IParticle {
     protected float age;
     @Setter @Getter
     protected int lifetime;
+    /**
+     * The age this particle was told to end at, or -1. A cyclic particle never dies of age on its own, so this is what
+     * makes it finish the cycle it is in when its emitter winds down. Ported from Photon 26.3.
+     */
+    protected float endAge = -1;
     @Setter @Getter
     protected boolean isRemoved;
 
@@ -207,7 +213,20 @@ public class TileParticle implements IParticle {
         if (getLifetime() <= 0) {
             return Mth.clamp(t, 0, 1); // infinite particle: hold current t instead of dividing by zero
         }
+        var mode = lifetimeMode();
+        if (mode.cyclic()) {
+            // derived from the age, not from the stored t: a cyclic particle's T wraps and comes back down, so
+            // interpolating the stored t would run past the end of a cycle between ticks
+            return ParticleLifetime.t(mode, age + partialTicks, getLifetime(), endAge);
+        }
+        if (config.emission.isLegacyTickEmission()) return t + partialTicks / getLifetime();
         return Mth.clamp(t + partialTicks / getLifetime(), 0, 1);
+    }
+
+    /** A file naming no known mode reads as null: play once, which is what this port always did. */
+    private ParticleLifetime.Mode lifetimeMode() {
+        var mode = config.getLifetimeMode();
+        return mode == null ? ParticleLifetime.Mode.Once : mode;
     }
 
     @Override
@@ -290,16 +309,21 @@ public class TileParticle implements IParticle {
     }
 
     public Vector3f getRealRotation(float partialTicks) {
-        var rotation = new Vector3f(
-                Mth.lerp(partialTicks, rotationXo, rotationX),
+        return getRealRotation(partialTicks, new Vector3f());
+    }
+
+    public Vector3f getRealRotation(float partialTicks, Vector3f dest) {
+        return dest.set(Mth.lerp(partialTicks, rotationXo, rotationX),
                 Mth.lerp(partialTicks, rotationYo, rotationY),
                 Mth.lerp(partialTicks, rotationZo, rotationZ));
-        return rotation;
     }
 
     public Vector3f getRealSize(float partialTicks) {
-        return new Vector3f(
-                Mth.lerp(partialTicks, sizeXo, sizeX),
+        return getRealSize(partialTicks, new Vector3f());
+    }
+
+    public Vector3f getRealSize(float partialTicks, Vector3f dest) {
+        return dest.set(Mth.lerp(partialTicks, sizeXo, sizeX),
                 Mth.lerp(partialTicks, sizeYo, sizeY),
                 Mth.lerp(partialTicks, sizeZo, sizeZ));
     }
@@ -351,7 +375,11 @@ public class TileParticle implements IParticle {
     }
 
     public Vector3f getSimPos(float partialTicks) {
-        var pos = getSimPosWithoutNoise(partialTicks);
+        return getSimPos(partialTicks, new Vector3f());
+    }
+
+    public Vector3f getSimPos(float partialTicks, Vector3f dest) {
+        var pos = getSimPosWithoutNoise(partialTicks, dest);
 
         if (runtime.noise.isEnable()) {
             pos.add(runtime.noise.getPosition(this, partialTicks));
@@ -365,10 +393,14 @@ public class TileParticle implements IParticle {
     }
 
     public Vector3f getSimPosWithoutNoise(float partialTicks) {
+        return getSimPosWithoutNoise(partialTicks, new Vector3f());
+    }
+
+    public Vector3f getSimPosWithoutNoise(float partialTicks, Vector3f dest) {
         if (isRemoved) {
-            return new Vector3f(localX, localY, localZ);
+            return dest.set(localX, localY, localZ);
         }
-        return new Vector3f(Mth.lerp(partialTicks, this.localXo, this.localX),
+        return dest.set(Mth.lerp(partialTicks, this.localXo, this.localX),
                 Mth.lerp(partialTicks, this.localYo, this.localY),
                 Mth.lerp(partialTicks, this.localZo, this.localZ));
     }
@@ -422,19 +454,27 @@ public class TileParticle implements IParticle {
     }
 
     public Vector4f getRealColor(float partialTicks) {
-        var emitterColor = emitter.getRGBAColor();
+        return getRealColor(partialTicks, new Vector4f());
+    }
+
+    public Vector4f getRealColor(float partialTicks, Vector4f dest) {
         var a = Mth.lerp(partialTicks, this.ao, this.a);
         var r = Mth.lerp(partialTicks, this.ro, this.r);
         var g = Mth.lerp(partialTicks, this.go, this.g);
         var b = Mth.lerp(partialTicks, this.bo, this.b);
-        return emitterColor.mul(r, g, b, a);
+        return emitter.getRGBAColor(dest).mul(r, g, b, a);
     }
 
     public Vector4f getRealUVs(float partialTicks) {
+        return getRealUVs(partialTicks, new Vector4f());
+    }
+
+    /** The UV animation's own vector when it runs, else {@code dest} set to the whole texture. */
+    public Vector4f getRealUVs(float partialTicks, Vector4f dest) {
         if (runtime.uvAnimation.isEnable()) {
             return runtime.uvAnimation.getUVs(this, partialTicks);
         } else {
-            return new Vector4f(0, 0, 1, 1);
+            return dest.set(0, 0, 1, 1);
         }
     }
 
@@ -464,13 +504,37 @@ public class TileParticle implements IParticle {
             runtime.subEmitters.triggerEvent(this, SubEmittersSetting.Event.Birth);
         }
 
-        // death: snap t to 1 and apply the final visual state (no motion) so over-lifetime curves
+        var mode = lifetimeMode();
+        if (lifetime > 0 && config.emission.isLegacyTickEmission() && mode == ParticleLifetime.Mode.Once) {
+            // Photon 1 increments age, fires Death, then performs the final update using the
+            // previous progress; Tick fires after the update and progress is stored last.
+            boolean dies = lifetime > 0 && age >= lifetime;
+            age += dt;
+            if (dies) {
+                setRemoved(true);
+                if (runtime.subEmitters.isEnable()) runtime.subEmitters.triggerEvent(this, SubEmittersSetting.Event.Death);
+            }
+            update(dt);
+            if (runtime.subEmitters.isEnable()) runtime.subEmitters.triggerTickEvent(this, dt);
+            if (lifetime > 0) t = age / lifetime;
+            return;
+        }
+        var cyclic = mode.cyclic() && lifetime > 0;
+        // what never dies of age ends with its emitter winding down: an infinite particle now, a cyclic one at the end
+        // of the cycle it is in, so a Loop/PingPong particle stops instead of living forever
+        if (endAge < 0 && (cyclic || lifetime <= 0) && emitter instanceof FXObject object && object.isWindingDown()) {
+            endAge = cyclic ? ParticleLifetime.endOfCycle(age, lifetime) : age;
+        }
+        var deathAge = cyclic || lifetime <= 0 ? endAge : lifetime;
+        // death: snap t to its final value and apply the final visual state (no motion) so over-lifetime curves
         // reach their endpoints on the frames the dead particle still renders before removal.
-        // lifetime <= 0 intentionally never age-dies (infinite particles; they die via collision
-        // or emitter removal).
-        if (this.age >= this.lifetime && lifetime > 0) {
+        // lifetime <= 0 intentionally never age-dies (infinite particles; they die via collision or emitter
+        // removal), unless the emitter is winding down.
+        if (deathAge >= 0 && this.age >= deathAge) {
             this.age += dt;
-            this.t = 1;
+            if (lifetime > 0) {
+                this.t = cyclic ? ParticleLifetime.finalT(mode, deathAge, lifetime) : 1;
+            }
             this.updateColor();
             this.updateSize();
             this.updateRotation();
@@ -485,7 +549,7 @@ public class TileParticle implements IParticle {
         if (lifetime > 0) {
             // recompute BEFORE update so curves sample this step's t (was one tick late), and clamp:
             // fractional dt can push age past lifetime here, which previously produced t > 1
-            t = Math.min(age / lifetime, 1f);
+            t = cyclic ? ParticleLifetime.t(mode, age, lifetime, endAge) : Math.min(age / lifetime, 1f);
         }
 
         // update data

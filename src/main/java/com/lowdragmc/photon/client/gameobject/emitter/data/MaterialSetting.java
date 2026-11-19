@@ -10,6 +10,7 @@ import com.lowdragmc.lowdraglib2.editor.resource.BuiltinPath;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.syncdata.IPersistedSerializable;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.BlendMode;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialContext;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.MaterialRenderState;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PremultipliedBlendPlan;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
@@ -22,6 +23,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -65,7 +67,7 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
         }
 
         public String langKey() {
-            return "photon.blend_preset." + name().toLowerCase();
+            return "photon.blend_preset." + name().toLowerCase(java.util.Locale.ROOT);
         }
 
         public static BlendChoice of(BlendMode mode) {
@@ -97,6 +99,8 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
     @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
     private transient BlendMode appliedBlend = blendMode;
     @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
+    private transient boolean appliedFollowedRenderState;
+    @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
     private transient boolean appliedCull = true;
     @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
     private transient boolean appliedDepthTest = true;
@@ -113,10 +117,26 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
         this.material = material;
     }
 
+    /** A deserialized null must not make particle rendering fail; use the inert missing material instead. */
+    @Nonnull
+    public IMaterial getMaterial() {
+        if (material == null) material = IMaterial.MISSING;
+        return material;
+    }
+
+    public MaterialSetting setMaterial(@Nullable IMaterial material) {
+        this.material = material == null ? IMaterial.MISSING : material;
+        return this;
+    }
+
+    public RenderStateSource effectiveRenderStateSource() {
+        return renderStateSource == null ? RenderStateSource.MATERIAL : renderStateSource;
+    }
+
     /** The material's render state when this slot follows it, else null. */
     @Nullable
     public MaterialRenderState getFollowedRenderState() {
-        return renderStateSource == RenderStateSource.MATERIAL ? material.getPreferredRenderState() : null;
+        return effectiveRenderStateSource() == RenderStateSource.MATERIAL ? getMaterial().getPreferredRenderState() : null;
     }
 
     public BlendMode getEffectiveBlendMode() {
@@ -168,6 +188,7 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
      */
     public void pre() {
         var followed = getFollowedRenderState();
+        appliedFollowedRenderState = followed != null;
         appliedBlend = followed != null ? followed.blendMode() : blendMode;
         appliedCull = followed != null ? followed.cull() : cull;
         appliedDepthTest = followed != null ? followed.depthTest() : depthTest;
@@ -181,6 +202,11 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
         if (appliedCull) RenderSystem.enableCull(); else RenderSystem.disableCull();
         if (appliedDepthTest) RenderSystem.enableDepthTest(); else RenderSystem.disableDepthTest();
         RenderSystem.depthMask(appliedDepthMask);
+    }
+
+    /** Start the draw with the effective slot blend available to shaders that bake blend semantics into output. */
+    public ShaderInstance beginMaterial(IMaterial material, MaterialContext context) {
+        return material.begin(context, appliedBlend, !appliedFollowedRenderState);
     }
 
     public void post() {
@@ -201,8 +227,8 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
     public void buildConfigurator(ConfiguratorGroup father) {
         addField(father, "material");
         var sourceRow = new SelectorConfigurator<>("MaterialSetting.renderStateSource",
-                () -> renderStateSource, source -> renderStateSource = source, RenderStateSource.MATERIAL, true,
-                List.of(RenderStateSource.values()), source -> "MaterialSetting.renderStateSource." + source.name().toLowerCase());
+                this::effectiveRenderStateSource, source -> renderStateSource = source, RenderStateSource.MATERIAL, true,
+                List.of(RenderStateSource.values()), source -> "MaterialSetting.renderStateSource." + source.name().toLowerCase(java.util.Locale.ROOT));
         sourceRow.setTips("MaterialSetting.renderStateSource.tips");
         father.addConfigurator(sourceRow);
         var slotRows = new ArrayList<Configurator>();
@@ -220,7 +246,7 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
         father.addConfigurator(followedRow);
         father.addEventListener(UIEvents.TICK, e -> {
             // only a material that brings its own state has anything to follow
-            sourceRow.setDisplay(material.getPreferredRenderState() != null);
+            sourceRow.setDisplay(getMaterial().getPreferredRenderState() != null);
             var followed = getFollowedRenderState();
             for (var row : slotRows) {
                 row.setDisplay(followed == null);

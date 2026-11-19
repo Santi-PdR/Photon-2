@@ -2,5 +2,6 @@
 build/
 run/
 run-data/
+.venv/
 src/generated/resources/
 *.class

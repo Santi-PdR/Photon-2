@@ -37,8 +37,9 @@ photon/fxpacks/escudo.fxpack        ← el archivo que compartes
             └── photon_fx/          ← material/ graph internos que generó el exportador
 ```
 
-El **ID** con el que se usa el efecto es `namespace:nombre`. Por eso un paquete llamado
-`escudo.fxpack` con `assets/escudo/fx/escudo.fx` se reproduce con `/photon play escudo:escudo`.
+El **ID** del efecto es `namespace:nombre`. Por ejemplo, `assets/escudo/fx/escudo.fx` tiene el ID
+`escudo:escudo`. Un operador puede probarlo en una entidad con `/photon fx escudo:escudo entity @p`.
+Para la guía resumida, consulta [Photon en tu servidor: explicación fácil](Photon2-Servidor-en-5-minutos.md).
 
 ---
 
@@ -128,8 +129,9 @@ Photon ya trae ese circuito hecho. Funciona así:
    - si no lo tiene o cambió → pide el archivo por trozos de 24 KB.
 3. Al terminar, verifica el hash y el contenido (tiene que traer al menos un `assets/*/fx/*.fx`),
    lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**.
-4. El efecto ya se puede reproducir con `/photon play namespace:nombre`, y con las texturas y
-   materiales que venían dentro del paquete.
+4. El efecto ya está cargado con sus texturas y materiales. Un operador puede probarlo en una entidad
+   con `/photon fx namespace:nombre entity @p`, o en un bloque con
+   `/photon fx namespace:nombre block ~ ~ ~`.
 
 Al desconectarse, los paquetes del servidor se desmontan; los que el jugador instaló a mano se
 quedan.

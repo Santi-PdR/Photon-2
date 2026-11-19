@@ -19,6 +19,12 @@ public class FXObjectTreeNode implements ITreeNode<IFXObject, Void> {
     @Getter
     public final IFXObject key;
 
+    @Override
+    @Nullable
+    public FXObjectTreeNode getParent() {
+        return parent;
+    }
+
     public FXObjectTreeNode(IFXObject root) {
         this(null, root);
     }

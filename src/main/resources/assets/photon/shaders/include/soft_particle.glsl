@@ -16,7 +16,9 @@ uniform vec4 SoftParticleParams;
 // right — MIRRORS kilagraph:kg_scene.glsl's kg_eye_from_ndcz, which is what the DepthFade node uses.
 float photon_eye_from_ndcz(float ndcZ) {
     vec4 view = U_InverseProjectionMatrix * vec4(0.0, 0.0, ndcZ, 1.0);
-    return -(view.z / view.w);
+    if (!(abs(view.w) > 1e-8 && abs(view.w) < 1e30)) return 1e30;
+    float eye = -(view.z / view.w);
+    return eye > 0.0 && eye < 1e30 ? eye : 1e30;
 }
 
 /**

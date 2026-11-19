@@ -53,18 +53,30 @@ public class RemoveEntityEffectCommand {
 
     private static int execute(CommandContext<CommandSourceStack> context, boolean force, boolean location) throws CommandSyntaxException {
         var command = new RemoveEntityEffectCommand();
-        command.setEntities(EntityArgument.getEntities(context, "entities").stream().map(e -> (Entity) e).toList());
+        var selected = EntityArgument.getEntities(context, "entities");
+        if (selected.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
+            context.getSource().sendFailure(net.minecraft.network.chat.Component.literal(
+                    "Photon: entity FX removal supports at most " + EntityIdListCodec.MAX_ENTITY_IDS + " entities"));
+            return 0;
+        }
+        command.setEntities(selected.stream().map(e -> (Entity) e).toList());
         // The ordinary remove command must also remove long-lived particles. Explicit false
         // retains the original graceful-drain behavior for callers that need it.
         command.setForce(!force || BoolArgumentType.getBool(context, "force"));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }
+        for (var entity : command.entities) {
+            ActiveEntityEffects.forget(entity, command.location);
+        }
         PhotonNetworking.CHANNEL.send(PacketDistributor.ALL.noArg(), command);
         return Command.SINGLE_SUCCESS;
     }
 
     public void encode(FriendlyByteBuf buf) {
+        if (entities.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
+            throw new IllegalArgumentException("Entity FX removal packet exceeds the target limit");
+        }
         buf.writeVarInt(entities.size());
         for (Entity entity : entities) {
             buf.writeVarInt(entity.getId());

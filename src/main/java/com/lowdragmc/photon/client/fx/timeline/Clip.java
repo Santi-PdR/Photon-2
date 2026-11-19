@@ -27,6 +27,10 @@ public class Clip {
     private boolean randomSeed = true;
     /** Random seed applied to the bound object when a control clip restarts it. */
     private long seed;
+    /** How the bound object leaves this clip: cut at once, or wind down and let what shows finish. */
+    private ExitMode exitMode = ExitMode.CUT;
+    /** What happens to the bound object when a section wrap or jump happens while this clip is on. */
+    private SeamMode seamMode = SeamMode.AUTO;
 
     /** Stable per-clip lerp source for Random* sampling functions (re-rolls with the clip seed). */
     private transient float lerpValue = Float.NaN;
@@ -88,6 +92,24 @@ public class Clip {
         return this;
     }
 
+    public ExitMode exitMode() {
+        return exitMode;
+    }
+
+    public Clip exitMode(ExitMode exitMode) {
+        this.exitMode = exitMode;
+        return this;
+    }
+
+    public SeamMode seamMode() {
+        return seamMode;
+    }
+
+    public Clip seamMode(SeamMode seamMode) {
+        this.seamMode = seamMode;
+        return this;
+    }
+
     public double start() {
         return start;
     }
@@ -119,7 +141,8 @@ public class Clip {
      * An independent value copy of this clip.
      */
     public Clip copy() {
-        return new Clip(start, duration, speed).targetId(targetId).seed(seed).randomSeed(randomSeed);
+        return new Clip(start, duration, speed).targetId(targetId).seed(seed).randomSeed(randomSeed)
+                .exitMode(exitMode).seamMode(seamMode);
     }
 
     /**
@@ -205,5 +228,29 @@ public class Clip {
             return SWITCH;
         }
     }
-}
 
+    /**
+     * What happens to the object when a control clip stops covering it.
+     * <p>
+     * {@code CUT} is the historical behaviour and the default: the object stops the moment its clip ends, so a
+     * particle that was mid-flight vanishes. {@code DRAIN} stops it from doing <em>new</em> work and lets what is
+     * already visible finish (existing particles age out, a looping emitter closes its cycle), which is what an
+     * effect needs to end instead of disappearing. Ported from Photon 26.3.
+     */
+    public enum ExitMode {
+        CUT,
+        DRAIN
+    }
+
+    /**
+     * What a control clip that is still on across a section wrap or jump does to its object. Ported from 26.3, where
+     * jumping back into a section would otherwise leave a finished emitter finished.
+     * <p>
+     * {@code AUTO} is the default and keeps what still plays playing, restarting only what already finished.
+     * {@code RESTART} restarts it every time, which is what a one-shot burst wants when its section repeats.
+     */
+    public enum SeamMode {
+        AUTO,
+        RESTART
+    }
+}
