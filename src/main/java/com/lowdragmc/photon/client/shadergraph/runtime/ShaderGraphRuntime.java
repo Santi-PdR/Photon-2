@@ -193,12 +193,13 @@ public final class ShaderGraphRuntime {
         var locations = new LinkedHashSet<ResourceLocation>();
         try {
             var tag = ShaderGraphResource.INSTANCE.getResourceInstance().getResource(path);
-            if (tag == null) return Set.of();
-            var graph = ShaderGraphResource.INSTANCE.deserializeGraph(tag, RESOLVER);
-            var visitedGraphs = Collections.newSetFromMap(new IdentityHashMap<Graph, Boolean>());
-            var visitedResources = new HashSet<GraphResourceKey>();
-            visitedResources.add(new GraphResourceKey(path, graph.getClass()));
-            collectSamplerLocations(graph, visitedGraphs, visitedResources, locations);
+            if (tag != null) {
+                var graph = ShaderGraphResource.INSTANCE.deserializeGraph(tag, RESOLVER);
+                var visitedGraphs = Collections.newSetFromMap(new IdentityHashMap<Graph, Boolean>());
+                var visitedResources = new HashSet<GraphResourceKey>();
+                visitedResources.add(new GraphResourceKey(path, graph.getClass()));
+                collectSamplerLocations(graph, visitedGraphs, visitedResources, locations);
+            }
         } catch (RuntimeException failure) {
             Photon.LOGGER.warn("Could not inspect sampler defaults for shader graph {}", path, failure);
         }
