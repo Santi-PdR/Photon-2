@@ -36,8 +36,8 @@ public final class AudioConverter {
 
         int sampleRate();
 
-        /** Fills {@code dst} with PCM bytes; returns the count, or {@code -1} at the end. */
-        int read(byte[] dst) throws IOException;
+        /** Fills {@code dst[start, start + length)} with PCM bytes; returns the count, or {@code -1} at the end. */
+        int read(byte[] dst, int start, int length) throws IOException;
 
         @Override
         void close() throws IOException;
@@ -192,15 +192,15 @@ public final class AudioConverter {
         }
 
         @Override
-        public int read(byte[] dst) throws IOException {
+        public int read(byte[] dst, int start, int length) throws IOException {
             while (offset >= pending.length) {
                 var frame = nextFrame("stream");
                 if (frame == null) return -1;
                 pending = toLittleEndian(frame);
                 offset = 0;
             }
-            int count = Math.min(dst.length, pending.length - offset);
-            System.arraycopy(pending, offset, dst, 0, count);
+            int count = Math.min(length, pending.length - offset);
+            System.arraycopy(pending, offset, dst, start, count);
             offset += count;
             return count;
         }
@@ -260,7 +260,7 @@ public final class AudioConverter {
         }
 
         @Override
-        public int read(byte[] dst) throws IOException {
+        public int read(byte[] dst, int start, int length) throws IOException {
             while (offset >= pending.length) {
                 try {
                     if (!track.hasMoreFrames()) return -1;
@@ -275,8 +275,8 @@ public final class AudioConverter {
                     throw new IOException("Could not decode AAC audio: " + failure, failure);
                 }
             }
-            int count = Math.min(dst.length, pending.length - offset);
-            System.arraycopy(pending, offset, dst, 0, count);
+            int count = Math.min(length, pending.length - offset);
+            System.arraycopy(pending, offset, dst, start, count);
             offset += count;
             return count;
         }
@@ -334,14 +334,14 @@ public final class AudioConverter {
         }
 
         @Override
-        public int read(byte[] dst) throws IOException {
+        public int read(byte[] dst, int start, int length) throws IOException {
             while (offset >= pending.length) {
                 pending = decodeNext("stream");
                 if (pending == null) return -1;
                 offset = 0;
             }
-            int count = Math.min(dst.length, pending.length - offset);
-            System.arraycopy(pending, offset, dst, 0, count);
+            int count = Math.min(length, pending.length - offset);
+            System.arraycopy(pending, offset, dst, start, count);
             offset += count;
             return count;
         }
@@ -375,8 +375,8 @@ public final class AudioConverter {
         }
 
         @Override
-        public int read(byte[] dst) throws IOException {
-            return stream.read(dst);
+        public int read(byte[] dst, int start, int length) throws IOException {
+            return stream.read(dst, start, length);
         }
 
         @Override
@@ -406,8 +406,8 @@ public final class AudioConverter {
         }
 
         @Override
-        public int read(byte[] dst) throws IOException {
-            int frames = dst.length / 4;
+        public int read(byte[] dst, int start, int length) throws IOException {
+            int frames = length / 4;
             if (frames <= 0) return 0;
             byte[] chunk = new byte[frames * sourceChannels * 2];
             int read = readFully(delegate, chunk);
@@ -429,8 +429,8 @@ public final class AudioConverter {
                         rightSources++;
                     }
                 }
-                writeShort(dst, frame * 4, clamp(left / Math.max(1, leftSources)));
-                writeShort(dst, frame * 4 + 2, clamp(right / Math.max(1, rightSources)));
+                writeShort(dst, start + frame * 4, clamp(left / Math.max(1, leftSources)));
+                writeShort(dst, start + frame * 4 + 2, clamp(right / Math.max(1, rightSources)));
             }
             return complete * 4;
         }
