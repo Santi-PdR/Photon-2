@@ -208,6 +208,12 @@ uniform int PhotonVertsPerParticle;
  */
 #define PHOTON_NO_TANGENT vec4(1.0, 0.0, 0.0, 1.0)
 
+/** Degenerate or corrupted geometry must not let GLSL normalize(0) poison downstream shading. */
+vec3 photon_safe_normalize(vec3 value, vec3 fallback) {
+    float lengthSquared = dot(value, value);
+    return lengthSquared > 1.0e-16 && lengthSquared < 1.0e30 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
 /**
  * A normal out of one float, octahedral at 12 bits a component — MIRRORED FROM
  * VertexAnimationBake.packNormal, whose sign convention is `>= 0 ? 1 : -1` and not sign(), which
@@ -223,13 +229,14 @@ vec3 photon_unpack_normal(float encoded) {
     if (n.z < 0.0) {
         n.xy = (1.0 - abs(n.yx)) * vec2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
     }
-    return normalize(n);
+    return photon_safe_normalize(n, vec3(0.0, 0.0, 1.0));
 }
 
 /** Any unit vector perpendicular to n, for a dP/du that collapsed (a zero-length segment). */
 vec3 photon_any_perpendicular(vec3 n) {
+    n = photon_safe_normalize(n, vec3(0.0, 0.0, 1.0));
     vec3 axis = abs(n.x) > 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    return normalize(cross(axis, n));
+    return photon_safe_normalize(cross(axis, n), vec3(0.0, 1.0, 0.0));
 }
 
 /**
@@ -238,7 +245,9 @@ vec3 photon_any_perpendicular(vec3 n) {
  * reject a true zero, not "small".
  */
 vec3 photon_safe_tangent(vec3 v, vec3 n) {
-    return dot(v, v) > 1.0e-30 ? normalize(v) : photon_any_perpendicular(n);
+    float lengthSquared = dot(v, v);
+    return lengthSquared > 1.0e-30 && lengthSquared < 1.0e30
+            ? v * inversesqrt(lengthSquared) : photon_any_perpendicular(n);
 }
 
 /**
@@ -295,14 +304,14 @@ ParticleData getParticleData() {
     data.UV = mix(iUV.xy, iUV.zw, aPos.xy * 0.5 + 0.5);
     // vanilla UV2 order is (block, sky); java packs sky<<20 | block<<4
     data.LightUV = ivec2(iLight & 0xFFFF, (iLight >> 16) & 0xFFFF);
-    data.Normal = normalize(rotMat * vec3(0, 0, 1));
+    data.Normal = photon_safe_normalize(rotMat * vec3(0, 0, 1), vec3(0.0, 0.0, 1.0));
     // The quad's uv is axis-aligned: u runs along local +X, v along local +Y. Which WAY each runs is read
     // off the packed frame rather than assumed — the uploader packs iUV as (u0, v1, u1, v0) ("flip v"), so
     // v normally decreases with +Y, and a mirrored sprite frame reverses either axis.
     float uDir = (iUV.z < iUV.x) ? -1.0 : 1.0;
     float vDir = (iUV.w < iUV.y) ? -1.0 : 1.0;
     // cross(N, T) = uDir * +Y while dP/dv = vDir * +Y, so the handedness is just their product.
-    data.Tangent = vec4(normalize(rotMat * vec3(uDir, 0, 0)), uDir * vDir);
+    data.Tangent = vec4(photon_safe_normalize(rotMat * vec3(uDir, 0, 0), vec3(1.0, 0.0, 0.0)), uDir * vDir);
     // object space: the local billboard corner (aPos.xy = centered quad coord), facing +z pre-rotation
     data.ObjectPosition = aPos;
     data.ObjectNormal = vec3(0.0, 0.0, 1.0);
@@ -335,8 +344,8 @@ ParticleData getParticleData() {
         vec4 photonVatTexelNext = texelFetch(PhotonVat, (photonVatFrame + 1) * PhotonVatSize.x + gl_VertexID);
         photonPos = mix(photonPos, photonVatTexelNext.xyz + PhotonModelPivot, photonVatBlend);
         // the packed normals cannot be mixed as scalars; unpack both, then renormalise the blend
-        photonNormal = normalize(mix(photonNormal,
-                photon_unpack_normal(photonVatTexelNext.w), photonVatBlend));
+        photonNormal = photon_safe_normalize(mix(photonNormal,
+                photon_unpack_normal(photonVatTexelNext.w), photonVatBlend), photonNormal);
     }
 #else
     vec3 photonPos = aPos;
@@ -354,7 +363,7 @@ ParticleData getParticleData() {
 #else
     data.Color = vec4(iColor.rgb * aBrightness, iColor.a);
 #endif
-    data.Normal = normalize(rotMat * photonNormal);
+    data.Normal = photon_safe_normalize(rotMat * photonNormal, vec3(0.0, 0.0, 1.0));
     data.ObjectNormal = photonNormal;
 #ifdef PHOTON_TANGENT
     // Like Normal above, the tangent is ROTATED but not scaled — iScale is deliberately left out of
@@ -363,7 +372,7 @@ ParticleData getParticleData() {
     // negative-determinant iScale would only be right if the tangent had been mirrored along with it;
     // doing it here inverted the bitangent instead. (glTF node mirroring IS handled, in GltfMeshParser,
     // where the tangent really is transformed by the mirroring matrix.)
-    data.Tangent = vec4(normalize(rotMat * aTangent.xyz), aTangent.w);
+    data.Tangent = vec4(photon_safe_normalize(rotMat * aTangent.xyz, photon_any_perpendicular(data.Normal)), aTangent.w);
     data.ObjectTangent = aTangent;
 #else
     // the emitter's Tangent setting is off, so no tangent stream was uploaded
@@ -382,14 +391,14 @@ ParticleData getParticleData() {
     vec3 pPrev = texelFetch(PhotonPoints, (c - 1) * 3).xyz;
     vec3 pNext2 = texelFetch(PhotonPoints, (c + 2) * 3).xyz;
     vec3 seg = pN.xyz - pC.xyz;
-    vec3 nCurr = normalize(cross(seg, pC.xyz));
-    vec3 nPrev = (pPrev == pC.xyz) ? nCurr : normalize(cross(pC.xyz - pPrev, pPrev));
-    vec3 nNext = (pNext2 == pN.xyz) ? nCurr : normalize(cross(pNext2 - pN.xyz, pN.xyz));
+    vec3 nCurr = photon_safe_normalize(cross(seg, pC.xyz), photon_any_perpendicular(seg));
+    vec3 nPrev = (pPrev == pC.xyz) ? nCurr : photon_safe_normalize(cross(pC.xyz - pPrev, pPrev), nCurr);
+    vec3 nNext = (pNext2 == pN.xyz) ? nCurr : photon_safe_normalize(cross(pNext2 - pN.xyz, pN.xyz), nCurr);
     // averaged like the CPU path: (a + b) / 2, NOT renormalized
     vec3 avg = mix((nPrev + nCurr) * 0.5, (nCurr + nNext) * 0.5, aPos.x);
     data.Position = mix(pC.xyz, pN.xyz, aPos.x) + avg * (mix(pC.w, pN.w, aPos.x) * aPos.y);
     vec3 fnVec = (aPos.x < 0.5 || pNext2 == pN.xyz) ? seg : (pNext2 - pN.xyz);
-    data.Normal = normalize(cross(avg, fnVec));
+    data.Normal = photon_safe_normalize(cross(avg, fnVec), nCurr);
     data.Color = mix(texelFetch(PhotonPoints, c * 3 + 1), texelFetch(PhotonPoints, (c + 1) * 3 + 1), aPos.x);
     float uC = texelFetch(PhotonPoints, c * 3 + 2).x;
     float uN = texelFetch(PhotonPoints, (c + 1) * 3 + 2).x;
@@ -451,13 +460,13 @@ ParticleData getParticleData() {
 
     vec3 beamDir = iEnd - iStart.xyz;
     // toO = start - cameraPos = start (camera at origin)
-    vec3 beamN = normalize(cross(iStart.xyz, beamDir)) * iStart.w;
+    vec3 beamN = photon_safe_normalize(cross(iStart.xyz, beamDir), photon_any_perpendicular(beamDir)) * iStart.w;
     data.Position = mix(iStart.xyz, iEnd, aPos.x) + beamN * aPos.y;
     data.Color = iColor;
     // -n side (-1) uses v0 (iUV.y), +n side (+1) uses v1 (iUV.w)
     data.UV = vec2(mix(iUV.x, iUV.z, aPos.x), mix(iUV.y, iUV.w, aPos.y * 0.5 + 0.5));
     data.LightUV = ivec2(iLight & 0xFFFF, (iLight >> 16) & 0xFFFF);
-    data.Normal = normalize(cross(beamDir, beamN));
+    data.Normal = photon_safe_normalize(cross(beamDir, beamN), photon_any_perpendicular(beamDir));
     // u runs start -> end along the beam, v across its width along beamN; both scaled by their own uv
     // delta so a reversed (uv-scrolled) frame reverses the tangent frame with it
     vec3 tDir = photon_safe_tangent(beamDir * (iUV.z - iUV.x), data.Normal);

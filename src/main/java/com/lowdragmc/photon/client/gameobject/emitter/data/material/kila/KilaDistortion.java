@@ -60,6 +60,20 @@ public class KilaDistortion extends KilaModule {
     @Persisted
     public boolean dissolve = true;
 
+    public Mask effectiveMask() {
+        return mask == null ? Mask.NONE : mask;
+    }
+
+    public Mode effectiveMode() {
+        return mode == null ? Mode.OFFSET : mode;
+    }
+
+    public Vector2f effectiveAmount() {
+        return amount == null ? new Vector2f(1, 1)
+                : new Vector2f(finite(amount.x, 1f, -100_000f, 100_000f),
+                        finite(amount.y, 1f, -100_000f, 100_000f));
+    }
+
     @Override
     public String id() {
         return "distortion";
@@ -77,23 +91,26 @@ public class KilaDistortion extends KilaModule {
 
     @Override
     public long structure() {
-        return mode.ordinal();
+        return effectiveMode().ordinal();
     }
 
     @Override
     public void declare(KilaLayout.Builder layout) {
         layout.define("KILA_DISTORT").fragmentUvChain("KilaDistort").vec4("KilaDistortParams", 1, 1, 1, 0)
                 .source("DISTORT", "KilaDistort", texture, false).params(KilaParam.DISTORT_STRENGTH);
-        if (mode == Mode.FLOW_MAP) layout.define("KILA_FLOWMAP").vec4("KilaFlowMap", 0.5f, 0, 0, 0);
+        if (effectiveMode() == Mode.FLOW_MAP) layout.define("KILA_FLOWMAP").vec4("KilaFlowMap", 0.5f, 0, 0, 0);
     }
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
         texture.uploadUv(shader, "KilaDistort");
         if (texture.isProcedural()) texture.uploadSource(shader, "KilaDistort", scratch);
-        shader.safeGetUniform("KilaDistortOpts").set(texture.flags(), 0, targets(), mask.ordinal());
-        shader.safeGetUniform("KilaDistortParams").set(amount.x, amount.y, bidirectional ? 1f : 0f, 0f);
-        if (mode == Mode.FLOW_MAP) shader.safeGetUniform("KilaFlowMap").set(flowSpeed, 0f, 0f, 0f);
+        shader.safeGetUniform("KilaDistortOpts").set(texture.flags(), 0, targets(), effectiveMask().ordinal());
+        var safeAmount = effectiveAmount();
+        shader.safeGetUniform("KilaDistortParams").set(safeAmount.x, safeAmount.y, bidirectional ? 1f : 0f, 0f);
+        if (effectiveMode() == Mode.FLOW_MAP) {
+            shader.safeGetUniform("KilaFlowMap").set(finite(flowSpeed, 0.5f, -16f, 16f), 0f, 0f, 0f);
+        }
     }
 
     @Override
@@ -108,14 +125,14 @@ public class KilaDistortion extends KilaModule {
 
     @Override
     public void buildModuleConfigurator(ConfiguratorGroup group) {
-        KilaUI.choice(group, "kila.distortion.mode", Mode.values(), () -> mode, v -> mode = v);
+        KilaUI.choice(group, "kila.distortion.mode", Mode.values(), this::effectiveMode, v -> mode = v);
         KilaUI.driver(group, "kila.distortion.strength", strength, -1, 1);
         KilaUI.showWhen(group, KilaUI.number(group, "kila.distortion.flow_speed", () -> flowSpeed, v -> flowSpeed = v,
-                0.5f, -16, 16), () -> mode == Mode.FLOW_MAP);
+                0.5f, -16, 16), () -> effectiveMode() == Mode.FLOW_MAP);
         KilaUI.texture(group, "kila.distortion.texture", texture, KilaUI.TextureKind.VECTOR, true, true);
-        KilaUI.vec2(group, "kila.distortion.amount", () -> amount, v -> amount = v);
+        KilaUI.vec2(group, "kila.distortion.amount", this::effectiveAmount, v -> amount = v);
         KilaUI.bool(group, "kila.distortion.bidirectional", () -> bidirectional, v -> bidirectional = v);
-        KilaUI.choice(group, "kila.distortion.mask", Mask.values(), () -> mask, v -> mask = v);
+        KilaUI.choice(group, "kila.distortion.mask", Mask.values(), this::effectiveMask, v -> mask = v);
         var targets = KilaUI.subGroup(group, "kila.distortion.targets", false);
         KilaUI.bool(targets, "kila.distortion.target.main", () -> main, v -> main = v);
         KilaUI.bool(targets, "kila.distortion.target.layer", () -> layer, v -> layer = v);

@@ -98,8 +98,17 @@ public class GltfModelSource implements IModelSource {
             return null;
         }
         PhotonMeshCache.INSTANCE.trackAssetFile(key(), modelLocation);
-        try (var in = Minecraft.getInstance().getResourceManager().open(modelLocation)) {
-            return GltfMeshParser.parseModel(in, flipV, modelLocation);
+        var nested = LDLibModelAssets.resolve(modelLocation, modelLocation.getPath());
+        if (nested != null) PhotonMeshCache.INSTANCE.trackFile(key(), nested.toFile());
+        var resource = nested == null ? Minecraft.getInstance().getResourceManager().getResource(modelLocation).orElse(null) : null;
+        if (nested == null && resource == null) {
+            Photon.LOGGER.warn("glTF model {} does not exist", modelLocation);
+            return SkinnedModel.EMPTY;
+        }
+        try (var in = nested != null ? java.nio.file.Files.newInputStream(nested) : resource.open()) {
+            var bytes = ModelInput.readAllBytes(in, "glTF model " + modelLocation);
+            LDLibModelAssets.trackGltfBuffers(key(), modelLocation, bytes);
+            return GltfMeshParser.parseModel(bytes, flipV, modelLocation);
         } catch (FileNotFoundException e) {
             // a source whose file has not been picked yet; a stack trace says nothing extra
             Photon.LOGGER.warn("glTF model {} does not exist", modelLocation);
@@ -121,7 +130,7 @@ public class GltfModelSource implements IModelSource {
             Dialog.showFileDialog("photon.gui.editor.tips.select_gltf", PhotonPaths.getDataDir(), true,
                     node -> {
                         if (!node.getKey().isFile()) return true; // allow directories
-                        var name = node.getKey().getName().toLowerCase();
+                        var name = node.getKey().getName().toLowerCase(java.util.Locale.ROOT);
                         return name.endsWith(".glb") || name.endsWith(".gltf");
                     }, r -> {
                         if (r != null && r.isFile()) {

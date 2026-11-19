@@ -61,28 +61,28 @@ public class UVAnimationSetting extends ToggleGroup {
 
     public Vector4f getUVs(IParticle particle, float partialTicks) {
         var t = particle.getT(partialTicks);
-        var cellU = 1f / tiles.x();
-        var cellV = 1f / tiles.y();
-        var currentFrame = this.startFrame.get(t, () -> particle.getMemRandom("startFrame")).floatValue();
-        currentFrame += cycle * frameOverTime.get(t, () -> particle.getMemRandom("frameOverTime")).floatValue();
-        float u0, v0, u1, v1;
-        var cellSize = tiles.x();
-        if (animation == Animation.WholeSheet) {
-            // wrap into the sheet so frames past tiles.x*tiles.y don't sample outside the texture
-            int frame = Math.floorMod((int) currentFrame, tiles.x() * tiles.y());
-            int X = frame % cellSize;
-            int Y = frame / cellSize;
-            u0 = X * cellU;
-            v0 = Y * cellV;
+        var frame = startFrame.get(t, () -> particle.getMemRandom("startFrame")).floatValue()
+                + cycle * frameOverTime.get(t, () -> particle.getMemRandom("frameOverTime")).floatValue();
+        return calculateUVs(tiles, animation, frame, animation == Animation.SingleRow ? particle.getMemRandom("randomRow") : 0f);
+    }
+
+    /** Loaded data and timeline overrides can bypass the editor's tile-count limits. */
+    public static Vector4f calculateUVs(Vector2i tiles, Animation animation, float frame, float randomRow) {
+        int columns = tiles == null ? 1 : Math.max(1, tiles.x());
+        int rows = tiles == null ? 1 : Math.max(1, tiles.y());
+        float cellU = 1f / columns, cellV = 1f / rows;
+        long index = Float.isFinite(frame) ? (long) frame : 0L;
+        long column, row;
+        if (animation == Animation.SingleRow) {
+            column = Math.floorMod(index, (long) columns);
+            row = Math.max(0, Math.min(rows - 1L, (long) (randomRow * rows)));
         } else {
-            int X = (int) (currentFrame % cellSize);
-            int Y = (int) (particle.getMemRandom("randomRow") * tiles.y());
-            u0 = X * cellU;
-            v0 = Y * cellV;
+            index = Math.floorMod(index, (long) columns * rows);
+            column = index % columns;
+            row = index / columns;
         }
-        u1 = u0 + cellU;
-        v1 = v0 + cellV;
-        return new Vector4f(u0, v0, u1, v1);
+        float u = column * cellU, v = row * cellV;
+        return new Vector4f(u, v, u + cellU, v + cellV);
     }
 
     public Runtime createRuntime() {
@@ -116,29 +116,10 @@ public class UVAnimationSetting extends ToggleGroup {
 
         public Vector4f getUVs(IParticle particle, float partialTicks) {
             var t = particle.getT(partialTicks);
-            var tiles = this.tiles.get();
-            var cellU = 1f / tiles.x();
-            var cellV = 1f / tiles.y();
-            var currentFrame = startFrame.get().get(t, () -> particle.getMemRandom("startFrame")).floatValue();
-            currentFrame += cycle.get() * frameOverTime.get().get(t, () -> particle.getMemRandom("frameOverTime")).floatValue();
-            float u0, v0, u1, v1;
-            var cellSize = tiles.x();
-            if (animation.get() == Animation.WholeSheet) {
-                // wrap into the sheet so frames past tiles.x*tiles.y don't sample outside the texture
-                int frame = Math.floorMod((int) currentFrame, tiles.x() * tiles.y());
-                int X = frame % cellSize;
-                int Y = frame / cellSize;
-                u0 = X * cellU;
-                v0 = Y * cellV;
-            } else {
-                int X = (int) (currentFrame % cellSize);
-                int Y = (int) (particle.getMemRandom("randomRow") * tiles.y());
-                u0 = X * cellU;
-                v0 = Y * cellV;
-            }
-            u1 = u0 + cellU;
-            v1 = v0 + cellV;
-            return new Vector4f(u0, v0, u1, v1);
+            var frame = startFrame.get().get(t, () -> particle.getMemRandom("startFrame")).floatValue()
+                    + cycle.get() * frameOverTime.get().get(t, () -> particle.getMemRandom("frameOverTime")).floatValue();
+            var mode = animation.get();
+            return calculateUVs(tiles.get(), mode, frame, mode == Animation.SingleRow ? particle.getMemRandom("randomRow") : 0f);
         }
 
         public void clear() {

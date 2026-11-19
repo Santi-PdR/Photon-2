@@ -3,6 +3,7 @@ package com.lowdragmc.photon.client.light;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonShaders;
+import com.lowdragmc.photon.client.fx.EntityEffectExecutor;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
@@ -265,6 +266,12 @@ public final class DynamicLightRenderer {
         if (!config.dynamicLights.get() || frame.width() <= 0 || frame.height() <= 0
                 || DynamicLightManager.isEmpty(scene, frame.world())) return;
         long start = System.nanoTime();
+        // Lights are collected at AFTER_SKY, before AFTER_ENTITIES snaps entity FX to this
+        // frame's interpolated pose. Without that snap, LightObjects and local-space particle
+        // lights sit on last tick's transform and smear when the player sprints or flies.
+        if (frame.world()) {
+            EntityEffectExecutor.followAllPlaying(frame.partialTick());
+        }
         var lights = DynamicLightManager.collect(scene, frame.world(), frame.partialTick(), FRAME_LIGHTS);
 
         int n = 0;

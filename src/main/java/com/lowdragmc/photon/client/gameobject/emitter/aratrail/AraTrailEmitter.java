@@ -195,7 +195,7 @@ public class AraTrailEmitter extends Emitter {
 
     @Override
     public int getParticleAmount() {
-        return trailParticle.isAlive() ? 1 : 0;
+        return trailParticle != null && trailParticle.isAlive() ? 1 : 0;
     }
 
     @Override

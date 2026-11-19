@@ -57,9 +57,18 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
             return fallback;
         }
 
+        public ShaderInstance getShader(MaterialContext context) {
+            return fallback().getShader(context);
+        }
+
         @Override
         public ShaderInstance begin(MaterialContext context) {
             return fallback().begin(context);
+        }
+
+        @Override
+        public ShaderInstance begin(MaterialContext context, BlendMode slotBlend, boolean slotOwnsRenderState) {
+            return fallback().begin(context, slotBlend, slotOwnsRenderState);
         }
 
         @Override
@@ -90,10 +99,16 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
     }
 
     static IMaterial deserializeWrapper(Tag tag) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(MISSING);
+        return CODEC.parse(NbtOps.INSTANCE, com.lowdragmc.photon.client.fx.compat.MapperUtils.repairLegacyCodecs(tag))
+                .result().orElse(MISSING);
     }
 
     ShaderInstance begin(MaterialContext context);
+
+    /** Begin with the render state resolved by the owning slot; most materials only need their shader context. */
+    default ShaderInstance begin(MaterialContext context, BlendMode slotBlend, boolean slotOwnsRenderState) {
+        return begin(context);
+    }
 
     IGuiTexture preview();
 
@@ -142,6 +157,16 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
     }
 
     default void createPreview(ConfiguratorGroup father) {
+        var preview = new UIElement().layout(layout -> {
+            layout.widthPercent(100);
+            layout.heightPercent(100);
+        }).style(style -> style.backgroundTexture(DynamicTexture.of(this::preview)));
+        var checker = new UIElement().layout(layout -> {
+            layout.widthPercent(100);
+            layout.heightPercent(100);
+        }).style(style -> style.backgroundTexture(
+                com.lowdragmc.photon.client.gameobject.emitter.data.material.kila.KilaSlotPreview.checker()))
+                .addChild(preview);
         father.addConfigurators(new Configurator("ldlib.gui.editor.group.preview")
                 .addChild(new UIElement().layout(layout -> {
                             layout.setAspectRatio(1.0f);
@@ -150,10 +175,7 @@ public interface IMaterial extends IConfigurable, IPersistedSerializable, ILDLRe
                             layout.paddingAll(3);
                         }).addClass("preview_bg").style(style -> style.backgroundTexture(Sprites.BORDER1_RT1))
                         .moveInlineAsDefault()
-                        .addChild(new UIElement().layout(layout -> {
-                            layout.widthPercent(100);
-                            layout.heightPercent(100);
-                        }).style(style -> style.backgroundTexture(DynamicTexture.of(this::preview))))));
+                        .addChild(checker)));
     }
 
     @Override

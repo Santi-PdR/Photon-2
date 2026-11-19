@@ -17,6 +17,10 @@ public abstract class Expr {
     @Setter @Getter
     public String input;
 
+    public void setInput(String input) {
+        this.input = input;
+    }
+
     /**
      * Calculate the expression's value.
      *

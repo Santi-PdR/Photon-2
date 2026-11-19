@@ -20,7 +20,7 @@ public class RotationAnimatedProperty extends AnimatedProperty {
         SHORTEST;
 
         public String langKey() {
-            return "photon.gui.editor.timeline.interp_" + name().toLowerCase();
+            return "photon.gui.editor.timeline.interp_" + name().toLowerCase(java.util.Locale.ROOT);
         }
 
         public static InterpMode byOrdinal(int ordinal) {

@@ -172,6 +172,11 @@ public class TrailEmitter extends Emitter {
     //////////////////////////////////////
 
     @Override
+    public void inheritDuration(int duration) {
+        runtime().duration.set(duration);
+    }
+
+    @Override
     public int getLifetime() {
         return runtime().duration.get();
     }
@@ -194,7 +199,7 @@ public class TrailEmitter extends Emitter {
 
     @Override
     public int getParticleAmount() {
-        return trailParticle.isAlive() ? 1 : 0;
+        return trailParticle != null && trailParticle.isAlive() ? 1 : 0;
     }
 
     @Override
@@ -205,8 +210,11 @@ public class TrailEmitter extends Emitter {
 
     @Override
     protected void update(float dt) {
-        if (trailParticle.isAlive()) {
+        if (trailParticle != null && trailParticle.isAlive()) {
+            boolean delayed = trailParticle.getDelay() > 0;
             trailParticle.updateTick(dt);
+            // Keep the authored duration for the visible trail, after its start delay.
+            if (delayed) return;
         } else {
             remove();
         }
@@ -234,7 +242,7 @@ public class TrailEmitter extends Emitter {
     }
 
     public void prepareRenderPass(RenderPassPipeline buffer) {
-        if (isVisible()) {
+        if (isVisible() && trailParticle != null) {
             buffer.pipeQueue(effectiveRenderPass(), Collections.singleton(trailParticle));
         }
     }
@@ -252,10 +260,10 @@ public class TrailEmitter extends Emitter {
 
     @Override
     public void remove(boolean force) {
-        trailParticle.setRemoved(true);
+        if (trailParticle != null) trailParticle.setRemoved(true);
         super.remove(force);
         if (force) {
-            trailParticle.getTails().clear();
+            if (trailParticle != null) trailParticle.getTails().clear();
             if (runtime != null) {
                 runtime.clearRenderOverride(); // free the per-instance override pass's GL on force removal
             }
