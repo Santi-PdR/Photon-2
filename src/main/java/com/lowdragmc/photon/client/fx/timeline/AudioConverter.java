@@ -209,7 +209,8 @@ public final class AudioConverter {
     }
 
     /** Copies one container's children, dropping {@code udta}/{@code meta}; recurses into {@code trak}. */
-    private static boolean rewriteContainer(byte[] buf, int from, int to, java.io.ByteArrayOutputStream out) {
+    private static boolean rewriteContainer(byte[] buf, int from, int to, java.io.ByteArrayOutputStream out)
+            throws IOException {
         boolean stripped = false;
         int i = from;
         while (i + 8 <= to) {
