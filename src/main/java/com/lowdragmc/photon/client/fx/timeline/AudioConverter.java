@@ -104,7 +104,7 @@ public final class AudioConverter {
         try {
             if (name.endsWith(".mp3")) return new Mp3Source(file);
             if (name.endsWith(".wav") || name.endsWith(".aif") || name.endsWith(".aiff")) return javasoundSource(file);
-            if (name.endsWith(".mp4") || name.endsWith(".m4a")) return new Mp4Source(file);
+            if (name.endsWith(".mp4") || name.endsWith(".m4a")) return mp4Source(file);
             if (name.endsWith(".aac")) return new AdtsSource(file);
         } catch (IOException failure) {
             throw failure;
@@ -113,6 +113,196 @@ public final class AudioConverter {
         }
         throw new IOException("Photon cannot convert " + file.getName()
                 + " — supported: .ogg, .mp3, .wav, .aiff, .mp4, .m4a, .aac");
+    }
+
+    /** Opens the MP4/M4A through JAAD, first stripping the tag trees its box walker cannot parse. */
+    private static PcmSource mp4Source(File file) throws IOException {
+        Path scrubbed = scrubMp4Metadata(file);
+        File open = scrubbed == null ? file : scrubbed.toFile();
+        try {
+            return new Mp4Source(open, scrubbed);
+        } catch (IOException | RuntimeException failure) {
+            if (scrubbed != null) Files.deleteIfExists(scrubbed);
+            throw failure;
+        }
+    }
+
+    /**
+     * Returns a temp copy of the MP4 without its {@code udta}/{@code meta} tag subtrees, or
+     * {@code null} when the file has none. JAAD's box walker misparses ffmpeg's iTunes-style
+     * {@code moov > udta > meta > ilst} children ("box too large for parent") and gives up before
+     * the audio track is read, even though the track itself is fine. Only whole {@code udta} and
+     * {@code meta} boxes are dropped — {@code moov} and {@code trak} are rewritten with patched
+     * sizes, every other box (including {@code mdat} and the sample tables) is copied byte for byte.
+     */
+    private static Path scrubMp4Metadata(File file) throws IOException {
+        var temp = Files.createTempFile("photon-mp4-", ".mp4");
+        boolean complete = false;
+        boolean stripped;
+        try (var in = new BufferedInputStream(Files.newInputStream(file.toPath()), 64 * 1024);
+             var out = new java.io.BufferedOutputStream(Files.newOutputStream(temp), 64 * 1024)) {
+            stripped = copyMp4WithoutTags(in, out);
+            complete = true;
+        } finally {
+            if (!complete) Files.deleteIfExists(temp);
+        }
+        if (!stripped) {
+            Files.deleteIfExists(temp);
+            return null;
+        }
+        return temp;
+    }
+
+    /** Streams top-level boxes through, dropping {@code udta}/{@code meta} and rewriting {@code moov}. */
+    private static boolean copyMp4WithoutTags(InputStream in, OutputStream out) throws IOException {
+        boolean stripped = false;
+        byte[] head = new byte[16];
+        while (true) {
+            int got = readUpTo(in, head, 0, 8);
+            if (got <= 0) break;
+            if (got < 8) { // trailing garbage — keep it rather than lose bytes
+                out.write(head, 0, got);
+                break;
+            }
+            long size = readUInt(head, 0, 4);
+            String type = new String(head, 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            int header = 8;
+            if (size == 1) {
+                int gotLarge = readUpTo(in, head, 8, 8);
+                if (gotLarge < 8) {
+                    out.write(head, 0, 8 + gotLarge);
+                    break;
+                }
+                size = readUInt(head, 8, 8);
+                header = 16;
+            }
+            long payload = size == 0 ? Long.MAX_VALUE : size - header; // size 0 = box to EOF
+            if (payload < 0) {
+                out.write(head, 0, header);
+                break;
+            }
+            if (type.equals("udta") || type.equals("meta")) {
+                skipFully(in, payload);
+                stripped = true;
+            } else if (type.equals("moov") && payload <= 64L * 1024 * 1024) {
+                var body = new byte[(int) payload];
+                if (readUpTo(in, body, 0, body.length) < body.length) {
+                    out.write(head, 0, header);
+                    out.write(body);
+                    break;
+                }
+                var rewritten = new java.io.ByteArrayOutputStream(body.length);
+                if (rewriteContainer(body, 0, body.length, rewritten)) {
+                    stripped = true;
+                    writeBox(out, type, rewritten.toByteArray(), header == 16);
+                } else {
+                    out.write(head, 0, header);
+                    out.write(body);
+                }
+            } else {
+                out.write(head, 0, header);
+                copyExactly(in, out, payload);
+            }
+            if (size == 0) break;
+        }
+        return stripped;
+    }
+
+    /** Copies one container's children, dropping {@code udta}/{@code meta}; recurses into {@code trak}. */
+    private static boolean rewriteContainer(byte[] buf, int from, int to, java.io.ByteArrayOutputStream out) {
+        boolean stripped = false;
+        int i = from;
+        while (i + 8 <= to) {
+            long size = readUInt(buf, i, 4);
+            String type = new String(buf, i + 4, 4, java.nio.charset.StandardCharsets.ISO_8859_1);
+            int header = 8;
+            if (size == 1 && i + 16 <= to) {
+                size = readUInt(buf, i + 8, 8);
+                header = 16;
+            }
+            long end = i + size;
+            if (size < header || end > to) { // malformed tail — keep it untouched
+                out.write(buf, i, to - i);
+                return stripped;
+            }
+            if (type.equals("udta") || type.equals("meta")) {
+                stripped = true;
+            } else if (type.equals("trak")) {
+                var inner = new java.io.ByteArrayOutputStream((int) size);
+                if (rewriteContainer(buf, i + header, (int) end, inner)) {
+                    stripped = true;
+                    writeBox(out, type, inner.toByteArray(), header == 16);
+                } else {
+                    out.write(buf, i, (int) size);
+                }
+            } else {
+                out.write(buf, i, (int) size);
+            }
+            i = (int) end;
+        }
+        if (i < to) out.write(buf, i, to - i);
+        return stripped;
+    }
+
+    /** Writes a complete box: patched size, kept type, new body. */
+    private static void writeBox(OutputStream out, String type, byte[] body, boolean largeSize) throws IOException {
+        byte[] head = new byte[largeSize ? 16 : 8];
+        if (largeSize) {
+            writeUInt(head, 0, 1, 4);
+            writeUInt(head, 8, 16L + body.length, 8);
+        } else {
+            writeUInt(head, 0, 8L + body.length, 4);
+        }
+        byte[] typeBytes = type.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        System.arraycopy(typeBytes, 0, head, 4, 4);
+        out.write(head);
+        out.write(body);
+    }
+
+    private static long readUInt(byte[] buf, int offset, int length) {
+        long value = 0;
+        for (int i = 0; i < length; i++) value = (value << 8) | (buf[offset + i] & 0xFF);
+        return value;
+    }
+
+    private static void writeUInt(byte[] buf, int offset, long value, int length) {
+        for (int i = length - 1; i >= 0; i--) {
+            buf[offset + i] = (byte) (value & 0xFF);
+            value >>>= 8;
+        }
+    }
+
+    /** Reads until {@code length} bytes are filled or EOF; returns how many were read. */
+    private static int readUpTo(InputStream in, byte[] buf, int offset, int length) throws IOException {
+        int total = 0;
+        while (total < length) {
+            int got = in.read(buf, offset + total, length - total);
+            if (got < 0) break;
+            total += got;
+        }
+        return total;
+    }
+
+    private static void skipFully(InputStream in, long count) throws IOException {
+        while (count > 0) {
+            long skipped = in.skip(count);
+            if (skipped <= 0) {
+                if (in.read() < 0) return;
+                count--;
+            } else {
+                count -= skipped;
+            }
+        }
+    }
+
+    private static void copyExactly(InputStream in, OutputStream out, long count) throws IOException {
+        byte[] chunk = new byte[64 * 1024];
+        while (count > 0) {
+            int got = in.read(chunk, 0, (int) Math.min(chunk.length, count));
+            if (got < 0) return;
+            out.write(chunk, 0, got);
+            count -= got;
+        }
     }
 
     private static PcmSource javasoundSource(File file) throws IOException {
@@ -239,6 +429,7 @@ public final class AudioConverter {
     /** Extracts the AAC audio track of an mp4/m4a with JAAD (pure Java). */
     private static final class Mp4Source implements PcmSource {
         private final java.io.RandomAccessFile fileHandle;
+        private final Path deleteOnClose;
         private final net.sourceforge.jaad.mp4.api.AudioTrack track;
         private final net.sourceforge.jaad.aac.Decoder decoder;
         private final net.sourceforge.jaad.aac.SampleBuffer buffer = new net.sourceforge.jaad.aac.SampleBuffer();
@@ -247,7 +438,8 @@ public final class AudioConverter {
         private byte[] pending = new byte[0];
         private int offset;
 
-        Mp4Source(File file) throws IOException {
+        Mp4Source(File file, Path deleteOnClose) throws IOException {
+            this.deleteOnClose = deleteOnClose;
             try {
                 fileHandle = new java.io.RandomAccessFile(file, "r");
                 var container = new net.sourceforge.jaad.mp4.MP4Container(fileHandle);
@@ -303,7 +495,11 @@ public final class AudioConverter {
 
         @Override
         public void close() throws IOException {
-            fileHandle.close();
+            try {
+                fileHandle.close();
+            } finally {
+                if (deleteOnClose != null) Files.deleteIfExists(deleteOnClose);
+            }
         }
     }
 
