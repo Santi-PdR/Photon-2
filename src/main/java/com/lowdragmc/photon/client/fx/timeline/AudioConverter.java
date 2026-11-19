@@ -147,6 +147,7 @@ public final class AudioConverter {
     private static final class Mp3Source implements PcmSource {
         private final javazoom.jl.decoder.Bitstream bitstream;
         private final javazoom.jl.decoder.Decoder decoder = new javazoom.jl.decoder.Decoder();
+        private final javazoom.jl.decoder.SampleBuffer sampleBuffer;
         private final int channels;
         private final int sampleRate;
         private byte[] pending = new byte[0];
@@ -154,16 +155,32 @@ public final class AudioConverter {
 
         Mp3Source(File file) throws IOException {
             bitstream = new javazoom.jl.decoder.Bitstream(new BufferedInputStream(Files.newInputStream(file.toPath())));
-            var first = nextFrame(file.getName());
-            if (first == null) throw new IOException(file.getName() + " has no decodable MP3 frames");
-            channels = first.getChannelCount();
-            sampleRate = first.getSampleFrequency();
-            pending = toLittleEndian(first);
+            var header = readFrame(file.getName());
+            if (header == null) throw new IOException(file.getName() + " has no decodable MP3 frames");
+            channels = header.mode() == javazoom.jl.decoder.Header.SINGLE_CHANNEL ? 1 : 2;
+            sampleRate = header.frequency();
+            // jlayer 1.0.6's decodeNextFrame() allocates a fresh SampleBuffer per call, but the
+            // LayerIIIDecoder it caches keeps writing into the buffer it was created with — frame 2
+            // then overflows frame 1's buffer (ArrayIndexOutOfBoundsException). Own the buffer
+            // instead: decodeFrame() clears and refills this same one for every frame.
+            sampleBuffer = new javazoom.jl.decoder.SampleBuffer(sampleRate, channels);
+            decoder.setOutputBuffer(sampleBuffer);
+            decodeCurrentFrame(header, file.getName());
+            pending = toLittleEndian(sampleBuffer);
         }
 
-        private javazoom.jl.decoder.SampleBuffer nextFrame(String name) throws IOException {
+        private javazoom.jl.decoder.Header readFrame(String name) throws IOException {
             try {
-                return decoder.decodeNextFrame(bitstream);
+                return bitstream.readFrame();
+            } catch (Exception failure) {
+                throw new IOException("Could not read MP3 frames of " + name + ": " + failure, failure);
+            }
+        }
+
+        private void decodeCurrentFrame(javazoom.jl.decoder.Header header, String name) throws IOException {
+            try {
+                decoder.decodeFrame(header, bitstream);
+                bitstream.closeFrame();
             } catch (Exception failure) {
                 throw new IOException("Could not decode MP3 frames of " + name + ": " + failure, failure);
             }
@@ -178,8 +195,7 @@ public final class AudioConverter {
                 out[i * 2] = (byte) (sample & 0xFF);
                 out[i * 2 + 1] = (byte) ((sample >>> 8) & 0xFF);
             }
-            // JLayer's SampleBuffer accumulates across frames unless cleared; the next
-            // decodeNextFrame would otherwise append past the end of the buffer.
+            // Belt and braces: decodeFrame() already clears the buffer before each frame.
             buffer.clearBuffer();
             return out;
         }
@@ -197,9 +213,10 @@ public final class AudioConverter {
         @Override
         public int read(byte[] dst, int start, int length) throws IOException {
             while (offset >= pending.length) {
-                var frame = nextFrame("stream");
-                if (frame == null) return -1;
-                pending = toLittleEndian(frame);
+                var header = readFrame("stream");
+                if (header == null) return -1;
+                decodeCurrentFrame(header, "stream");
+                pending = toLittleEndian(sampleBuffer);
                 offset = 0;
             }
             int count = Math.min(length, pending.length - offset);
