@@ -165,6 +165,7 @@ jobs:
             '[editor-open] FXEditor built in'
             '[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely'
             '[material-persistence-smoke] created materials persist on disk and travel inside the project file'
+            '[fxpack-stall-watchdog-smoke] stalled server pack transfers are swept and live ones survive'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '

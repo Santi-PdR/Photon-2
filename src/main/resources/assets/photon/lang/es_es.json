@@ -26,8 +26,6 @@
   "photon.gui.editor.timeline.audio.ogg": "Audio OGG personalizado",
   "photon.gui.editor.timeline.audio.import_ogg": "Importar sonido .ogg a esta pista",
   "photon.gui.editor.timeline.audio.loop": "Repetir sonido",
-  "photon.configuration.bloom_intensity_in_scene": "Intensidad de bloom",
-  "photon.configuration.bloom_intensity_in_scene.tooltip": "Fuerza del halo de bloom de este FX (0 a 2). Se guarda en el efecto, no es una opción del cliente.",
   "kila.preset.browse": "Ver presets...",
   "kila.preset.gallery": "Presets",
   "kila.preset.tips": "Reemplaza todos los ajustes por un efecto listo para empezar.",
