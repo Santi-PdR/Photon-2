@@ -223,6 +223,13 @@ public class FXHelper {
                         + "supported — re-export it (assets travel in .fxpack files now)", fxLocation);
             }
             return tag;
+        } catch (StackOverflowError tooDeep) {
+            // 1.20.1's NBT reader has no nesting limit: a crafted .fx from an untrusted pack can recurse
+            // past the stack. Fail this load gracefully instead of crashing the client (a deep stack
+            // trace is not logged — building it would itself be megabytes).
+            Photon.LOGGER.warn("Failed to load fx {} ({}): NBT nesting is too deep", fxLocation, resourceLocation);
+            FXDiagnostics.failure(fxLocation, "read", "NBT nesting is too deep in " + resourceLocation, null, null);
+            return null;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
             FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation, null, e);
@@ -293,6 +300,12 @@ public class FXHelper {
                         + " objects; see preceding object decode messages", tag, null);
             }
             return fx;
+        } catch (StackOverflowError tooDeep) {
+            // same containment as readTag: deeply nested (or cyclic-reference) data must fail this one
+            // effect, not the client; the partial fx is discarded
+            Photon.LOGGER.warn("Failed to load fx {}: nested data is too deep", fxLocation);
+            FXDiagnostics.failure(fxLocation, "decode", "Nested data is too deep", null, null);
+            return null;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {}", fxLocation, e);
             FXDiagnostics.failure(fxLocation, "decode", "Effect deserialization threw an exception", tag, e);

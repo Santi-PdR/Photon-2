@@ -218,7 +218,7 @@ public class EntityEffectCommand extends EffectCommand {
     public void decode(FriendlyByteBuf buf) {
         super.decode(buf);
         autoRotate = buf.readEnum(EntityEffectExecutor.AutoRotate.class);
-        ids = EntityIdListCodec.read(buf, 0);
+        ids = EntityIdListCodec.read(buf, 1); // trailing: the replay flag
         replay = buf.readBoolean();
     }
 
