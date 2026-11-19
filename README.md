@@ -26,6 +26,12 @@ The editor includes a growing catalogue of ready-to-edit Kila materials: impact 
 
 See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) for the folder layout, custom resource rules, and where to turn on Bloom. For the very short, plain-language setup for server owners and players, see [Photon server in five minutes](docs/Photon2-Servidor-en-5-minutos.md); for details on `.fxpack` files and sync limits, see the [full server distribution guide](docs/Photon2-FXPack-Guia-Servidor.md). For the port's technical and testing history, see [Photon 2 Forge port context](docs/Photon2-Port-Context.md). For a single-document handover covering the whole project (architecture, fixes, CI, releases and pending work), see the [full project context](docs/Photon2-Contexto-Completo.md).
 
+### Share LDLib2 resources
+
+- As an operator, run `/photon fx send <player>` to request a private transfer of your local `<gameDir>/ldlib2/assets` to one online player. Your client asks you to confirm before reading or uploading any files; the server retains the recipient-specific pack for future logins.
+- To create a standalone `.fxpack` for Discord or another file host, run `/photon_client export_ldlib2_assets` and confirm when prompted. The file is written to `<gameDir>/photon/fxpacks/`.
+- Current cap: 512 MiB compressed and 2 GiB expanded per pack. If the file is too large for a chat attachment, use file hosting.
+
 ## License
 
 Photon is licensed under CC BY-NC-SA 4.0. See [LICENSE](LICENSE).

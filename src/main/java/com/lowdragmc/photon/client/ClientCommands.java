@@ -134,6 +134,28 @@ public class ClientCommands {
                         .then(createLiteral("export_ldlib2_assets").executes(context -> {
                             com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.exportLocal();
                             return 1;
+                        }))
+                        .then(Commands.literal("confirm_ldlib2_upload")
+                                .then(Commands.argument("token", com.mojang.brigadier.arguments.LongArgumentType.longArg())
+                                        .executes(context -> {
+                                            com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.confirmUpload(
+                                                    com.mojang.brigadier.arguments.LongArgumentType.getLong(context, "token"));
+                                            return 1;
+                                        })))
+                        .then(Commands.literal("cancel_ldlib2_upload")
+                                .then(Commands.argument("token", com.mojang.brigadier.arguments.LongArgumentType.longArg())
+                                        .executes(context -> {
+                                            com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.cancelUpload(
+                                                    com.mojang.brigadier.arguments.LongArgumentType.getLong(context, "token"));
+                                            return 1;
+                                        })))
+                        .then(createLiteral("confirm_export_ldlib2_assets").executes(context -> {
+                            com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.confirmLocalExport();
+                            return 1;
+                        }))
+                        .then(createLiteral("cancel_export_ldlib2_assets").executes(context -> {
+                            com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.cancelLocalExport();
+                            return 1;
                         })),
                 // shader-pack compatibility diagnostics: what layout did we resolve, and what had
                 // to be approximated. Resolution does not need FX on screen, so a whole pack can be

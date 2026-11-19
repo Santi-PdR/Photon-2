@@ -36,7 +36,25 @@ El **servidor guarda y reparte los paquetes**. Cada jugador necesita tener Photo
 
    El comando vuelve a consultar al servidor y descarga solo lo que falta o cambió.
 
-Al salir del servidor se desmontan los packs que ese servidor te prestó. Tus packs personales, guardados en la carpeta `photon/fxpacks/` de tu instancia, se quedan.
+Al salir del servidor se desmontan los packs públicos y privados que ese servidor te prestó. Tus packs personales, guardados en la carpeta `photon/fxpacks/` de tu instancia, se quedan.
+
+## Compartir todos tus recursos LDLib2
+
+Si eres operador y quieres mandar tu carpeta local `<instancia>/ldlib2/assets` a un jugador conectado (por ejemplo Oz), usa:
+
+```text
+/photon fx send Oz
+```
+
+El cliente del operador primero muestra **Confirm upload / Cancel**; no se lee ningún archivo hasta que confirmes. Después el servidor entrega el pack solo a Oz, lo conserva para sus próximas conexiones y su cliente recarga los recursos automáticamente.
+
+Para crear un archivo y compartirlo por Discord u otro servicio, ejecuta en tu cliente:
+
+```text
+/photon_client export_ldlib2_assets
+```
+
+Photon primero te pide confirmar; sólo entonces lee y empaqueta el contenido en `<instancia>/photon/fxpacks/`. Tu amigo lo instala copiándolo a su propia carpeta `photon/fxpacks/`. El límite es 512 MiB comprimidos / 2 GiB descomprimidos por pack; si no entra como adjunto en Discord, usa un servicio de almacenamiento.
 
 ## ¿Cómo se dispara un efecto?
 

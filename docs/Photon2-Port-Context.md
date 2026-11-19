@@ -92,9 +92,9 @@ Este mecanismo resuelve el objetivo de Alex de añadir efectos en el servidor si
 4. El cliente valida/guarda el paquete en su caché y actualiza los recursos de Photon automáticamente, sin que el jugador use F3+T ni reinstale el mod.
 5. El efecto se ejecuta usando el mismo namespace e ID incluido en el pack.
 
-Los clientes que ya están conectados reciben la actualización al volver a entrar; el flujo documentado no promete una descarga instantánea a mitad de sesión. Servidor y cliente necesitan tener Photon instalado, pero cuando sólo cambian FX/assets no hace falta reconstruir ni sustituir el JAR de Photon. Para cambiar código/funciones del mod sí se necesita una versión nueva del mod.
+Los packs públicos nuevos se ofrecen al entrar; para jugadores ya conectados, el operador puede ejecutar `/photon fxpacks` o pedirles `/photon_client fxpacks`. `/photon fx send <jugador>` permite transferir en privado todo `<gameDir>/ldlib2/assets` a un destinatario conectado, que también recibe el pack en futuros inicios de sesión. El cliente pide confirmación explícita antes de leer o subir los archivos. `/photon_client export_ldlib2_assets` también pide confirmación y crea un `.fxpack` local en `<gameDir>/photon/fxpacks/` para compartir manualmente.
 
-Límites de validación del lado del servidor en `FxPackSync`: hasta 32 packs por manifiesto, 64 MiB por pack, 128 MiB de transferencia total, 256 MiB expandidos por ZIP y 20 000 entradas. El código rechaza rutas ZIP sospechosas y verifica los hashes.
+Límites actuales en `FxPackSync`: 512 MiB comprimidos y 2 GiB expandidos por pack; hasta 32 packs públicos / 512 MiB totales; hasta 16 packs privados y 2 GiB por destinatario; manifiesto de hasta 3 GiB, presupuesto agregado de validación de 8 GiB y 20 000 entradas ZIP. El código rechaza rutas inseguras y verifica los hashes. Servidor y cliente necesitan Photon; el `.fxpack` transporta contenido, no código.
 
 ## Port de comportamiento de 26.3
 

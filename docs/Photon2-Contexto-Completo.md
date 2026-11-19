@@ -4,7 +4,7 @@
 > portado, qué se arregló y por qué, cómo se verifica, cómo se distribuye, y qué queda pendiente.
 > Si alguien (Santi, Alex u otra persona o IA) retoma esto sin el historial del chat, empieza aquí.
 >
-> Última actualización: **2026-11-07** · commit de referencia `0fbf2ad` · build CI #526 ✅
+> Actualizado: **2026-11-06** · sincronización de FX en loop y transferencia/exportación de `ldlib2/assets`; CI `44446628854` ✅ · preview `preview-44446628854-1`.
 
 ---
 
@@ -12,7 +12,7 @@
 
 - Es el **port de Photon 2 (`v26.2.2.9`) a Minecraft 1.20.1 / Forge 47.x**, Java 17.
 - El JAR distributivo (`-all.jar`) **incluye LDLib2 y KilaGraph**; LDLib 1 sigue siendo dependencia externa.
-- Ya funciona: editor visual, FX, materiales Kila, trails, beams, luces dinámicas, bloom, audio OGG, **`.fxpack`** y **sincronización de packs desde servidor**.
+- Ya funciona: editor visual, FX/materiales, bloom, sincronización pública de `.fxpack`, transferencia privada de `ldlib2/assets` a un jugador y exportación local de un pack compartible.
 - Se arreglaron bugs reportados por Alex: bloom lavado, materiales animados, trails a alta velocidad, shaders ausentes, y el **selector de FX** (lista congelada).
 - Estado del repo: `main` + ramas de trabajo; este documento acompaña la limpieza del repositorio a una sola rama.
 
@@ -135,9 +135,10 @@ Rutas relativas a `src/main/java/com/lowdragmc/photon/`.
 ├── assets/<namespace>/...      # effects, PNG, modelos, shaders (workspace montado como resource pack)
 ├── projects/*.fxproj           # proyectos editables
 ├── resources/global/           # recursos del editor: materiales, mallas, curvas, graphs
-└── fxpacks/                    # .fxpack instalados o exportados  (+ server-<hash>.fxpack del servidor)
+└── fxpacks/                    # .fxpack instalados/exportados (+ server-<hash>.fxpack del servidor)
 
-<servidor>/photon/fxpacks/      # packs que el servidor reparte automáticamente
+<servidor>/photon/fxpacks/      # packs públicos ofrecidos a todos
+<servidor>/photon/private-fxpacks/<UUID>/  # packs privados para un destinatario
 ```
 
 También se montan como assets legados: `<instancia>/ldlib/assets` (Photon 1) y `<instancia>/ldlib2/assets` (Photon 2 previo al workspace).
@@ -179,25 +180,25 @@ Respondido con [`Photon2-FXPack-Guia-Servidor.md`](Photon2-FXPack-Guia-Servidor.
 4. **Detección**: requiere recarga de recursos (F3+T) para archivos nuevos; `FXPacks.rewrite` sirve ediciones de packs ya montados sin recargar.
 5. **IDs**: `namespace:nombre` (namespace = nombre del `.fxpack`; ruta = nombre dado al exportar; ambos saneados a `[a-z0-9/._-]`).
 
-### 7.1 Distribución desde servidor
+### 7.1 Distribución pública y privada desde el servidor
 
 ```text
-login → servidor escanea <server>/photon/fxpacks/*.fxpack
-      → manifiesto (nombre, tamaño, SHA-256) al cliente
-      → cliente pide solo hashes que no tiene (chunks 24 KiB)
-      → valida hash + formato (debe contener assets/*/fx/*.fx)
-      → guarda photon/fxpacks/server-<hash>.fxpack
-      → recarga recursos automáticamente
-logout → desmonta los packs del servidor (los del jugador se quedan)
+Público: <server>/photon/fxpacks/*.fxpack → manifiesto para todos → descarga por bloques
+         → SHA-256 + validación ZIP → recarga automática
+Privado: /photon fx send <jugador> → cliente del operador empaqueta ldlib2/assets
+         → servidor guarda bajo private-fxpacks/<UUID>/ → solo ese jugador descarga;
+           el pack se vuelve a ofrecer en futuras conexiones
+Local:   /photon_client export_ldlib2_assets → .fxpack en <instancia>/photon/fxpacks/
+         → el autor lo puede adjuntar en Discord/transferir por otro servicio
 ```
 
-Límites en código (`FxPackSync`): **32 packs**, **64 MiB por pack**, **128 MiB totales**, **256 MiB expandidos**, **20 000 entradas**; rechaza rutas ZIP sospechosas (`../`, `\`, absolutas).
+Límites actuales (`FxPackSync`): **512 MiB comprimidos y 2 GiB descomprimidos por pack**; 32 packs públicos / 512 MiB público total; hasta 16 packs privados / 2 GiB por destinatario; manifiesto de hasta 3 GiB y presupuesto agregado de validación de 8 GiB; **20 000 entradas ZIP**. Rechaza rutas inseguras (`../`, barras invertidas y rutas absolutas). La entrega directa requiere que remitente y destinatario estén conectados para iniciarla y permiso de operador (nivel 2). Antes de empaquetar y subir recursos, el cliente muestra acciones explícitas para confirmar o cancelar; exportar localmente también requiere confirmación. Cancelar no lee archivos.
 
-### 7.2 Lo que NO hace
+### 7.2 Límites de uso
 
-- No vigila la carpeta del servidor ni empuja cambios por sí solo a quienes ya están conectados: el login siempre recibe el manifiesto, y para refrescar en línea hay que ejecutar `/photon fxpacks` como operador (permiso 2) o pedir al jugador `/photon_client fxpacks`. La descarga compara hashes y el cliente recarga los recursos automáticamente.
-- No sustituye al mod: sin Photon en el servidor no hay anuncio; sin Photon en el cliente no hay render.
-- No transporta código: solo contenido.
+- Los packs públicos añadidos mientras hay jugadores conectados requieren `/photon fxpacks` como operador o `/photon_client fxpacks` en el cliente. Login y reentrada al nivel también ofrecen el manifiesto.
+- La carpeta local `ldlib2/assets` no se comparte sola: usa `/photon fx send <jugador>` para enviarla de forma privada, o `/photon_client export_ldlib2_assets` para crear un archivo que puedas compartir por Discord/otro servicio.
+- Sin Photon en el servidor no hay sincronización; sin Photon en el cliente no hay render. El `.fxpack` transporta recursos, no código.
 
 ---
 
@@ -246,8 +247,9 @@ gh run download <RUN_ID> -R Santi-PdR/Photon-2 -n photon-forge-1.20.1
 | **Ronda 2 (picker + control de bloom + guía)** | `0fbf2ad` | run `42384055373` (build **#526**) ✅ | `photon-forge-1.20.1` id `13578638461` (13 378 526 B) · diagnóstico `13578569377` |
 | Docs y limpieza de repo | `c5bf27b` | run `42386451673` ✅ | — (solo documentación) |
 | **Merge del port a `main`** | `61fcf63` | PR #1 ✅ | build lanzado desde `main` |
+| **FX en loop + envío privado/exportación LDLib2** | `520bd2f` | run `44446628854` ✅ | [`preview-44446628854-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) |
 
-- Ruta de descarga directa: `https://github.com/Santi-PdR/Photon-2/actions/runs/42384055373/artifacts/13578638461`
+- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44446628854-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44446628854).
 - Los artifacts de GitHub caducan a los **90 días**.
 - En `mods/` debe quedar **un solo** `photon-…-all.jar`; borrar duplicados tipo `…-all (2).jar` antes de probar.
 
@@ -267,14 +269,14 @@ Estos registros vivían en las ramas `backup/photon-forge-*`, que se eliminaron 
 
 ## 10. Estado del repositorio y limpieza de ramas
 
-### 10.1 Situación final (2026-11-07)
+### 10.1 Situación histórica de la limpieza
 
-El port **está en `main`**. Estado tras la limpieza:
+La tabla siguiente registra el estado del repositorio después del merge inicial del port (2026-11-07); **no representa el estado actual de la sesión**. El trabajo posterior de persistencia y transferencia de recursos corresponde a la rama `arena/747b04a3-photon-2` y al PR #9 hacia `main`.
 
-| Rama | Estado |
+| Rama histórica | Estado en esa fecha |
 | --- | --- |
-| `main` | **Rama única de trabajo.** Contiene el port completo + rondas 1 y 2. Commit de merge `61fcf63`. |
-| `arena/9edfd416-photon-2` | Rama de la sesión del agente en Arena; se conserva porque la plataforma la usa para seguir el trabajo. Apunta al mismo contenido que `main` y no debe usarse como base de desarrollo. |
+| `main` | Contenía el port y rondas 1 y 2, merge `61fcf63`. |
+| `arena/9edfd416-photon-2` | Rama Arena de una sesión anterior, apunta al mismo contenido que `main`. |
 
 Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
@@ -297,11 +299,13 @@ Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
 ## 11. Pendientes y siguientes pasos sugeridos
 
-1. **Verificación en el cliente de Alex** del JAR con el arreglo del buscador (`SearchComponentMixin`) y el slider de bloom.
-2. Selector de FX: la causa de la segunda queja ya está identificada y arreglada en el widget (apertura del desplegable, no la lista de candidatos). Si volviera a fallar, pedir `latest.log` de la sesión concreta y la captura del desplegable abierto.
-3. **Iris/DH**: revisar `iris_composite_mode` y el bloom bajo shaderpacks en hardware AMD.
-4. **Rendimiento**: presupuesto de post-FX (`postfx_pool_budget_mb`), actualización de partículas en paralelo con colisiones.
-5. Considerar publicar el JAR como **release con tag** para que los jugadores tengan enlace permanente (los artifacts caducan).
+1. Probar con dos clientes reales `/photon fx send <jugador>`: confirmar que únicamente el destinatario recibe el pack, que se recarga y que se vuelve a ofrecer tras reconectar.
+2. Probar `/photon_client export_ldlib2_assets` en otra instancia y verificar la instalación del `.fxpack` compartido.
+3. Probar en juego la persistencia tardía de FX en loop para entidad/bloque, y comprobar que `/photon fx remove` evita que reaparezcan.
+4. Verificar en el cliente de Alex el selector y el slider de bloom; si fallan, pedir `latest.log` y captura de la sesión.
+5. **Iris/DH**: revisar `iris_composite_mode` y bloom bajo shaderpacks AMD; seguir con presupuesto de post-FX y partículas paralelas.
+
+El JAR de esta funcionalidad está publicado como preview en GitHub; ver la release enlazada en la sección 9. La verificación manual en dos clientes (privacidad, reconexión, exportación e instalación) queda pendiente.
 
 ---
 

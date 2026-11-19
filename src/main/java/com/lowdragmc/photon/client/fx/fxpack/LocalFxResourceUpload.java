@@ -5,7 +5,9 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import com.lowdragmc.photon.network.FxPackSync;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -27,6 +29,8 @@ public final class LocalFxResourceUpload {
     private static final AtomicBoolean UPLOADING = new AtomicBoolean();
     private static final AtomicBoolean EXPORTING = new AtomicBoolean();
     private static volatile long activeToken = -1;
+    private static volatile FxPackSync.UploadPromptPacket pendingUploadPrompt;
+    private static final AtomicBoolean EXPORT_CONFIRMATION_PENDING = new AtomicBoolean();
     private static final int MAX_ENTRIES = 20_000;
     private static final long MAX_ARCHIVE_BYTES = FxPackSync.MAX_PACK_BYTES;
     private static final long MAX_EXPANDED_BYTES = FxPackSync.MAX_EXPANDED_PACK_BYTES;
@@ -34,8 +38,22 @@ public final class LocalFxResourceUpload {
     private LocalFxResourceUpload() {
     }
 
-    /** Upload the local assets to the server for delivery to the selected player. */
+    /** Ask the player before reading any local assets in response to a server upload request. */
     public static void begin(FxPackSync.UploadPromptPacket prompt) {
+        pendingUploadPrompt = prompt;
+        feedbackWithActions("Photon: " + prompt.recipientName() + " will receive all files in <gameDir>/ldlib2/assets. "
+                        + "Photon must read and upload those files. Continue? ",
+                "/photon_client confirm_ldlib2_upload " + prompt.token(), "[Confirm upload]",
+                "/photon_client cancel_ldlib2_upload " + prompt.token(), "[Cancel]");
+    }
+
+    public static void confirmUpload(long token) {
+        var prompt = pendingUploadPrompt;
+        if (prompt == null || prompt.token() != token) {
+            feedback("Photon: this upload confirmation has expired.");
+            return;
+        }
+        pendingUploadPrompt = null;
         if (!UPLOADING.compareAndSet(false, true)) {
             feedback("Photon: another ldlib2/assets transfer is already running.");
             return;
@@ -45,8 +63,36 @@ public final class LocalFxResourceUpload {
         CompletableFuture.runAsync(() -> upload(prompt));
     }
 
-    /** Create a standalone .fxpack in <gameDir>/photon/fxpacks for Discord or another file-sharing service. */
+    public static void cancelUpload(long token) {
+        var prompt = pendingUploadPrompt;
+        if (prompt != null && prompt.token() == token) {
+            pendingUploadPrompt = null;
+            feedback("Photon: resource upload cancelled; no local files were read.");
+        }
+    }
+
+    /** Ask for explicit confirmation before creating a standalone shareable .fxpack. */
     public static void exportLocal() {
+        if (!EXPORT_CONFIRMATION_PENDING.compareAndSet(false, true)) {
+            feedback("Photon: an LDLib2 export confirmation is already pending.");
+            return;
+        }
+        feedbackWithActions("Photon: this will read all files in <gameDir>/ldlib2/assets and create a local .fxpack. Continue? ",
+                "/photon_client confirm_export_ldlib2_assets", "[Confirm export]",
+                "/photon_client cancel_export_ldlib2_assets", "[Cancel]");
+    }
+
+    public static void cancelLocalExport() {
+        if (EXPORT_CONFIRMATION_PENDING.compareAndSet(true, false)) {
+            feedback("Photon: local export cancelled; no files were read.");
+        }
+    }
+
+    public static void confirmLocalExport() {
+        if (!EXPORT_CONFIRMATION_PENDING.compareAndSet(true, false)) {
+            feedback("Photon: there is no pending LDLib2 export confirmation.");
+            return;
+        }
         if (!EXPORTING.compareAndSet(false, true)) {
             feedback("Photon: an LDLib2 resource export is already running.");
             return;
@@ -170,6 +216,7 @@ public final class LocalFxResourceUpload {
     public static void onClientLogout() {
         UPLOADING.set(false);
         activeToken = -1;
+        pendingUploadPrompt = null;
     }
 
     private static String sha256(Path path) throws IOException {
@@ -196,6 +243,21 @@ public final class LocalFxResourceUpload {
     private static String safeMessage(Exception failure) {
         var message = failure.getMessage();
         return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    }
+
+    private static void feedbackWithActions(String message, String acceptCommand, String acceptLabel,
+                                            String rejectCommand, String rejectLabel) {
+        Minecraft.getInstance().execute(() -> {
+            var player = Minecraft.getInstance().player;
+            if (player == null) return;
+            var accept = Component.literal(acceptLabel).withStyle(Style.EMPTY
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, acceptCommand))
+                    .withUnderlined(true));
+            var reject = Component.literal(rejectLabel).withStyle(Style.EMPTY
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, rejectCommand))
+                    .withUnderlined(true));
+            player.sendSystemMessage(Component.literal(message).append(accept).append(" ").append(reject));
+        });
     }
 
     private static void feedback(String message) {
