@@ -39,6 +39,9 @@ jobs:
       - name: Verify referenced translation keys exist
         run: python3 .github/scripts/verify_lang_key_usage.py
 
+      - name: Verify placeholder translation keys get their arguments
+        run: python3 .github/scripts/verify_lang_placeholders.py
+
       - name: Verify config screen covers every top-level Photon setting
         run: python3 .github/scripts/verify_config_screen_coverage.py
 

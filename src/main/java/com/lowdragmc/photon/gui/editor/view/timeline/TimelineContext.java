@@ -10,6 +10,7 @@ import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.Track;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -57,9 +58,23 @@ public interface TimelineContext {
     void zoom(UIEvent event);
 
     // ---- history + live preview ----
-    void pushEdit(String name, Runnable doFn, Runnable undoFn);
+    /** Push {@code doFn} to the editor history under {@code label} and run it. The label is shown as-is
+     *  in the history panel, so a key with placeholders (e.g. "Add %s") must be built here together with
+     *  its arguments; the {@link #pushEdit(String, Runnable, Runnable)} shorthand only fits plain keys. */
+    void pushEdit(Component label, Runnable doFn, Runnable undoFn);
 
-    void pushApplied(String name, Runnable redo, Runnable undo);
+    /** Record an edit that is already applied (e.g. a finished drag) under {@code label}, without running it. */
+    void pushApplied(Component label, Runnable redo, Runnable undo);
+
+    /** Shorthand for an argument-free translation key. */
+    default void pushEdit(String name, Runnable doFn, Runnable undoFn) {
+        pushEdit(Component.translatable(name), doFn, undoFn);
+    }
+
+    /** Shorthand for an argument-free translation key. */
+    default void pushApplied(String name, Runnable redo, Runnable undo) {
+        pushApplied(Component.translatable(name), redo, undo);
+    }
 
     void refreshPreview();
 
