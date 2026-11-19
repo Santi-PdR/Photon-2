@@ -955,7 +955,8 @@ public class AnimationTrackEditor extends TrackEditor {
         if (!(runtime.objects.get(track.targetId()) instanceof FXObject target)) return;
         var property = type.create(target);
         st.expanded = true;
-        ctx.pushEdit("photon.gui.editor.timeline.add_property",
+        // "Add %s": the history label names the property the same way the add menu did
+        ctx.pushEdit(Component.translatable("photon.gui.editor.timeline.add_property", Component.translatable(propertyKey(type))),
                 () -> { track.properties().add(property); selectPropertyState(st, property, -1); ctx.requestRebuild(); ctx.refreshPreview(); },
                 () -> { track.properties().remove(property); property.restoreBase(target); clearSelectedIf(st, property); ctx.requestRebuild(); ctx.refreshPreview(); });
     }
@@ -964,7 +965,7 @@ public class AnimationTrackEditor extends TrackEditor {
         var runtime = ctx.runtime();
         var bound = (runtime == null || track.targetId() == null) ? null : runtime.objects.get(track.targetId());
         var index = track.properties().indexOf(property);
-        ctx.pushEdit("photon.gui.editor.timeline.remove_property",
+        ctx.pushEdit(Component.translatable("photon.gui.editor.timeline.remove_property", Component.translatable(propertyKey(property.type()))),
                 () -> {
                     track.properties().remove(property);
                     if (bound instanceof FXObject obj) property.restoreBase(obj);

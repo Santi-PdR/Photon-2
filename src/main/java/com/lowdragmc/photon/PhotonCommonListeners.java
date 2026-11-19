@@ -9,6 +9,7 @@ import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -16,6 +17,12 @@ import java.util.List;
 
 @EventBusSubscriber(modid = Photon.MOD_ID, bus = EventBusSubscriber.Bus.FORGE)
 public class PhotonCommonListeners {
+    /** Crash-orphaned upload parts are only safe to sweep when no transfer can be in flight. */
+    @SubscribeEvent
+    public static void onServerStarting(ServerStartingEvent event) {
+        com.lowdragmc.photon.network.FxPackSync.onServerStarting(event.getServer());
+    }
+
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         ActiveEntityEffects.clear();

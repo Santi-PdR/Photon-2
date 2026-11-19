@@ -246,11 +246,11 @@ public class FXTimelineView extends View implements TimelineContext {
     @Override public float scrollTicks() { return scrollTicks; }
     @Override public long currentTimeTicks() { return fxEditor.sceneView.particleManager.getTime(); }
     @Override public double majorTickInterval() { return niceInterval(60 / scale); }
-    @Override public void pushEdit(String name, Runnable doFn, Runnable undoFn) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(doFn, undoFn));
+    @Override public void pushEdit(Component label, Runnable doFn, Runnable undoFn) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(doFn, undoFn));
     }
-    @Override public void pushApplied(String name, Runnable redo, Runnable undo) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(redo, undo), false);
+    @Override public void pushApplied(Component label, Runnable redo, Runnable undo) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(redo, undo), false);
     }
     // coalesced: edit actions can fire many refreshes per frame; only the last one replays
     @Override public void refreshPreview() { fxEditor.sceneView.requestSimulateTo(currentTimeTicks()); }

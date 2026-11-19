@@ -33,6 +33,18 @@ jobs:
       - name: Verify shader normal and projection safety
         run: python3 .github/scripts/verify_shader_normal_safety.py
 
+      - name: Verify language file parity
+        run: python3 .github/scripts/verify_lang_parity.py
+
+      - name: Verify referenced translation keys exist
+        run: python3 .github/scripts/verify_lang_key_usage.py
+
+      - name: Verify placeholder translation keys get their arguments
+        run: python3 .github/scripts/verify_lang_placeholders.py
+
+      - name: Verify config screen covers every top-level Photon setting
+        run: python3 .github/scripts/verify_config_screen_coverage.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -66,8 +78,8 @@ jobs:
           [ -f "$log" ] || exit 0
           # first the compiler's own errors, then whatever the log ended on: a failure that is not a
           # javac error (a test, a plugin) still has to be readable without the log
-          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed' "$log" \
-            | head -n 25 | while IFS= read -r line; do echo "::error title=build::$line"; done
+          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed|Could not |A problem occurred|Caused by' "$log" \
+            | head -n 30 | while IFS= read -r line; do echo "::error title=build::$line"; done
           echo "::group::last 25 log lines"
           tail -n 25 "$log"
           echo "::endgroup::"
@@ -99,6 +111,7 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 180s bash ./gradlew --no-daemon runServer > "$log_file" 2>&1
           result=$?
+          tr -d '\000' < "$log_file" > "$log_file.clean" && mv "$log_file.clean" "$log_file"
           if grep -Fq 'For help, type "help"' "$log_file"; then
             echo "Forge server reached the ready state."
             exit 0
@@ -140,7 +153,15 @@ jobs:
       - name: Install virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil
+          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil ffmpeg
+
+      - name: Generate audio conversion smoke fixtures
+        run: |
+          mkdir -p run/photon/smoke-fixtures
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a libmp3lame -b:a 128k run/photon/smoke-fixtures/beat.mp3
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k run/photon/smoke-fixtures/beat.m4a
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -ar 48000 run/photon/smoke-fixtures/beat48k.wav
+          ffmpeg -loglevel error -f lavfi -i "testsrc=size=64x64:duration=0.5" -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:v libx264 -c:a aac -shortest run/photon/smoke-fixtures/beat.mp4
 
       - name: Smoke-test Forge client startup without a physical display
         shell: bash
@@ -149,6 +170,9 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true -Dphoton.serverFxPackSyncSmoke=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
+          # Some crashes dump binary bytes into stdout and grep then hides every diagnostic as
+          # "binary file matches". Strip NULs so all later greps treat the log as text.
+          tr -d '\000' < "$log_file" > "$log_file.clean" && mv "$log_file.clean" "$log_file"
           required_markers=(
             'Photon shader graph nodes loaded:'
             'Sound engine started'
@@ -161,6 +185,11 @@ jobs:
             '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously'
             '[editor-open] FXEditor built in'
             '[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely'
+            '[material-persistence-smoke] created materials persist on disk and travel inside the project file'
+            '[fxpack-stall-watchdog-smoke] stalled server pack transfers are swept and live ones survive'
+            '[upload-archive-smoke] the local LDLib2 asset archive skips unsafe names and passes pack validation'
+            '[late-replay-smoke] entity and block FX snapshots replay with their fields and per-chunk filtering'
+            '[audio-conversion-smoke] user audio formats convert to playable Ogg Vorbis'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -231,7 +260,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -378,6 +407,7 @@ jobs:
           grep -Fq '[playback-rate-sanitize-smoke] non-finite, negative and extreme FX rates are bounded' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[blend-preset-classification-smoke] preset factors and Kila slot-to-shader blend selection match the shader contract' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[animated-property-load-smoke] unreadable animated properties are skipped without failing the track' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require self-contained shield FX pack
         shell: bash
@@ -528,10 +558,12 @@ jobs:
           echo "::endgroup::"
           echo "::group::noise filter"
           echo "The headless client always logs a narrator and a netty failure; neither stops the run."
+          echo "Blocked Mojang session servers make authlib fail over a Gson parse of the HTML error page"
+          echo "('Expected BEGIN_OBJECT but was STRING'); that noise is external and must never gate or mask a run."
           echo "::endgroup::"
           # Our own assertion first: the log's first Exception is narrator/netty noise, and publishing that
           # instead of the smoke failure is why a red run used to say nothing about what broke.
-          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator' | head -n 4 | \
+          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator|Expected BEGIN_OBJECT' | head -n 4 | \
             while IFS= read -r line; do echo "::error title=smoke assertion::$line"; done
           # Then one flattened window: the 25 lines of our own logging before the first line that names the
           # test, which is where the reason for the failure always is.
@@ -544,8 +576,10 @@ jobs:
           # Finally the generic sweep, filtered, as a last resort. Include the owning Java frames for
           # Optional failures and blocked reflection, not only the exception headline.
           grep -n -A 12 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
+            | grep -vE 'Reflective setAccessible|PlatformDependent|netty' \
             | head -n 28 | while IFS= read -r line; do echo "::error title=client exception trace::$line"; done
-          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" \
+            | grep -vE 'flite|Narrator|netty|Unsafe|Native library|authlib|AuthenticationUnavailable|MinecraftClientException|Expected BEGIN_OBJECT' \
             | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
@@ -564,9 +598,9 @@ jobs:
     needs: build
     if: >-
       always() && !cancelled() && needs.build.outputs.distributable_uploaded == 'true' &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2') ||
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')) ||
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.head.ref == 'arena/747b04a3-photon-2'))
+        startsWith(github.event.pull_request.head.ref, 'arena/')))
     permissions:
       contents: write
     runs-on: ubuntu-latest

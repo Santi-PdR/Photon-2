@@ -27,7 +27,7 @@ import java.util.function.Supplier;
 public class CurveTexture implements AutoCloseable, IConfigurable, IProviderAwareNBTSerializable<ListTag> {
     private final int width;
     private final int height;
-    @Configurable(name = "curves", canCollapse = false, collapse = false)
+    @Configurable(name = "CurveTexture.curves", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildCurveConfigurator", addDefaultMethod = "addDefaultCurve")
     private final List<Curve> curves = new ArrayList<>();
     // Upload once on first use, even when the curve list is empty: shader samplers must never receive null.
