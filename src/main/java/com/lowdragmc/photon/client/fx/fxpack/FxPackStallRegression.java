@@ -24,7 +24,9 @@ public final class FxPackStallRegression {
         var freshTemp = directory.resolve("fresh.fxpack.part");
         Files.write(stalledTemp, new byte[]{1});
         Files.write(freshTemp, new byte[]{1});
-        var session = new ClientFxPackSync.SyncSession(7L, 2);
+        // 3 counted entries but only 2 transfers: sweeping them must never bring remaining to 0,
+        // because finish() would swap the active server pack set and reload resources mid-smoke.
+        var session = new ClientFxPackSync.SyncSession(7L, 3);
         var stalled = new ClientFxPackSync.Transfer(
                 new FxPackSync.PackEntry("stalled.fxpack", 1, "aa"), directory.resolve("stalled.fxpack"), stalledTemp);
         var fresh = new ClientFxPackSync.Transfer(
@@ -33,6 +35,7 @@ public final class FxPackStallRegression {
         session.transfers.put("bb", fresh);
         var previous = ClientFxPackSync.activeSession;
         ClientFxPackSync.activeSession = session;
+        ClientFxPackSync.sweepSuspended = true;
         try {
             // an idle IO thread sweeps the stale transfer and leaves the live one alone
             stalled.lastActivity = now - 2 * timeout;
@@ -58,6 +61,7 @@ public final class FxPackStallRegression {
                 throw new IllegalStateException("the stale transfer survived the second sweep");
             }
         } finally {
+            ClientFxPackSync.sweepSuspended = false;
             ClientFxPackSync.activeSession = previous;
             Files.deleteIfExists(stalledTemp);
             Files.deleteIfExists(freshTemp);

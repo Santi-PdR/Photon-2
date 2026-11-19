@@ -73,10 +73,15 @@ public final class ClientFxPackSync {
     }
 
     private static void checkStalls() {
+        if (sweepSuspended) return;
         var session = activeSession;
         if (session == null) return;
         sweepStalled(session, System.nanoTime(), IO_ACTIVITY.get());
     }
+
+    /** Set while a regression drives {@link #sweepStalled} with fabricated times, so the live
+     *  watchdog cannot sweep its synthetic transfers out from under its assertions. */
+    static volatile boolean sweepSuspended;
 
     /** Fail every transfer of {@code session} that has seen no activity for the timeout while the IO
      *  thread was idle. Package-private so the stall sweep is testable without a server. */
