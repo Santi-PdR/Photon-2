@@ -73,11 +73,21 @@ public final class ActiveEntityEffects {
     /** Re-send every stored FX on {@code target} to {@code player} (entity is present on their client). */
     public static void replayTo(ServerPlayer player, Entity target) {
         if (player == null || target == null) return;
-        var list = ACTIVE.get(target.getUUID());
-        if (list == null || list.isEmpty()) return;
-        for (var snapshot : list) {
-            PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), snapshot.packet(target));
+        for (var packet : pendingReplay(target)) {
+            PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
         }
+    }
+
+    /** The replay packets for {@code target}'s stored FX. Split from the send so the replay content
+     *  is regression-testable without a network connection. */
+    static List<EntityEffectCommand> pendingReplay(Entity target) {
+        var list = ACTIVE.get(target.getUUID());
+        if (list == null || list.isEmpty()) return List.of();
+        var packets = new ArrayList<EntityEffectCommand>(list.size());
+        for (var snapshot : list) {
+            packets.add(snapshot.packet(target));
+        }
+        return packets;
     }
 
     private record Snapshot(ResourceLocation location, Vec3 offset, Vec3 rotation, Vec3 scale,
