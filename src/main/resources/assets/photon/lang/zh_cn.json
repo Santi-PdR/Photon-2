@@ -193,6 +193,7 @@
   "photon.gui.editor.timeline.audio.loop": "循环播放",
   "photon.gui.editor.timeline.property.speed": "速度",
   "photon.gui.editor.timeline.add_signal": "添加信号",
+  "photon.gui.editor.timeline.edit_signal": "编辑信号",
   "photon.gui.editor.timeline.add_child_track": "添加子轨道",
   "photon.gui.editor.timeline.signal_name": "名称",
   "photon.gui.editor.timeline.signal_data": "数据",

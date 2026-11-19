@@ -243,6 +243,7 @@
   "photon.gui.editor.timeline.audio.preview": "vista previa",
   "photon.gui.editor.timeline.property.speed": "velocidad",
   "photon.gui.editor.timeline.add_signal": "Agregar señal",
+  "photon.gui.editor.timeline.edit_signal": "Editar señal",
   "photon.gui.editor.timeline.add_child_track": "Agregar pista hija",
   "photon.gui.editor.timeline.signal_name": "nombre",
   "photon.gui.editor.timeline.signal_data": "datos",

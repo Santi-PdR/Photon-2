@@ -197,6 +197,7 @@
   "photon.gui.editor.timeline.audio.loop": "Loop sound",
   "photon.gui.editor.timeline.property.speed": "speed",
   "photon.gui.editor.timeline.add_signal": "Add Signal",
+  "photon.gui.editor.timeline.edit_signal": "Edit Signal",
   "photon.gui.editor.timeline.add_child_track": "Add Child Track",
   "photon.gui.editor.timeline.signal_name": "name",
   "photon.gui.editor.timeline.signal_data": "data",
