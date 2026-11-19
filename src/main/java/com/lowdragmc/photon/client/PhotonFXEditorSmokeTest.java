@@ -2945,8 +2945,10 @@ public final class PhotonFXEditorSmokeTest {
         verifyBlendPresetClassification();
         com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterialRegression.verify();
         Photon.LOGGER.info("[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely");
+        com.lowdragmc.photon.gui.editor.resource.MaterialPersistenceRegression.verify();
         com.lowdragmc.photon.client.fx.LooseTexturePathRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");

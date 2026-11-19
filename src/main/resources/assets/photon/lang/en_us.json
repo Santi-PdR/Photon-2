@@ -453,8 +453,6 @@
   "photon.fx.bloom.enable.tooltip": "Whether this FX feeds Photon's bloom halo. Off means this effect does not glow, regardless of other FX.",
   "photon.fx.bloom.intensity": "Bloom intensity",
   "photon.fx.bloom.intensity.tooltip": "How strong this FX's bloom halo is (0 to 2). Authored on the effect, not a client setting.",
-  "photon.configuration.bloom_intensity_in_scene": "Bloom intensity",
-  "photon.configuration.bloom_intensity_in_scene.tooltip": "How strong this FX's bloom halo is (0 to 2). Authored on the effect, not a client setting.",
   "editor.scene_mode": "scene mode",
   "scene_mode.platform": "platform",
   "scene_mode.real_world": "real world",

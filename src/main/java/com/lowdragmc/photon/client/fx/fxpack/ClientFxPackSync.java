@@ -20,9 +20,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
-/** Client cache and automatic ResourceManager reload for FX packs received from a Photon server. */
+/**
+ * Client cache and automatic ResourceManager reload for FX packs received from a Photon server.
+ * <p>
+ * Chunk transfers are driven by request/response: if the server stops sending (half-open connection,
+ * crash after the manifest), a transfer would wait forever and the session would never activate its
+ * packs. A watchdog sweeps transfers that see no chunk activity — and no IO work to explain it — for
+ * {@link #STALL_TIMEOUT_NANOS}, failing them through the same path as a corrupt chunk so the session
+ * still finishes with whatever downloaded.
+ */
 @OnlyIn(Dist.CLIENT)
 public final class ClientFxPackSync {
     private static final ExecutorService IO = Executors.newSingleThreadExecutor(task -> {
@@ -30,10 +41,69 @@ public final class ClientFxPackSync {
         thread.setDaemon(true);
         return thread;
     });
-    private static volatile SyncSession activeSession;
+    /** Touched at every IO task start and end: while the IO thread works, a quiet transfer is not a stall. */
+    private static final AtomicLong IO_ACTIVITY = new AtomicLong();
+    /** No chunk arrivals and no IO work for this long means the server stopped answering. */
+    static final long STALL_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(120);
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(task -> {
+        var thread = new Thread(task, "Photon FX pack sync watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    static {
+        WATCHDOG.scheduleWithFixedDelay(ClientFxPackSync::checkStalls, 30, 30, TimeUnit.SECONDS);
+    }
+
+    /** Package-visible so the stall sweep can be regression-tested against a synthetic session. */
+    static volatile SyncSession activeSession;
     private static long lastRequestToken = -1;
 
     private ClientFxPackSync() {}
+
+    private static void submitIO(Runnable task) {
+        IO.execute(() -> {
+            IO_ACTIVITY.set(System.nanoTime());
+            try {
+                task.run();
+            } finally {
+                IO_ACTIVITY.set(System.nanoTime());
+            }
+        });
+    }
+
+    private static void checkStalls() {
+        var session = activeSession;
+        if (session == null) return;
+        sweepStalled(session, System.nanoTime(), IO_ACTIVITY.get());
+    }
+
+    /** Fail every transfer of {@code session} that has seen no activity for the timeout while the IO
+     *  thread was idle. Package-private so the stall sweep is testable without a server. */
+    static void sweepStalled(SyncSession session, long nowNanos, long ioActivityNanos) {
+        if (nowNanos - ioActivityNanos < STALL_TIMEOUT_NANOS) return;
+        for (var transfer : List.copyOf(session.transfers.values())) {
+            if (nowNanos - transfer.lastActivity < STALL_TIMEOUT_NANOS) continue;
+            failStalled(session, transfer);
+        }
+    }
+
+    /** The writeChunk failure path for a transfer the server stopped feeding. */
+    private static void failStalled(SyncSession session, Transfer transfer) {
+        synchronized (transfer) {
+            if (!session.transfers.remove(transfer.entry.sha256(), transfer)) return;
+            try {
+                Files.deleteIfExists(transfer.temp);
+            } catch (IOException | RuntimeException cleanupFailure) {
+                Photon.LOGGER.warn("Could not remove stalled Photon FX pack transfer {}", transfer.temp, cleanupFailure);
+            }
+            if (activeSession == session) {
+                Photon.LOGGER.warn("Photon FX pack transfer {} stalled with no server chunks; dropping it",
+                        transfer.entry.fileName());
+                finishOne(session);
+            }
+        }
+    }
 
     public static void begin(long requestToken, List<FxPackSync.PackEntry> entries) {
         if (Minecraft.getInstance().getConnection() == null
@@ -42,7 +112,7 @@ public final class ClientFxPackSync {
         var previous = activeSession;
         var session = new SyncSession(requestToken, entries.size());
         activeSession = session;
-        IO.execute(() -> {
+        submitIO(() -> {
             if (previous != null) discardTemporaryFiles(previous);
             discardOrphanTemporaryFiles();
         });
@@ -53,7 +123,7 @@ public final class ClientFxPackSync {
         var directory = FXPacks.getFxPacksDir().toPath();
         for (var entry : entries) {
             var target = directory.resolve("server-" + entry.sha256() + FXPacks.SUFFIX);
-            IO.execute(() -> prepare(session, entry, target));
+            submitIO(() -> prepare(session, entry, target));
         }
     }
 
@@ -142,7 +212,10 @@ public final class ClientFxPackSync {
     public static void accept(FxPackSync.ChunkPacket packet) {
         var session = activeSession;
         if (session != null && packet.requestToken() == session.requestToken) {
-            IO.execute(() -> writeChunk(session, packet));
+            // arrival is the progress signal the watchdog watches, even while the IO thread is busy
+            var transfer = session.transfers.get(packet.sha256());
+            if (transfer != null) transfer.touch();
+            submitIO(() -> writeChunk(session, packet));
         }
     }
 
@@ -243,7 +316,7 @@ public final class ClientFxPackSync {
         var previous = activeSession;
         activeSession = null;
         lastRequestToken = -1;
-        if (previous != null) IO.execute(() -> discardTemporaryFiles(previous));
+        if (previous != null) submitIO(() -> discardTemporaryFiles(previous));
         var minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
             if (activeSession != null || !FXPacks.setActiveServerPacks(List.of())) return;
@@ -253,31 +326,37 @@ public final class ClientFxPackSync {
         });
     }
 
-    private static final class SyncSession {
+    static final class SyncSession {
         private final long requestToken;
-        private final Map<String, Transfer> transfers = new ConcurrentHashMap<>();
+        final Map<String, Transfer> transfers = new ConcurrentHashMap<>();
         private final java.util.Set<String> completed = ConcurrentHashMap.newKeySet();
         private final AtomicInteger remaining;
         /** Written only by the single-threaded IO executor. */
         private long expandedBytes;
         private volatile boolean downloaded;
 
-        private SyncSession(long requestToken, int count) {
+        SyncSession(long requestToken, int count) {
             this.requestToken = requestToken;
             remaining = new AtomicInteger(count);
         }
     }
 
-    private static final class Transfer {
-        private final FxPackSync.PackEntry entry;
+    static final class Transfer {
+        final FxPackSync.PackEntry entry;
         private final Path target;
-        private final Path temp;
+        final Path temp;
         private long received;
+        /** Last chunk arrival or IO touch; the watchdog sweeps transfers this goes stale on. */
+        volatile long lastActivity = System.nanoTime();
 
-        private Transfer(FxPackSync.PackEntry entry, Path target, Path temp) {
+        Transfer(FxPackSync.PackEntry entry, Path target, Path temp) {
             this.entry = entry;
             this.target = target;
             this.temp = temp;
+        }
+
+        void touch() {
+            lastActivity = System.nanoTime();
         }
     }
 
