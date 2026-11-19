@@ -207,7 +207,12 @@ public final class AudioConverter {
 
         @Override
         public void close() throws IOException {
-            bitstream.close();
+            try {
+                bitstream.close();
+            } catch (Exception failure) {
+                // jLayer's Bitstream.close throws a checked JavaLayer exception, not IOException
+                throw new IOException("Could not close the MP3 stream: " + failure, failure);
+            }
         }
     }
 
@@ -284,6 +289,7 @@ public final class AudioConverter {
 
     /** Decodes raw ADTS .aac streams with JAAD. */
     private static final class AdtsSource implements PcmSource {
+        private final InputStream input;
         private final net.sourceforge.jaad.adts.ADTSDemultiplexer demuxer;
         private final net.sourceforge.jaad.aac.Decoder decoder;
         private final net.sourceforge.jaad.aac.SampleBuffer buffer = new net.sourceforge.jaad.aac.SampleBuffer();
@@ -293,8 +299,8 @@ public final class AudioConverter {
         private int offset;
 
         AdtsSource(File file) throws IOException {
-            demuxer = new net.sourceforge.jaad.adts.ADTSDemultiplexer(
-                    new BufferedInputStream(Files.newInputStream(file.toPath())));
+            input = new BufferedInputStream(Files.newInputStream(file.toPath()));
+            demuxer = new net.sourceforge.jaad.adts.ADTSDemultiplexer(input);
             decoder = new net.sourceforge.jaad.aac.Decoder(demuxer.getDecoderSpecificInfo());
             pending = decodeNext(file.getName());
             if (pending == null) throw new IOException(file.getName() + " has no decodable AAC frames");
@@ -342,7 +348,7 @@ public final class AudioConverter {
 
         @Override
         public void close() throws IOException {
-            demuxer.close();
+            input.close();
         }
     }
 

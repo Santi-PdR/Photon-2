@@ -127,8 +127,11 @@ jarJar.versionInformation {
     pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a+forge.1.20.1')
     ranged(dependency { it.group == 'local' && it.name == 'kilagraph' }, '[20.1.0.15,20.1.0.16)')
     pin(dependency { it.group == 'local' && it.name == 'kilagraph' }, '20.1.0.15')
+    ranged(dependency { it.name == 'jVorbisEnc' }, '[0.0.2,0.0.3)')
     pin(dependency { it.name == 'jVorbisEnc' }, '0.0.2')
+    ranged(dependency { it.name == 'jlayer' }, '[1.0.6,1.1)')
     pin(dependency { it.name == 'jlayer' }, '1.0.6')
+    ranged(dependency { it.name == 'jaad' }, '[0.8.8-MILESTONE-202111270642,0.9)')
     pin(dependency { it.name == 'jaad' }, '0.8.8-MILESTONE-202111270642')
 }
 
