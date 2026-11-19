@@ -1148,7 +1148,8 @@ public final class PhotonFXEditorSmokeTest {
                 new com.lowdragmc.photon.client.fx.timeline.TimelineSection("A", 0)
                         .then(com.lowdragmc.photon.client.fx.timeline.TimelineSection.Then.END)), 20, null, true);
         ending.begin(null);
-        ending.step(25);
+        ending.step(com.lowdragmc.photon.client.gameobject.FXObject.MAX_SUBSTEPS);
+        ending.step(4);
         if (!ending.endPending() && !ending.ended()) {
             throw new IllegalStateException("\"then: end\" let the clock run past the end of its section to "
                     + ending.time());
