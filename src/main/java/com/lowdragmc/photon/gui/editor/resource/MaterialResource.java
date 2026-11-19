@@ -75,10 +75,6 @@ public class MaterialResource extends Resource<IMaterial> {
         addKilaTextureMaterial(provider, "noise_cloud");
     }
 
-    private void addVanillaTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
-        builtin.addResource(name, new TextureMaterial(new ResourceLocation("textures/particle/%s.png".formatted(name))));
-    }
-
     private void addBuiltinTextureMaterial(BuiltinResourceProvider<IMaterial> builtin, String name) {
         builtin.addResource(name, new TextureMaterial(new ResourceLocation("photon:textures/particle/%s.png".formatted(name))));
     }

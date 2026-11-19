@@ -31,7 +31,6 @@ public class PhotonConfig {
     public final ForgeConfigSpec.ConfigValue<Integer> bloomMipLevel;
 //    public final ForgeConfigSpec.ConfigValue<BloomMode> bloomMode;
     public final ForgeConfigSpec.ConfigValue<Double> bloomThreshold;
-    public final ForgeConfigSpec.ConfigValue<Double> bloomIntensity;
     /** Persistent guard for the one-time migration of the previous client-wide bloom defaults. */
     public final ForgeConfigSpec.ConfigValue<Boolean> migratedOldBloomDefaults;
     public final ForgeConfigSpec.ConfigValue<Boolean> enableBloomWithIrisShader;
@@ -94,7 +93,6 @@ public class PhotonConfig {
         // Bloom thresholds the brightest RGB channel so saturated reds/blues glow too. The additive
         // pass preserves the scene, and the conservative intensity keeps that glow from washing out.
         bloomThreshold = builder.defineInRange("bloom_threshold", 0.5, 0, 10d);
-        bloomIntensity = builder.defineInRange("bloom_intensity", 0.18, 0, 2);
         migratedOldBloomDefaults = builder.define("migrated_old_bloom_defaults", false);
 
         // Only consulted when the FX layer is composited into the pack's own colour target, where
