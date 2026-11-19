@@ -80,6 +80,7 @@ repositories {
     mavenCentral()
     maven { url = 'https://maven.firstdark.dev/snapshots' }
     maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://jitpack.io' }
     flatDir { dirs 'libs' }
 }
 
@@ -95,6 +96,21 @@ dependencies {
     jarJar(fg.deobf('local:kilagraph:20.1.0.15'))
     // Generate the production refmap for the Forge mixin configs.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    // Automatic audio → Ogg Vorbis conversion for timeline audio clips (pure-Java codecs, no ffmpeg).
+    // jVorbisEnc (libvorbis encoder port) and jLayer (mp3) come from JitPack; JAAD decodes AAC/MP4.
+    // Plain libraries must go through FG's minecraftLibrary configuration to reach the dev game
+    // classpath (the minecraft_classpath token) — plain implementation only reaches compilation —
+    // while jarJar embeds them in the -all jar for production.
+    minecraftLibrary('com.github.umjammer:jVorbisEnc:0.0.2') {
+        exclude group: 'com.github.umjammer', module: 'vavi-commons' // test-only in jVorbisEnc
+    }
+    minecraftLibrary 'com.github.umjammer:jlayer:1.0.6'
+    minecraftLibrary 'io.vacco.jaad:jaad:0.8.8-MILESTONE-202111270642'
+    jarJar('com.github.umjammer:jVorbisEnc:0.0.2') {
+        exclude group: 'com.github.umjammer', module: 'vavi-commons'
+    }
+    jarJar 'com.github.umjammer:jlayer:1.0.6'
+    jarJar 'io.vacco.jaad:jaad:0.8.8-MILESTONE-202111270642'
     // Photon 1.20.1 shader integration links against the Iris API shipped by Oculus.
     // Compile-only: Oculus remains an optional client-side runtime dependency.
     compileOnly fg.deobf('maven.modrinth:GchcoXML:iQ1SwGc3')
@@ -114,6 +130,12 @@ jarJar.versionInformation {
     pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a+forge.1.20.1')
     ranged(dependency { it.group == 'local' && it.name == 'kilagraph' }, '[20.1.0.15,20.1.0.16)')
     pin(dependency { it.group == 'local' && it.name == 'kilagraph' }, '20.1.0.15')
+    ranged(dependency { it.name == 'jVorbisEnc' }, '[0.0.2,0.0.3)')
+    pin(dependency { it.name == 'jVorbisEnc' }, '0.0.2')
+    ranged(dependency { it.name == 'jlayer' }, '[1.0.6,1.1)')
+    pin(dependency { it.name == 'jlayer' }, '1.0.6')
+    ranged(dependency { it.name == 'jaad' }, '[0.8.8-MILESTONE-202111270642,0.9)')
+    pin(dependency { it.name == 'jaad' }, '0.8.8-MILESTONE-202111270642')
 }
 
 tasks.withType(JavaCompile).configureEach {
