@@ -233,10 +233,12 @@ un proyecto viejo.
 
 - En la barra superior de la vista **Scene** hay, junto al icono de bloom, un **control de
   intensidad**: un deslizador de `0.00` a `2.00` con su valor al lado.
-- Escribe directamente `bloom_intensity` de la configuración: es el mismo valor que
-  **Mods → Photon → Config**, y el deslizador se sincroniza si lo cambias ahí.
-- El valor por defecto (`0.18`) **no cambia**: sólo se modifica lo que muevas tú.
-- El icono de bloom de al lado sigue siendo el encendido/apagado de la vista previa (tecla `B`).
+- Escribe la intensidad **del FX que tienes abierto** (`bloomIntensity` dentro del efecto), no un
+  ajuste global: dos efectos pueden brillar distinto y el valor viaja con el FX al exportarlo.
+- El valor por defecto (`0.18`) **no cambia**: sólo se modifica lo que muevas tú. Si varios FX
+  brillan a la vez, el pase usa la intensidad más alta.
+- El icono de bloom de al lado activa/desactiva el bloom **de ese FX** (tecla `B`); el interruptor
+  global sigue siendo **Enable Bloom** en **Mods → Photon → Config**.
 
 ---
 
