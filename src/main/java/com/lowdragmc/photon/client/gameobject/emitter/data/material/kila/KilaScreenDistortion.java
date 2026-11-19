@@ -36,6 +36,10 @@ public class KilaScreenDistortion extends KilaModule {
     /** whether this draw stacks: asked of the pipeline per draw, not saved */
     public boolean stacking;
 
+    public Source effectiveSource() {
+        return source == null ? Source.TEXTURE : source;
+    }
+
     public enum Source {
         /** the texture's red and green, both ways */
         TEXTURE,
@@ -53,16 +57,21 @@ public class KilaScreenDistortion extends KilaModule {
         return Category.COLOR;
     }
 
+    float effectiveChromatic() {
+        return finite(chromatic, 0f, -1f, 1f);
+    }
+
     @Override
     public long structure() {
-        if (stacking) return 8 | (source == Source.NORMAL ? 4 : 0);
-        return (keepForeground ? 1 : 0) | (chromatic != 0 ? 2 : 0) | (source == Source.NORMAL ? 4 : 0);
+        if (stacking) return 8 | (effectiveSource() == Source.NORMAL ? 4 : 0);
+        return (keepForeground ? 1 : 0) | (effectiveChromatic() != 0f ? 2 : 0)
+                | (effectiveSource() == Source.NORMAL ? 4 : 0);
     }
 
     @Override
     public void declare(KilaLayout.Builder layout) {
         layout.define("KILA_SCREEN_DISTORT").vec4("KilaScreenParams").params(KilaParam.SCREEN_STRENGTH);
-        if (source == Source.NORMAL) {
+        if (effectiveSource() == Source.NORMAL) {
             layout.define("KILA_SCREEN_NORMAL");
         } else {
             layout.fragmentUvChain("KilaScreen").source("SCREEN", "KilaScreen", texture, false);
@@ -73,7 +82,7 @@ public class KilaScreenDistortion extends KilaModule {
             return;
         }
         layout.sampler(PhotonShaderCompiler.SCENE_COLOR);
-        if (chromatic != 0) layout.define("KILA_SCREEN_CHROMA");
+        if (effectiveChromatic() != 0f) layout.define("KILA_SCREEN_CHROMA");
         if (keepForeground) {
             layout.define("KILA_SCREEN_DEPTH").mat4("U_InverseProjectionMatrix").sampler(PhotonShaderCompiler.SCENE_DEPTH);
         }
@@ -81,7 +90,7 @@ public class KilaScreenDistortion extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        if (source == Source.TEXTURE) {
+        if (effectiveSource() == Source.TEXTURE) {
             texture.uploadUv(shader, "KilaScreen");
             if (texture.isProcedural()) texture.uploadSource(shader, "KilaScreen", scratch);
             shader.safeGetUniform("KilaScreenOpts").set(texture.flags(), 0, 0, 0);
@@ -104,12 +113,12 @@ public class KilaScreenDistortion extends KilaModule {
             //noinspection DataFlowIssue
             shader.setSampler(PhotonShaderCompiler.SCENE_COLOR, null);
         }
-        shader.safeGetUniform("KilaScreenParams").set(scene > 0 ? 1f : 0f, depth ? 1f : 0f, chromatic, 0f);
+        shader.safeGetUniform("KilaScreenParams").set(scene > 0 ? 1f : 0f, depth ? 1f : 0f, effectiveChromatic(), 0f);
     }
 
     @Override
     public void textures(java.util.function.Consumer<KilaTexture> out) {
-        if (source == Source.TEXTURE) out.accept(texture);
+        if (effectiveSource() == Source.TEXTURE) out.accept(texture);
     }
 
     @Override
@@ -123,9 +132,9 @@ public class KilaScreenDistortion extends KilaModule {
         KilaUI.bool(group, "kila.screen_distortion.stack", () -> stack, v -> stack = v);
         KilaUI.bool(group, "kila.screen_distortion.keep_foreground", () -> keepForeground, v -> keepForeground = v);
         KilaUI.number(group, "kila.screen_distortion.chromatic", () -> chromatic, v -> chromatic = v, 0, -1, 1);
-        KilaUI.choice(group, "kila.screen_distortion.source", Source.values(), () -> source, v -> source = v);
+        KilaUI.choice(group, "kila.screen_distortion.source", Source.values(), this::effectiveSource, v -> source = v);
         var noise = KilaUI.subGroup(group, "kila.screen_distortion.texture_group", false);
         KilaUI.texture(noise, "kila.screen_distortion.texture", texture, KilaUI.TextureKind.VECTOR, true, true);
-        KilaUI.showWhen(group, noise, () -> source == Source.TEXTURE);
+        KilaUI.showWhen(group, noise, () -> effectiveSource() == Source.TEXTURE);
     }
 }

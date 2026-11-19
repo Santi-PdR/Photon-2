@@ -14,6 +14,11 @@ import java.util.function.BiConsumer;
 /** One switchable feature of {@link KilaMaterial}; off, it adds nothing to the program. */
 @OnlyIn(Dist.CLIENT)
 public abstract class KilaModule extends ToggleGroup {
+    /** Guard persisted scalar settings before they reach GLSL; NaN/Infinity can poison a whole fragment. */
+    protected static float finite(float value, float fallback, float min, float max) {
+        return Float.isFinite(value) ? net.minecraft.util.Mth.clamp(value, min, max) : fallback;
+    }
+
     public enum Category {
         TEXTURE, COLOR, ALPHA, VERTEX, LIGHTING
     }

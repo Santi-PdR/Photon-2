@@ -16,7 +16,10 @@ uniform int DebugMode;
 out vec4 fragColor;
 
 float pixelFootprint(float viewZ) {
-    return 2.0 * -viewZ / (ProjMat[1][1] * ScreenSize.y);
+    float denominator = ProjMat[1][1] * ScreenSize.y;
+    if (!(abs(denominator) > 1e-6 && abs(denominator) < 1e30)) return 1e6;
+    float footprint = abs(2.0 * viewZ / denominator);
+    return footprint < 1e30 ? min(footprint, 1e6) : 1e6;
 }
 
 float ign(vec2 p) {
@@ -25,9 +28,9 @@ float ign(vec2 p) {
 
 // the cell's point on the disk the light's sphere shows to `origin`; x = ring, y = sector
 vec3 lightSample(vec3 lightPos, vec3 origin, float radius, int light, ivec2 cell) {
-    vec3 w = normalize(lightPos - origin);
+    vec3 w = photon_safe_normalize(lightPos - origin, vec3(0.0, 1.0, 0.0));
     vec3 a = abs(w.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 u = normalize(cross(a, w));
+    vec3 u = photon_safe_normalize(cross(a, w), vec3(1.0, 0.0, 0.0));
     vec3 v = cross(w, u);
     float r = radius * sqrt((float(cell.x) + 0.5) / 4.0);
     float phi = (float(cell.y) + 0.5 + 0.25 * float(cell.x)) * 1.5707963 + float(light) * 1.3;
@@ -39,6 +42,8 @@ vec3 lightSample(vec3 lightPos, vec3 origin, float radius, int light, ivec2 cell
 float screenShadow(vec3 origin, vec3 target, float maxLen, int steps, float noise, float slope) {
     vec3 delta = target - origin;
     float len = length(delta);
+    // A light exactly at the sample point has no meaningful shadow ray; treat it as visible.
+    if (!(len > 1e-6 && len < 1e30)) return 1.0;
     float start = min(3.0 * pixelFootprint(origin.z), len * 0.5);
     float marchLen = max(min(len - 0.3, maxLen) - start, 0.0);
     vec3 dir = delta / len;
@@ -64,10 +69,10 @@ void main() {
         return;
     }
 
-    vec3 p = viewPos((vec2(pixel) + 0.5) / ScreenSize, depth);
+    vec3 p = viewPos((vec2(pixel) + 0.5) / photon_safe_screen_size(), depth);
     vec3 n = reconstructNormal(pixel, p);
     mat3 viewToWorld = mat3(IViewMat);
-    vec3 nw = normalize(viewToWorld * n);
+    vec3 nw = photon_safe_normalize(viewToWorld * n, vec3(0.0, 1.0, 0.0));
     vec3 an = abs(nw);
     float major = max(an.x, max(an.y, an.z));
     if (major > 0.985) {
@@ -80,7 +85,7 @@ void main() {
     ivec2 cell = tileCell();
     float noise = soft ? tileStratum() : ign(gl_FragCoord.xy);
     vec3 origin = p + n * (0.03 + 0.002 * viewDepth);
-    float slope = max(abs(dot(n, normalize(-p))), 0.15);
+    float slope = max(abs(dot(n, photon_safe_normalize(-p, vec3(0.0, 0.0, 1.0)))), 0.15);
     vec3 originBlock = voxelPos(origin);
     int mode = int(ShadowParams.x + 0.5);
 
@@ -95,6 +100,7 @@ void main() {
         photon_fetchLight(light, t0, t1, t2, t3);
         vec3 toLight = t0.xyz - p;
         float d2 = dot(toLight, toLight);
+        if (!(d2 > 1e-12 && d2 < 1e30)) continue;
         float attenuation = photon_attenuation(d2, t0.w);
         if (attenuation <= 0.0) continue;
         vec3 l = toLight * inversesqrt(d2);

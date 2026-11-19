@@ -29,7 +29,7 @@ public class KilaDriver implements IPersistedSerializable {
         }
 
         public String langKey() {
-            return "kila.source." + name().toLowerCase();
+            return "kila.source." + name().toLowerCase(java.util.Locale.ROOT);
         }
 
         /** Whether the value comes from per-particle data that only some draws carry. */
@@ -70,19 +70,38 @@ public class KilaDriver implements IPersistedSerializable {
         return this;
     }
 
+    /** A corrupt or old enum value must behave like the harmless constant default. */
+    public Source effectiveSource() {
+        return source == null ? Source.CONSTANT : source;
+    }
+
+    private static float finiteBounded(float value, float fallback) {
+        if (!Float.isFinite(value)) return fallback;
+        return Math.max(-1_000_000f, Math.min(1_000_000f, value));
+    }
+
+    public float safeValue() {
+        return finiteBounded(value, 0f);
+    }
+
+    public float safeScale() {
+        return finiteBounded(scale, 0f);
+    }
+
     public boolean isDriven() {
-        return source != Source.CONSTANT;
+        return effectiveSource() != Source.CONSTANT;
     }
 
     /** The code {@code kila_source} switches on. */
     public int code() {
-        if (source != Source.CUSTOM) return source.code;
+        var effective = effectiveSource();
+        if (effective != Source.CUSTOM) return effective.code;
         return Source.CUSTOM.code + net.minecraft.util.Mth.clamp(stream, 0, 3) * 4 + net.minecraft.util.Mth.clamp(channel, 0, 3);
     }
 
     /** {@code PhotonGpuChannels} bits this driver reads. */
     public long channelMask() {
-        var id = switch (source) {
+        var id = switch (effectiveSource()) {
             case LIFE -> "addition_gpu_data.t";
             case RANDOM -> "addition_gpu_data.random";
             case POINT_LIFE -> "addition_gpu_data.point_life";
@@ -95,7 +114,11 @@ public class KilaDriver implements IPersistedSerializable {
     }
 
     public boolean readsCustomData() {
-        return source == Source.CUSTOM;
+        return effectiveSource() == Source.CUSTOM;
+    }
+
+    public boolean readsParticleData() {
+        return effectiveSource().isParticleData();
     }
 
     public void copyFrom(KilaDriver other) {

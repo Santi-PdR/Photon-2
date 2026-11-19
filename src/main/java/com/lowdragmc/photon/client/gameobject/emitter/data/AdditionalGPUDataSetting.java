@@ -486,7 +486,7 @@ public abstract class AdditionalGPUDataSetting extends ToggleGroup {
                 },
                 CustomData.Type.VECTOR, true,
                 List.of(CustomData.Type.VECTOR, CustomData.Type.COLOR),
-                type -> I18n.get("photon.custom_data.type." + type.name().toLowerCase())));
+                type -> I18n.get("photon.custom_data.type." + type.name().toLowerCase(java.util.Locale.ROOT))));
 
         // sampling-t source selector — options depend on the kind (trail/ara add LENGTH)
         var tSources = new ArrayList<>(availableTSources());
@@ -499,7 +499,7 @@ public abstract class AdditionalGPUDataSetting extends ToggleGroup {
                     },
                     CustomData.TSource.SELF, true,
                     tSources,
-                    source -> I18n.get("photon.custom_data.t_source." + source.name().toLowerCase())));
+                    source -> I18n.get("photon.custom_data.t_source." + source.name().toLowerCase(java.util.Locale.ROOT))));
         }
         itemGroup.addConfigurator(countSelector);
 

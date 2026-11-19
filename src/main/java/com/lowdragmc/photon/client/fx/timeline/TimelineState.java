@@ -23,9 +23,19 @@ public record TimelineState(boolean tick, boolean render) {
      */
     public static TimelineState resolve(boolean hasActivator, boolean activatorActive,
                                         boolean hasControl, boolean controlActive) {
+        return resolve(hasActivator, activatorActive, hasControl, controlActive, false);
+    }
+
+    /**
+     * @param draining the object left a control clip that drains and still shows something: it keeps running until
+     *                 what it emitted has finished, which is the difference between an effect ending and an effect
+     *                 disappearing. Ported from Photon 26.3.
+     */
+    public static TimelineState resolve(boolean hasActivator, boolean activatorActive,
+                                        boolean hasControl, boolean controlActive, boolean draining) {
         // alive/ticking: control owns lifecycle when present; otherwise the activator freezes it;
         // otherwise it just runs (default behavior).
-        boolean alive = hasControl ? controlActive : (hasActivator ? activatorActive : true);
+        boolean alive = hasControl ? controlActive || draining : (hasActivator ? activatorActive : true);
         // render only when alive AND not hidden by an activator track.
         boolean visible = hasActivator ? activatorActive : true;
         return new TimelineState(alive, alive && visible);

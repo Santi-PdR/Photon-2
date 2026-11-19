@@ -56,6 +56,7 @@ public class LitParticles extends ToggleGroup {
      * material of a kind. Off nulls the samplers, the one value {@code ShaderInstance.apply} leaves unbound.
      */
     public static void bind(ShaderInstance shader, MaterialContext context, float intensity) {
+        intensity = Float.isFinite(intensity) ? net.minecraft.util.Mth.clamp(intensity, 0f, 16f) : 0f;
         if (intensity > 0 && !context.isRenderingPreview() && DynamicLightRenderer.hasLights()) {
             DynamicLightRenderer.bindLights(shader);
             shader.safeGetUniform("LitParticleParams").set(1f, intensity, 0f, 0f);

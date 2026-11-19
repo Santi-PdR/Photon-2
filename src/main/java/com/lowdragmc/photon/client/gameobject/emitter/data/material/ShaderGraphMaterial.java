@@ -19,12 +19,12 @@ import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.data.Tooltips;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.api.IFieldValueConfigurable;
 import com.lowdragmc.lowdraglib2.nodegraphtookit.api.type.TypeHandle;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.syncdata.annotation.Persisted;
-import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.PreloadContext;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.shadergraph.PhotonShaderCompiler;
@@ -88,14 +88,18 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
                               boolean depthWrite) {
         public static final RenderState DEFAULT = new RenderState(BlendMode.Preset.ALPHA, false, false, true, false);
 
+        public BlendMode.Preset effectiveBlend() {
+            return blend == null ? BlendMode.Preset.ALPHA : blend;
+        }
+
         public MaterialRenderState create() {
             boolean twoPass = doubleSided && backFacesFirst;
-            return new MaterialRenderState(blend.create(), !doubleSided || twoPass, depthTest, depthWrite, twoPass);
+            return new MaterialRenderState(effectiveBlend().create(), !doubleSided || twoPass, depthTest, depthWrite, twoPass);
         }
 
         private CompoundTag save() {
             var tag = new CompoundTag();
-            tag.putString("blend", blend.name());
+            tag.putString("blend", effectiveBlend().name());
             tag.putBoolean("double_sided", doubleSided);
             tag.putBoolean("back_faces_first", backFacesFirst);
             tag.putBoolean("depth_test", depthTest);
@@ -124,6 +128,11 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
     private ShaderGraphRuntime.Entry entry;
     @Nullable
     private KGMaterialValues values;
+    private transient boolean usingMissingFallback;
+    private String previewErrorText = "";
+    @Nullable
+    private TextTexture previewErrorTexture;
+    private final IGuiTexture previewTexture = DynamicTexture.of(this::previewTextureImage);
 
     public ShaderGraphMaterial() {
     }
@@ -241,6 +250,25 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
 
     @Override
     public void preload(MaterialContext context, PreloadContext preload) {
+        if (preload.isCollectingTextures()) {
+            // A texture diagnostic cannot run the render job below (that compiles the graph). Inspect
+            // authored constants without compiling, then include the current overrides and any cached
+            // compiler-discovered samplers (e.g. those from referenced subgraphs).
+            for (var location : ShaderGraphRuntime.samplerLocations(getGraphPath())) preload.texture(location);
+            var cached = ShaderGraphRuntime.peek(getGraphPath());
+            if (cached != null && cached.isValid() && cached.getCompiled() != null) {
+                for (var sampler : cached.getCompiled().samplerDefaults().values()) {
+                    if (sampler.texture() != null) preload.texture(sampler.texture());
+                }
+            }
+            for (var value : overrides.values()) {
+                if (value instanceof RenderTypeGraphTypes.Sampler2DValue sampler) {
+                    var location = net.minecraft.resources.ResourceLocation.tryParse(sampler.location());
+                    if (location != null) preload.texture(location);
+                }
+            }
+            return;
+        }
         preload.onRenderThread(() -> {
             var entry = refreshEntry();
             if (entry == null || !entry.isValid()) return;
@@ -259,15 +287,24 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
     }
 
     @Override
+    public ShaderInstance begin(MaterialContext context) {
+        var shader = getShader(context);
+        return usingMissingFallback ? IMaterial.MISSING.begin(context) : shader;
+    }
+
+    @Override
     public ShaderInstance getShader(MaterialContext context) {
+        usingMissingFallback = false;
         var entry = refreshEntry();
         if (entry == null || !entry.isValid()) {
-            return fallback(context);
+            usingMissingFallback = true;
+            return IMaterial.MISSING.getShader(context);
         }
         var shader = entry.variant(context.getVariantKey(), context.getShaderDefines());
         var compiled = entry.getCompiled();
         if (shader == null || compiled == null) {
-            return fallback(context);
+            usingMissingFallback = true;
+            return IMaterial.MISSING.getShader(context);
         }
         // Stage this material's uniforms/samplers on the shared shader — uploaded by the draw's apply().
         KGBuiltinUniforms.bind(shader, compiled.builtinUniforms());
@@ -281,19 +318,37 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
         return shader;
     }
 
-    /** A broken graph draws with the texture material's shader, unlit whatever the last texture material left on it. */
-    private static ShaderInstance fallback(MaterialContext context) {
-        var shader = PhotonShaders.getHDRParticleShader();
-        if (shader != null) LitParticles.bind(shader, context, 0);
-        return shader;
-    }
-
     /** The engine-driven uniforms/samplers (Photon pipeline state), mirroring CustomShaderMaterial. */
     private void bindDynamicUniforms(ShaderInstance shader, CompiledShaderGraph compiled) {
+        // KGBuiltinUniforms may use the window dimensions, which differ from an Iris target or a
+        // resized editor framebuffer. Screen-space graph nodes use the actual capture dimensions.
+        var screenSize = shader.getUniform("ScreenSize");
+        if (screenSize != null) {
+            var pipeline = RenderPassPipeline.getCurrent();
+            int width;
+            int height;
+            if (pipeline != null) {
+                width = pipeline.framebufferWidth();
+                height = pipeline.framebufferHeight();
+            } else {
+                var surface = UISurface.current();
+                if (surface != null && !surface.isMainWindow()) {
+                    width = surface.framebufferWidth();
+                    height = surface.framebufferHeight();
+                } else {
+                    var target = net.minecraft.client.Minecraft.getInstance().getMainRenderTarget();
+                    width = target.width;
+                    height = target.height;
+                }
+            }
+            screenSize.set((float) Math.max(1, width), (float) Math.max(1, height));
+        }
         var viewport = shader.getUniform(PhotonShaderCompiler.VIEWPORT);
         if (viewport != null) {
+            // A zero-sized viewport during minimize/resize would make screen-space nodes divide by zero.
             viewport.set((float) GlStateManager.Viewport.x(), (float) GlStateManager.Viewport.y(),
-                    (float) GlStateManager.Viewport.width(), (float) GlStateManager.Viewport.height());
+                    (float) Math.max(1, GlStateManager.Viewport.width()),
+                    (float) Math.max(1, GlStateManager.Viewport.height()));
         }
         // KilaGraph's world-space nodes (Camera / Position "world" / WorldToScreenUV "absolute") read the
         // absolute camera position as KG's precision-split kg_CameraBlockPos - kg_CameraOffset, which
@@ -401,6 +456,7 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
     /** Self-describing value tag (types survive without the graph being loaded). */
     @Nullable
     private static Tag encodeValue(Object value) {
+        if (!isFiniteOverride(value)) return null;
         if (value instanceof Float) return FloatTag.valueOf((Float) value);
         if (value instanceof Integer) return IntTag.valueOf((Integer) value);
         if (value instanceof Boolean) return ByteTag.valueOf((Boolean) value);
@@ -435,23 +491,42 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
         return null;
     }
 
+    static boolean isFiniteOverride(@Nullable Object value) {
+        if (value instanceof Float number) return Float.isFinite(number);
+        if (value instanceof Vector2f vector) return Float.isFinite(vector.x) && Float.isFinite(vector.y);
+        if (value instanceof Vector3f vector)
+            return Float.isFinite(vector.x) && Float.isFinite(vector.y) && Float.isFinite(vector.z);
+        if (value instanceof Vector4f vector)
+            return Float.isFinite(vector.x) && Float.isFinite(vector.y)
+                    && Float.isFinite(vector.z) && Float.isFinite(vector.w);
+        if (value instanceof HDRColor color) {
+            var components = color.toVector4fOpaque();
+            return Float.isFinite(components.x) && Float.isFinite(components.y) && Float.isFinite(components.z);
+        }
+        return value != null;
+    }
+
     @Nullable
-    private static Object decodeValue(@Nullable Tag tag) {
-        if (tag instanceof FloatTag value) return value.getAsFloat();
+    static Object decodeValue(@Nullable Tag tag) {
+        if (tag instanceof FloatTag value) {
+            float decoded = value.getAsFloat();
+            return Float.isFinite(decoded) ? decoded : null;
+        }
         if (tag instanceof IntTag value) return value.getAsInt();
         if (tag instanceof ByteTag value) return value.getAsByte() != 0;
         if (tag instanceof ListTag) {
             ListTag list = (ListTag) tag;
-            return switch (list.size()) {
+            Object decoded = switch (list.size()) {
                 case 2 -> new Vector2f(list.getFloat(0), list.getFloat(1));
                 case 3 -> new Vector3f(list.getFloat(0), list.getFloat(1), list.getFloat(2));
                 case 4 -> new Vector4f(list.getFloat(0), list.getFloat(1), list.getFloat(2), list.getFloat(3));
                 default -> null;
             };
+            return isFiniteOverride(decoded) ? decoded : null;
         }
         if (tag instanceof CompoundTag) {
             CompoundTag compound = (CompoundTag) tag;
-            return switch (compound.getString("type")) {
+            Object decoded = switch (compound.getString("type")) {
                 case "sampler" -> RenderTypeGraphTypes.SAMPLER2D_CODEC.parse(NbtOps.INSTANCE, compound.get("data"))
                         .result().orElse(null);
                 case "gradient" -> RenderTypeGraphTypes.GRADIENT_CODEC.parse(NbtOps.INSTANCE, compound.get("data"))
@@ -462,6 +537,7 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
                         .result().orElse(null);
                 default -> null;
             };
+            return isFiniteOverride(decoded) ? decoded : null;
         }
         return null;
     }
@@ -537,11 +613,20 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
 
     // ---- inspector -------------------------------------------------------------------------------
 
+    private IGuiTexture previewTextureImage() {
+        if (!isCompiledError()) return preview;
+        var message = getCompiledErrorMessage();
+        if (message.isEmpty()) message = "error";
+        if (previewErrorTexture == null || !message.equals(previewErrorText)) {
+            previewErrorText = message;
+            previewErrorTexture = new TextTexture(message, 0xffff0000);
+        }
+        return previewErrorTexture;
+    }
+
     @Override
     public IGuiTexture preview() {
-        return DynamicTexture.of(() -> isCompiledError() ?
-                new TextTexture(getCompiledErrorMessage().isEmpty() ? "error" : getCompiledErrorMessage(), 0xffff0000) :
-                preview);
+        return previewTexture;
     }
 
     @Override
@@ -587,21 +672,21 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
         group.addConfigurator(new BooleanConfigurator("photon.shader_graph.render_state.own", () -> renderState != null,
                 own -> setRenderState(own ? RenderState.DEFAULT : null), false, true));
         Supplier<RenderState> state = () -> renderState == null ? RenderState.DEFAULT : renderState;
-        var blend = new SelectorConfigurator<>("photon.shader_graph.render_state.blend", () -> state.get().blend(),
+        var blend = new SelectorConfigurator<>("photon.shader_graph.render_state.blend", () -> state.get().effectiveBlend(),
                 v -> setRenderState(new RenderState(v, state.get().doubleSided(), state.get().backFacesFirst(),
                         state.get().depthTest(), state.get().depthWrite())),
                 BlendMode.Preset.ALPHA, true, List.of(BlendMode.Preset.values()), BlendMode.Preset::langKey);
         var doubleSided = new BooleanConfigurator("photon.shader_graph.render_state.double_sided",
-                () -> state.get().doubleSided(), v -> setRenderState(new RenderState(state.get().blend(), v,
+                () -> state.get().doubleSided(), v -> setRenderState(new RenderState(state.get().effectiveBlend(), v,
                 state.get().backFacesFirst(), state.get().depthTest(), state.get().depthWrite())), false, true);
         var backFirst = new BooleanConfigurator("photon.shader_graph.render_state.back_faces_first",
-                () -> state.get().backFacesFirst(), v -> setRenderState(new RenderState(state.get().blend(),
+                () -> state.get().backFacesFirst(), v -> setRenderState(new RenderState(state.get().effectiveBlend(),
                 state.get().doubleSided(), v, state.get().depthTest(), state.get().depthWrite())), false, true);
         var depthTest = new BooleanConfigurator("photon.shader_graph.render_state.depth_test",
-                () -> state.get().depthTest(), v -> setRenderState(new RenderState(state.get().blend(),
+                () -> state.get().depthTest(), v -> setRenderState(new RenderState(state.get().effectiveBlend(),
                 state.get().doubleSided(), state.get().backFacesFirst(), v, state.get().depthWrite())), true, true);
         var depthWrite = new BooleanConfigurator("photon.shader_graph.render_state.depth_write",
-                () -> state.get().depthWrite(), v -> setRenderState(new RenderState(state.get().blend(),
+                () -> state.get().depthWrite(), v -> setRenderState(new RenderState(state.get().effectiveBlend(),
                 state.get().doubleSided(), state.get().backFacesFirst(), state.get().depthTest(), v)), false, true);
         group.addConfigurators(blend, doubleSided, backFirst, depthTest, depthWrite);
         Runnable sync = () -> {
@@ -742,7 +827,7 @@ public class ShaderGraphMaterial extends ShaderInstanceMaterial {
 
         @Override
         public void setValue(Object value) {
-            if (value == null) return;
+            if (!isFiniteOverride(value)) return;
             overrides.put(name, value);
             invalidateOverridesCache();
             applyOverride(name, value);
