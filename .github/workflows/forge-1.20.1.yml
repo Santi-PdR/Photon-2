@@ -140,6 +140,11 @@ jobs:
               pack.writestr("assets/photon_sync_probe/textures/server_sync_marker.txt", b"delivered only by the integrated server")
           PY
 
+      - name: Install virtual display and software OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil ffmpeg
+
       - name: Generate audio conversion smoke fixtures
         run: |
           mkdir -p run/photon/smoke-fixtures
@@ -147,11 +152,6 @@ jobs:
           ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k run/photon/smoke-fixtures/beat.m4a
           ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -ar 48000 run/photon/smoke-fixtures/beat48k.wav
           ffmpeg -loglevel error -f lavfi -i "testsrc=size=64x64:duration=0.5" -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:v libx264 -c:a aac -shortest run/photon/smoke-fixtures/beat.mp4
-
-      - name: Install virtual display and software OpenGL
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil
 
       - name: Smoke-test Forge client startup without a physical display
         shell: bash
