@@ -217,7 +217,7 @@ public final class LocalFxResourceUpload {
     }
 
     /** Mirror of {@code FxPackSync.isSafeZipEntryName} for a relative path about to become {@code assets/<path>}. */
-    private static boolean isSafeEntryName(String relative) {
+    static boolean isSafeEntryName(String relative) {
         if (relative == null || relative.isBlank() || relative.indexOf('\\') >= 0 || relative.indexOf(':') >= 0
                 || relative.chars().anyMatch(ch -> ch == 0 || ch < 0x20 || ch == 0x7f)) return false;
         for (var segment : relative.split("/", -1)) {
