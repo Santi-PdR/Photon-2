@@ -4,7 +4,7 @@
 > portado, qué se arregló y por qué, cómo se verifica, cómo se distribuye, y qué queda pendiente.
 > Si alguien (Santi, Alex u otra persona o IA) retoma esto sin el historial del chat, empieza aquí.
 >
-> Última actualización: **2026-11-07** · commit de referencia `0fbf2ad` · build CI #526 ✅
+> Actualizado: **2026-11-06** · sincronización de FX en loop y transferencia/exportación de `ldlib2/assets`; CI `44446628854` ✅ · preview `preview-44446628854-1`.
 
 ---
 
@@ -12,7 +12,7 @@
 
 - Es el **port de Photon 2 (`v26.2.2.9`) a Minecraft 1.20.1 / Forge 47.x**, Java 17.
 - El JAR distributivo (`-all.jar`) **incluye LDLib2 y KilaGraph**; LDLib 1 sigue siendo dependencia externa.
-- Ya funciona: editor visual, FX, materiales Kila, trails, beams, luces dinámicas, bloom, audio OGG, **`.fxpack`** y **sincronización de packs desde servidor**.
+- Ya funciona: editor visual, FX/materiales, bloom, sincronización pública de `.fxpack`, transferencia privada de `ldlib2/assets` a un jugador y exportación local de un pack compartible.
 - Se arreglaron bugs reportados por Alex: bloom lavado, materiales animados, trails a alta velocidad, shaders ausentes, y el **selector de FX** (lista congelada).
 - Estado del repo: `main` + ramas de trabajo; este documento acompaña la limpieza del repositorio a una sola rama.
 
@@ -58,7 +58,7 @@ GPU **AMD RX Vega 11**, OpenGL 4.6. Servidor sin packs de FX (0 ofrecidos) en el
 - **Emisores y partículas**: materiales, formas (shapes), renderers, modelos (OBJ / glTF / JSON), texturas, shaders, trails, beams, ara-trails, force fields, colisiones.
 - **Iluminación dinámica** con sombras (voxel/screen/contact), luces y volúmenes de niebla.
 - **Post-procesado**: bloom, máscaras (`CustomMask`), graph de shader y grafo fullscreen, clips de post-proceso.
-- **Materiales Kila** con presets, módulos (mask, dissolve, ramp, fresnel, UV, flipbook…), bindings a datos de partícula.
+- **Materiales Kila** con presets, módulos (mask, dissolve, ramp, fresnel, UV, flipbook…), bindings a datos de partícula y galería organizada por destino. Los presets recientes incluyen cristal esmerilado, limo tóxico, roca incandescente, llama de alma, estela de aurora, estallidos de lava/glacial y cuarenta más: aura curativa, niebla tóxica, estallido de agua, estela de cometa, portal del vacío, rayo solar, runas de suelo, escudo prismático, fragmento de cristal, remolino de polvo, estallido de brasas, anillo glacial, relámpago ramificado, estela de plasma, impacto de meteorito, obsidiana, manto de sombras, portal estelar, vaho ascendente, estallido de arena, marejada, nube de hongo, polvo de hadas, estela rúnica, grieta de sombras, río de lava, aura cristalina, pulso de fuerza, tormenta de polvo, lanza solar, destello de impacto, corte de viento, nube de ceniza, llama azul, mancha de esporas, grieta glaciar, portal celestial, pozo gravitatorio, armadura de circuito y armadura fundida; ver [guía de presets Kila](Photon2-Kila-Presets.md). La galería coloca categorías extensas en cuadrícula y configura flipbooks/distorsión como corrientes. El smoke de arranque valida texturas, presupuesto de samplers y round-trip de serialización de todos los presets; la galería de desarrollo comprueba sus variantes de shader por contexto. La búsqueda de módulos descartados por el presupuesto de samplers ahora usa lookup por identidad constante, conservando la lista ordenada para diagnóstico. El explorador reutiliza el material de la miniatura al seleccionar y la miniatura flotante del inspector tolera que su nodo ya se haya desmontado.
 - **Carga por namespace** e importación de contenido **Photon 1** (`.fx` y `.fxproj` crudos o gzip, assets legados).
 - **Audio OGG** desde la pista Audio (clip, loop, volumen, pitch, categoría, atenuación).
 - **`.fxpack`**: paquete ZIP autosuficiente para repartir un efecto con sus assets.
@@ -135,9 +135,10 @@ Rutas relativas a `src/main/java/com/lowdragmc/photon/`.
 ├── assets/<namespace>/...      # effects, PNG, modelos, shaders (workspace montado como resource pack)
 ├── projects/*.fxproj           # proyectos editables
 ├── resources/global/           # recursos del editor: materiales, mallas, curvas, graphs
-└── fxpacks/                    # .fxpack instalados o exportados  (+ server-<hash>.fxpack del servidor)
+└── fxpacks/                    # .fxpack instalados/exportados (+ server-<hash>.fxpack del servidor)
 
-<servidor>/photon/fxpacks/      # packs que el servidor reparte automáticamente
+<servidor>/photon/fxpacks/      # packs públicos ofrecidos a todos
+<servidor>/photon/private-fxpacks/<UUID>/  # packs privados para un destinatario
 ```
 
 También se montan como assets legados: `<instancia>/ldlib/assets` (Photon 1) y `<instancia>/ldlib2/assets` (Photon 2 previo al workspace).
@@ -160,7 +161,9 @@ Cientos de commits adaptando APIs NeoForge → Forge 1.20.1: NBT, modelos OBJ (l
 | Uniforms `Threshold`/`Knee` sobrando | Pasadas del port | Eliminados de `bloom_final_scatter_pass.json` |
 | Trails a alta velocidad | Muestreo insuficiente | Sub-muestreo con tope de 64 puntos + prueba de gradiente de color |
 | Textura `brutality:...trail_particle.png` ausente | El asset no existe en la instancia | Se documenta: el exportador avisa la ruta; no puede inventar el archivo |
-| **"Sigue sin funcionar el cosito de elegir partículas"** | Los buscadores (`SearchComponentConfigurator`) copiaban los candidatos **una sola vez** al construir el configurador y nunca se refrescaban → lista vacía si el panel se abrió antes de la primera carga de recursos o después de una recarga | `FXHelper.searchFX(...)` lee la lista (cacheada) **en cada búsqueda**; lo usan sub-emisores, `FXInstanceStyle.pickFx` y `IdLists` |
+| **"Sigue sin funcionar el cosito de elegir partículas"** (1.ª vez) | Los buscadores (`SearchComponentConfigurator`) copiaban los candidatos **una sola vez** al construir el configurador y nunca se refrescaban → lista vacía si el panel se abrió antes de la primera carga de recursos o después de una recarga | `FXHelper.searchFX(...)` lee la lista (cacheada) **en cada búsqueda**; lo usan sub-emisores, `FXInstanceStyle.pickFx` y `IdLists` |
+| **"Lo de las partículas y la lista de fx siguen igual"** (2.ª vez) | La lista de candidatos estaba bien; el fallo era del **widget** de búsqueda de LDLib 2.2.39: al abrirse busca con el texto que el campo ya tiene, que es el nombre del valor **ya elegido**. El desplegable mostraba una sola línea (o ninguna la primera vez), y teclear **concatenaba** al nombre viejo (`nombreElegidoX`), así que no encontraba nada. LDLib lo arregló en 2.2.39.8, versión que no se puede usar aquí | `SearchComponentMixin` (nuevo): repite la búsqueda en vacío al abrir y selecciona el texto, para que la primera tecla reemplace el nombre en vez de sumarse. Arregla **todos** los selectores que usan ese widget de una sola vez. Candado: `[search-box-smoke]` |
+| Slider de bloom que "volvía" a 0.18 | La migración de defaults antiguos corría en trabajo diferido y comparaba por valor: pasar el slider por **1.0** (un default viejo) devolvía el valor a 0.18 | La migración es ahora **una sola vez**, al arrancar, antes del trabajo diferido |
 | Pedido: botón para cambiar intensidad de bloom | Solo existía en la pantalla de config | `SceneBloomIntensityControl` en la barra de escena: slider 0..2 + valor, sincronizado con la config, **sin tocar el default** |
 
 ### 6.3 Pedido de Alex: explicar `.fxpack` y el flujo de servidor
@@ -177,25 +180,25 @@ Respondido con [`Photon2-FXPack-Guia-Servidor.md`](Photon2-FXPack-Guia-Servidor.
 4. **Detección**: requiere recarga de recursos (F3+T) para archivos nuevos; `FXPacks.rewrite` sirve ediciones de packs ya montados sin recargar.
 5. **IDs**: `namespace:nombre` (namespace = nombre del `.fxpack`; ruta = nombre dado al exportar; ambos saneados a `[a-z0-9/._-]`).
 
-### 7.1 Distribución desde servidor
+### 7.1 Distribución pública y privada desde el servidor
 
 ```text
-login → servidor escanea <server>/photon/fxpacks/*.fxpack
-      → manifiesto (nombre, tamaño, SHA-256) al cliente
-      → cliente pide solo hashes que no tiene (chunks 24 KiB)
-      → valida hash + formato (debe contener assets/*/fx/*.fx)
-      → guarda photon/fxpacks/server-<hash>.fxpack
-      → recarga recursos automáticamente
-logout → desmonta los packs del servidor (los del jugador se quedan)
+Público: <server>/photon/fxpacks/*.fxpack → manifiesto para todos → descarga por bloques
+         → SHA-256 + validación ZIP → recarga automática
+Privado: /photon fx send <jugador> → cliente del operador empaqueta ldlib2/assets
+         → servidor guarda bajo private-fxpacks/<UUID>/ → solo ese jugador descarga;
+           el pack se vuelve a ofrecer en futuras conexiones
+Local:   /photon_client export_ldlib2_assets → .fxpack en <instancia>/photon/fxpacks/
+         → el autor lo puede adjuntar en Discord/transferir por otro servicio
 ```
 
-Límites en código (`FxPackSync`): **32 packs**, **64 MiB por pack**, **128 MiB totales**, **256 MiB expandidos**, **20 000 entradas**; rechaza rutas ZIP sospechosas (`../`, `\`, absolutas).
+Límites actuales (`FxPackSync`): **512 MiB comprimidos y 2 GiB descomprimidos por pack**; 32 packs públicos / 512 MiB público total; hasta 16 packs privados / 2 GiB por destinatario; manifiesto de hasta 3 GiB y presupuesto agregado de validación de 8 GiB; **20 000 entradas ZIP**. Rechaza rutas inseguras (`../`, barras invertidas y rutas absolutas). La entrega directa requiere que remitente y destinatario estén conectados para iniciarla y permiso de operador (nivel 2). Antes de empaquetar y subir recursos, el cliente muestra acciones explícitas para confirmar o cancelar; exportar localmente también requiere confirmación. Cancelar no lee archivos.
 
-### 7.2 Lo que NO hace
+### 7.2 Límites de uso
 
-- No actualiza packs en caliente a jugadores ya conectados (se anuncia en el login).
-- No sustituye al mod: sin Photon en el servidor no hay anuncio; sin Photon en el cliente no hay render.
-- No transporta código: solo contenido.
+- Los packs públicos añadidos mientras hay jugadores conectados requieren `/photon fxpacks` como operador o `/photon_client fxpacks` en el cliente. Login y reentrada al nivel también ofrecen el manifiesto.
+- La carpeta local `ldlib2/assets` no se comparte sola: usa `/photon fx send <jugador>` para enviarla de forma privada, o `/photon_client export_ldlib2_assets` para crear un archivo que puedas compartir por Discord/otro servicio.
+- Sin Photon en el servidor no hay sincronización; sin Photon en el cliente no hay render. El `.fxpack` transporta recursos, no código.
 
 ---
 
@@ -244,8 +247,9 @@ gh run download <RUN_ID> -R Santi-PdR/Photon-2 -n photon-forge-1.20.1
 | **Ronda 2 (picker + control de bloom + guía)** | `0fbf2ad` | run `42384055373` (build **#526**) ✅ | `photon-forge-1.20.1` id `13578638461` (13 378 526 B) · diagnóstico `13578569377` |
 | Docs y limpieza de repo | `c5bf27b` | run `42386451673` ✅ | — (solo documentación) |
 | **Merge del port a `main`** | `61fcf63` | PR #1 ✅ | build lanzado desde `main` |
+| **FX en loop + envío privado/exportación LDLib2** | `520bd2f` | run `44446628854` ✅ | [`preview-44446628854-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) |
 
-- Ruta de descarga directa: `https://github.com/Santi-PdR/Photon-2/actions/runs/42384055373/artifacts/13578638461`
+- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44446628854-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44446628854).
 - Los artifacts de GitHub caducan a los **90 días**.
 - En `mods/` debe quedar **un solo** `photon-…-all.jar`; borrar duplicados tipo `…-all (2).jar` antes de probar.
 
@@ -265,14 +269,14 @@ Estos registros vivían en las ramas `backup/photon-forge-*`, que se eliminaron 
 
 ## 10. Estado del repositorio y limpieza de ramas
 
-### 10.1 Situación final (2026-11-07)
+### 10.1 Situación histórica de la limpieza
 
-El port **está en `main`**. Estado tras la limpieza:
+La tabla siguiente registra el estado del repositorio después del merge inicial del port (2026-11-07); **no representa el estado actual de la sesión**. El trabajo posterior de persistencia y transferencia de recursos corresponde a la rama `arena/747b04a3-photon-2` y al PR #9 hacia `main`.
 
-| Rama | Estado |
+| Rama histórica | Estado en esa fecha |
 | --- | --- |
-| `main` | **Rama única de trabajo.** Contiene el port completo + rondas 1 y 2. Commit de merge `61fcf63`. |
-| `arena/9edfd416-photon-2` | Rama de la sesión del agente en Arena; se conserva porque la plataforma la usa para seguir el trabajo. Apunta al mismo contenido que `main` y no debe usarse como base de desarrollo. |
+| `main` | Contenía el port y rondas 1 y 2, merge `61fcf63`. |
+| `arena/9edfd416-photon-2` | Rama Arena de una sesión anterior, apunta al mismo contenido que `main`. |
 
 Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
@@ -295,11 +299,13 @@ Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 
 ## 11. Pendientes y siguientes pasos sugeridos
 
-1. **Verificación en el cliente de Alex** del build `0fbf2ad`: picker de FX (sub-emisores e instancias) y slider de bloom.
-2. Si el selector sigue fallando: pedir `latest.log` de la sesión concreta y revisar si el fallo está en la apertura del desplegable (no en la lista de candidatos).
-3. **Iris/DH**: revisar `iris_composite_mode` y el bloom bajo shaderpacks en hardware AMD.
-4. **Rendimiento**: presupuesto de post-FX (`postfx_pool_budget_mb`), actualización de partículas en paralelo con colisiones.
-5. Considerar publicar el JAR como **release con tag** para que los jugadores tengan enlace permanente (los artifacts caducan).
+1. Probar con dos clientes reales `/photon fx send <jugador>`: confirmar que únicamente el destinatario recibe el pack, que se recarga y que se vuelve a ofrecer tras reconectar.
+2. Probar `/photon_client export_ldlib2_assets` en otra instancia y verificar la instalación del `.fxpack` compartido.
+3. Probar en juego la persistencia tardía de FX en loop para entidad/bloque, y comprobar que `/photon fx remove` evita que reaparezcan.
+4. Verificar en el cliente de Alex el selector y el slider de bloom; si fallan, pedir `latest.log` y captura de la sesión.
+5. **Iris/DH**: revisar `iris_composite_mode` y bloom bajo shaderpacks AMD; seguir con presupuesto de post-FX y partículas paralelas.
+
+El JAR de esta funcionalidad está publicado como preview en GitHub; ver la release enlazada en la sección 9. La verificación manual en dos clientes (privacidad, reconexión, exportación e instalación) queda pendiente.
 
 ---
 

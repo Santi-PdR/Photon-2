@@ -5,28 +5,46 @@ uniform mat4 IProjMat;
 uniform vec2 ScreenSize;
 uniform float ResolutionScale;
 
+// Safe for zero-area depth neighborhoods, a pixel at the view origin, or malformed projection input.
+vec3 photon_safe_normalize(vec3 value, vec3 fallback) {
+    float lengthSquared = dot(value, value);
+    return lengthSquared > 1e-16 && lengthSquared < 1e30 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
+vec2 photon_safe_screen_size() {
+    return max(ScreenSize, vec2(1.0));
+}
+
+float photon_safe_resolution_scale() {
+    return ResolutionScale > 1e-6 && ResolutionScale < 1e6
+            ? clamp(ResolutionScale, 1e-4, 1.0) : 1.0;
+}
+
 vec3 viewPos(vec2 uv, float depth) {
     vec4 p = IProjMat * vec4(vec3(uv, depth) * 2.0 - 1.0, 1.0);
-    return p.xyz / p.w;
+    if (!(abs(p.w) > 1e-8 && abs(p.w) < 1e30)) return vec3(0.0);
+    vec3 position = p.xyz / p.w;
+    return all(lessThan(abs(position), vec3(1e30))) ? position : vec3(0.0);
 }
 
 // the view ray through a pixel and where the scene stops it; from the near plane, so an orthographic editor camera
 // works too, and not toward the far plane, which a mod's projection may push to infinity
 void viewRay(ivec2 pixel, float depth, out vec3 origin, out vec3 dir, out float rayEnd) {
-    vec2 uv = (vec2(pixel) + 0.5) / ScreenSize;
+    vec2 uv = (vec2(pixel) + 0.5) / photon_safe_screen_size();
     origin = viewPos(uv, 0.0);
-    dir = normalize(viewPos(uv, 0.5) - origin);
+    dir = photon_safe_normalize(viewPos(uv, 0.5) - origin, vec3(0.0, 0.0, -1.0));
     rayEnd = depth < 1.0 ? dot(viewPos(uv, depth) - origin, dir) : 1e5;
 }
 
 vec3 viewPosAt(ivec2 pixel) {
-    pixel = clamp(pixel, ivec2(0), ivec2(ScreenSize) - 1);
-    return viewPos((vec2(pixel) + 0.5) / ScreenSize, texelFetch(SceneDepthSampler, pixel, 0).r);
+    ivec2 screenSize = ivec2(photon_safe_screen_size());
+    pixel = clamp(pixel, ivec2(0), screenSize - 1);
+    return viewPos((vec2(pixel) + 0.5) / vec2(screenSize), texelFetch(SceneDepthSampler, pixel, 0).r);
 }
 
 // from the closer neighbour on each axis; on the screen edge the clamped neighbour is the centre itself
 vec3 reconstructNormal(ivec2 pixel, vec3 center) {
-    ivec2 last = ivec2(ScreenSize) - 1;
+    ivec2 last = ivec2(photon_safe_screen_size()) - 1;
     vec3 l = viewPosAt(pixel - ivec2(1, 0));
     vec3 r = viewPosAt(pixel + ivec2(1, 0));
     vec3 d = viewPosAt(pixel - ivec2(0, 1));
@@ -35,28 +53,31 @@ vec3 reconstructNormal(ivec2 pixel, vec3 center) {
     bool down = pixel.y == last.y || (pixel.y > 0 && abs(d.z - center.z) < abs(u.z - center.z));
     vec3 n = cross(left ? center - l : r - center, down ? center - d : u - center);
     float length2 = dot(n, n);
-    if (length2 < 1e-24) return -normalize(center);
+    if (!(length2 > 1e-24 && length2 < 1e30))
+        return -photon_safe_normalize(center, vec3(0.0, 0.0, -1.0));
     n *= inversesqrt(length2);
     return dot(n, center) > 0.0 ? -n : n;
 }
 
 // the full-resolution pixel a light-buffer texel stands for
 ivec2 scenePixel(ivec2 lightPixel) {
-    return clamp(ivec2(floor((vec2(lightPixel) + 0.5) / ResolutionScale)), ivec2(0), ivec2(ScreenSize) - 1);
+    return clamp(ivec2(floor((vec2(lightPixel) + 0.5) / photon_safe_resolution_scale())),
+            ivec2(0), ivec2(photon_safe_screen_size()) - 1);
 }
 
 // positive view depth under a light-buffer texel, -1 for the sky
 float lightTexelDepth(ivec2 lightPixel) {
     ivec2 pixel = scenePixel(lightPixel);
     float depth = texelFetch(SceneDepthSampler, pixel, 0).r;
-    return depth >= 1.0 ? -1.0 : -viewPos((vec2(pixel) + 0.5) / ScreenSize, depth).z;
+    return depth >= 1.0 ? -1.0 : -viewPos((vec2(pixel) + 0.5) / photon_safe_screen_size(), depth).z;
 }
 
 // bilinear over the four nearest light texels, each weighted by how close its depth is to ours; sky texels
 // stand at skyDepth
 vec4 upsample(sampler2D source, ivec2 pixel, float z, float skyDepth) {
-    if (ResolutionScale >= 0.999) return texelFetch(source, pixel, 0);
-    vec2 lp = (vec2(pixel) + 0.5) * ResolutionScale - 0.5;
+    float scale = photon_safe_resolution_scale();
+    if (scale >= 0.999) return texelFetch(source, pixel, 0);
+    vec2 lp = (vec2(pixel) + 0.5) * scale - 0.5;
     ivec2 base = ivec2(floor(lp));
     vec2 f = lp - vec2(base);
     ivec2 size = textureSize(source, 0);

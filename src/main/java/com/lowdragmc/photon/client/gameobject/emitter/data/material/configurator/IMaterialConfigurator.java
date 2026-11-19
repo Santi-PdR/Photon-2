@@ -9,6 +9,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.IMaterial;
+import com.lowdragmc.photon.client.gameobject.emitter.data.material.TextureMaterial;
 import com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterial;
 import com.lowdragmc.photon.gui.editor.resource.MaterialResource;
 import dev.vfyjxf.taffy.style.AlignItems;
@@ -80,6 +81,19 @@ public class IMaterialConfigurator extends ValueConfigurator<IMaterial> {
                     onValueUpdatePassively(previous);
                     updateValue();
                 });
+        dialog.addButton(new com.lowdragmc.lowdraglib2.gui.ui.elements.Button()
+                .setText("photon.material.pick_texture_as_material")
+                .setOnClick(e -> {
+                    dialog.close();
+                    var mui = getModularUI();
+                    if (mui == null) return;
+                    TextureMaterial.openLoadedTexturePicker(mui.ui.rootElement, location -> {
+                        var textureMaterial = new TextureMaterial(location);
+                        if (!filter.test(textureMaterial)) return;
+                        onValueUpdatePassively(textureMaterial);
+                        updateValue();
+                    });
+                }));
         dialog.setOnClose(() -> MaterialResource.INSTANCE.setPathSelectListener(null));
         dialog.show(getModularUI());
     }

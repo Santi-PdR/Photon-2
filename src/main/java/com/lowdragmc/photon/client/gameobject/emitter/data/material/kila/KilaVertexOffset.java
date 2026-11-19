@@ -31,6 +31,17 @@ public class KilaVertexOffset extends KilaModule {
     @Persisted
     public float edgeFade;
 
+    public Direction effectiveDirection() {
+        return direction == null ? Direction.NORMAL : direction;
+    }
+
+    public Vector3f effectiveAxis() {
+        return axis == null ? new Vector3f(0, 1, 0)
+                : new Vector3f(finite(axis.x, 0f, -10_000f, 10_000f),
+                        finite(axis.y, 1f, -10_000f, 10_000f),
+                        finite(axis.z, 0f, -10_000f, 10_000f));
+    }
+
     @Override
     public String id() {
         return "vertex_offset";
@@ -53,8 +64,11 @@ public class KilaVertexOffset extends KilaModule {
         texture.uploadUv(shader, "KilaVertex");
         shader.safeGetUniform("KilaVertexOpts").set(texture.flags(), 0, 0, 0);
         texture.uploadSource(shader, "KilaVertex", scratch);
-        shader.safeGetUniform("KilaVertexDir").set(direction == Direction.AXIS ? 1f : 0f, axis.x, axis.y, axis.z);
-        shader.safeGetUniform("KilaVertexShape").set(bidirectional ? 1f : 0f, edgeFade, 0f, 0f);
+        var safeAxis = effectiveAxis();
+        shader.safeGetUniform("KilaVertexDir").set(effectiveDirection() == Direction.AXIS ? 1f : 0f,
+                safeAxis.x, safeAxis.y, safeAxis.z);
+        shader.safeGetUniform("KilaVertexShape").set(
+                bidirectional ? 1f : 0f, finite(edgeFade, 0f, 0f, 0.5f), 0f, 0f);
     }
 
     @Override
@@ -72,8 +86,8 @@ public class KilaVertexOffset extends KilaModule {
         KilaUI.driver(group, "kila.vertex_offset.strength", strength, -4, 4);
         KilaUI.texture(group, "kila.vertex_offset.texture", texture, KilaUI.TextureKind.SCALAR, true, true);
         KilaUI.choice(group, "kila.vertex_offset.direction", Direction.values(), () -> direction, v -> direction = v);
-        KilaUI.showWhen(group, KilaUI.vec3(group, "kila.vertex_offset.axis", () -> axis, v -> axis = v),
-                () -> direction == Direction.AXIS);
+        KilaUI.showWhen(group, KilaUI.vec3(group, "kila.vertex_offset.axis", this::effectiveAxis, v -> axis = v),
+                () -> effectiveDirection() == Direction.AXIS);
         KilaUI.bool(group, "kila.vertex_offset.bidirectional", () -> bidirectional, v -> bidirectional = v);
         KilaUI.number(group, "kila.vertex_offset.edge_fade", () -> edgeFade, v -> edgeFade = v, 0, 0, 0.5f);
     }

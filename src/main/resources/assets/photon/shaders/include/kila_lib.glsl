@@ -3,6 +3,18 @@
 
 uniform float GameTime;
 
+// Degenerate mesh, view and derivative frames occur at clipped edges and zero-area geometry. GLSL normalize(0)
+// is undefined and can poison every later material operation with NaNs, so keep a deterministic fallback direction.
+vec2 kila_safe_normalize(vec2 value, vec2 fallback) {
+    float lengthSquared = dot(value, value);
+    return lengthSquared > 1e-16 && lengthSquared < 1e30 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
+vec3 kila_safe_normalize(vec3 value, vec3 fallback) {
+    float lengthSquared = dot(value, value);
+    return lengthSquared > 1e-16 && lengthSquared < 1e30 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
 // Modules sample through the KILA_TEX_<SLOT> aliases KilaLayout defines to one of these.
 #ifdef KILA_TEX0
 uniform sampler2D KilaTex0;
@@ -122,7 +134,7 @@ vec2 kila_gradient_dir(vec2 p) {
     float x = mod((34.0 * p.x + 1.0) * p.x, 289.0) + p.y;
     x = mod((34.0 * x + 1.0) * x, 289.0);
     x = fract(x / 41.0) * 2.0 - 1.0;
-    return normalize(vec2(x - floor(x + 0.5), abs(x) - 0.5));
+    return kila_safe_normalize(vec2(x - floor(x + 0.5), abs(x) - 0.5), vec2(1.0, 0.0));
 }
 
 float kila_gradient_noise(vec2 p) {

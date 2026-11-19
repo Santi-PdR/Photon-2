@@ -91,7 +91,7 @@ public class JsonModelSource implements IModelSource {
     public boolean isObjLoaderModel() {
         try {
             ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
-            Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+            Path nestedFile = LDLibModelAssets.resolve(modelLocation, file.getPath());
             Resource resource = nestedFile == null
                     ? Minecraft.getInstance().getResourceManager().getResource(file).orElse(null)
                     : null;
@@ -125,7 +125,7 @@ public class JsonModelSource implements IModelSource {
         }
         ObjLoaderReference objReference = getObjLoaderReference();
         if (objReference != null) {
-            Path nestedObj = LDLibModelAssets.findNested(objReference.location(), objReference.location().getPath());
+            Path nestedObj = LDLibModelAssets.resolve(objReference.location(), objReference.location().getPath());
             if (nestedObj != null) {
                 PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedObj.toFile());
             }
@@ -135,7 +135,10 @@ public class JsonModelSource implements IModelSource {
         var random = RandomSource.create();
         BakedModel bakedModel = PhotonModelBaker.bake(modelLocation);
         if (bakedModel == null) {
-            return null;
+            // The loading overlay was handled above. A null here is a stable parse/bake failure, so
+            // cache an empty mesh until the tracked file or resource manager changes instead of
+            // rebuilding and logging the same broken model on every draw.
+            return PhotonMesh.EMPTY;
         }
         var quads = new ArrayList<Pair<BakedQuad, Float>>();
         for (var side : TileParticle.MODEL_SIDES) {
@@ -170,7 +173,7 @@ public class JsonModelSource implements IModelSource {
             if (objLoaderChecked) return objLoaderReference;
             try {
                 ResourceLocation file = ModelBakery.MODEL_LISTER.idToFile(modelLocation);
-                Path nestedFile = LDLibModelAssets.findNested(modelLocation, file.getPath());
+                Path nestedFile = LDLibModelAssets.resolve(modelLocation, file.getPath());
                 if (nestedFile != null) {
                     PhotonMeshCache.INSTANCE.trackFile(new PhotonMeshCache.JsonKey(modelLocation), nestedFile.toFile());
                 }
@@ -211,7 +214,7 @@ public class JsonModelSource implements IModelSource {
             var mui = e.currentElement.getModularUI();
             if (mui == null) return;
             Dialog.showFileDialog("ldlib.gui.editor.tips.select_model", PhotonPaths.getDataDir(), true, node -> {
-                return !node.getKey().isFile() || node.getKey().getName().toLowerCase().endsWith(".json");
+                return !node.getKey().isFile() || node.getKey().getName().toLowerCase(java.util.Locale.ROOT).endsWith(".json");
             }, r -> {
                 if (r != null && r.isFile()) {
                     var newModel = getModelLocationFromFile(r);

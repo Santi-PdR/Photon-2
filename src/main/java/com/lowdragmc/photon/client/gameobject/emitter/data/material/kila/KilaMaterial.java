@@ -14,6 +14,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.data.TextWrap;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
+import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.lowdraglib2.gui.ui.styletemplate.Sprites;
 import com.lowdragmc.lowdraglib2.math.HDRColor;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
@@ -172,6 +173,23 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     @Persisted(subPersisted = true)
     public final KilaScreenDistortion screenDistortion = new KilaScreenDistortion();
 
+    /** Keep even finite-but-corrupt persisted HDR components out of the shader's overflow range. */
+    static float finite(float value) {
+        return Float.isFinite(value) ? net.minecraft.util.Mth.clamp(value, -1_000_000f, 1_000_000f) : 0f;
+    }
+
+    private float safeCameraOffset() {
+        return Float.isFinite(cameraOffset) ? net.minecraft.util.Mth.clamp(cameraOffset, -8f, 8f) : 0f;
+    }
+
+    private float safeFrameRate() {
+        return Float.isFinite(frameRate) ? net.minecraft.util.Mth.clamp(frameRate, 0f, 60f) : 0f;
+    }
+
+    private float safeBoil() {
+        return Float.isFinite(boil) ? net.minecraft.util.Mth.clamp(boil, 0f, 0.2f) : 0f;
+    }
+
     @Override
     public boolean usesSceneColor() {
         return screenDistortion.isEnable();
@@ -212,6 +230,34 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     /** Not saved: authoring only. */
     public PreviewBackground previewBackground = PreviewBackground.CHECKER;
 
+    public HDRColor effectiveColor() {
+        return color == null ? HDRColor.white() : color;
+    }
+
+    public HDRColor effectiveBackColor() {
+        return backColor == null ? HDRColor.white() : backColor;
+    }
+
+    public HDRColor effectiveEmission() {
+        return emission == null ? HDRColor.black() : emission;
+    }
+
+    public BlendMode.Preset effectiveBlend() {
+        return blend == null ? BlendMode.Preset.ALPHA : blend;
+    }
+
+    public VertexColor effectiveVertexColor() {
+        return vertexColor == null ? VertexColor.MULTIPLY : vertexColor;
+    }
+
+    public DebugView effectiveDebugView() {
+        return debugView == null ? DebugView.OFF : debugView;
+    }
+
+    public PreviewBackground effectivePreviewBackground() {
+        return previewBackground == null ? PreviewBackground.CHECKER : previewBackground;
+    }
+
     // runtime
     // one layout per stacking state: the thumbnail never stacks while the scene may
     private final KilaLayout[] layouts = new KilaLayout[2];
@@ -222,6 +268,10 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     private final float[] scratch = new float[4];
     private boolean stackedDraw;
     private boolean depthTestLifted;
+    /** Per-draw override from the owning material slot; not persisted on this material. */
+    private transient boolean slotStateActive;
+    @Nullable
+    private transient BlendMode.Preset slotBlendPreset;
     private final float[][] base = new float[KilaParam.GROUPS][4];
     private final float[][] scale = new float[KilaParam.GROUPS][4];
     private final int[][] source = new int[KilaParam.GROUPS][4];
@@ -236,7 +286,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     private final BiConsumer<KilaParam, KilaDriver> scanner = (param, driver) -> {
         scanMask |= driver.channelMask();
         scanCustom |= driver.readsCustomData();
-        scanParticleData |= driver.source.isParticleData();
+        scanParticleData |= driver.readsParticleData();
     };
 
     public List<KilaModule> modules() {
@@ -252,8 +302,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         var layout = layouts[slot];
         if (layout == null || structure != layoutStructures[slot]) {
             var builder = KilaLayout.surface();
-            if (cameraOffset != 0) builder.define("KILA_CAMERA_OFFSET").float1("KilaCameraOffset", 0);
-            if (frameRate > 0) builder.define("KILA_TIME_STEP").float1("GameTime", 0).vec4("KilaTimeStep", 12, 0, 0, 0);
+            if (safeCameraOffset() != 0) builder.define("KILA_CAMERA_OFFSET").float1("KilaCameraOffset", 0);
+            if (safeFrameRate() > 0) builder.define("KILA_TIME_STEP").float1("GameTime", 0).vec4("KilaTimeStep", 12, 0, 0, 0);
             var enabled = new ArrayList<KilaModule>();
             for (var module : keepOrder) {
                 if (module.isEnable()) enabled.add(module);
@@ -266,7 +316,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private long structure() {
-        textureHash = (cameraOffset != 0 ? 2 : 1) + (frameRate > 0 ? 4 : 0);
+        textureHash = (safeCameraOffset() != 0 ? 2 : 1) + (safeFrameRate() > 0 ? 4 : 0);
         for (var module : modules) {
             textureHash = textureHash * 31 + (module.isEnable() ? 1 : 0);
             if (!module.isEnable()) continue;
@@ -277,14 +327,15 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private boolean active(KilaModule module, KilaLayout layout) {
-        return module.isEnable() && !layout.dropped.contains(module);
+        return module.isEnable() && !layout.isDropped(module);
     }
 
     @Override
     public ShaderInstance getShader(MaterialContext context) {
         syncStacking(context.isRenderingPreview());
         var variant = layout().variant(context);
-        return variant == null ? IMaterial.MISSING.begin(context) : variant.shader();
+        // This accessor only resolves the program; only begin() may bind the missing material's state.
+        return variant == null ? IMaterial.MISSING.getShader(context) : variant.shader();
     }
 
     @Override
@@ -309,9 +360,37 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     @Override
+    public ShaderInstance begin(MaterialContext context, BlendMode slotBlend, boolean slotOwnsRenderState) {
+        slotStateActive = slotOwnsRenderState;
+        slotBlendPreset = slotOwnsRenderState ? BlendMode.Preset.of(slotBlend) : null;
+        try {
+            return begin(context);
+        } finally {
+            // begin() has uploaded the material uniforms; do not leak a previous slot's state into another draw.
+            slotStateActive = false;
+            slotBlendPreset = null;
+        }
+    }
+
+    @Override
     public void preload(MaterialContext context, PreloadContext preload) {
+        // Report texture ids synchronously so collection-only texture diagnostics can see Kila's
+        // samplers without compiling a program or uploading resources. Actual preparation stays below.
+        boolean wasStacking = screenDistortion.stacking;
+        try {
+            screenDistortion.stacking = false;
+            reportLayoutTextures(preload, layout());
+            boolean mayStack = screenDistortion.isEnable() && screenDistortion.stack
+                    && effectiveDebugView() == DebugView.OFF && !context.isRenderingPreview();
+            if (mayStack) {
+                screenDistortion.stacking = true;
+                reportLayoutTextures(preload, layout());
+            }
+        } finally {
+            screenDistortion.stacking = wasStacking;
+        }
         preload.onRenderThread(() -> {
-            var stacks = screenDistortion.isEnable() && screenDistortion.stack && debugView == DebugView.OFF
+            var stacks = screenDistortion.isEnable() && screenDistortion.stack && effectiveDebugView() == DebugView.OFF
                     && !context.isRenderingPreview();
             // the pipeline decides per draw whether a distortion stacks, and may refuse under a shader pack
             if (stacks) preloadLayout(true, context, preload);
@@ -320,12 +399,19 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         });
     }
 
+    private static void reportLayoutTextures(PreloadContext preload, KilaLayout layout) {
+        for (var texture : layout.textures) {
+            if (texture.texture() != null) preload.texture(texture.texture().getTexture());
+        }
+    }
+
     private void preloadLayout(boolean stacking, MaterialContext context, PreloadContext preload) {
         screenDistortion.stacking = stacking;
         var layout = layout();
         for (var texture : layout.textures) {
             if (texture.texture() != null) {
-                preload.texture(texture.texture().getTexture());
+                var location = com.lowdragmc.photon.client.fx.LooseTextures.resolveForRender(texture.texture().getTexture());
+                preload.texture(location);
             } else if (texture.dynamic() != null) {
                 texture.dynamic().getAsInt();
             }
@@ -336,7 +422,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     /** Stacked only in a build that can bend the frame, and not while a debug view replaces the output. */
     private void syncStacking(boolean preview) {
         screenDistortion.stacking = screenDistortion.isEnable() && screenDistortion.stack && !preview
-                && debugView == DebugView.OFF && StackedDistortion.available();
+                && effectiveDebugView() == DebugView.OFF && StackedDistortion.available();
     }
 
     @Override
@@ -358,14 +444,51 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         }
     }
 
+    /** Resolve the shader's colour transform separately from GL: a slot override owns the effective factors. */
+    static BlendMode.Preset resolveShaderBlend(boolean slotStateActive, @Nullable BlendMode.Preset slotBlendPreset,
+                                               boolean slotRenderState, BlendMode.Preset materialBlend) {
+        if (slotStateActive) return slotBlendPreset == null ? BlendMode.Preset.ALPHA : slotBlendPreset;
+        return slotRenderState ? BlendMode.Preset.ALPHA : materialBlend;
+    }
+
+    static int safeScreenDimension(int dimension) {
+        return Math.max(1, dimension);
+    }
+
+    private static void uploadScreenSize(ShaderInstance shader, boolean preview) {
+        var screenSize = shader.getUniform("ScreenSize");
+        if (screenSize == null) return;
+        int width;
+        int height;
+        var pipeline = preview ? null : RenderPassPipeline.getCurrent();
+        if (pipeline != null) {
+            width = pipeline.framebufferWidth();
+            height = pipeline.framebufferHeight();
+        } else {
+            var surface = UISurface.current();
+            if (surface != null && !surface.isMainWindow()) {
+                width = surface.framebufferWidth();
+                height = surface.framebufferHeight();
+            } else {
+                var target = Minecraft.getInstance().getMainRenderTarget();
+                width = target.width;
+                height = target.height;
+            }
+        }
+        screenSize.set((float) safeScreenDimension(width), (float) safeScreenDimension(height));
+    }
+
     private void upload(ShaderInstance shader, KilaLayout layout, KilaShaders.Variant variant, MaterialContext context) {
         var preview = context.isRenderingPreview();
+        uploadScreenSize(shader, preview);
         var textureManager = Minecraft.getInstance().getTextureManager();
         bindings.clear();
         for (var texture : layout.textures) {
             int unit = variant.textureUnits()[texture.index()];
             if (texture.texture() != null) {
-                shader.setSampler(texture.name(), textureManager.getTexture(texture.texture().getTexture()));
+                var location = com.lowdragmc.photon.client.fx.LooseTextures
+                        .resolveForRender(texture.texture().getTexture());
+                shader.setSampler(texture.name(), textureManager.getTexture(location));
                 if (unit >= 0) bindings.add(new KGSamplerGl.Binding(unit, texture.texture().glSampler()));
             } else if (texture.dynamic() != null) {
                 shader.setSampler(texture.name(), texture.dynamic().getAsInt());
@@ -376,21 +499,27 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         KGSamplerBinder.stage(shader, bindings);
 
         // the thumbnail drops the intensity
-        var tint = (preview ? color.withIntensity(1f) : color).toVector4f();
-        shader.safeGetUniform("KilaTint").set(tint.x, tint.y, tint.z, tint.w);
-        var back = backColor.toVector4fOpaque();
-        shader.safeGetUniform("KilaBackTint").set(back.x, back.y, back.z, 1f);
-        var glow = emission.toVector4fOpaque();
-        shader.safeGetUniform("KilaEmission").set(glow.x, glow.y, glow.z, 0f);
-        shader.safeGetUniform("KilaSurface").set(alphaClip, alphaSharpen, worldLight ? 1f : 0f, fog ? 1f : 0f);
-        // the slot's blend wants what a TextureMaterial gives it: straight colour
-        shader.safeGetUniform("KilaSurfaceModes").set(vertexColor.ordinal(),
-                slotRenderState ? BlendMode.Preset.ALPHA.ordinal() : blend.ordinal(), 0, 0);
-        shader.safeGetUniform("KilaOutput").set(additive, 0f, 0f, 0f);
+        var surfaceColor = effectiveColor();
+        var tint = (preview ? surfaceColor.withIntensity(1f) : surfaceColor).toVector4f();
+        shader.safeGetUniform("KilaTint").set(finite(tint.x), finite(tint.y), finite(tint.z), finite(tint.w));
+        var back = effectiveBackColor().toVector4fOpaque();
+        shader.safeGetUniform("KilaBackTint").set(finite(back.x), finite(back.y), finite(back.z), 1f);
+        var glow = effectiveEmission().toVector4fOpaque();
+        shader.safeGetUniform("KilaEmission").set(finite(glow.x), finite(glow.y), finite(glow.z), 0f);
+        shader.safeGetUniform("KilaSurface").set(
+                Float.isFinite(alphaClip) ? net.minecraft.util.Mth.clamp(alphaClip, 0f, 1f) : 0.01f,
+                Float.isFinite(alphaSharpen) ? net.minecraft.util.Mth.clamp(alphaSharpen, 0f, 16f) : 1f,
+                worldLight ? 1f : 0f, fog ? 1f : 0f);
+        // Match shader-side premultiplication / stacked-distortion math to the blend the slot actually applies.
+        // A custom factor set has no named shader transform; Alpha is the least surprising straight-colour fallback.
+        var shaderBlend = resolveShaderBlend(slotStateActive, slotBlendPreset, slotRenderState, effectiveBlend());
+        shader.safeGetUniform("KilaSurfaceModes").set(effectiveVertexColor().ordinal(), shaderBlend.ordinal(), 0, 0);
+        shader.safeGetUniform("KilaOutput").set(Float.isFinite(additive)
+                ? net.minecraft.util.Mth.clamp(additive, 0f, 1f) : 0f, 0f, 0f, 0f);
         shader.safeGetUniform("KilaPreview").set(preview ? previewValue() : -1f);
-        shader.safeGetUniform("KilaDebug").set(debugView.ordinal(), 0, 0, 0);
-        if (cameraOffset != 0) shader.safeGetUniform("KilaCameraOffset").set(preview ? 0f : cameraOffset);
-        if (frameRate > 0) shader.safeGetUniform("KilaTimeStep").set(frameRate, boil, 0f, 0f);
+        shader.safeGetUniform("KilaDebug").set(effectiveDebugView().ordinal(), 0, 0, 0);
+        if (safeCameraOffset() != 0) shader.safeGetUniform("KilaCameraOffset").set(preview ? 0f : safeCameraOffset());
+        if (safeFrameRate() > 0) shader.safeGetUniform("KilaTimeStep").set(safeFrameRate(), safeBoil(), 0f, 0f);
         if (layout.world) {
             var pipeline = preview ? null : RenderPassPipeline.getCurrent();
             var camera = pipeline == null ? null : pipeline.getCamera();
@@ -422,8 +551,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
     }
 
     private void stage(KilaParam param, KilaDriver driver) {
-        base[param.group][param.component] = driver.value;
-        scale[param.group][param.component] = driver.isDriven() ? driver.scale : 0;
+        base[param.group][param.component] = driver.safeValue();
+        scale[param.group][param.component] = driver.isDriven() ? driver.safeScale() : 0;
         source[param.group][param.component] = driver.code();
     }
 
@@ -492,9 +621,10 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         // a projection paints the very terrain that stands in front of its quad
         boolean tested = depthTest && !projection.isEnable();
         boolean twoPass = doubleSided && backFacesFirst;
-        int key = blend.ordinal() | (doubleSided ? 16 : 0) | (tested ? 32 : 0) | (depthWrite ? 64 : 0) | (twoPass ? 128 : 0);
+        var effectiveBlend = effectiveBlend();
+        int key = effectiveBlend.ordinal() | (doubleSided ? 16 : 0) | (tested ? 32 : 0) | (depthWrite ? 64 : 0) | (twoPass ? 128 : 0);
         if (renderState == null || key != renderStateKey) {
-            renderState = new MaterialRenderState(blend.create(), !doubleSided || twoPass, tested, depthWrite, twoPass);
+            renderState = new MaterialRenderState(effectiveBlend.create(), !doubleSided || twoPass, tested, depthWrite, twoPass);
             renderStateKey = key;
         }
         return renderState;
@@ -577,10 +707,10 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         father.addConfigurator(new Configurator("ldlib.gui.editor.group.preview").addChild(frame));
         followPreview(father, frame);
 
-        KilaUI.add(father, new ToggleSelectorConfigurator<>("kila.preview.background", () -> previewBackground,
+        KilaUI.add(father, new ToggleSelectorConfigurator<>("kila.preview.background", this::effectivePreviewBackground,
                 v -> previewBackground = v, PreviewBackground.CHECKER, true, List.of(PreviewBackground.values()),
-                v -> "kila.preview.background." + v.name().toLowerCase(), v -> v.texture), "kila.preview.background");
-        KilaUI.choice(father, "kila.debug_view", DebugView.values(), () -> debugView, v -> debugView = v);
+                v -> "kila.preview.background." + v.name().toLowerCase(java.util.Locale.ROOT), v -> v.texture), "kila.preview.background");
+        KilaUI.choice(father, "kila.debug_view", DebugView.values(), this::effectiveDebugView, v -> debugView = v);
     }
 
     private UIElement previewImage() {
@@ -591,7 +721,7 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         return new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.heightPercent(100);
-        }).style(style -> style.backgroundTexture(DynamicTexture.of(() -> previewBackground.texture))).addChild(drawn);
+        }).style(style -> style.backgroundTexture(DynamicTexture.of(() -> effectivePreviewBackground().texture))).addChild(drawn);
     }
 
     /**
@@ -641,7 +771,8 @@ public class KilaMaterial extends ShaderInstanceMaterial {
             if (mui == null) return;
             // the inspector moved on or its tab is hidden: a hidden subtree stops ticking, so it can't take the corner down
             if (!shownUnder(frame, mui.ui.rootElement)) {
-                corner.getParent().removeChild(corner);
+                var parent = corner.getParent();
+                if (parent != null) parent.removeChild(corner);
                 return;
             }
             var local = corner.worldToLocal(new Vector2f(mui.getLastMouseX(), mui.getLastMouseY()));
@@ -673,10 +804,10 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         var render = KilaUI.subGroup(father, "kila.render", true);
         KilaUI.bool(render, "kila.render.slot_state", () -> slotRenderState, v -> slotRenderState = v);
         BooleanSupplier own = () -> !slotRenderState;
-        KilaUI.showWhen(render, KilaUI.choice(render, "kila.render.blend", BlendMode.Preset.values(), () -> blend,
+        KilaUI.showWhen(render, KilaUI.choice(render, "kila.render.blend", BlendMode.Preset.values(), this::effectiveBlend,
                 v -> blend = v), own);
         KilaUI.showWhen(render, KilaUI.number(render, "kila.render.additive", () -> additive, v -> additive = v, 0, 0, 1),
-                () -> !slotRenderState && blend == BlendMode.Preset.PREMULTIPLIED);
+                () -> !slotRenderState && effectiveBlend() == BlendMode.Preset.PREMULTIPLIED);
         KilaUI.showWhen(render, KilaUI.bool(render, "kila.render.double_sided", () -> doubleSided, v -> doubleSided = v), own);
         KilaUI.showWhen(render, KilaUI.bool(render, "kila.render.back_first", () -> backFacesFirst, v -> backFacesFirst = v),
                 () -> !slotRenderState && doubleSided);
@@ -685,17 +816,17 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         KilaUI.number(render, "kila.render.camera_offset", () -> cameraOffset, v -> cameraOffset = v, 0, -8, 8);
 
         var surface = KilaUI.subGroup(father, "kila.surface", false);
-        KilaUI.hdr(surface, "kila.surface.color", () -> color, v -> color = v, true);
+        KilaUI.hdr(surface, "kila.surface.color", this::effectiveColor, v -> color = v, true);
         KilaUI.driver(surface, "kila.surface.intensity", intensity, 0, 64);
         KilaUI.driver(surface, "kila.surface.alpha", alpha, 0, 1);
-        KilaUI.hdr(surface, "kila.surface.emission", () -> emission, v -> emission = v, false);
+        KilaUI.hdr(surface, "kila.surface.emission", this::effectiveEmission, v -> emission = v, false);
         var more = KilaUI.subGroup(surface, "kila.surface.more", true);
-        KilaUI.choice(more, "kila.surface.vertex_color", VertexColor.values(), () -> vertexColor, v -> vertexColor = v);
+        KilaUI.choice(more, "kila.surface.vertex_color", VertexColor.values(), this::effectiveVertexColor, v -> vertexColor = v);
         KilaUI.bool(more, "kila.surface.world_light", () -> worldLight, v -> worldLight = v);
         KilaUI.bool(more, "kila.surface.fog", () -> fog, v -> fog = v);
         KilaUI.number(more, "kila.surface.alpha_clip", () -> alphaClip, v -> alphaClip = v, 0.01f, 0, 1);
         KilaUI.number(more, "kila.surface.alpha_sharpen", () -> alphaSharpen, v -> alphaSharpen = v, 1, 0.05f, 16);
-        KilaUI.hdr(more, "kila.surface.back_color", () -> backColor, v -> backColor = v, false);
+        KilaUI.hdr(more, "kila.surface.back_color", this::effectiveBackColor, v -> backColor = v, false);
         KilaUI.number(more, "kila.surface.frame_rate", () -> frameRate, v -> frameRate = v, 0, 0, 60);
         KilaUI.showWhen(more, KilaUI.number(more, "kila.surface.boil", () -> boil, v -> boil = v, 0, 0, 0.2f),
                 () -> frameRate > 0);
@@ -724,17 +855,32 @@ public class KilaMaterial extends ShaderInstanceMaterial {
         status.label.layout(layout -> layout.widthPercent(100));
         status.label.moveInlineAsDefault();
         father.addConfigurator(status);
+        // Avoid rebuilding the translated status Component and relaying out its row every UI tick.
+        var lastStatus = new Object() {
+            int samplers = -1;
+            List<KilaModule> dropped = List.of();
+        };
+        long[] lastStatusRefresh = {0L};
+        boolean[] statusRefreshed = {false};
         father.addEventListener(UIEvents.TICK, e -> {
             for (int i = 0; i < modules.size(); i++) {
                 groups.get(i).setDisplay(modules.get(i).isEnable());
             }
+            long now = System.nanoTime();
+            if (statusRefreshed[0] && now - lastStatusRefresh[0] < 100_000_000L) return;
+            lastStatusRefresh[0] = now;
+            statusRefreshed[0] = true;
             var current = layout();
-            var text = Component.translatable("kila.status.samplers", current.samplers.size(), KilaLayout.SAMPLER_BUDGET);
-            for (var dropped : current.dropped) {
-                text.append(" ").append(Component.translatable("kila.status.dropped",
-                        Component.translatable(dropped.langKey())));
+            if (current.samplers.size() != lastStatus.samplers || !current.dropped.equals(lastStatus.dropped)) {
+                var text = Component.translatable("kila.status.samplers", current.samplers.size(), KilaLayout.SAMPLER_BUDGET);
+                for (var dropped : current.dropped) {
+                    text.append(" ").append(Component.translatable("kila.status.dropped",
+                            Component.translatable(dropped.langKey())));
+                }
+                status.setLabel(text);
+                lastStatus.samplers = current.samplers.size();
+                lastStatus.dropped = current.dropped;
             }
-            status.setLabel(text);
         });
     }
 }

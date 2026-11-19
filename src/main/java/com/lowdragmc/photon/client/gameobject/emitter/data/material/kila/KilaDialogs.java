@@ -62,6 +62,15 @@ public final class KilaDialogs {
 
     /** The resource panel's cell, showing {@code thumbnail} and wearing its selection look while {@code selected}. */
     static UIElement cell(UIElement thumbnail, Component name, int width, BooleanSupplier selected) {
+        return cell(thumbnail, name, width, selected, true);
+    }
+
+    private static UIElement staticCell(UIElement thumbnail, Component name, int width) {
+        return cell(thumbnail, name, width, () -> false, false);
+    }
+
+    private static UIElement cell(UIElement thumbnail, Component name, int width, BooleanSupplier selected,
+                                 boolean refreshSelection) {
         var cell = ResourceProviderContainer.createResourceCell(Resource.DisplayMode.GRID, width, thumbnail, name.getString());
         var wash = ResourceProviderContainer.defaultSelectedTexture();
         Runnable sync = () -> {
@@ -75,7 +84,7 @@ public final class KilaDialogs {
             cell.style(style -> Style.defaultPipeline(style, s -> s.overlayTexture(on ? wash : IGuiTexture.EMPTY)));
         };
         sync.run();
-        cell.addEventListener(UIEvents.TICK, event -> sync.run());
+        if (refreshSelection) cell.addEventListener(UIEvents.TICK, event -> sync.run());
         return cell;
     }
 
@@ -86,17 +95,46 @@ public final class KilaDialogs {
         }).style(style -> style.backgroundTexture(texture));
     }
 
-    /** Every preset by category, drawn with its own material; a click applies it. */
+    /** Presets by category, with lazy live previews; a click applies one. */
     public static Dialog presets(UIElement origin, float x, float y, Consumer<KilaMaterial> apply) {
-        var dialog = new Dialog().windowMode(x, y, 220, 300);
+        var dialog = new Dialog().windowMode(x, y, 280, 360);
         dialog.setTitle("kila.preset.gallery");
+        // A live Kila thumbnail compiles its material's shader layout. Building all 89 tiles at once
+        // makes opening this small gallery expensive, so keep only the selected category alive.
+        var categoryBar = new UIElement().layout(layout -> {
+            layout.widthPercent(100);
+            layout.heightAuto();
+            layout.flexDirection(FlexDirection.ROW);
+            layout.wrap(FlexWrap.WRAP);
+            layout.gapAll(2);
+        });
+        dialog.addContent(categoryBar);
+        var targetBar = new UIElement().layout(layout -> {
+            layout.widthPercent(100);
+            layout.heightAuto();
+            layout.flexDirection(FlexDirection.ROW);
+            layout.wrap(FlexWrap.WRAP);
+            layout.gapAll(2);
+        });
+        dialog.addContent(targetBar);
         var list = list();
         list.addClass("__kila-presets__");
-        for (var category : KilaPresets.Category.values()) {
+        dialog.addContent(list);
+        KilaPresets.Category[] selectedCategory = {KilaPresets.Category.BASIC};
+        KilaPresets.Target[] selectedTarget = {null};
+        java.util.function.Consumer<KilaPresets.Category> showCategory = category -> {
+            selectedCategory[0] = category;
+            list.clearAllScrollViewChildren();
             var grid = section(list, category.langKey());
+            int shown = 0;
             for (var preset : KilaPresets.ALL) {
-                if (preset.category() != category) continue;
-                var material = preset.create();
+                if (preset.category() != category
+                        || (selectedTarget[0] != null && preset.target() != selectedTarget[0])) continue;
+                KilaMaterial[] cachedMaterial = {null};
+                java.util.function.Supplier<KilaMaterial> material = () -> {
+                    if (cachedMaterial[0] == null) cachedMaterial[0] = preset.create();
+                    return cachedMaterial[0];
+                };
                 var name = Component.translatable(preset.langKey());
                 var tips = new ArrayList<Component>(List.of(name));
                 if (preset.target() != KilaPresets.Target.PARTICLE) {
@@ -104,17 +142,50 @@ public final class KilaDialogs {
                 }
                 tips.add(Component.translatable(preset.langKey() + ".desc"));
                 tips.add(Component.translatable("kila.preset.click_to_apply"));
-                var cell = cell(fill(KilaSlotPreview.checker()).addChild(fill(material.preview())), name, PRESET, () -> false);
+                boolean[] hovered = {false};
+                long[] hoverStarted = {0L};
+                var preview = com.lowdragmc.lowdraglib2.gui.texture.DynamicTexture.of(() ->
+                        hovered[0] && System.nanoTime() - hoverStarted[0] >= 250_000_000L
+                                ? material.get().preview() : com.lowdragmc.lowdraglib2.gui.texture.Icons.MATERIAL);
+                var previewWidget = fill(preview);
+                var cell = staticCell(fill(KilaSlotPreview.checker()).addChild(previewWidget), name, PRESET);
+                previewWidget.addEventListener(UIEvents.MOUSE_ENTER, event -> {
+                    hovered[0] = true;
+                    hoverStarted[0] = System.nanoTime();
+                });
+                previewWidget.addEventListener(UIEvents.MOUSE_LEAVE, event -> hovered[0] = false);
+                cell.addEventListener(UIEvents.MOUSE_ENTER, event -> {
+                    hovered[0] = true;
+                    hoverStarted[0] = System.nanoTime();
+                });
+                cell.addEventListener(UIEvents.MOUSE_LEAVE, event -> hovered[0] = false);
                 cell.style(style -> style.tooltips(tips.toArray(Component[]::new)));
                 cell.addEventListener(UIEvents.MOUSE_DOWN, event -> {
                     if (event.button != 0) return;
-                    apply.accept(preset.create());
+                    // This instance already owns the live tile preview; reuse it instead of rebuilding every module.
+                    apply.accept(material.get());
                     dialog.close();
                 });
                 grid.addChild(cell);
+                shown++;
             }
+            if (shown == 0) grid.addChild(new Label().setText("kila.preset.none"));
+        };
+        for (var category : KilaPresets.Category.values()) {
+            categoryBar.addChild(new Button().setText(category.langKey())
+                    .setOnClick(event -> showCategory.accept(category)));
         }
-        dialog.addContent(list);
+        targetBar.addChild(new Button().setText("kila.preset.target.all").setOnClick(event -> {
+            selectedTarget[0] = null;
+            showCategory.accept(selectedCategory[0]);
+        }));
+        for (var target : KilaPresets.Target.values()) {
+            targetBar.addChild(new Button().setText(target.langKey()).setOnClick(event -> {
+                selectedTarget[0] = target;
+                showCategory.accept(selectedCategory[0]);
+            }));
+        }
+        showCategory.accept(KilaPresets.Category.BASIC);
         dialog.addButton(new Button().setText("ldlib.gui.tips.cancel").setOnClick(e -> dialog.close())
                 .addClass("__cancel-button__"));
         return dialog.show(origin.getModularUI());
@@ -127,7 +198,7 @@ public final class KilaDialogs {
         var list = list();
         list.addClass("__kila-modules__");
         for (var category : KilaModule.Category.values()) {
-            var group = new ConfiguratorGroup("kila.module.category." + category.name().toLowerCase(), false);
+            var group = new ConfiguratorGroup("kila.module.category." + category.name().toLowerCase(java.util.Locale.ROOT), false);
             for (var module : material.modules()) {
                 if (module.category() == category) group.addConfigurator(moduleEntry(dialog, module, add));
             }

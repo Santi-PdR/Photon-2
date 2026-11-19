@@ -47,6 +47,18 @@ public class KilaUvEffects extends KilaModule {
     @Persisted
     public float rippleSpeed = 1;
 
+    public WaveAxis effectiveWaveAxis() {
+        return waveAxis == null ? WaveAxis.U : waveAxis;
+    }
+
+    public Vector2f effectiveTwirlCenter() {
+        return twirlCenter == null ? new Vector2f(0.5f, 0.5f) : twirlCenter;
+    }
+
+    public Vector2f effectiveShear() {
+        return shear == null ? new Vector2f() : shear;
+    }
+
     @Override
     public String id() {
         return "uv_effects";
@@ -65,11 +77,19 @@ public class KilaUvEffects extends KilaModule {
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        shader.safeGetUniform("KilaTwirl").set(twirlCenter.x, twirlCenter.y, 0f, 0f);
-        shader.safeGetUniform("KilaShear").set(shear.x, shear.y, 0f, 0f);
+        var center = effectiveTwirlCenter();
+        var safeShear = effectiveShear();
+        shader.safeGetUniform("KilaTwirl").set(
+                finite(center.x, 0.5f, -100_000f, 100_000f), finite(center.y, 0.5f, -100_000f, 100_000f), 0f, 0f);
+        shader.safeGetUniform("KilaShear").set(
+                finite(safeShear.x, 0f, -100_000f, 100_000f), finite(safeShear.y, 0f, -100_000f, 100_000f), 0f, 0f);
         float tau = (float) (Math.PI * 2);
-        shader.safeGetUniform("KilaWave").set(waveFrequency * tau, waveSpeed * tau, waveAxis == WaveAxis.U ? 1f : 0f, 0f);
-        shader.safeGetUniform("KilaRipple").set(rippleAmplitude, rippleFrequency * tau, rippleSpeed * tau, 0f);
+        shader.safeGetUniform("KilaWave").set(
+                finite(waveFrequency, 2f, 0f, 64f) * tau, finite(waveSpeed, 1f, -64f, 64f) * tau,
+                effectiveWaveAxis() == WaveAxis.U ? 1f : 0f, 0f);
+        shader.safeGetUniform("KilaRipple").set(
+                finite(rippleAmplitude, 0f, -1f, 1f), finite(rippleFrequency, 6f, 0f, 64f) * tau,
+                finite(rippleSpeed, 1f, -64f, 64f) * tau, 0f);
     }
 
     @Override
@@ -82,13 +102,13 @@ public class KilaUvEffects extends KilaModule {
     public void buildModuleConfigurator(ConfiguratorGroup group) {
         var swirl = KilaUI.subGroup(group, "kila.uv_effects.twirl_group", false);
         KilaUI.driver(swirl, "kila.uv_effects.twirl", twirl, -64, 64);
-        KilaUI.vec2(swirl, "kila.uv_effects.twirl_center", () -> twirlCenter, v -> twirlCenter = v);
-        KilaUI.vec2(swirl, "kila.uv_effects.shear", () -> shear, v -> shear = v);
+        KilaUI.vec2(swirl, "kila.uv_effects.twirl_center", this::effectiveTwirlCenter, v -> twirlCenter = v);
+        KilaUI.vec2(swirl, "kila.uv_effects.shear", this::effectiveShear, v -> shear = v);
         var wave = KilaUI.subGroup(group, "kila.uv_effects.wave", false);
         KilaUI.driver(wave, "kila.uv_effects.wave_amplitude", waveAmplitude, -1, 1);
         KilaUI.number(wave, "kila.uv_effects.wave_frequency", () -> waveFrequency, v -> waveFrequency = v, 2, 0, 64);
         KilaUI.number(wave, "kila.uv_effects.wave_speed", () -> waveSpeed, v -> waveSpeed = v, 1, -64, 64);
-        KilaUI.choice(wave, "kila.uv_effects.wave_axis", WaveAxis.values(), () -> waveAxis, v -> waveAxis = v);
+        KilaUI.choice(wave, "kila.uv_effects.wave_axis", WaveAxis.values(), this::effectiveWaveAxis, v -> waveAxis = v);
         var ripple = KilaUI.subGroup(group, "kila.uv_effects.ripple", true);
         KilaUI.number(ripple, "kila.uv_effects.ripple_amplitude", () -> rippleAmplitude, v -> rippleAmplitude = v, 0, -1, 1);
         KilaUI.number(ripple, "kila.uv_effects.ripple_frequency", () -> rippleFrequency, v -> rippleFrequency = v, 6, 0, 64);

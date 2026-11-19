@@ -52,6 +52,26 @@ public class KilaShading extends KilaModule {
     public Model model = Model.LAMBERT;
     @Persisted(subPersisted = true)
     public final KilaTexture sixWayNegative = new KilaTexture(KilaTextures.SMOKE6_NEG);
+
+    public Normal effectiveNormal() {
+        return normal == null ? Normal.SPHERE : normal;
+    }
+
+    public Bump effectiveBump() {
+        return bump == null ? Bump.NONE : bump;
+    }
+
+    public Model effectiveModel() {
+        return model == null ? Model.LAMBERT : model;
+    }
+
+    public HDRColor effectiveLightColor() {
+        return lightColor == null ? HDRColor.white() : lightColor;
+    }
+
+    public Vector3f effectiveLightDirection() {
+        return lightDirection == null ? new Vector3f(0.5f, 1f, 0.35f) : lightDirection;
+    }
     /** in the world, towards the light */
     @Persisted
     public Vector3f lightDirection = new Vector3f(0.5f, 1f, 0.35f);
@@ -66,6 +86,16 @@ public class KilaShading extends KilaModule {
 
     private final Vector3f viewLight = new Vector3f();
 
+    /** A zero or non-finite light vector has no Lambert direction; use the authored default instead. */
+    static Vector3f safeLightDirection(Vector3f direction) {
+        var safe = direction == null ? new Vector3f(0.5f, 1f, 0.35f)
+                : new Vector3f(finite(direction.x, 0.5f, -1f, 1f), finite(direction.y, 1f, -1f, 1f),
+                        finite(direction.z, 0.35f, -1f, 1f));
+        float lengthSquared = safe.lengthSquared();
+        if (!(lengthSquared > 1e-8f && Float.isFinite(lengthSquared))) safe.set(0.5f, 1f, 0.35f);
+        return safe.normalize();
+    }
+
     @Override
     public String id() {
         return "shading";
@@ -78,37 +108,41 @@ public class KilaShading extends KilaModule {
 
     @Override
     public long structure() {
-        return bump.ordinal() | (model == Model.SIX_WAY ? 4 : 0);
+        return effectiveBump().ordinal() | (effectiveModel() == Model.SIX_WAY ? 4 : 0);
     }
 
     @Override
     public void declare(KilaLayout.Builder layout) {
         layout.define("KILA_SHADING").ivec4("KilaShadingOpts").vec4("KilaShadingParams", 1, 1, 0.3f, 0.35f)
                 .vec4("KilaKeyLight", 0, 1, 0, 0).vec4("KilaKeyColor", 1, 1, 1, 1);
-        if (bump == Bump.HEIGHT) {
+        if (effectiveBump() == Bump.HEIGHT) {
             layout.define("KILA_BUMP").define("KILA_BUMP_HEIGHT").fragmentUvChain("KilaBump")
                     .source("BUMP", "KilaBump", height, true);
-        } else if (bump == Bump.NORMAL_MAP) {
+        } else if (effectiveBump() == Bump.NORMAL_MAP) {
             layout.define("KILA_BUMP").fragmentUvChain("KilaBump").texture("BUMP", normalMap);
         }
-        if (model == Model.SIX_WAY) layout.define("KILA_SIXWAY").texture("SIXWAY", sixWayNegative);
+        if (effectiveModel() == Model.SIX_WAY) layout.define("KILA_SIXWAY").texture("SIXWAY", sixWayNegative);
     }
 
     @Override
     public void apply(ShaderInstance shader, MaterialContext context, float[] scratch) {
-        shader.safeGetUniform("KilaShadingOpts").set(normal.ordinal(), bump.ordinal(), model.ordinal(), flipGreen ? 1 : 0);
-        shader.safeGetUniform("KilaShadingParams").set(bulge, bumpStrength, wrap, ambient);
+        shader.safeGetUniform("KilaShadingOpts").set(effectiveNormal().ordinal(), effectiveBump().ordinal(), effectiveModel().ordinal(), flipGreen ? 1 : 0);
+        shader.safeGetUniform("KilaShadingParams").set(
+                finite(bulge, 1f, 0f, 1f), finite(bumpStrength, 1f, 0f, 16f),
+                finite(wrap, 0.3f, 0f, 1f), finite(ambient, 0.35f, 0f, 1f));
         // the shader's normals are in view space
-        RenderSystem.getModelViewMatrix().transformDirection(lightDirection, viewLight);
-        if (viewLight.lengthSquared() > 1e-8f) viewLight.normalize();
+        var safeDirection = safeLightDirection(effectiveLightDirection());
+        RenderSystem.getModelViewMatrix().transformDirection(safeDirection, viewLight);
+        viewLight.set(safeLightDirection(viewLight));
         shader.safeGetUniform("KilaKeyLight").set(viewLight.x, viewLight.y, viewLight.z, 0f);
-        var key = lightColor.toVector4fOpaque();
-        shader.safeGetUniform("KilaKeyColor").set(key.x, key.y, key.z, 1f);
-        if (bump == Bump.HEIGHT) {
+        var key = effectiveLightColor().toVector4fOpaque();
+        shader.safeGetUniform("KilaKeyColor").set(
+                KilaMaterial.finite(key.x), KilaMaterial.finite(key.y), KilaMaterial.finite(key.z), 1f);
+        if (effectiveBump() == Bump.HEIGHT) {
             height.uploadUv(shader, "KilaBump");
             shader.safeGetUniform("KilaBumpOpts").set(height.flags(), 0, 0, 0);
             height.uploadSource(shader, "KilaBump", scratch);
-        } else if (bump == Bump.NORMAL_MAP) {
+        } else if (effectiveBump() == Bump.NORMAL_MAP) {
             normalMap.uploadUv(shader, "KilaBump");
             shader.safeGetUniform("KilaBumpOpts").set(normalMap.flags(), 0, 0, 0);
         }
@@ -116,35 +150,35 @@ public class KilaShading extends KilaModule {
 
     @Override
     public void textures(java.util.function.Consumer<KilaTexture> out) {
-        if (bump == Bump.HEIGHT) out.accept(height);
-        if (bump == Bump.NORMAL_MAP) out.accept(normalMap);
-        if (model == Model.SIX_WAY) out.accept(sixWayNegative);
+        if (effectiveBump() == Bump.HEIGHT) out.accept(height);
+        if (effectiveBump() == Bump.NORMAL_MAP) out.accept(normalMap);
+        if (effectiveModel() == Model.SIX_WAY) out.accept(sixWayNegative);
     }
 
     @Override
     public void buildModuleConfigurator(ConfiguratorGroup group) {
-        KilaUI.choice(group, "kila.shading.normal", Normal.values(), () -> normal, v -> normal = v);
+        KilaUI.choice(group, "kila.shading.normal", Normal.values(), this::effectiveNormal, v -> normal = v);
         KilaUI.showWhen(group, KilaUI.number(group, "kila.shading.bulge", () -> bulge, v -> bulge = v, 1, 0, 1),
-                () -> normal == Normal.SPHERE);
-        KilaUI.choice(group, "kila.shading.bump", Bump.values(), () -> bump, v -> bump = v);
+                () -> effectiveNormal() == Normal.SPHERE);
+        KilaUI.choice(group, "kila.shading.bump", Bump.values(), this::effectiveBump, v -> bump = v);
         KilaUI.showWhen(group, KilaUI.number(group, "kila.shading.bump_strength", () -> bumpStrength,
-                v -> bumpStrength = v, 1, 0, 16), () -> bump != Bump.NONE);
+                v -> bumpStrength = v, 1, 0, 16), () -> effectiveBump() != Bump.NONE);
         var heightGroup = KilaUI.subGroup(group, "kila.shading.height", false);
         KilaUI.texture(heightGroup, "kila.shading.height_texture", height, KilaUI.TextureKind.SCALAR, true, true);
-        KilaUI.showWhen(group, heightGroup, () -> bump == Bump.HEIGHT);
+        KilaUI.showWhen(group, heightGroup, () -> effectiveBump() == Bump.HEIGHT);
         var mapGroup = KilaUI.subGroup(group, "kila.shading.normal_map", false);
         KilaUI.texture(mapGroup, "kila.shading.normal_map_texture", normalMap, KilaUI.TextureKind.VECTOR, true);
         KilaUI.bool(mapGroup, "kila.shading.flip_green", () -> flipGreen, v -> flipGreen = v);
-        KilaUI.showWhen(group, mapGroup, () -> bump == Bump.NORMAL_MAP);
+        KilaUI.showWhen(group, mapGroup, () -> effectiveBump() == Bump.NORMAL_MAP);
 
-        KilaUI.choice(group, "kila.shading.model", Model.values(), () -> model, v -> model = v);
+        KilaUI.choice(group, "kila.shading.model", Model.values(), this::effectiveModel, v -> model = v);
         // read through the main texture's uv and flipbook: no chain of its own
         KilaUI.showWhen(group, KilaUI.add(group, new KilaTextureField("kila.shading.six_way_negative", sixWayNegative,
-                KilaUI.TextureKind.COLOR, false), "kila.shading.six_way_negative"), () -> model == Model.SIX_WAY);
-        KilaUI.vec3(group, "kila.shading.light_direction", () -> lightDirection, v -> lightDirection = v);
-        KilaUI.hdr(group, "kila.shading.light_color", () -> lightColor, v -> lightColor = v, false);
+                KilaUI.TextureKind.COLOR, false), "kila.shading.six_way_negative"), () -> effectiveModel() == Model.SIX_WAY);
+        KilaUI.vec3(group, "kila.shading.light_direction", this::effectiveLightDirection, v -> lightDirection = v);
+        KilaUI.hdr(group, "kila.shading.light_color", this::effectiveLightColor, v -> lightColor = v, false);
         KilaUI.number(group, "kila.shading.ambient", () -> ambient, v -> ambient = v, 0.35f, 0, 1);
         KilaUI.showWhen(group, KilaUI.number(group, "kila.shading.wrap", () -> wrap, v -> wrap = v, 0.3f, 0, 1),
-                () -> model == Model.LAMBERT);
+                () -> effectiveModel() == Model.LAMBERT);
     }
 }

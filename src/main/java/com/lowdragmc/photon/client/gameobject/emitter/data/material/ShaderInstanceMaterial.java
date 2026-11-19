@@ -67,21 +67,36 @@ public abstract class ShaderInstanceMaterial implements IMaterial {
             float imageV = 0;
             float imageWidth = 1;
             float imageHeight = 1;
-            var shader = begin(MaterialContext.PREVIEW);
             var lightTexture = Minecraft.getInstance().gameRenderer.lightTexture();
-            lightTexture.turnOnLightLayer();
-            var mat = graphics.pose().last().pose();
-            var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(Tesselator.getInstance(),VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
+            boolean lightLayerEnabled = false;
+            try {
+                var shader = begin(MaterialContext.PREVIEW);
+                lightTexture.turnOnLightLayer();
+                lightLayerEnabled = true;
+                var mat = graphics.pose().last().pose();
+                var buffer = com.lowdragmc.photon.client.util.PhotonBuffers.begin(
+                        Tesselator.getInstance(), VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
 
-            buffer.vertex(mat, x, y + height, 0).color(255, 255, 255, 255).uv(imageU, imageV + imageHeight).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x + width, y + height, 0).color(255, 255, 255, 255).uv(imageU + imageWidth, imageV + imageHeight).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x + width, y, 0).color(255, 255, 255, 255).uv(imageU + imageWidth, imageV).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
-            buffer.vertex(mat, x, y, 0).color(255, 255, 255, 255).uv(imageU, imageV).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+                buffer.vertex(mat, x, y + height, 0).color(255, 255, 255, 255).uv(imageU, imageV + imageHeight)
+                        .uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+                buffer.vertex(mat, x + width, y + height, 0).color(255, 255, 255, 255)
+                        .uv(imageU + imageWidth, imageV + imageHeight).uv2(LightTexture.FULL_BRIGHT)
+                        .normal(0, 0, 1).endVertex();
+                buffer.vertex(mat, x + width, y, 0).color(255, 255, 255, 255)
+                        .uv(imageU + imageWidth, imageV).uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
+                buffer.vertex(mat, x, y, 0).color(255, 255, 255, 255).uv(imageU, imageV)
+                        .uv2(LightTexture.FULL_BRIGHT).normal(0, 0, 1).endVertex();
 
-            RenderSystem.setShader(() -> shader);
-            BufferUploader.drawWithShader(buffer.end());
-            end(MaterialContext.PREVIEW);
-            lightTexture.turnOffLightLayer();
+                RenderSystem.setShader(() -> shader);
+                BufferUploader.drawWithShader(buffer.end());
+            } finally {
+                try {
+                    end(MaterialContext.PREVIEW);
+                } finally {
+                    if (lightLayerEnabled) lightTexture.turnOffLightLayer();
+                    RenderSystem.enableBlend();
+                }
+            }
         }
     }
 

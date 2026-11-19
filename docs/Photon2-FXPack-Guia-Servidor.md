@@ -4,9 +4,9 @@ Esta guía explica, sin dar nada por sabido, qué es un `.fxpack`, cómo se hace
 lo importante para un servidor — cómo hacer que **todos** los jugadores reciban los FX actualizados
 solos, con sus texturas, materiales y modelos incluidos.
 
-Si sólo quieres el resumen: **un `.fxpack` es un ZIP con los efectos y todo lo que usan; para que se
-actualice solo en un servidor, el archivo va en `photon/fxpacks/` del servidor y Photon lo manda a
-cada jugador al entrar.**
+Si sólo quieres el resumen: **un `.fxpack` es un ZIP con los efectos y recursos; los packs públicos
+van en `<servidor>/photon/fxpacks/` y se ofrecen a todos los jugadores. También puedes enviar tu
+carpeta local completa `ldlib2/assets` a un jugador concreto, o exportarla como archivo para compartir.**
 
 ---
 
@@ -37,8 +37,9 @@ photon/fxpacks/escudo.fxpack        ← el archivo que compartes
             └── photon_fx/          ← material/ graph internos que generó el exportador
 ```
 
-El **ID** con el que se usa el efecto es `namespace:nombre`. Por eso un paquete llamado
-`escudo.fxpack` con `assets/escudo/fx/escudo.fx` se reproduce con `/photon play escudo:escudo`.
+El **ID** del efecto es `namespace:nombre`. Por ejemplo, `assets/escudo/fx/escudo.fx` tiene el ID
+`escudo:escudo`. Un operador puede probarlo en una entidad con `/photon fx escudo:escudo entity @p`.
+Para la guía resumida, consulta [Photon en tu servidor: explicación fácil](Photon2-Servidor-en-5-minutos.md).
 
 ---
 
@@ -128,27 +129,68 @@ Photon ya trae ese circuito hecho. Funciona así:
    - si no lo tiene o cambió → pide el archivo por trozos de 24 KB.
 3. Al terminar, verifica el hash y el contenido (tiene que traer al menos un `assets/*/fx/*.fx`),
    lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**.
-4. El efecto ya se puede reproducir con `/photon play namespace:nombre`, y con las texturas y
-   materiales que venían dentro del paquete.
+4. El efecto ya está cargado con sus texturas y materiales. Un operador puede probarlo en una entidad
+   con `/photon fx namespace:nombre entity @p`, o en un bloque con
+   `/photon fx namespace:nombre block ~ ~ ~`.
 
 Al desconectarse, los paquetes del servidor se desmontan; los que el jugador instaló a mano se
 quedan.
 
-### 4.3 Límites a tener en cuenta (están puestos en el código)
+### 4.3 Enviar tu carpeta LDLib2 a un jugador específico
+
+Si los FX y materiales ya están en tu cliente dentro de `<instancia>/ldlib2/assets`, puedes pedir al
+servidor que los empaquete y se los entregue a un jugador conectado:
+
+```text
+/photon fx send Oz
+```
+
+Reemplaza `Oz` por el nombre del jugador. Quien ejecuta el comando debe ser operador (permiso 2),
+y tanto quien envía como quien recibe deben tener Photon y estar conectados para iniciar el envío.
+Antes de leer archivos, el cliente muestra botones **Confirm upload** y **Cancel**; sólo al confirmar
+comienza a empaquetar y subir. La exportación local también pide confirmación antes de leer archivos.
+Photon empaqueta **todo** `ldlib2/assets`, lo sube al servidor y entrega el pack solo a ese jugador;
+no lo añade al conjunto público que reciben los demás. El servidor guarda el pack por UUID bajo
+`<servidor>/photon/private-fxpacks/`, así que vuelve a ofrecérselo al destinatario cuando se conecte
+en otra ocasión. El cliente lo descarga por bloques y recarga sus recursos automáticamente.
+
+### 4.4 Crear un archivo local para Discord u otro servicio
+
+Para crear un `.fxpack` compartible sin enviarlo a un servidor o jugador, ejecuta en tu cliente:
+
+```text
+/photon_client export_ldlib2_assets
+```
+
+Photon primero pide confirmación en el cliente; sólo después lee toda la carpeta
+`<instancia>/ldlib2/assets` y deja el resultado en
+`<instancia>/photon/fxpacks/ldlib2-assets-<hash>.fxpack`. Puedes adjuntar ese archivo en Discord o
+compartirlo con otro servicio de archivos. Quien lo reciba lo instala copiándolo a su propia carpeta
+`<instancia>/photon/fxpacks/` y recargando recursos si Photon no lo detecta automáticamente.
+
+Ambos métodos aceptan como máximo **512 MiB comprimidos** y **2 GiB descomprimidos** por pack.
+El pack tiene que contener al menos un FX válido (`assets/<namespace>/fx/*.fx`); se omiten enlaces
+simbólicos y se rechazan rutas ZIP inseguras. El envío directo tiene además una cuota de **2 GiB y 16
+packs privados por destinatario**. Si el archivo supera el límite de adjuntos de Discord, usa otro
+servicio de almacenamiento/transferencia.
+
+### 4.5 Límites de la distribución pública (están puestos en el código)
 
 | Límite | Valor |
 |---|---|
-| Tamaño máximo por paquete | 64 MB |
-| Suma de todos los paquetes | 128 MB |
-| Paquetes por servidor | 32 |
-| Tamaño descomprimido máximo | 256 MB |
+| Tamaño máximo de cada `.fxpack` (público, privado o local) | 512 MiB comprimidos |
+| Tamaño descomprimido máximo por pack | 2 GiB |
+| Packs públicos en `<servidor>/photon/fxpacks/` | 32; hasta 512 MiB en total |
+| Packs privados por destinatario | 16; hasta 2 GiB en total |
+| Manifiesto que recibe un jugador (públicos + privados) | hasta 3 GiB |
+| Descompresión total validada por manifiesto | 8 GiB |
 | Entradas del ZIP | 20 000 |
 
 Si un paquete se pasa, el servidor lo omite con un aviso en su log
 (`Photon FX sync skipped ... (size ... exceeds limits)`), así que **no se puede actualizar nada de
 lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparece".
 
-### 4.4 Lo que hay que evitar
+### 4.6 Lo que hay que evitar
 
 - **No** repartas los `.fx` sueltos: sin sus texturas/materiales llegarán "vacíos" o con textura
   rosa/negra.
@@ -158,11 +200,11 @@ lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparec
   sólo su interior.
 - **No** dejes el `.fxpack` en el servidor "para que lo vean los jugadores" sin Photon en el
   servidor: sin el mod, el servidor no anuncia nada y nada se descarga.
-- Los jugadores **conectados** no reciben un paquete nuevo solos: el anuncio sale en el login, al
-  cambiar de dimensión, al reaparecer, o cuando alguien corre `/photon fxpacks` (servidor) o
-  `/photon_client fxpacks` (cliente). Reconectar sigue funcionando y es lo más simple si son muchos.
+- Los packs **públicos** no se vuelven a anunciar solos a quienes ya están conectados: usa
+  `/photon fxpacks` (servidor) o `/photon_client fxpacks` (cliente). El comando
+  `/photon fx send <jugador>` sí inicia una entrega privada inmediata a ese destinatario.
 
-### 4.5 Comprobaciones rápidas
+### 4.7 Comprobaciones rápidas
 
 - Servidor: el log debe decir `Offered N Photon FX pack(s) to <jugador>` al entrar.
 - Cliente: `Downloading Photon FX pack ...` y luego `Server Photon FX packs are ready`.
@@ -219,6 +261,10 @@ un `.fxpack` que aparece o cambia en `photon/fxpacks/`, un paquete que llega del
 exportación desde el editor, y una conversión de Photon 1 a 2 (`/photon_client convert`). El atajo
 manual sigue existiendo (`/photon_client reload` o F3+T) por si editás archivos fuera del juego
 —por ejemplo a mano dentro de `photon/assets/`— y querés verlo al instante.
+
+**¿Cómo le mando mis recursos de LDLib2 solo a Oz?** Como operador, ejecuta `/photon fx send Oz` con Oz conectado. Photon empaqueta toda tu carpeta local `ldlib2/assets`, se la sube al servidor y el servidor guarda el pack privado para ofrecérselo a Oz también en conexiones futuras.
+
+**¿Cómo saco un archivo para compartir por Discord?** Ejecuta `/photon_client export_ldlib2_assets`. El `.fxpack` queda en `photon/fxpacks/` dentro de tu instancia. Puedes enviarlo como archivo; Oz lo instala poniéndolo en su propia carpeta `photon/fxpacks/`. El envío/exportación admite 512 MiB comprimidos y 2 GiB descomprimidos; para archivos mayores que el límite del servicio de chat usa almacenamiento externo.
 
 **¿Y si mi servidor usa un proxy (BungeeCord/Velocity)?** Photon anuncia desde el servidor de Forge;
 coloca los paquetes en el `photon/fxpacks/` de **cada** servidor que los use.

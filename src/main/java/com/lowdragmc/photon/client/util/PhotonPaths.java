@@ -2,12 +2,28 @@ package com.lowdragmc.photon.client.util;
 
 import com.lowdragmc.lowdraglib2.Platform;
 import com.lowdragmc.photon.Photon;
+import net.minecraft.resources.ResourceLocation;
 
 import java.io.File;
 
 /** Writable authoring folders owned by Photon, kept separate from LDLib2. */
 public final class PhotonPaths {
     private PhotonPaths() {}
+
+    /** Whether a resource id maps to a safe relative path below {@code assets/<namespace>}. */
+    public static boolean isSafeAssetLocation(ResourceLocation location) {
+        if (location == null) return false;
+        var namespace = location.getNamespace();
+        var path = location.getPath();
+        if (namespace.isBlank() || namespace.equals(".") || namespace.equals("..")
+                || namespace.indexOf('/') >= 0 || namespace.indexOf('\\') >= 0 || namespace.indexOf(':') >= 0
+                || path.isBlank() || path.startsWith("/") || path.startsWith("\\")
+                || path.indexOf('\\') >= 0 || path.indexOf(':') >= 0) return false;
+        for (var segment : path.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return false;
+        }
+        return true;
+    }
 
     /** {@code <gameDir>/photon}. */
     public static File getDataDir() {

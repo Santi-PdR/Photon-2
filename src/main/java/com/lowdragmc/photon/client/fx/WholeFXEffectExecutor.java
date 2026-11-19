@@ -54,17 +54,22 @@ public class WholeFXEffectExecutor extends EntityEffectExecutor implements IWhol
         // This executor is intentionally anchored at the original spawn position.
     }
 
+    @Override
+    protected void follow(boolean renderFrame, float partialTicks) {
+        // World-anchored: followAllPlaying must not snap this to the entity.
+    }
+
     @Override public void start() {
         if (!entity.isAlive()) return;
         List<EntityEffectExecutor> effects = CACHE.computeIfAbsent(entity, ignored -> new ArrayList<>());
         if (shouldSkipStart(effects)) return;
         resetFinishedNotification();
-        runtime = fx.createRuntime();
+        runtime = createDiagnosedRuntime();
         IFXObject root = runtime.getRoot();
         root.updatePos(pivot());
         root.updateRotation(wholeRotation());
         root.updateScale(scale);
-        runtime.emit(this, delay);
+        runtime.emit(this, delay, startSection);
         effects.add(this);
     }
 

@@ -200,7 +200,9 @@ public class WikiEditorScenario implements UIScenario {
                 .frames(10)
                 .screenshot("kila-inspector");
         KilaUiTestKit.clickOn(s, "the presets button", ctx -> KilaUiTestKit.label(ctx, "Browse Presets..."));
-        s.waitUntil("the gallery is open", ctx -> KilaUiTestKit.dialogLabel(ctx, "Lightning") != null)
+        s.waitUntil("the gallery is open", ctx -> KilaUiTestKit.dialogLabel(ctx, "Basics") != null);
+        KilaUiTestKit.clickOn(s, "Magic in the preset categories", ctx -> KilaUiTestKit.dialogLabel(ctx, "Magic"));
+        s.waitUntil("the Magic category is open", ctx -> KilaUiTestKit.dialogLabel(ctx, "Lightning") != null)
                 .step("move the pointer off the gallery", ctx -> ctx.input().moveTo(300, 300))
                 .frames(6)
                 .step("the gallery alone", ctx -> dialogShot(ctx, "kila-presets"))

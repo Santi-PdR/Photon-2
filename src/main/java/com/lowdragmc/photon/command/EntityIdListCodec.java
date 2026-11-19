@@ -5,13 +5,15 @@ import net.minecraft.network.FriendlyByteBuf;
 
 /** Bounds-checks an entity id list before allocating its backing array. */
 final class EntityIdListCodec {
+    static final int MAX_ENTITY_IDS = 4096;
+
     private EntityIdListCodec() {
     }
 
     static int[] read(FriendlyByteBuf buf, int trailingBytes) {
         int count = buf.readVarInt();
         int maximumCount = buf.readableBytes() - trailingBytes;
-        if (count < 0 || trailingBytes < 0 || count > maximumCount) {
+        if (count < 0 || count > MAX_ENTITY_IDS || trailingBytes < 0 || count > maximumCount) {
             throw new DecoderException("Invalid entity ID count " + count + " for "
                     + buf.readableBytes() + " remaining packet bytes");
         }

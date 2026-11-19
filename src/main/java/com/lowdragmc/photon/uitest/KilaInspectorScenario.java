@@ -105,8 +105,14 @@ public class KilaInspectorScenario implements UIScenario {
                 });
 
         clickOn(s, "the presets button", ctx -> label(ctx, "Browse Presets..."));
-        s.waitUntil("the gallery is open", ctx -> dialogLabel(ctx, "Lightning") != null)
-                .frames(5)
+        s.waitUntil("the gallery is open", ctx -> dialogLabel(ctx, "Basics") != null);
+        clickOn(s, "Magic in the preset categories", ctx -> dialogLabel(ctx, "Magic"));
+        s.waitUntil("the Magic category is open", ctx -> dialogLabel(ctx, "Lightning") != null)
+                .step("hover the Lightning preview", ctx -> {
+                    var at = centreOf(Objects.requireNonNull(dialogLabel(ctx, "Lightning")));
+                    ctx.input().moveTo(at[0], at[1]);
+                })
+                .frames(18)
                 .screenshot("presets");
         clickOn(s, "Lightning in the gallery", ctx -> dialogLabel(ctx, "Lightning"));
         s.frames(3)
