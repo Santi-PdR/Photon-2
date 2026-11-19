@@ -173,13 +173,6 @@ public class FXProject implements IProject {
      * re-registers any that no longer resolve on load.
      */
     private void embedLibraryMaterials(CompoundTag data) {
-        var instance = MaterialResource.INSTANCE.getResourceInstance();
-        try {
-            // flush pending library edits so the snapshot is the material being edited, not an older save
-            instance.saveResource();
-        } catch (RuntimeException failure) {
-            com.lowdragmc.photon.Photon.LOGGER.warn("Failed to flush the material library before project save", failure);
-        }
         var embedded = new ListTag();
         collectMaterials(data.getCompound("fx"), embedded, new HashSet<>());
         if (!embedded.isEmpty()) data.put("libraryMaterials", embedded);

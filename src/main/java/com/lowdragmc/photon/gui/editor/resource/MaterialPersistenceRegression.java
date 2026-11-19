@@ -40,11 +40,7 @@ public final class MaterialPersistenceRegression {
         if (!global.addResource(path, material)) {
             throw new IllegalStateException("could not create the persistence smoke material");
         }
-        try {
-            instance.saveResource(); // flush any deferred write before asserting the disk state
-        } catch (RuntimeException failure) {
-            throw new IllegalStateException("could not flush the material library", failure);
-        }
+        // FileResourceProvider.addResource writes the file immediately (its own write/serialize errors)
         if (!(path instanceof FilePath filePath) || !filePath.getFile().isFile()) {
             throw new IllegalStateException("a created material did not reach the disk: " + path.getPathWithType());
         }
