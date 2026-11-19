@@ -4,7 +4,7 @@
 > portado, qué se arregló y por qué, cómo se verifica, cómo se distribuye, y qué queda pendiente.
 > Si alguien (Santi, Alex u otra persona o IA) retoma esto sin el historial del chat, empieza aquí.
 >
-> Actualizado: **2026-11-06** · persistencia de FX en loop, transferencia/exportación de `ldlib2/assets` con confirmación previa; build CI `44449444574` ✅ · preview `preview-44449444574-1`.
+> Actualizado: **2026-11-06** · integra el contexto del chat, la transferencia/exportación de recursos con consentimiento previo y los merges PR #9/#10. CI: `44449444574` y `44450496049` ✅ · [JAR preview](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44450489962-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar).
 
 ---
 
@@ -14,7 +14,7 @@
 - El JAR distributivo (`-all.jar`) **incluye LDLib2 y KilaGraph**; LDLib 1 sigue siendo dependencia externa.
 - Ya funciona: editor visual, FX/materiales, bloom, sincronización pública de `.fxpack`, transferencia privada de `ldlib2/assets` a un jugador y exportación local de un pack compartible.
 - Se arreglaron bugs reportados por Alex: bloom lavado, materiales animados, trails a alta velocidad, shaders ausentes, y el **selector de FX** (lista congelada).
-- Estado del repo: `main` + ramas de trabajo; este documento acompaña la limpieza del repositorio a una sola rama.
+- Estado verificado al cierre del chat: PR #9 (funcionalidad + consentimiento + guías) y PR #10 (actualización del handoff/JAR) están mergeados en `main`; merge commits `e774dec` y `1064853`. La rama Arena activa de esta nueva sesión es `arena/cd0a1dc2-photon-2`, basada en `10648539c62b2c354ca88c8939efcd4d4a9e8f99`.
 
 ---
 
@@ -90,7 +90,10 @@ Rutas relativas a `src/main/java/com/lowdragmc/photon/`.
 | `client/fx/fxpack/FXPacks.java` | Montaje de `.fxpack` como resource packs de prioridad baja, `rewrite` del zip, `resolve`, gc de assets compartidos. |
 | `client/fx/fxpack/FXPackExporter.java` | Exportación: `.fx` + texturas + modelos + shaders + materiales/graphs (`assets/photon_fx/`) + audio. |
 | `client/fx/fxpack/ClientFxPackSync.java` | Descarga por chunks, verificación SHA-256, recarga automática, limpieza al desconectar. |
-| `network/FxPackSync.java` | Lado servidor: escaneo de `photon/fxpacks/`, manifiesto, streaming por `RandomAccessFile`, límites. |
+| `network/FxPackSync.java` | Lado servidor: escaneo de packs públicos, manifiesto, streaming por chunks, upload privado, cuotas y almacenamiento por UUID. |
+| `client/fx/fxpack/LocalFxResourceUpload.java` | Prompt confirm/cancel antes de leer, empaquetado de todo `ldlib2/assets`, upload privado o exportación local. |
+| `command/SendFxResourcesCommand.java` | `/photon fx send <player>` (requiere operador). |
+| `command/ActiveEntityEffects.java`, `ActiveWorldEffects.java` | Snapshots/replay en memoria de FX loop para entidades y ubicaciones. |
 | `gui/editor/FXProjectConverter.java` | `.fx`/`.fxproj` → proyecto del editor; repunta recursos empaquetados a `<proyecto>_resources/`. |
 | `gui/editor/FXFileActions.java` | Exportar FX, exportar FXPack, convertir Photon 1, avisos de resolución (live/shadowed/not mounted). |
 | `gui/editor/FXInstanceStyle.java` | Picker de FX para instancias (usa `FXHelper.searchFX`). |
@@ -170,6 +173,20 @@ Cientos de commits adaptando APIs NeoForge → Forge 1.20.1: NBT, modelos OBJ (l
 
 Respondido con [`Photon2-FXPack-Guia-Servidor.md`](Photon2-FXPack-Guia-Servidor.md) (lenguaje llano) y resumido en la sección 8.
 
+### 6.4 Conversación reciente: sincronización, consentimiento y continuidad
+
+Decisiones y resultado, en el orden en que se acordaron:
+
+1. Compartir con un jugador **todo** `<gameDir>/ldlib2/assets`, no solo los `.fxpack` ya creados ni las dependencias detectadas por FX. Se añadió el comando de operador `/photon fx send <jugador>`, entrega privada al jugador nombrado y almacenamiento por UUID en `<server>/photon/private-fxpacks/` para futuras conexiones. Los demás jugadores no reciben ese pack.
+2. Admitir workspaces grandes: 512 MiB comprimidos y 2 GiB expandidos por pack, con cuotas públicas/privadas agregadas indicadas en la sección 7.
+3. Permitir compartir fuera del juego: `/photon_client export_ldlib2_assets` crea `ldlib2-assets-<hash>.fxpack` en `<gameDir>/photon/fxpacks/`, para adjuntar/transferir por Discord u otro medio. El amigo lo instala en su propia carpeta `photon/fxpacks/`.
+4. Persistencia de FX: conservar snapshots en memoria del servidor y replay tardío para FX con contenido loop, en entidades/jugadores y ubicaciones/bloques; reemitir al empezar a trackear entidades o mirar chunks. FX del jugador se vuelven a emitir al cambiar de dimensión/respawn. Los comandos de borrado existentes quitan también los snapshots para que no se recreen. **No es persistencia en disco**: reiniciar el servidor borra el estado.
+5. Se pidió consentimiento explícito antes de inspeccionar/leer y subir archivos locales. La revisión inicial encontró que no había tal confirmación. Se añadió un mensaje cliente con botones confirm/cancel tanto al envío privado como a la exportación local; crear el ZIP no empieza hasta confirmar, y cancelar no lee ni sube archivos.
+6. Se actualizaron README, guías de servidor (rápida, detallada y técnica) y este documento; los límites viejos de 64/128/256 MiB se reemplazaron. PR #9 integró funcionalidad y docs; PR #10 actualizó el contexto y el enlace al preview. Ambos están mergeados.
+7. Solicitud actual de continuidad: documentar íntegramente este contexto y preparar un prompt general para revisar el repositorio, encontrar bugs/errores y luego mejorar texturas y materiales. El prompt reutilizable está en la sección 12.
+
+**Verificación:** tres scripts locales (`verify_kila_preset_catalog.py`, `verify_kila_blend_ordinals.py`, `verify_shader_normal_safety.py`) y `git diff --check` pasaron. CI en GitHub compiló el JAR, inició servidor Forge dedicado y cliente headless con pruebas de humo; runs `44449444574` y `44450496049` terminaron exitosamente. En el sandbox no había Java local. Queda pendiente validación manual visual/multicliente.
+
 ---
 
 ## 7. Cómo funciona `.fxpack` (resumen técnico)
@@ -188,13 +205,21 @@ Público: <server>/photon/fxpacks/*.fxpack → manifiesto para todos → descarg
 Privado: /photon fx send <jugador> → cliente del operador empaqueta ldlib2/assets
          → servidor guarda bajo private-fxpacks/<UUID>/ → solo ese jugador descarga;
            el pack se vuelve a ofrecer en futuras conexiones
-Local:   /photon_client export_ldlib2_assets → .fxpack en <instancia>/photon/fxpacks/
-         → el autor lo puede adjuntar en Discord/transferir por otro servicio
+Local:   /photon_client export_ldlib2_assets → diálogo de confirmación → .fxpack en
+         <instancia>/photon/fxpacks/ → el autor lo puede adjuntar en Discord/transferir
 ```
 
-Límites actuales (`FxPackSync`): **512 MiB comprimidos y 2 GiB descomprimidos por pack**; 32 packs públicos / 512 MiB público total; hasta 16 packs privados / 2 GiB por destinatario; manifiesto de hasta 3 GiB y presupuesto agregado de validación de 8 GiB; **20 000 entradas ZIP**. Rechaza rutas inseguras (`../`, barras invertidas y rutas absolutas). La entrega directa requiere que remitente y destinatario estén conectados para iniciarla y permiso de operador (nivel 2). Antes de empaquetar y subir recursos, el cliente muestra acciones explícitas para confirmar o cancelar; exportar localmente también requiere confirmación. Cancelar no lee archivos.
+El comando de envío requiere operador (nivel 2), y remitente y destinatario deben estar conectados al iniciarlo. El cliente del remitente muestra **Confirm upload / Cancel** antes de leer archivos; la exportación local también solicita confirmación. Solo al confirmar se lee y empaqueta el árbol; cancelar no lee ni sube archivos. Se incluyen todos los archivos regulares de `ldlib2/assets`, incluso los que ningún FX referencia (se omiten enlaces simbólicos). La validación requiere al menos un FX en `assets/<namespace>/fx/*.fx`.
 
-### 7.2 Límites de uso
+Límites actuales (`FxPackSync`): **512 MiB comprimidos y 2 GiB descomprimidos por pack**; 32 packs públicos / 512 MiB público total; hasta 16 packs privados / 2 GiB por destinatario; manifiesto de hasta 3 GiB y presupuesto agregado de validación de 8 GiB; **20 000 entradas ZIP**. Rechaza rutas inseguras (`../`, barras invertidas y rutas absolutas). La entrega directa requiere que remitente y destinatario estén conectados para iniciarla y permiso de operador (nivel 2).
+
+### 7.2 Replay tardío de FX en loop
+
+El servidor conserva snapshots **en memoria** (`ActiveEntityEffects` y `ActiveWorldEffects`) de comandos de FX. Cuando un cliente vuelve a ver la entidad (`StartTracking`) o empieza a observar el chunk (`ChunkWatchEvent`), se reemiten los efectos; el cliente valida que el FX tenga contenido loop mediante `FXLooping.hasLoopingContent` antes del replay. Los FX del propio jugador se reemiten en cambio de dimensión y respawn; al logout se eliminan. Al quitar/descartar entidades también se limpia su estado. Esto no persiste a disco ni sobrevive a un reinicio del servidor.
+
+Los comandos existentes `/photon fx remove ...` eliminan el FX activo y su snapshot asociado para que el replay no lo resucite. Los snapshots están acotados: hasta 4 096 entidades/posiciones y 64 efectos por entidad/posición (se descartan los más antiguos al exceder cuota). Para revisar: `command/ActiveEntityEffects.java`, `command/ActiveWorldEffects.java`, `PhotonCommonListeners.java`, `client/fx/FXLooping.java` y los comandos `Remove*EffectCommand`.
+
+### 7.3 Límites de uso
 
 - Los packs públicos añadidos mientras hay jugadores conectados requieren `/photon fxpacks` como operador o `/photon_client fxpacks` en el cliente. Login y reentrada al nivel también ofrecen el manifiesto.
 - La carpeta local `ldlib2/assets` no se comparte sola: usa `/photon fx send <jugador>` para enviarla de forma privada, o `/photon_client export_ldlib2_assets` para crear un archivo que puedas compartir por Discord/otro servicio.
@@ -248,9 +273,10 @@ gh run download <RUN_ID> -R Santi-PdR/Photon-2 -n photon-forge-1.20.1
 | Docs y limpieza de repo | `c5bf27b` | run `42386451673` ✅ | — (solo documentación) |
 | **Merge del port a `main`** | `61fcf63` | PR #1 ✅ | build lanzado desde `main` |
 | **FX en loop + envío privado/exportación LDLib2** | `520bd2f` | run `44446628854` ✅ | preview inicial [`preview-44446628854-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44446628854-1) |
-| **Consentimiento previo + documentación** | `0d107e4` | run de PR `44449444574` ✅ | [`preview-44449444574-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44449444574-1) |
+| **Consentimiento previo + documentación** | `0d107e4` | PR #9 mergeado (`e774dec`); run `44449444574` ✅ | [`preview-44449444574-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44449444574-1) |
+| **Handoff completo y enlace al preview** | merge `1064853` | PR #10 mergeado; runs `44450489962` y `44450496049` ✅ | [`preview-44450489962-1`](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44450489962-1) |
 
-- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44449444574-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44449444574-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44449444574).
+- Último preview directo: [descargar el JAR](https://github.com/Santi-PdR/Photon-2/releases/download/preview-44450489962-1/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.jar) · [release](https://github.com/Santi-PdR/Photon-2/releases/tag/preview-44450489962-1) · [CI](https://github.com/Santi-PdR/Photon-2/actions/runs/44450489962).
 - Los artifacts de GitHub caducan a los **90 días**.
 - En `mods/` debe quedar **un solo** `photon-…-all.jar`; borrar duplicados tipo `…-all (2).jar` antes de probar.
 
@@ -270,16 +296,19 @@ Estos registros vivían en las ramas `backup/photon-forge-*`, que se eliminaron 
 
 ## 10. Estado del repositorio y limpieza de ramas
 
-### 10.1 Situación histórica de la limpieza
+### 10.1 Estado integrado y rama al documentar esta sesión
 
-La tabla siguiente registra el estado del repositorio después del merge inicial del port (2026-11-07); **no representa el estado actual de la sesión**. El trabajo posterior de persistencia y transferencia de recursos corresponde a la rama `arena/747b04a3-photon-2` y al PR #9 hacia `main`.
+PR #9 integró sincronización FX, envío/exportación LDLib2, consentimiento y guías (`e774decd28c666e09d1a05b5b6ea6590483e9b73`). PR #10 integró la actualización del handoff y el enlace al JAR (`10648539c62b2c354ca88c8939efcd4d4a9e8f99`). Ambos están **MERGED** a `main`, con checks exitosos.
 
-| Rama histórica | Estado en esa fecha |
+| Rama | Estado |
 | --- | --- |
-| `main` | Contenía el port y rondas 1 y 2, merge `61fcf63`. |
-| `arena/9edfd416-photon-2` | Rama Arena de una sesión anterior, apunta al mismo contenido que `main`. |
+| `main` | Incluye PR #9 y #10; base actual `10648539`. |
+| `arena/cd0a1dc2-photon-2` | Rama Arena activa de esta sesión, branched desde `10648539c62b2c354ca88c8939efcd4d4a9e8f99`; usarla para este trabajo, sin cambiar de rama. |
+| `arena/747b04a3-photon-2` | Rama de la sesión anterior que produjo PR #9/#10; ya integrada. |
 
-Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
+### 10.2 Historial de limpieza de ramas
+
+La tabla siguiente es el registro de la limpieza anterior al port y no describe el estado actual:
 
 | Rama | Por qué se pudo borrar |
 | --- | --- |
@@ -291,26 +320,51 @@ Ramas **eliminadas** (todas verificadas antes con `git diff`/`git merge-base`):
 | `backup/photon-forge-1.20.1-run155` | Solo notas de JARs validados → **rescatadas en la sección 9**. |
 | `backup/photon-forge-run177` | Solo notas de JARs validados + workflows temporales (`backup-run177.yml`, `verify-candidate-run205.yml`). |
 
-### 10.2 Política recomendada de aquí en adelante
+### 10.3 Política recomendada de aquí en adelante
 
 - Todo entra por **PR a `main`**; ramas de trabajo cortas (`fix/...`, `feat/...`) borradas al mergear.
 - Para hitos estables usar **tags** (ya existe `v26.2.2.9-forge.1.20.1`), no ramas `backup/*`.
 - Los JARs se publican como **release adjunta al tag**; los artifacts de Actions caducan a los 90 días.
 - El contexto se mantiene en **este documento**, no repartido en ramas.
 
-## 11. Pendientes y siguientes pasos sugeridos
+## 11. Pendientes, riesgos conocidos y plan inmediato
 
-1. Probar con dos clientes reales `/photon fx send <jugador>`: confirmar que únicamente el destinatario recibe el pack, que se recarga y que se vuelve a ofrecer tras reconectar.
-2. Probar `/photon_client export_ldlib2_assets` en otra instancia y verificar la instalación del `.fxpack` compartido.
-3. Probar en juego la persistencia tardía de FX en loop para entidad/bloque, y comprobar que `/photon fx remove` evita que reaparezcan.
-4. Verificar en el cliente de Alex el selector y el slider de bloom; si fallan, pedir `latest.log` y captura de la sesión.
-5. **Iris/DH**: revisar `iris_composite_mode` y bloom bajo shaderpacks AMD; seguir con presupuesto de post-FX y partículas paralelas.
+### Pruebas funcionales manuales pendientes
 
-El JAR de esta funcionalidad está publicado como preview en GitHub; ver la release enlazada en la sección 9. La verificación manual en dos clientes (privacidad, reconexión, exportación e instalación) queda pendiente.
+1. Con dos clientes, probar `/photon fx send <jugador>`: confirmar que se empaqueta **todo** `ldlib2/assets`, que solo el destinatario recibe el pack, que el cliente recarga y que el pack reaparece tras reconectar. Probar cancelar antes de confirmar y verificar que no se lea/suba ningún archivo.
+2. Exportar `/photon_client export_ldlib2_assets`; cancelar y confirmar que no hay lectura. Después confirmar exportación, verificar el `.fxpack`, transferirlo por archivo e instalarlo en una instancia limpia.
+3. Probar loop FX en entidad/jugador y ubicación/bloque: replay al reentrar al rango/cargar chunk, cambio de dimensión del jugador, respawn, comandos de borrado y que un FX no-loop no se reproduzca tardíamente. Reiniciar servidor para confirmar que snapshots son solo de memoria.
+4. Revisar selector de FX/materiales y bloom en cliente de Alex si sigue disponible; pedir log/captura de la sesión si hay fallo. Probar shaderpacks/Iris/DH en AMD cuando haya hardware representativo.
+
+### Auditoría y mejoras solicitadas
+
+Después de leer el documento completo y recorrer el repo, comenzar una auditoría activa: buscar errores y bugs (lógica, estados, networking, límites, seguridad de ZIP/rutas, permisos, lifecycle, rendimiento, shaders, serialización y compatibilidad Forge/Java), corregir hallazgos reproducibles y añadir pruebas apropiadas. Luego revisar texturas/materiales: recursos faltantes/no referenciados, IDs/casing, formatos y dimensiones, alpha/UV/animaciones, shader-uniform/material bindings, presets y calidad visual dentro del juego/editor. Mejorar los recursos o sus valores cuando haya evidencia visual/técnica; evitar reemplazos masivos o degradar assets existentes sin comparación/validación. La sección 12 contiene el prompt general reutilizable.
 
 ---
 
-## 12. Referencias rápidas
+## 12. Prompt general para continuar el proyecto
+
+```text
+Eres un agente de desarrollo trabajando en el repositorio Santi-PdR/Photon-2, un port de Photon 2 a Minecraft 1.20.1 / Forge 47.x / Java 17. Antes de tocar nada, lee completo `docs/Photon2-Contexto-Completo.md`, las guías enlazadas y las instrucciones de la sesión Arena. Inspecciona `git status`, rama actual, historial reciente, PR/CI y workflows; nunca cambies de la rama que Arena indique.
+
+Contexto funcional que no debes perder:
+- PR #9 y PR #10 están mergeados en main. El repo ya incluye envío privado de todo `<gameDir>/ldlib2/assets` con `/photon fx send <jugador>`, exportación con `/photon_client export_ldlib2_assets`, consentimiento explícito confirm/cancel antes de leer archivos, cuotas grandes (512 MiB comprimidos / 2 GiB expandidos por pack), y snapshots/replay en memoria de FX en loop para entidades/jugadores y bloques/ubicaciones. Los snapshots se eliminan con los comandos existentes; los FX del jugador se reemiten al cambiar de dimensión. No afirmes que esto está probado manualmente: la prueba multicliente real sigue pendiente.
+- El JAR CI está enlazado en la sección 9. Python checks y GitHub Actions previos pasaron; usa CI para compilar si el sandbox no tiene Java.
+- Mantén Forge 1.20.1, Java 17 y compatibilidad con LDLib2/KilaGraph del repo. No cambies versiones/base upstream sin necesidad demostrada.
+
+Tu misión ahora es completar una revisión integral y luego trabajar, no limitarte a entregar una lista:
+1. Recorre el código, recursos, shaders, pruebas y documentación por áreas. Busca bugs y fallos reales: null/errores de estado, lifecycle/login/logout/dimensión/chunk, replay/removal, permisos, networking/concurrencia, límites/Zip Slip/rutas, recursos ausentes, regresiones de UI, memoria/rendimiento, serialización y compatibilidad Forge. Para cada hallazgo, identifica archivo/línea, impacto y forma de reproducirlo; distingue hechos de sospechas.
+2. Después del primer inventario, corrige primero los problemas de mayor impacto con cambios pequeños y enfocados; agrega/ajusta regresiones de test/smoke. No te detengas en el informe: continúa con las correcciones seguras y verificables.
+3. Audita texturas y materiales en conjunto con sus usos. Comprueba referencias e IDs, namespace/casing, archivos faltantes o huérfanos, dimensiones/formato/color/alpha, animaciones/UV, filtros/atlases, shader inputs y uniform bindings, presets/serialización y aspecto visual en el editor/juego. Localiza estilos o materiales inconsistentes y propone/mejora assets con intención, comprobando el resultado real; no inventes referencias ni sustituyas muchas texturas a ciegas. Conserva originales o explica cambios de forma reversible.
+4. Ejecuta verificadores Python, `git diff --check`, tests/build disponible; si no hay Java local, anótalo y usa GitHub Actions. Prueba servidor dedicado y cliente/smokes; cuando sea posible genera capturas comparativas para las mejoras visuales. Actualiza este handoff y documentación con resultados reales, fallos pendientes y enlaces a CI/JAR.
+5. Resume los cambios, pruebas, limitaciones y siguientes pasos. Trabaja solo en la rama actual de Arena; publica por PR si corresponde y mergea únicamente cuando el usuario lo haya pedido y los checks estén verdes.
+
+Empieza ahora leyendo todo el repo/contexto relevante; luego inicia la auditoría priorizada y aplica las primeras correcciones reproducibles. No solicites credenciales ni inventes resultados.
+```
+
+---
+
+## 13. Referencias rápidas
 
 | Documento | Uso |
 | --- | --- |
