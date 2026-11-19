@@ -548,10 +548,12 @@ jobs:
           echo "::endgroup::"
           echo "::group::noise filter"
           echo "The headless client always logs a narrator and a netty failure; neither stops the run."
+          echo "Blocked Mojang session servers make authlib fail over a Gson parse of the HTML error page"
+          echo "('Expected BEGIN_OBJECT but was STRING'); that noise is external and must never gate or mask a run."
           echo "::endgroup::"
           # Our own assertion first: the log's first Exception is narrator/netty noise, and publishing that
           # instead of the smoke failure is why a red run used to say nothing about what broke.
-          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator' | head -n 4 | \
+          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator|Expected BEGIN_OBJECT' | head -n 4 | \
             while IFS= read -r line; do echo "::error title=smoke assertion::$line"; done
           # Then one flattened window: the 25 lines of our own logging before the first line that names the
           # test, which is where the reason for the failure always is.
@@ -564,8 +566,10 @@ jobs:
           # Finally the generic sweep, filtered, as a last resort. Include the owning Java frames for
           # Optional failures and blocked reflection, not only the exception headline.
           grep -n -A 12 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
+            | grep -vE 'Reflective setAccessible|PlatformDependent|netty' \
             | head -n 28 | while IFS= read -r line; do echo "::error title=client exception trace::$line"; done
-          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" \
+            | grep -vE 'flite|Narrator|netty|Unsafe|Native library|authlib|AuthenticationUnavailable|MinecraftClientException|Expected BEGIN_OBJECT' \
             | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
