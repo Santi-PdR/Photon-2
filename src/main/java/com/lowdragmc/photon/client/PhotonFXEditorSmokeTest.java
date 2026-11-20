@@ -1627,6 +1627,19 @@ public final class PhotonFXEditorSmokeTest {
                 || unreadable.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.UNREADABLE) {
             throw new IllegalStateException("Adoption refusals were not told apart: " + vanillaRejection + " / " + unreadable);
         }
+        // pickers that also demand a folder: a well-named JSON outside it is "wrong folder", with the folder named
+        var strayShader = root.resolve(java.nio.file.Path.of("myfx", "textures", "glow.json"));
+        var strayRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explainUnder(null, root, strayShader, "shaders/core/");
+        var placedShader = root.resolve(java.nio.file.Path.of("myfx", "shaders", "core", "glow.json"));
+        var placedRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explainUnder(null, root, placedShader, "shaders/core/");
+        if (strayRejection == null
+                || strayRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.WRONG_FOLDER
+                || !"assets/myfx/shaders/core/".equals(strayRejection.suggestedId())
+                || !strayRejection.message().getString().contains("assets/myfx/shaders/core/")
+                || placedRejection == null
+                || placedRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.UNREADABLE) {
+            throw new IllegalStateException("Folder-bound pick refusals were not explained: " + strayRejection + " / " + placedRejection);
+        }
         // the explanation itself must be translated, not a raw key, and must carry the rename
         var message = badName.message().getString();
         if (message.startsWith("photon.") || !message.contains("myfx:textures/particle/fire_ball.png")) {

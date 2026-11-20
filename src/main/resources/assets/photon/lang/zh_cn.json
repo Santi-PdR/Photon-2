@@ -1812,6 +1812,7 @@
   "photon.asset_pick.invalid_name": "%s 的路径无法用作资源 ID：文件名和文件夹名只能包含小写 a-z、0-9、_ - . 和 /。请重命名后重新选择。",
   "photon.asset_pick.invalid_name.rename": "%s 的路径无法用作资源 ID：文件名和文件夹名只能包含小写 a-z、0-9、_ - . 和 /。请重命名为 %s 后重新选择。",
   "photon.asset_pick.reserved_namespace": "%s 位于 assets/%s/，这是游戏自带的命名空间，无法复制到工作区。请将其移到 photon/assets/<你的命名空间>/... 后重新选择。",
+  "photon.asset_pick.wrong_folder": "%s 所在的文件夹不适用于此项：它必须位于 %s 下（保留 .json 扩展名）。请移动后重新选择。",
   "photon.asset_pick.unreadable": "无法读取 %s 或将其复制到工作区（不是有效图片，或发生文件系统错误）；请查看日志。",
   "photon.material.pick_loaded_texture.empty": "除原版外没有已加载的贴图",
   "photon.material.pick_loaded_texture.limit": "仅显示前 %s 个结果；缩小搜索范围以查找更多贴图。",

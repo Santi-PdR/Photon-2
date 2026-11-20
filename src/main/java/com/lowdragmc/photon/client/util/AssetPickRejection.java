@@ -22,7 +22,8 @@ import java.nio.file.Path;
  * the second case is false). This names the right one and, for a bad name, says what to rename the file to.</p>
  */
 public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @Nullable String suggestedId) {
-    public enum Kind { NOT_UNDER_ASSETS, INVALID_NAME, RESERVED_NAMESPACE, UNREADABLE }
+    // suggestedId: the rename that fixes an INVALID_NAME, or the folder a WRONG_FOLDER file belongs in; null otherwise.
+    public enum Kind { NOT_UNDER_ASSETS, INVALID_NAME, RESERVED_NAMESPACE, WRONG_FOLDER, UNREADABLE }
 
     /** The rejection {@link PhotonAssetPath#fromFile} implies for this file, or null when it is accepted. */
     @Nullable
@@ -40,6 +41,7 @@ public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @
             case NOT_UNDER_ASSETS -> Component.translatable("photon.asset_pick.not_under_assets", name);
             case RESERVED_NAMESPACE -> Component.translatable("photon.asset_pick.reserved_namespace", name,
                     rawId == null ? "" : rawId.substring(0, Math.max(0, rawId.indexOf(':'))));
+            case WRONG_FOLDER -> Component.translatable("photon.asset_pick.wrong_folder", name, suggestedId == null ? "" : suggestedId);
             case UNREADABLE -> Component.translatable("photon.asset_pick.unreadable", name);
             case INVALID_NAME -> suggestedId == null
                     ? Component.translatable("photon.asset_pick.invalid_name", name)
@@ -81,6 +83,33 @@ public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @
     /** {@link #explain} + {@link #show} for a picker callback: false (and the explanation shown) when refused. */
     public static boolean accepted(@Nullable ResourceLocation location, Path assetsRoot, Path file, @Nullable UIElement host) {
         var rejection = explain(location, assetsRoot, file);
+        if (rejection == null) return true;
+        rejection.show(host);
+        return false;
+    }
+
+    /**
+     * Like {@link #explain} for pickers that also demand a folder inside the namespace (shader JSONs under
+     * {@code shaders/core/}, model JSONs under {@code models/}): a well-named file in the wrong place is reported
+     * as that, with the expected folder, instead of as unreadable.
+     */
+    @Nullable
+    public static AssetPickRejection explainUnder(@Nullable ResourceLocation location, Path assetsRoot, Path file, String folder) {
+        if (location != null) return null;
+        var rejection = of(assetsRoot, file);
+        if (rejection != null) return rejection;
+        var raw = PhotonAssetPath.rawId(assetsRoot, file);
+        var id = raw == null ? null : ResourceLocation.tryParse(raw);
+        if (id != null && !id.getPath().contains(folder)) {
+            return new AssetPickRejection(Kind.WRONG_FOLDER, file, raw, "assets/" + id.getNamespace() + "/" + folder);
+        }
+        return explain(null, assetsRoot, file);
+    }
+
+    /** {@link #explainUnder} + {@link #show}: false (and the explanation shown) when refused. */
+    public static boolean acceptedUnder(@Nullable ResourceLocation location, Path assetsRoot, Path file, String folder,
+                                        @Nullable UIElement host) {
+        var rejection = explainUnder(location, assetsRoot, file, folder);
         if (rejection == null) return true;
         rejection.show(host);
         return false;
