@@ -3230,6 +3230,31 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Curve bound fields accept a non-finite bound");
         }
         Photon.LOGGER.info("[curve-bound-finite-smoke] curve range fields keep their bound for NaN, Infinity and non-numeric text ({})", curveBounds.getSimpleName());
+        // A beam's renderer Layer used to be ignored: every beam drew in the translucent queue, so an Opaque
+        // beam could never be ordered among opaque meshes (upstream #56). It now picks the queue like the rest.
+        var opaqueBeamConfig = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamConfig();
+        opaqueBeamConfig.renderer.setLayer(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.Layer.Opaque);
+        var opaqueBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter(opaqueBeamConfig);
+        var translucentBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        if (opaqueBeam.getRenderType() != com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType.OPAQUE_QUEUE
+                || translucentBeam.getRenderType() != com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType.TRANSLUCENT_QUEUE) {
+            throw new IllegalStateException("A beam's renderer Layer does not choose its render queue");
+        }
+        Photon.LOGGER.info("[beam-layer-queue-smoke] an Opaque beam joins the opaque queue and a Translucent one the translucent queue");
+        // Sub-emitter "Inherit Duration": every emitter type must take the parent's lifetime into its runtime
+        // duration slot. The Ara trail used the interface default, which its updateOrigin() overwrote at once.
+        var inheritingAra = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        inheritingAra.reset();
+        int authoredAraDuration = inheritingAra.getLifetime();
+        inheritingAra.inheritDuration(authoredAraDuration + 37);
+        if (inheritingAra.getLifetime() != authoredAraDuration + 37) {
+            throw new IllegalStateException("An Ara trail ignores an inherited duration: " + inheritingAra.getLifetime());
+        }
+        inheritingAra.reset();
+        if (inheritingAra.getLifetime() != authoredAraDuration) {
+            throw new IllegalStateException("An Ara trail kept an inherited duration across reset: " + inheritingAra.getLifetime());
+        }
+        Photon.LOGGER.info("[aratrail-inherit-duration-smoke] an Ara trail takes the parent duration and drops it on reset");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
