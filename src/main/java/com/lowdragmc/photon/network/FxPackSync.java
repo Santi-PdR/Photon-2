@@ -67,6 +67,13 @@ public final class FxPackSync {
             new java.util.concurrent.atomic.AtomicLong();
     /** Validated expansion sizes keyed by content hash, so repeat offers avoid decompressing unchanged packs. */
     private static final Map<String, Long> VALIDATED_PACK_EXPANSIONS = new ConcurrentHashMap<>();
+    /**
+     * Content hashes keyed by {@code path|size|mtime}, so per-login offers do not rehash unchanged private packs.
+     * Private pack files are content-addressed ({@code <sha256>.fxpack}) and never rewritten in place, so the only
+     * way this entry goes stale is a same-size edit inside one millisecond — the manifest hash is then re-checked
+     * against the file on the client before use anyway.
+     */
+    private static final Map<String, String> PRIVATE_HASH_CACHE = new ConcurrentHashMap<>();
     /** Concurrent login/refresh offers share one disk scan for a server. */
     private static MinecraftServer scanServer;
     private static CompletableFuture<List<PackEntry>> activeScan;
@@ -333,9 +340,34 @@ public final class FxPackSync {
         LAST_REFRESH_NANOS.clear();
         OFFER_TOKENS.clear();
         LATEST_OFFER_TOKENS.clear();
+        PRIVATE_HASH_CACHE.clear();
         synchronized (FxPackSync.class) {
             activeScan = null;
             scanServer = null;
+        }
+    }
+
+    /**
+     * Drop partial uploads a crash left behind in {@code .incoming}: nothing can be in flight at startup, and each
+     * stale {@code .part} file can hold up to a full pack of disk space forever otherwise.
+     */
+    public static void onServerStarting(MinecraftServer server) {
+        PRIVATE_HASH_CACHE.clear();
+        var incoming = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
+        if (!Files.isDirectory(incoming)) return;
+        try (var files = Files.list(incoming)) {
+            for (var path : files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                    && file.getFileName().toString().endsWith(".part")).toList()) {
+                try {
+                    if (Files.deleteIfExists(path)) {
+                        Photon.LOGGER.info("Removed leftover Photon FX upload part {}", path.getFileName());
+                    }
+                } catch (IOException | RuntimeException failure) {
+                    Photon.LOGGER.warn("Could not remove leftover Photon FX upload part {}", path, failure);
+                }
+            }
+        } catch (IOException | RuntimeException failure) {
+            Photon.LOGGER.warn("Could not clean leftover Photon FX upload parts in {}", incoming, failure);
         }
     }
 
@@ -416,6 +448,8 @@ public final class FxPackSync {
         var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
                 .resolve(recipient.toString()).normalize();
         if (!Files.isDirectory(directory)) return List.of();
+        // the manifest budget is shared with the public packs already scanned: private work may not exceed it
+        var budget = Math.min(Math.max(0, expandedBudget), MAX_TOTAL_EXPANDED_PACK_BYTES);
         var result = new ArrayList<PrivatePack>();
         long total = 0;
         long expandedTotal = 0;
@@ -425,12 +459,22 @@ public final class FxPackSync {
                 if (result.size() >= MAX_PRIVATE_PACKS) break;
                 var size = Files.size(path);
                 if (size <= 0 || size > MAX_PACK_BYTES || total + size > MAX_PRIVATE_PACK_BYTES) continue;
-                var hash = sha256(path);
-                var remainingExpanded = MAX_TOTAL_EXPANDED_PACK_BYTES - expandedTotal;
-                if (remainingExpanded <= 0) break;
-                var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingExpanded));
-                if (!validation.valid()) continue;
-                expandedTotal += validation.expandedBytes();
+                var hash = cachedSha256(path, size);
+                // unchanged packs keep their validated expansion size: a login/respawn/dimension change must not
+                // re-decompress up to 2 GiB per recipient on the background executor
+                var expandedBytes = VALIDATED_PACK_EXPANSIONS.get(hash);
+                if (expandedBytes == null) {
+                    var remainingExpanded = budget - expandedTotal;
+                    if (remainingExpanded <= 0) break;
+                    var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingExpanded));
+                    if (!validation.valid()) continue;
+                    expandedBytes = validation.expandedBytes();
+                    var previous = VALIDATED_PACK_EXPANSIONS.putIfAbsent(hash, expandedBytes);
+                    if (previous != null) expandedBytes = previous;
+                    if (VALIDATED_PACK_EXPANSIONS.size() > 512) VALIDATED_PACK_EXPANSIONS.clear();
+                }
+                if (expandedTotal > budget - expandedBytes) continue;
+                expandedTotal += expandedBytes;
                 total += size;
                 result.add(new PrivatePack(new PackEntry("private-" + hash + SUFFIX, size, hash), path));
             }
@@ -438,6 +482,18 @@ public final class FxPackSync {
             Photon.LOGGER.warn("Could not scan private Photon FX packs for {}", recipient, failure);
         }
         return List.copyOf(result);
+    }
+
+    /** {@link #sha256} behind a size+mtime memo; every caller already bounds how many files it scans. */
+    private static String cachedSha256(Path path, long size) throws IOException {
+        var modified = Files.getLastModifiedTime(path).toMillis();
+        var key = path + "|" + size + "|" + modified;
+        var cached = PRIVATE_HASH_CACHE.get(key);
+        if (cached != null) return cached;
+        var hash = sha256(path);
+        if (PRIVATE_HASH_CACHE.size() > 512) PRIVATE_HASH_CACHE.clear();
+        PRIVATE_HASH_CACHE.put(key, hash);
+        return hash;
     }
 
     /** Result of streaming an untrusted archive; {@code expandedBytes} is actual work already performed. */

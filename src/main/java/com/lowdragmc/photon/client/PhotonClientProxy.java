@@ -140,11 +140,6 @@ public class PhotonClientProxy extends PhotonCommonProxy {
             PhotonConfig.INSTANCE.bloomThreshold.set(0.5);
             changed = true;
         }
-        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
-                || Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 1.0) == 0) {
-            PhotonConfig.INSTANCE.bloomIntensity.set(0.18);
-            changed = true;
-        }
         // Persist the guard even when neither value matched: the migration must not reinterpret a
         // player's deliberate choice of an old default on the next launch.
         PhotonConfig.INSTANCE.migratedOldBloomDefaults.set(true);

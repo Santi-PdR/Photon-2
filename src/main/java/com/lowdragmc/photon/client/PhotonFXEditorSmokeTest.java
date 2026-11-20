@@ -439,7 +439,6 @@ public final class PhotonFXEditorSmokeTest {
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
-        var oldIntensity = config.bloomIntensity.get();
         int previousFramebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
         int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
         int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
@@ -450,7 +449,6 @@ public final class PhotonFXEditorSmokeTest {
         try {
             config.enableBloom.set(true);
             config.bloomThreshold.set(0.5);
-            config.bloomIntensity.set(0.18);
             source.setClearColor(0.3f, 0.3f, 0.3f, 1);
             source.clear(Minecraft.ON_OSX);
             source.bindWrite(false);
@@ -482,7 +480,6 @@ public final class PhotonFXEditorSmokeTest {
         } finally {
             config.enableBloom.set(oldEnabled);
             config.bloomThreshold.set(oldThreshold);
-            config.bloomIntensity.set(oldIntensity);
             source.destroyBuffers();
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
                     previousFramebuffer);
@@ -2044,8 +2041,10 @@ public final class PhotonFXEditorSmokeTest {
             var path = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("photon-client.toml");
             if (!java.nio.file.Files.isRegularFile(path)) return "no config file at " + path;
             var text = java.nio.file.Files.readString(path);
-            var line = text.lines().filter(l -> l.startsWith("bloom_intensity"))
-                    .findFirst().orElse("<bloom_intensity missing>");
+            // Any live double entry proves the file has been rewritten or reloaded; bloom_threshold
+            // is the sibling of the retired bloom_intensity and always present.
+            var line = text.lines().filter(l -> l.startsWith("bloom_threshold"))
+                    .findFirst().orElse("<bloom_threshold missing>");
             return "file " + path.getFileName() + " (" + text.length() + " chars) says " + line
                     + ", watcher threads=" + Thread.getAllStackTraces().keySet().stream()
                     .map(Thread::getName)
@@ -2945,8 +2944,17 @@ public final class PhotonFXEditorSmokeTest {
         verifyBlendPresetClassification();
         com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterialRegression.verify();
         Photon.LOGGER.info("[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely");
+        com.lowdragmc.photon.gui.editor.resource.MaterialPersistenceRegression.verify();
         com.lowdragmc.photon.client.fx.LooseTexturePathRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
+        com.lowdragmc.photon.command.LateReplayRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyLoadRegression.verify();
+        Photon.LOGGER.info("[animated-property-load-smoke] unreadable animated properties are skipped without failing the track");
+        com.lowdragmc.photon.gui.editor.view.TimelineInsertTimeRegression.verify();
+        Photon.LOGGER.info("[timeline-insert-time-smoke] insert time only accepts a finite positive gap and its undo is exact");
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");

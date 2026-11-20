@@ -20,6 +20,7 @@ import org.joml.Vector4f;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.function.Function;
+import java.util.Locale;
 
 
 /**
@@ -147,7 +148,7 @@ public interface IParticleEmitter extends IFXObject, IConfigurable {
                         () -> Component.literal(getParticleAmount() + "")),
                 sceneView.fxObjectInfoView.createInformation(
                         Component.translatable("photon.gui.editor.fx_info.age"),
-                        () -> Component.literal("%.2f s".formatted(getAge() / 20f))),
+                        () -> Component.literal(String.format(Locale.ROOT, "%.2f s", getAge() / 20f))),
                 progress
         );
     }

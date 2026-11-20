@@ -60,7 +60,7 @@ public class TextureMaterial extends ShaderInstanceMaterial {
     }
 
     public static class PixelArt extends ToggleGroup {
-        @Configurable
+        @Configurable(name = "TextureMaterial.pixelArt.bits")
         @ConfigNumber(range = {1, 4096})
         public int bits = 8;
     }

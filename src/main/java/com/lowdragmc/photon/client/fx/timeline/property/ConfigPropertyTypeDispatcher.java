@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.fx.timeline.property;
 
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
+import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.fx.timeline.AnimatedProperty;
 import com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyType;
 import com.lowdragmc.photon.client.gameobject.FXObject;
@@ -8,6 +9,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+
+import javax.annotation.Nullable;
 
 /**
  * The single registry singleton for {@code "config"} animatable properties. It exists only to
@@ -44,10 +47,21 @@ public class ConfigPropertyTypeDispatcher implements AnimatedPropertyType {
     public void apply(FXObject target, float[] values) {
     }
 
+    /** Returns {@code null} for a {@code valueType} this build does not know (a newer or edited file), so the
+     *  track skips that one property the same way it skips an unregistered property type instead of failing
+     *  the whole effect's load. */
     @Override
+    @Nullable
     public AnimatedProperty deserialize(HolderLookup.Provider provider, CompoundTag tag) {
         var path = tag.getString("path");
-        var valueType = ConfigValueType.valueOf(tag.getString("valueType"));
+        var valueTypeName = tag.getString("valueType");
+        ConfigValueType valueType;
+        try {
+            valueType = ConfigValueType.valueOf(valueTypeName);
+        } catch (IllegalArgumentException unknown) {
+            Photon.LOGGER.warn("Unknown config value type '{}' of animated property '{}' skipped while loading", valueTypeName, path);
+            return null;
+        }
         var label = tag.contains("label") ? tag.getString("label") : path;
         if (valueType == ConfigValueType.COLOR) {
             return new ColorPropertyType(path, label).deserialize(provider, tag);

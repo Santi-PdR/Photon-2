@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Locale;
 
 /**
  * Unity/Premiere-style timeline editor panel and the generic host for the extensible track framework.
@@ -246,11 +247,11 @@ public class FXTimelineView extends View implements TimelineContext {
     @Override public float scrollTicks() { return scrollTicks; }
     @Override public long currentTimeTicks() { return fxEditor.sceneView.particleManager.getTime(); }
     @Override public double majorTickInterval() { return niceInterval(60 / scale); }
-    @Override public void pushEdit(String name, Runnable doFn, Runnable undoFn) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(doFn, undoFn));
+    @Override public void pushEdit(Component label, Runnable doFn, Runnable undoFn) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(doFn, undoFn));
     }
-    @Override public void pushApplied(String name, Runnable redo, Runnable undo) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(redo, undo), false);
+    @Override public void pushApplied(Component label, Runnable redo, Runnable undo) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(redo, undo), false);
     }
     // coalesced: edit actions can fire many refreshes per frame; only the last one replays
     @Override public void refreshPreview() { fxEditor.sceneView.requestSimulateTo(currentTimeTicks()); }
@@ -391,18 +392,18 @@ public class FXTimelineView extends View implements TimelineContext {
     private UIElement createTimeField() {
         // plain STRING mode + a numeric regex — NOT setNumbersOnlyDouble, whose NUMBER_DOUBLE mode
         // normalizes the text on setText (strips trailing zeros, so "1.00" would show as "1")
-        var field = new TextField().setTextRegexValidator("\\d*\\.?\\d*");
+        var field = new TextField().setTextRegexValidator("\\d*[.,]?\\d*"); // dot or the locale's comma
         field.setText("0.00", false);
         field.setId("timeline.time").layout(layout -> layout.flexGrow(1).maxWidth(70).alignSelf(AlignItems.CENTER))
                 .style(style -> style.tooltips("photon.gui.editor.timeline.time.tip"));
         // while not being typed in, mirror the live playhead time (no notify so it doesn't fight editing)
         field.addEventListener(UIEvents.TICK, e -> {
-            if (!field.isFocused()) field.setText("%.2f".formatted(currentTimeTicks() / 20f), false);
+            if (!field.isFocused()) field.setText(String.format(Locale.ROOT, "%.2f", currentTimeTicks() / 20f), false);
         });
         // commit on blur: parse seconds → jump the playhead (coalesced seek)
         field.addEventListener(UIEvents.FOCUS_OUT, e -> {
             try {
-                var seconds = Double.parseDouble(field.getText());
+                var seconds = Double.parseDouble(field.getText().replace(',', '.'));
                 fxEditor.sceneView.requestSimulateTo(Math.max(0, Math.round(seconds * 20)));
             } catch (NumberFormatException ignored) {
             }
@@ -862,7 +863,7 @@ public class FXTimelineView extends View implements TimelineContext {
                 value -> validSectionStartText(timeline, section, value), value -> {
                     if (!timeline.sections().contains(section) || !validSectionStartText(timeline, section, value)) return;
                     var before = section.start();
-                    var after = Double.parseDouble(value);
+                    var after = parseDecimal(value);
                     if (before == after) return;
                     pushEdit("photon.gui.editor.timeline.section.move", () -> section.start(after),
                             () -> section.start(before));
@@ -870,10 +871,15 @@ public class FXTimelineView extends View implements TimelineContext {
     }
 
     private static boolean validSectionStartText(Timeline timeline, TimelineSection section, String value) {
+        return validSectionStart(timeline, section, parseDecimal(value)); // NaN (unparseable) fails the finite check
+    }
+
+    /** Typed decimal text → value, accepting the locale's comma as well as the dot; NaN when unparseable. */
+    static double parseDecimal(String text) {
         try {
-            return validSectionStart(timeline, section, Double.parseDouble(value));
+            return Double.parseDouble(text.trim().replace(',', '.'));
         } catch (NumberFormatException e) {
-            return false;
+            return Double.NaN;
         }
     }
 
@@ -925,20 +931,36 @@ public class FXTimelineView extends View implements TimelineContext {
         });
     }
 
+    /** Longest gap the insert-time dialog accepts, in seconds (one hour; keeps keyframe x in float precision). */
+    static final double MAX_INSERT_SECONDS = 3600;
+
+    /**
+     * The gap in ticks the insert-time dialog text asks for, or NaN when it must be refused: unparseable,
+     * non-finite, zero, negative or absurdly long. Only a positive gap is accepted because the undo of an
+     * insert is the same ripple with {@code -delta} — exact for a positive insert (everything at or after
+     * the point moved later, so it all moves back) but not for a negative one, which can pull clips,
+     * keyframes and markers back across the insertion point where the inverse no longer reaches them.
+     */
+    static double insertTicksFromDialog(String text) {
+        var seconds = parseDecimal(text);
+        if (!(seconds > 0) || seconds > MAX_INSERT_SECONDS) return Double.NaN; // NaN/-x/0/huge all fail here
+        return seconds * 20;
+    }
+
     /** Prompt for an amount of time (seconds) to ripple-insert at {@code atTick}. */
     private void openInsertTimeDialog(double atTick) {
         Dialog.stringEditorDialog("photon.gui.editor.timeline.insert_time", "1.0",
-                s -> { try { Double.parseDouble(s); return true; } catch (NumberFormatException ex) { return false; } },
+                s -> !Double.isNaN(insertTicksFromDialog(s)),
                 s -> {
-                    double delta;
-                    try { delta = Double.parseDouble(s) * 20; } catch (NumberFormatException ex) { return; }
-                    if (delta == 0) return;
+                    var delta = insertTicksFromDialog(s);
+                    if (Double.isNaN(delta)) return;
                     insertTime(atTick, delta);
                 }).show(fxEditor);
     }
 
     /** Ripple-insert {@code delta} ticks of time at {@code atTick} across the whole timeline (undoable).
-     *  The inverse is the same op with {@code -delta} (undo shifts the just-shifted content back). */
+     *  The inverse is the same op with {@code -delta} (undo shifts the just-shifted content back) — which
+     *  is why only positive deltas reach here (see {@link #insertTicksFromDialog}). */
     private void insertTime(double atTick, double delta) {
         if (fxEditor.runtime == null) return;
         var timeline = fxEditor.runtime.fxData.timeline();
