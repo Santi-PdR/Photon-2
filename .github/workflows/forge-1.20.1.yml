@@ -271,6 +271,36 @@ jobs:
             fi
           done
 
+      # Non-failing audit aid: the distinct WARN/ERROR lines that mention Photon, LDLib or Kila in
+      # both smoke logs (prefix stripped, numbers normalised, known authlib noise removed), printed
+      # here and published as one notice annotation per log so an audit can read them through the
+      # check-run API without downloading the log archive.
+      - name: Summarize Photon warnings from the smoke logs
+        if: always()
+        shell: bash
+        run: |
+          for which in client server; do
+            log="$RUNNER_TEMP/photon-$which.log"
+            if [ ! -f "$log" ]; then
+              echo "== $which: no log"
+              continue
+            fi
+            summary=$(grep -aE '/(WARN|ERROR)\]' "$log" \
+              | grep -aEi 'photon|ldlib|kila' \
+              | grep -avE 'authlib|Expected BEGIN_OBJECT|AuthenticationUnavailable' \
+              | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//; s/\b[0-9]+(\.[0-9]+)?\b/N/g' \
+              | sort | uniq -c | sort -rn | head -n 40 | cut -c1-200 || true)
+            count=$(printf '%s\n' "$summary" | grep -c . || true)
+            echo "== $which: $count distinct Photon WARN/ERROR lines"
+            printf '%s\n' "$summary"
+            if [ "$count" -gt 0 ]; then
+              encoded=$(printf '%s' "$summary" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-3900)
+              echo "::notice title=photon $which WARN/ERROR summary ($count distinct)::$encoded"
+            else
+              echo "::notice title=photon $which WARN/ERROR summary::none"
+            fi
+          done
+
       - name: Require server FX pack download and automatic resource reload
         shell: bash
         run: grep -Fq '[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload' "$RUNNER_TEMP/photon-client.log"

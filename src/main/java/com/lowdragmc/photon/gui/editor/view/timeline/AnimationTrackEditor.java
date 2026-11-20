@@ -1407,6 +1407,7 @@ public class AnimationTrackEditor extends TrackEditor {
         } catch (Exception ex) {
             return; // invalid input → keep the old range
         }
+        if (!Float.isFinite(v)) return; // "NaN"/"Infinity" parse fine but would break the lane layout
         var oldMin = property.rangeMin();
         var oldMax = property.rangeMax();
         var fixedMin = property.type().fixedRangeMin();
