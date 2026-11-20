@@ -1864,6 +1864,8 @@
   "photon.emitter.trail.config.colorOverTrail": "Elige un color para el trail desde su vértice inicial al final.",
   "photon.emitter.config.sub_emitters": "Sub emisión de partículas. Permite que cada partícula emita partículas en otro sistema.",
   "photon.emitter.config.sub_emitters.emitter.name": "Arrastra/selecciona un emisor aquí (usando el nombre del emisor).",
+  "photon.emitter.config.sub_emitters.emitter.cycle.title": "Subemisor",
+  "photon.emitter.config.sub_emitters.emitter.cycle": "Generar %s desde aquí generaría este efecto dentro de sí mismo (a través de %s): cada partícula iniciaría otra copia sin fin. La elección no se aplicó.",
   "photon.emitter.config.sub_emitters.emitter.event": "Evento que dispara la emisión.",
   "photon.emitter.config.sub_emitters.emitter.inherit_color": "Heredar el color de la partícula madre.",
   "photon.emitter.config.sub_emitters.emitter.tick_interval": "Intervalo de ticks entre eventos de emisión.",

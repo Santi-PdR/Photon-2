@@ -49,6 +49,8 @@ public class FXRuntime implements IScene {
     private int generationAtEmit;
     /** Playback rate for this whole runtime; see {@link #setRate}. */
     private float rate = 1f;
+    /** The effects that spawned this runtime, outermost first; empty for a top-level effect. See {@link SpawnChain}. */
+    private List<String> spawnChain = List.of();
 
     public FXRuntime(FXData fxData) {
         this.fxData = fxData;
@@ -225,6 +227,19 @@ public class FXRuntime implements IScene {
     public void setRate(float rate) {
         this.rate = FXObject.sanitizeTimeScale(rate);
         root.setSelfTimeScale(this.rate);
+    }
+
+    /**
+     * The effects a sub-emitter chain spawned this runtime through, outermost first (ids as
+     * {@link SpawnChain} writes them); empty for an effect an executor plays directly. Not persisted.
+     */
+    public List<String> spawnChain() {
+        return spawnChain;
+    }
+
+    /** Set by the sub-emitter that spawned this runtime, before {@link #emit}. */
+    public void spawnChain(List<String> chain) {
+        this.spawnChain = List.copyOf(chain);
     }
 
     /** Start playback: emit every object into the executor's particle engine and reset the timeline. */

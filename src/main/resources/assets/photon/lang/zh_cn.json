@@ -654,6 +654,8 @@
   "photon.emitter.trail.config.colorOverTrail": "为拖尾从其起始顶点到结束顶点选择颜色。",
   "photon.emitter.config.sub_emitters": "粒子的子发射。这允许每个粒子在另一个系统中发射粒子。",
   "photon.emitter.config.sub_emitters.emitter.name": "在此处拖放/选择一个发射器（使用发射器名称）。",
+  "photon.emitter.config.sub_emitters.emitter.cycle.title": "子发射器",
+  "photon.emitter.config.sub_emitters.emitter.cycle": "从这里生成 %s 会让这个特效套住自己（经由 %s）：每个粒子都会再启动一个副本，永无止境。该选择未被应用。",
   "photon.emitter.config.sub_emitters.emitter.event": "触发发射的事件。",
   "photon.emitter.config.sub_emitters.emitter.inherit_color": "从父粒子继承颜色。",
   "photon.emitter.config.sub_emitters.emitter.tick_interval": "发射事件之间的刻间隔。",

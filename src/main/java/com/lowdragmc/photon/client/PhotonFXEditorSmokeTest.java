@@ -3027,6 +3027,8 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[timeline-insert-time-smoke] insert time only accepts a finite positive gap and its undo is exact");
         com.lowdragmc.photon.client.fx.timeline.ExpressionSafetyRegression.verify();
         Photon.LOGGER.info("[expression-safety-smoke] formulas parse once per source, reject unknown identifiers and never yield NaN");
+        com.lowdragmc.photon.client.gameobject.emitter.data.SubEmitterCycleRegression.verify(minecraft.level);
+        Photon.LOGGER.info("[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run");
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");

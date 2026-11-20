@@ -657,6 +657,8 @@
   "photon.emitter.trail.config.colorOverTrail": "Select a color for the trail from its start to end vertex.",
   "photon.emitter.config.sub_emitters": "Sub emission of particles. This allows each particle to emit particles in another system.",
   "photon.emitter.config.sub_emitters.emitter.name": "Drag/Select an emitter here (using emitter name).",
+  "photon.emitter.config.sub_emitters.emitter.cycle.title": "Sub-emitter",
+  "photon.emitter.config.sub_emitters.emitter.cycle": "Spawning %s from here would spawn this effect inside itself (through %s): every particle would start another copy without end. The pick was not applied.",
   "photon.emitter.config.sub_emitters.emitter.event": "Event to trigger the emission.",
   "photon.emitter.config.sub_emitters.emitter.inherit_color": "Inherit color from the parent particle.",
   "photon.emitter.config.sub_emitters.emitter.tick_interval": "Tick interval bewteen emitting events.",
