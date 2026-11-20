@@ -145,7 +145,7 @@ public class RendererSetting {
     public static class Cull extends ToggleGroup {
         @Setter
         @Getter
-        @Configurable
+        @Configurable(name = "RendererSetting.cull.cullBox")
         @ConfigNumber(range = {-Float.MAX_VALUE, Float.MAX_VALUE})
         protected AABB cullBox = new AABB(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
 

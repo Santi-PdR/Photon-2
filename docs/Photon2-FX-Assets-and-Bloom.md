@@ -68,7 +68,7 @@ también se monta automáticamente como recurso legado.
 - **Vista previa del editor:** en la barra superior de Scene, pulsa el icono de bloom/brillo; la tecla
   `B` alterna la vista previa.
 - **En juego:** abre **Mods → Photon → Config**, activa **Enable Bloom** y ajusta el umbral.
-  Este ajuste es global para los FX de Photon; no hay una casilla de bloom por emisor en este port.
+  `Enable Bloom` y el umbral son globales; la intensidad y el sí/no de cada efecto se guardan dentro del FX.
 - **Colores normales:** Bloom Threshold empieza en `0.5`; el pase mide el canal RGB más brillante,
   así que los rojos y azules saturados también pueden generar halo sin tratar el gris de la escena como luz.
   Súbelo si quieres que sólo brillen luces HDR.
@@ -77,14 +77,17 @@ también se monta automáticamente como recurso legado.
   el sol, las nubes y el terreno iluminado no generan halo ni lavan la imagen. En las rutas que trabajan
   sobre una capa de FX suelta (composición tardía, shader packs) la máscara queda neutra porque ahí sólo
   hay FX.
-- **Intensidad:** el control global va de `0` a `2` y empieza en `0.18` para conservar el detalle de la escena.
-  Se encuentra en **Mods → Photon → Config**, y también en la barra superior de la vista
-  **Scene**: junto al icono de bloom hay un deslizador con su valor (`0.00`–`2.00`) que escribe el
-  mismo `bloom_intensity`. El valor por defecto no cambia y los dos controles se mantienen sincronizados.
-- **Ajuste del halo:** modifica **Bloom Intensity** y **Bloom mip level** en la configuración.
+- **Intensidad:** es una propiedad **de cada FX** (`bloomIntensity`, `0`–`2`, por defecto `0.18`), no un ajuste
+  global. Se edita en la barra superior de la vista **Scene**: junto al icono de bloom hay un deslizador con su
+  valor (`0.00`–`2.00`). Si varios FX con bloom activo se ven a la vez, el pase usa la intensidad más alta de
+  ellos. El icono de bloom de la barra activa/desactiva el bloom **de ese FX** (tecla `B`).
+- **Ajuste del halo:** además de la intensidad por FX, **Bloom Threshold** y **Bloom mip level** siguen siendo
+  globales en **Mods → Photon → Config**. La opción `bloom_intensity` que esa pantalla mostraba antes ya no
+  existe: la intensidad vive en el FX y viaja con él al exportar.
 
-La vista previa del editor y el bloom de juego son controles distintos. Activar sólo el icono del
-editor no cambia la configuración global de renderizado del juego.
+La vista previa del editor y el bloom de juego usan la misma propiedad del FX: el icono de la barra
+(y la tecla `B`) activan o desactivan el bloom **del FX abierto**, y eso viaja con el efecto al
+guardar/exportar. El interruptor global **Enable Bloom** de la config sigue mandando sobre todo.
 
 ## Texturas del editor y archivos de Photon 1
 

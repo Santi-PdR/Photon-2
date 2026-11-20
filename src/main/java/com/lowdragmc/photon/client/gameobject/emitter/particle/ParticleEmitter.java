@@ -68,6 +68,7 @@ import java.util.*;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Locale;
 
 /**
  * @author KilaBash
@@ -860,7 +861,7 @@ public class ParticleEmitter extends Emitter {
                                 lastCollisionStats[2]))),
                 info.createInformation(Component.translatable("photon.gui.editor.fx_info.collision_time"),
                         () -> Component.literal(collisionScene == null ? "-"
-                                : "%.3f ms, %s".formatted(lastCollisionMillis, lastCollisionParallel ? "parallel" : "serial"))),
+                                : String.format(Locale.ROOT, "%.3f ms, %s", lastCollisionMillis, lastCollisionParallel ? "parallel" : "serial"))),
                 info.createInformation(Component.translatable("photon.gui.editor.fx_info.collision_world"),
                         () -> Component.literal(collisionWorld == null ? "-"
                                 : "%d sections, %d depenetrated, %d misses".formatted(collisionWorld.sectionCount(),

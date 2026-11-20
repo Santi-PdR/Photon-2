@@ -52,16 +52,24 @@ public final class ActiveWorldEffects {
 
     public static void replayTo(ServerPlayer player, ServerLevel level, ChunkPos chunkPos) {
         if (player == null || level == null || !player.serverLevel().dimension().equals(level.dimension())) return;
-        var chunkX = chunkPos.x;
-        var chunkZ = chunkPos.z;
+        for (var packet : pendingReplay(level.dimension().location(), chunkPos)) {
+            PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), packet);
+        }
+    }
+
+    /** The replay packets for one chunk of {@code dimension}. Split from the send so the chunk
+     *  filter and replay content are regression-testable without a network connection. */
+    static List<BlockEffectCommand> pendingReplay(ResourceLocation dimension, ChunkPos chunkPos) {
+        List<BlockEffectCommand> packets = new ArrayList<>();
         for (var entry : ACTIVE.entrySet()) {
             var key = entry.getKey();
-            if (!key.dimension.equals(level.dimension().location())
-                    || (key.pos.getX() >> 4) != chunkX || (key.pos.getZ() >> 4) != chunkZ) continue;
+            if (!key.dimension.equals(dimension)
+                    || (key.pos.getX() >> 4) != chunkPos.x || (key.pos.getZ() >> 4) != chunkPos.z) continue;
             for (var snapshot : List.copyOf(entry.getValue())) {
-                PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), snapshot.packet(key));
+                packets.add(snapshot.packet(key));
             }
         }
+        return packets;
     }
 
     public static void clear() {

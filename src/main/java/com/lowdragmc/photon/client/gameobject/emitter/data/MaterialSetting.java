@@ -88,11 +88,11 @@ public class MaterialSetting implements IConfigurable, IPersistedSerializable {
     protected RenderStateSource renderStateSource = RenderStateSource.MATERIAL;
     @Configurable(name = "MaterialSetting.blendMode", subConfigurable = true)
     protected final BlendMode blendMode = new BlendMode();
-    @Configurable
+    @Configurable(name = "MaterialSetting.cull")
     protected boolean cull = true;
-    @Configurable
+    @Configurable(name = "MaterialSetting.depthTest")
     protected boolean depthTest = true;
-    @Configurable
+    @Configurable(name = "MaterialSetting.depthMask")
     protected boolean depthMask = false;
 
     // what pre() applied, so post() undoes exactly that even if the material changed in between
