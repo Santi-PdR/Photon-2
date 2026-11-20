@@ -22,7 +22,7 @@ import java.nio.file.Path;
  * the second case is false). This names the right one and, for a bad name, says what to rename the file to.</p>
  */
 public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @Nullable String suggestedId) {
-    public enum Kind { NOT_UNDER_ASSETS, INVALID_NAME, UNREADABLE }
+    public enum Kind { NOT_UNDER_ASSETS, INVALID_NAME, RESERVED_NAMESPACE, UNREADABLE }
 
     /** The rejection {@link PhotonAssetPath#fromFile} implies for this file, or null when it is accepted. */
     @Nullable
@@ -38,6 +38,8 @@ public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @
         var name = file.getFileName() == null ? file.toString() : file.getFileName().toString();
         return switch (kind) {
             case NOT_UNDER_ASSETS -> Component.translatable("photon.asset_pick.not_under_assets", name);
+            case RESERVED_NAMESPACE -> Component.translatable("photon.asset_pick.reserved_namespace", name,
+                    rawId == null ? "" : rawId.substring(0, Math.max(0, rawId.indexOf(':'))));
             case UNREADABLE -> Component.translatable("photon.asset_pick.unreadable", name);
             case INVALID_NAME -> suggestedId == null
                     ? Component.translatable("photon.asset_pick.invalid_name", name)
@@ -61,14 +63,25 @@ public record AssetPickRejection(Kind kind, Path file, @Nullable String rawId, @
     }
 
     /**
-     * {@link #of} + {@link #show} for a picker callback: when {@code location} (what the picker mapped the file to)
-     * is null, explain why and return false; otherwise true.
+     * Why a picker ended with {@code location} (what it mapped the file to) null: {@link #of}'s reasons first; when
+     * the mapping itself accepted the file, adoption refused it — a game-owned namespace is never copied into the
+     * workspace, otherwise the PNG did not decode or the copy failed (details in the log). Null when accepted.
      */
-    public static boolean accepted(@Nullable ResourceLocation location, Path assetsRoot, Path file, @Nullable UIElement host) {
-        if (location != null) return true;
+    @Nullable
+    public static AssetPickRejection explain(@Nullable ResourceLocation location, Path assetsRoot, Path file) {
+        if (location != null) return null;
         var rejection = of(assetsRoot, file);
-        // the mapping accepted the file but a later step (decoding the PNG, copying it in) refused it: say that
-        if (rejection == null) rejection = new AssetPickRejection(Kind.UNREADABLE, file, null, null);
+        if (rejection != null) return rejection;
+        var raw = PhotonAssetPath.rawId(assetsRoot, file);
+        var id = raw == null ? null : ResourceLocation.tryParse(raw);
+        var reserved = id != null && com.lowdragmc.photon.client.fx.LooseTextures.isBuiltinNamespace(id.getNamespace());
+        return new AssetPickRejection(reserved ? Kind.RESERVED_NAMESPACE : Kind.UNREADABLE, file, raw, null);
+    }
+
+    /** {@link #explain} + {@link #show} for a picker callback: false (and the explanation shown) when refused. */
+    public static boolean accepted(@Nullable ResourceLocation location, Path assetsRoot, Path file, @Nullable UIElement host) {
+        var rejection = explain(location, assetsRoot, file);
+        if (rejection == null) return true;
         rejection.show(host);
         return false;
     }

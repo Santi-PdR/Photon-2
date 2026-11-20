@@ -794,6 +794,7 @@
   "photon.asset_pick.not_under_assets": "%s no está dentro de una carpeta assets/<namespace>/. Ponlo en photon/assets/<namespace>/... (por ejemplo photon/assets/myfx/textures/particle/) y vuelve a elegirlo.",
   "photon.asset_pick.invalid_name": "La ruta de %s no sirve como identificador de recurso: en nombres de archivo y carpeta solo se admiten a-z minúsculas, 0-9, _ - . y /. Renómbralo y vuelve a elegirlo.",
   "photon.asset_pick.invalid_name.rename": "La ruta de %s no sirve como identificador de recurso: en nombres de archivo y carpeta solo se admiten a-z minúsculas, 0-9, _ - . y /. Renómbralo a %s y vuelve a elegirlo.",
+  "photon.asset_pick.reserved_namespace": "%s está en assets/%s/, un namespace propio del juego, así que no se puede copiar al espacio de trabajo. Muévelo a photon/assets/<tu namespace>/... y vuelve a elegirlo.",
   "photon.asset_pick.unreadable": "No se pudo leer %s ni copiarlo al espacio de trabajo (no es una imagen válida o hubo un error del sistema de archivos); consulta el registro.",
   "photon.material.pick_loaded_texture.empty": "No hay texturas cargadas aparte de las de vanilla",
   "photon.material.pick_loaded_texture.limit": "Se muestran los primeros %s resultados; afina la búsqueda para encontrar más.",

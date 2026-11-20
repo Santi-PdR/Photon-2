@@ -1800,6 +1800,7 @@
   "photon.asset_pick.not_under_assets": "%s is not inside an assets/<namespace>/ folder. Put it under photon/assets/<namespace>/... (for example photon/assets/myfx/textures/particle/) and pick it again.",
   "photon.asset_pick.invalid_name": "The path of %s cannot be used as a resource id: only lowercase a-z, 0-9, _ - . and / are allowed in file and folder names. Rename it and pick it again.",
   "photon.asset_pick.invalid_name.rename": "The path of %s cannot be used as a resource id: only lowercase a-z, 0-9, _ - . and / are allowed in file and folder names. Rename it to %s and pick it again.",
+  "photon.asset_pick.reserved_namespace": "%s sits in assets/%s/, a namespace owned by the game, so it cannot be copied into the workspace. Move it under photon/assets/<your namespace>/... and pick it again.",
   "photon.asset_pick.unreadable": "%s could not be read or copied into the workspace (not a valid image, or a file-system error); see the log.",
   "photon.material.pick_loaded_texture.empty": "No loaded textures besides vanilla",
   "photon.material.pick_loaded_texture.limit": "Showing the first %s results; narrow the search to find more.",

@@ -1610,17 +1610,29 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("File outside every assets tree was not reported as such: " + outsideRejection);
         }
         var fine = root.resolve(java.nio.file.Path.of("myfx", "textures", "particle", "fire_ball.png"));
+        var fineId = com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, fine);
         if (com.lowdragmc.photon.client.util.AssetPickRejection.of(root, fine) != null
-                || !new ResourceLocation("myfx", "textures/particle/fire_ball.png")
-                .equals(com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, fine))) {
+                || !new ResourceLocation("myfx", "textures/particle/fire_ball.png").equals(fineId)
+                || com.lowdragmc.photon.client.util.AssetPickRejection.explain(fineId, root, fine) != null) {
             throw new IllegalStateException("A valid asset file was refused by the pick explainer");
+        }
+        // mapped fine but never adopted: a file parked in the game's own namespace, versus one that failed to decode
+        var vanilla = root.resolve(java.nio.file.Path.of("minecraft", "textures", "particle", "flame.png"));
+        var vanillaRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explain(null, root, vanilla);
+        var unreadable = com.lowdragmc.photon.client.util.AssetPickRejection.explain(null, root, fine);
+        if (vanillaRejection == null
+                || vanillaRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.RESERVED_NAMESPACE
+                || !vanillaRejection.message().getString().contains("assets/minecraft/")
+                || unreadable == null
+                || unreadable.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.UNREADABLE) {
+            throw new IllegalStateException("Adoption refusals were not told apart: " + vanillaRejection + " / " + unreadable);
         }
         // the explanation itself must be translated, not a raw key, and must carry the rename
         var message = badName.message().getString();
         if (message.startsWith("photon.") || !message.contains("myfx:textures/particle/fire_ball.png")) {
             throw new IllegalStateException("Asset pick rejection message is raw or lacks the rename: " + message);
         }
-        Photon.LOGGER.info("[asset-pick-rejection-smoke] badly named, accented and outside-assets picks are explained; valid files pass");
+        Photon.LOGGER.info("[asset-pick-rejection-smoke] badly named, accented, outside-assets and reserved-namespace picks are explained; valid files pass");
     }
 
     /** Material previews are retained textures; asking for one each frame must not allocate a new wrapper. */
