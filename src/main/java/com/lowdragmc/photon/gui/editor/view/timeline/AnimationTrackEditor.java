@@ -61,6 +61,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 
 /** Editor for {@code animation} tracks: a bound-target header (root excluded), a keyframe-dot lane,
  *  and an expandable property list + interactive bezier curve editor. */
@@ -1224,8 +1225,8 @@ public class AnimationTrackEditor extends TrackEditor {
         var range = effectiveRange(property);
         var min = range[0];
         var max = range[1];
-        DrawerHelper.drawText(graphics, "%.1f".formatted(max), x + 2, y + 1, 1f, ColorPattern.WHITE.color);
-        DrawerHelper.drawText(graphics, "%.1f".formatted(min), x + 2, y + height - 9, 1f, ColorPattern.WHITE.color);
+        DrawerHelper.drawText(graphics, String.format(Locale.ROOT, "%.1f", max), x + 2, y + 1, 1f, ColorPattern.WHITE.color);
+        DrawerHelper.drawText(graphics, String.format(Locale.ROOT, "%.1f", min), x + 2, y + height - 9, 1f, ColorPattern.WHITE.color);
         var scroll = ctx.scrollTicks();
         var endTick = scroll + width / ctx.scale();
         var axes = activeAxes(st);
@@ -1280,7 +1281,7 @@ public class AnimationTrackEditor extends TrackEditor {
         var hit = hitKey(ctx, st, property, x, y, height, effectiveRange(property), mx, my);
         if (hit == null) return;
         var key = property.key(hit[0], hit[1]);
-        var text = "(%.0f, %.2f)".formatted(key.x, key.y);
+        var text = String.format(Locale.ROOT, "(%.0f, %.2f)", key.x, key.y);
         var tw = net.minecraft.client.Minecraft.getInstance().font.width(text);
         var tx = mx + 6 + tw > x + width ? mx - 6 - tw : mx + 6;
         var ty = Math.max(y, my - 10);
@@ -1375,7 +1376,7 @@ public class AnimationTrackEditor extends TrackEditor {
         var current = editingMax ? property.rangeMax() : property.rangeMin();
         var field = new TextField();
         field.setAnyString();
-        field.setText("%.3f".formatted(current), false);
+        field.setText(String.format(Locale.ROOT, "%.3f", current), false);
         field.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(2).top(editingMax ? 1 : boxH - 9).width(44).height(9));
         var committed = new boolean[]{false};
         Runnable commit = () -> {
@@ -1402,7 +1403,7 @@ public class AnimationTrackEditor extends TrackEditor {
     private void applyRangeEdit(TimelineContext ctx, AnimatedProperty property, boolean editingMax, String raw) {
         float v;
         try {
-            v = Float.parseFloat(raw.trim());
+            v = Float.parseFloat(raw.trim().replace(',', '.')); // accept the locale's comma too
         } catch (Exception ex) {
             return; // invalid input → keep the old range
         }
