@@ -1,8 +1,8 @@
 package com.lowdragmc.photon.client.fx.timeline;
 
+import com.lowdragmc.photon.client.util.CachedExpression;
 import expr.Expr;
-import expr.Parser;
-import expr.SyntaxException;
+import expr.Variable;
 
 import javax.annotation.Nullable;
 
@@ -18,16 +18,16 @@ import javax.annotation.Nullable;
  * {@link AnimatedProperty}.
  */
 public class ExprClip implements SubClip {
+    /** The only variable a clip formula may use: clip-local {@code t} (plus {@code PI}/{@code pi}). */
+    public static final Variable[] VARIABLES = {Variable.make("t")};
+
     private double start;
     private double duration;
     private String expression;
-    // transient parse cache (rebuilt lazily on expression change; never serialized/copied)
-    @Nullable
-    private transient Expr compiled;
-    @Nullable
-    private transient String error;
-    @Nullable
-    private transient String parsedInput;
+    // transient parse cache (rebuilt lazily on expression change; never serialized/copied). Parses once per
+    // distinct source, rejects identifiers other than t/PI (they used to read as a silent 0) and remembers a
+    // broken source as broken.
+    private final transient CachedExpression compiled = new CachedExpression(VARIABLES);
 
     public ExprClip() {
         this(0.0, 1.0, "");
@@ -80,29 +80,20 @@ public class ExprClip implements SubClip {
      *  the compiled expression, or {@code null} when the source is empty or fails to parse. */
     @Nullable
     public Expr compiled() {
-        if (!java.util.Objects.equals(parsedInput, expression)) {
-            parsedInput = expression;
-            if (expression.isBlank()) {
-                compiled = null;
-                error = null;
-            } else {
-                try {
-                    compiled = Parser.parse(expression);
-                    error = null;
-                } catch (SyntaxException e) {
-                    compiled = null;
-                    error = e.getMessage();
-                }
-            }
-        }
-        return compiled;
+        compiled.update(expression);
+        return compiled.expr();
     }
 
     /** The expression's syntax error (null if it is empty or parses). */
     @Nullable
     public String error() {
-        compiled();
-        return error;
+        compiled.update(expression);
+        return compiled.error();
+    }
+
+    /** Whether {@code source} is a formula a clip can use (blank reads as "no formula"). */
+    public static boolean isUsableFormula(String source) {
+        return CachedExpression.problem(source, VARIABLES) == null;
     }
 
     /** An independent value copy of this clip (parse cache is not copied — it rebuilds lazily). */

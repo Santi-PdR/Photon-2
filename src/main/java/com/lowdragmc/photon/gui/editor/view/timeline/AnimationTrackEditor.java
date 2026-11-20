@@ -1061,7 +1061,11 @@ public class AnimationTrackEditor extends TrackEditor {
                                 () -> { clip.expression(prev); ctx.refreshPreview(); });
                         ctx.refreshPreview();
                     },
-                    "", true).setTips(
+                    "", true)
+                    // a source that does not parse, or names anything but t/PI, shows as invalid and is not applied
+                    // (it used to be accepted silently: the clip then just fell back to the curve, or read 0)
+                    .setTextValidator(ExprClip::isUsableFormula)
+                    .setTips(
                     Component.translatable("photon.gui.editor.timeline.property.expression.tips.0"),
                     Component.translatable("photon.gui.editor.timeline.property.expression.tips.1"),
                     Component.translatable("photon.gui.editor.timeline.property.expression.tips.2"));
