@@ -346,18 +346,29 @@ public final class AudioConverter {
 
         Mp3Source(File file) throws IOException {
             bitstream = new javazoom.jl.decoder.Bitstream(new BufferedInputStream(Files.newInputStream(file.toPath())));
-            var header = readFrame(file.getName());
-            if (header == null) throw new IOException(file.getName() + " has no decodable MP3 frames");
-            channels = header.mode() == javazoom.jl.decoder.Header.SINGLE_CHANNEL ? 1 : 2;
-            sampleRate = header.frequency();
-            // jlayer 1.0.6's decodeNextFrame() allocates a fresh SampleBuffer per call, but the
-            // LayerIIIDecoder it caches keeps writing into the buffer it was created with — frame 2
-            // then overflows frame 1's buffer (ArrayIndexOutOfBoundsException). Own the buffer
-            // instead: decodeFrame() clears and refills this same one for every frame.
-            sampleBuffer = new javazoom.jl.decoder.SampleBuffer(sampleRate, channels);
-            decoder.setOutputBuffer(sampleBuffer);
-            decodeCurrentFrame(header, file.getName());
-            pending = toLittleEndian(sampleBuffer);
+            try {
+                var header = readFrame(file.getName());
+                if (header == null) throw new IOException(file.getName() + " has no decodable MP3 frames");
+                channels = header.mode() == javazoom.jl.decoder.Header.SINGLE_CHANNEL ? 1 : 2;
+                sampleRate = header.frequency();
+                // jlayer 1.0.6's decodeNextFrame() allocates a fresh SampleBuffer per call, but the
+                // LayerIIIDecoder it caches keeps writing into the buffer it was created with — frame 2
+                // then overflows frame 1's buffer (ArrayIndexOutOfBoundsException). Own the buffer
+                // instead: decodeFrame() clears and refills this same one for every frame.
+                sampleBuffer = new javazoom.jl.decoder.SampleBuffer(sampleRate, channels);
+                decoder.setOutputBuffer(sampleBuffer);
+                decodeCurrentFrame(header, file.getName());
+                pending = toLittleEndian(sampleBuffer);
+            } catch (IOException | RuntimeException failure) {
+                // a source that fails to open never reaches close(): release the file here, or it
+                // stays locked (Windows) until the GC finalizes the stream
+                try {
+                    bitstream.close();
+                } catch (Exception suppressed) {
+                    failure.addSuppressed(suppressed);
+                }
+                throw failure;
+            }
         }
 
         private javazoom.jl.decoder.Header readFrame(String name) throws IOException {
@@ -441,9 +452,9 @@ public final class AudioConverter {
 
         Mp4Source(File file, Path deleteOnClose) throws IOException {
             this.deleteOnClose = deleteOnClose;
+            var handle = new java.io.RandomAccessFile(file, "r");
             try {
-                fileHandle = new java.io.RandomAccessFile(file, "r");
-                var container = new net.sourceforge.jaad.mp4.MP4Container(fileHandle);
+                var container = new net.sourceforge.jaad.mp4.MP4Container(handle);
                 var movie = container.getMovie();
                 List<net.sourceforge.jaad.mp4.api.Track> tracks = movie == null
                         ? List.<net.sourceforge.jaad.mp4.api.Track>of()
@@ -455,10 +466,14 @@ public final class AudioConverter {
                 decoder = new net.sourceforge.jaad.aac.Decoder(track.getDecoderSpecificInfo());
                 channels = track.getChannelCount();
                 sampleRate = (int) track.getSampleRate();
+                fileHandle = handle;
             } catch (IOException failure) {
+                closeQuietly(handle, failure);
                 throw failure;
             } catch (Exception failure) {
-                throw new IOException("Could not open " + file.getName() + " as MP4: " + failure, failure);
+                var wrapped = new IOException("Could not open " + file.getName() + " as MP4: " + failure, failure);
+                closeQuietly(handle, wrapped);
+                throw wrapped;
             }
         }
 
@@ -517,12 +532,17 @@ public final class AudioConverter {
 
         AdtsSource(File file) throws IOException {
             input = new BufferedInputStream(Files.newInputStream(file.toPath()));
-            demuxer = new net.sourceforge.jaad.adts.ADTSDemultiplexer(input);
-            decoder = new net.sourceforge.jaad.aac.Decoder(demuxer.getDecoderSpecificInfo());
-            pending = decodeNext(file.getName());
-            if (pending == null) throw new IOException(file.getName() + " has no decodable AAC frames");
-            channels = buffer.getChannels();
-            sampleRate = buffer.getSampleRate();
+            try {
+                demuxer = new net.sourceforge.jaad.adts.ADTSDemultiplexer(input);
+                decoder = new net.sourceforge.jaad.aac.Decoder(demuxer.getDecoderSpecificInfo());
+                pending = decodeNext(file.getName());
+                if (pending == null) throw new IOException(file.getName() + " has no decodable AAC frames");
+                channels = buffer.getChannels();
+                sampleRate = buffer.getSampleRate();
+            } catch (IOException | RuntimeException failure) {
+                closeQuietly(input, failure);
+                throw failure;
+            }
         }
 
         private byte[] decodeNext(String name) throws IOException {
@@ -685,6 +705,15 @@ public final class AudioConverter {
             stream.close();
         } catch (IOException ignored) {
             // best effort
+        }
+    }
+
+    /** Closes a resource whose owner failed to open, keeping the open failure as the primary error. */
+    private static void closeQuietly(java.io.Closeable resource, Exception failure) {
+        try {
+            resource.close();
+        } catch (IOException | RuntimeException suppressed) {
+            failure.addSuppressed(suppressed);
         }
     }
 }

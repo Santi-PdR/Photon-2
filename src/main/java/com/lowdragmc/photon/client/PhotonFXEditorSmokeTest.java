@@ -3255,6 +3255,48 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("An Ara trail kept an inherited duration across reset: " + inheritingAra.getLifetime());
         }
         Photon.LOGGER.info("[aratrail-inherit-duration-smoke] an Ara trail takes the parent duration and drops it on reset");
+        // Audio import: a source that fails to open must release its file. The mp3/aac/mp4 openers threw
+        // past their open stream, which kept the file locked on Windows and, for an mp4, made the caller fail
+        // on deleting its scrubbed temp copy instead of reporting what was wrong with the audio.
+        var brokenAudioDir = Files.createTempDirectory("photon-broken-audio-smoke");
+        try {
+            var brokenMp3 = brokenAudioDir.resolve("broken.mp3");
+            Files.write(brokenMp3, new byte[64]); // no frame sync anywhere: "no decodable MP3 frames"
+            var brokenAac = brokenAudioDir.resolve("broken.aac");
+            Files.write(brokenAac, new byte[64]); // no ADTS header
+            var brokenM4a = brokenAudioDir.resolve("broken.m4a");
+            Files.write(brokenM4a, new byte[]{ // ftyp(isom) + free: a well-formed container with no moov/AAC track
+                    0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0,
+                    0, 0, 0, 8, 'f', 'r', 'e', 'e'});
+            for (var broken : new Path[]{brokenMp3, brokenAac, brokenM4a}) {
+                java.io.IOException refusal = null;
+                try {
+                    com.lowdragmc.photon.client.fx.timeline.AudioConverter.toOgg(broken.toFile(),
+                            java.io.OutputStream.nullOutputStream());
+                } catch (java.io.IOException expected) {
+                    refusal = expected;
+                }
+                if (refusal == null) {
+                    throw new IllegalStateException("The audio converter accepted " + broken.getFileName());
+                }
+                int stillOpen = openDescriptorsTo(broken);
+                if (stillOpen > 0) { // -1: no /proc/self/fd on this kernel, nothing to check
+                    throw new IllegalStateException("A rejected " + broken.getFileName() + " is still open "
+                            + stillOpen + " time(s) after: " + refusal.getMessage());
+                }
+            }
+            try (var leftovers = Files.list(brokenAudioDir)) {
+                if (leftovers.count() != 3) {
+                    throw new IllegalStateException("Rejecting broken audio left temp files next to it");
+                }
+            }
+        } finally {
+            try (var files = Files.list(brokenAudioDir)) {
+                for (var file : files.toList()) Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(brokenAudioDir);
+        }
+        Photon.LOGGER.info("[audio-source-release-smoke] a broken mp3, aac and m4a are refused with their file released");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
@@ -5386,6 +5428,31 @@ public final class PhotonFXEditorSmokeTest {
         } finally {
             cache.invalidate(parent);
             cache.invalidate(child);
+        }
+    }
+
+    /**
+     * How many of this process's file descriptors point at {@code file}, read from {@code /proc/self/fd};
+     * {@code -1} where the kernel does not expose that (then the check is skipped, not failed).
+     */
+    private static int openDescriptorsTo(Path file) {
+        var descriptors = Path.of("/proc/self/fd");
+        if (!Files.isDirectory(descriptors)) return -1;
+        try {
+            var target = file.toRealPath();
+            int count = 0;
+            try (var entries = Files.list(descriptors)) {
+                for (var entry : entries.toList()) {
+                    try {
+                        if (Files.readSymbolicLink(entry).equals(target)) count++;
+                    } catch (java.io.IOException | UnsupportedOperationException ignored) {
+                        // a descriptor that closed meanwhile, or one that is not a file
+                    }
+                }
+            }
+            return count;
+        } catch (java.io.IOException failure) {
+            return -1;
         }
     }
 }
