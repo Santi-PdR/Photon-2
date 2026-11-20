@@ -49,7 +49,7 @@ public class ClientCommands {
         return List.of(
                 (LiteralArgumentBuilder<S>) createLiteral("photon_editor").executes(context -> {
                     if (Platform.getMinecraftServer() != null && !Platform.getMinecraftServer().isSingleplayer()) {
-                        context.getSource().sendFailure(Component.literal("This command can only be used in singleplayer"));
+                        context.getSource().sendFailure(Component.translatable("photon.command.editor.singleplayer_only"));
                         return 0;
                     }
                     var minecraft = Minecraft.getInstance();
@@ -80,13 +80,13 @@ public class ClientCommands {
                         .then(createLiteral("clear")
                                 .executes(context -> {
                                     PhotonPostFX.clearTestEffect();
-                                    feedback("photonfx: test effect cleared");
+                                    feedback(Component.translatable("photon.command.postfx.cleared"));
                                     return 1;
                                 }))
                         .then(createLiteral("list")
                                 .executes(context -> {
                                     var paths = PhotonPostFX.listEffectPaths();
-                                    feedback("photonfx: %d effect(s) available:".formatted(paths.size()));
+                                    feedback(Component.translatable("photon.command.postfx.list", paths.size()));
                                     paths.forEach(path -> feedback("  " + path));
                                     return 1;
                                 })),
@@ -106,7 +106,7 @@ public class ClientCommands {
                         .then(createLiteral("clear_client_fx_cache")
                                 .executes(context -> {
                                     if (Minecraft.getInstance().player != null) {
-                                        Minecraft.getInstance().player.sendSystemMessage(Component.literal("clear client cache fx: " + FXHelper.clearCache()));
+                                        Minecraft.getInstance().player.sendSystemMessage(Component.translatable("photon.command.fx_cache_cleared", FXHelper.clearCache()));
                                     } else {
                                         FXHelper.clearCache();
                                     }
@@ -120,7 +120,7 @@ public class ClientCommands {
                                     var text = StringArgumentType.getString(context, "effect");
                                     var id = net.minecraft.resources.ResourceLocation.tryParse(text);
                                     if (id == null) {
-                                        feedback("photon: invalid FX id: " + text);
+                                        feedback(Component.translatable("photon.command.fx_source.invalid_id", text));
                                         return 0;
                                     }
                                     var lines = com.lowdragmc.photon.client.fx.FXSourceReport.describe(id);
@@ -129,7 +129,7 @@ public class ClientCommands {
                                     return 1;
                                 })))
                         .then(createLiteral("textures").executes(context -> textureStatus()))
-                        .then(createLiteral("reload").executes(context -> reloadResources("requested")))
+                        .then(createLiteral("reload").executes(context -> reloadResources(Component.translatable("photon.command.reload.reason_requested"))))
                         .then(createLiteral("fxpacks").executes(context -> refreshServerPacks()))
                         .then(createLiteral("export_ldlib2_assets").executes(context -> {
                             com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUpload.exportLocal();
@@ -192,20 +192,21 @@ public class ClientCommands {
         Photon.LOGGER.info("Iris compatibility report:\n{}", joined);
         if (toClipboard) {
             Minecraft.getInstance().keyboardHandler.setClipboard(joined);
-            feedback("photon_iris: copied to clipboard");
+            feedback(Component.translatable("photon.command.iris.copied"));
         }
         return 1;
     }
 
     private static int setIrisOverlay(boolean enabled) {
         IrisOverlay.setEnabled(enabled);
-        feedback("photon_iris: overlay " + (enabled ? "on" : "off"));
+        feedback(Component.translatable(enabled ? "photon.command.iris.overlay_on" : "photon.command.iris.overlay_off"));
         return 1;
     }
 
     private static int setIrisMode(@Nullable IrisCompositeMode mode) {
         IrisCompat.setModeOverride(mode);
-        feedback("photon_iris: composite mode " + (mode == null ? "auto (config)" : mode.name()));
+        feedback(Component.translatable("photon.command.iris.mode",
+                mode == null ? Component.translatable("photon.command.iris.mode_auto") : Component.literal(mode.name())));
         return 1;
     }
 
@@ -213,11 +214,11 @@ public class ClientCommands {
         var text = StringArgumentType.getString(context, "effect");
         var path = PhotonPostFX.parsePath(text);
         if (path == null) {
-            feedback("photonfx: cannot parse effect path '" + text + "'");
+            feedback(Component.translatable("photon.command.postfx.invalid_path", text));
             return 0;
         }
         PhotonPostFX.setTestEffect(path, weight);
-        feedback("photonfx: testing '" + text + "' at weight " + weight + " (stop with /photonfx clear)");
+        feedback(Component.translatable("photon.command.postfx.testing", text, weight));
         return 1;
     }
 
@@ -227,12 +228,12 @@ public class ClientCommands {
      */
     private static int convertLegacyFx() {
         var report = FXCompat.convertAllFX();
-        feedback("photon 1 -> 2 conversion");
+        feedback(Component.translatable("photon.command.convert.header"));
         report.lines().forEach(ClientCommands::feedback);
         if (report.converted() > 0) {
             // no F3+T needed: the new files only become listable when the packs are re-read, so ask for that
             // reload here instead of making the player remember a key combination
-            reloadResources("converted " + report.converted() + " effect(s)");
+            reloadResources(Component.translatable("photon.command.convert.reason_converted", report.converted()));
         }
         return 1;
     }
@@ -242,45 +243,46 @@ public class ClientCommands {
      * (the fx folder, {@code photon/fxpacks}, the ldlib trees) only rescans on this, which is why "drop a file and
      * play it" never worked without a manual refresh.
      */
-    private static int reloadResources(String reason) {
-        feedback("photon: reloading resources (" + reason + ") ...");
+    private static int reloadResources(Component reason) {
+        feedback(Component.translatable("photon.command.reload.started", reason));
         Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
                 Minecraft.getInstance().execute(() -> {
                     if (failure != null) {
                         Photon.LOGGER.error("photon: resource reload failed", failure);
-                        feedback("photon: reload failed: " + failure.getMessage());
+                        feedback(Component.translatable("photon.command.reload.failed", String.valueOf(failure.getMessage())));
                         return;
                     }
                     FXHelper.clearCache();
                     com.lowdragmc.photon.client.fx.LooseTextures.invalidate();
                     // the same work the F3+T path does, so nothing is left for the player to redo by hand
                     com.lowdragmc.photon.client.fx.FXPreloader.onResourcesReloaded();
-                    feedback("photon: resources reloaded, the effect list is up to date");
+                    feedback(Component.translatable("photon.command.reload.done"));
                 }));
         return 1;
     }
 
     /** "Did it work?" without converting anything: the folders read, the fx each holds, and where they would land. */
     private static int legacyFxStatus() {
-        feedback("photon 1 -> 2 conversion status");
+        feedback(Component.translatable("photon.command.convert.status_header"));
         var destination = com.lowdragmc.photon.client.fx.compat.FXCompat.destination();
         for (var root : FXCompat.legacyRoots()) {
             var present = java.nio.file.Files.isDirectory(root);
-            feedback("  " + root + (present ? "" : "  (missing)"));
+            feedback(present ? Component.literal("  " + root) : Component.translatable("photon.command.convert.root_missing", root.toString()));
             if (!present) continue;
             try (var paths = java.nio.file.Files.walk(root)) {
                 var effects = paths.filter(java.nio.file.Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().endsWith(".fx"))
                         .toList();
-                feedback("    " + effects.size() + " .fx file(s)");
+                feedback(Component.translatable("photon.command.convert.fx_count", effects.size()));
                 for (var effect : effects) {
                     // by file name: that is where the conversion puts it, flat
                     var target = destination.resolve(effect.getFileName().toString());
-                    feedback("    " + effect.getFileName() + (java.nio.file.Files.exists(target)
-                            ? "  -> converted already" : "  -> would convert"));
+                    feedback(Component.translatable(java.nio.file.Files.exists(target)
+                            ? "photon.command.convert.converted_already" : "photon.command.convert.would_convert",
+                            effect.getFileName().toString()));
                 }
             } catch (java.io.IOException e) {
-                feedback("    unreadable: " + e.getMessage());
+                feedback(Component.translatable("photon.command.convert.unreadable", String.valueOf(e.getMessage())));
             }
         }
         return 1;
@@ -300,19 +302,24 @@ public class ClientCommands {
     private static int refreshServerPacks() {
         var connection = Minecraft.getInstance().getConnection();
         if (connection == null) {
-            feedback("photon: not connected to a server");
+            feedback(Component.translatable("photon.command.packs.not_connected"));
             return 0;
         }
-        feedback("photon: asking the server for its FX packs ...");
+        feedback(Component.translatable("photon.command.packs.requested"));
         com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(
                 com.lowdragmc.photon.network.FxPackSync.refreshRequest());
         return 1;
     }
 
+    /** Diagnostic report lines (fx_source, iris, textures) stay as the reports build them. */
     private static void feedback(String message) {
+        feedback(Component.literal(message));
+    }
+
+    private static void feedback(Component message) {
         var player = Minecraft.getInstance().player;
         if (player != null) {
-            player.sendSystemMessage(Component.literal(message));
+            player.sendSystemMessage(message);
         }
     }
 }

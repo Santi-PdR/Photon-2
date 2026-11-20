@@ -42,7 +42,12 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         upperBound.setNumbersOnlyFloat(value.getMin(), value.getMax());
         upperBound.setText(value.getUpper() + "");
         upperBound.setTextResponder(text -> {
-            value.setUpper(Mth.clamp(Float.parseFloat(text), value.getMin(), value.getMax()));
+            var bound = CurveConfigurator.finiteBound(text);
+            if (bound == null) { // "NaN"/"Infinity" parse as numbers; neither is a usable bound
+                upperBound.setText(value.getUpper() + "", false);
+                return;
+            }
+            value.setUpper(Mth.clamp(bound, value.getMin(), value.getMax()));
             updateValue();
         });
         upperBound.layout(layout -> {
@@ -53,7 +58,12 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         lowerBound.setNumbersOnlyFloat(value.getMin(), value.getMax());
         lowerBound.setText(value.getLower() + "");
         lowerBound.setTextResponder(text -> {
-            value.setLower(Mth.clamp(Float.parseFloat(text), value.getMin(), value.getMax()));
+            var bound = CurveConfigurator.finiteBound(text);
+            if (bound == null) {
+                lowerBound.setText(value.getLower() + "", false);
+                return;
+            }
+            value.setLower(Mth.clamp(bound, value.getMin(), value.getMax()));
             updateValue();
         });
         lowerBound.layout(layout -> {

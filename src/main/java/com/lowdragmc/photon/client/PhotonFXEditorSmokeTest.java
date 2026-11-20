@@ -3218,6 +3218,18 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Ara trail warmup was not bounded to 60 seconds");
         }
         Photon.LOGGER.info("[aratrail-warmup-bound-smoke] an Ara trail pre-simulates at most 60 seconds, nothing for NaN or negative values");
+        // The curve inspector's bound fields: "NaN"/"Infinity" parse as floats, so they used to become the curve's
+        // range and poison every sample; the responder now keeps the previous bound for anything non-finite.
+        var curveBounds = com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.class;
+        if (!Float.valueOf(2.5f).equals(com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound(" 2.5 "))
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("NaN") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("Infinity") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("-Infinity") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("abc") != null) {
+            throw new IllegalStateException("Curve bound fields accept a non-finite bound");
+        }
+        Photon.LOGGER.info("[curve-bound-finite-smoke] curve range fields keep their bound for NaN, Infinity and non-numeric text ({})", curveBounds.getSimpleName());
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);

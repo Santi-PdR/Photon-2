@@ -4,6 +4,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import net.minecraft.Util;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
@@ -109,21 +110,21 @@ public final class FxPackSync {
         if (sender == null) return;
         if (packet.token() < 0 || packet.size() <= 0 || packet.size() > MAX_PACK_BYTES
                 || !packet.sha256().matches("[0-9a-f]{64}")) {
-            sendUploadStatus(sender, false, "The upload metadata is invalid or exceeds 512 MiB.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.invalid_metadata"));
             return;
         }
         var request = UPLOAD_REQUESTS.get(sender.getUUID());
         if (request == null || request.token != packet.token()) return;
         if (System.nanoTime() - request.createdAtNanos > java.util.concurrent.TimeUnit.MINUTES.toNanos(10)) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
-            sendUploadStatus(sender, false, "The transfer took too long to prepare; run the send command again.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_timeout"));
             return;
         }
         var server = sender.getServer();
         var target = server == null ? null : server.getPlayerList().getPlayer(request.recipient);
         if (target == null) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
-            sendUploadStatus(sender, false, "Recipient is no longer online.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.recipient_offline"));
             return;
         }
         var tempDirectory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
@@ -141,7 +142,7 @@ public final class FxPackSync {
         } catch (IOException | RuntimeException failure) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
             deleteUpload(new UploadState(packet.token(), request.recipient, packet.size(), packet.sha256(), temp));
-            sendUploadStatus(sender, false, "Could not prepare the server upload file.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_failed"));
             Photon.LOGGER.warn("Could not prepare private Photon FX pack upload from {}", sender.getGameProfile().getName(), failure);
         }
     }
@@ -153,7 +154,7 @@ public final class FxPackSync {
         if (packet.offset() != state.received || packet.bytes().length > state.size - state.received) {
             UPLOADS.remove(sender.getUUID(), state);
             deleteUpload(state);
-            sendUploadStatus(sender, false, "The resource upload arrived out of order; please retry.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.out_of_order"));
             return;
         }
         try (var file = new RandomAccessFile(state.temp.toFile(), "rw")) {
@@ -163,7 +164,7 @@ public final class FxPackSync {
         } catch (IOException failure) {
             UPLOADS.remove(sender.getUUID(), state);
             deleteUpload(state);
-            sendUploadStatus(sender, false, "The upload failed while writing data on the server.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.write_failed"));
             Photon.LOGGER.warn("Could not receive private Photon FX pack from {}", sender.getGameProfile().getName(), failure);
             return;
         }
@@ -177,11 +178,11 @@ public final class FxPackSync {
         try {
             if (Files.size(state.temp) != state.size || !sha256(state.temp).equals(state.sha256)
                     || !inspectFxPack(state.temp, MAX_EXPANDED_PACK_BYTES).valid()) {
-                sendUploadStatus(sender, false, "The archive is invalid or does not contain a Photon FX.");
+                sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.invalid_archive"));
                 return;
             }
             if (recipient == null) {
-                sendUploadStatus(sender, false, "Recipient went offline before the transfer completed.");
+                sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.recipient_left"));
                 return;
             }
             var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
@@ -202,7 +203,7 @@ public final class FxPackSync {
                     }
                 }
                 if (existingFiles >= MAX_PRIVATE_PACKS || existingBytes + state.size > MAX_PRIVATE_PACK_BYTES) {
-                    sendUploadStatus(sender, false, "That player's private FX pack storage is full.");
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.storage_full"));
                     return;
                 }
                 Files.deleteIfExists(target);
@@ -214,20 +215,18 @@ public final class FxPackSync {
             }
             Photon.LOGGER.info("Stored private Photon FX pack {} for {} from {}", state.sha256,
                     recipient.getGameProfile().getName(), sender.getGameProfile().getName());
-            sendUploadStatus(sender, true, "Sent your ldlib2/assets resources to "
-                    + recipient.getGameProfile().getName() + ". They will reload automatically.");
-            recipient.sendSystemMessage(net.minecraft.network.chat.Component.literal("Photon: received FX/resources from "
-                    + sender.getGameProfile().getName() + "; reloading assets."));
+            sendUploadStatus(sender, true, Component.translatable("photon.fxpack.upload.sent", recipient.getGameProfile().getName()));
+            recipient.sendSystemMessage(Component.translatable("photon.fxpack.upload.received", sender.getGameProfile().getName()));
             offer(recipient, false);
         } catch (IOException | RuntimeException failure) {
-            sendUploadStatus(sender, false, "Could not validate or store the resource pack on the server.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.store_failed"));
             Photon.LOGGER.warn("Could not finalize private Photon FX pack upload", failure);
         } finally {
             deleteUpload(state);
         }
     }
 
-    private static void sendUploadStatus(ServerPlayer player, boolean success, String message) {
+    private static void sendUploadStatus(ServerPlayer player, boolean success, Component message) {
         PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new UploadStatusPacket(success, message));
     }
 
@@ -725,13 +724,14 @@ public final class FxPackSync {
         }
     }
 
-    public record UploadStatusPacket(boolean success, String message) {
+    /** The outcome of a private upload, as a component so the sender's client renders it in its own language. */
+    public record UploadStatusPacket(boolean success, Component message) {
         public static void encode(UploadStatusPacket packet, FriendlyByteBuf buf) {
             buf.writeBoolean(packet.success());
-            buf.writeUtf(packet.message(), 256);
+            buf.writeComponent(packet.message());
         }
         public static UploadStatusPacket decode(FriendlyByteBuf buf) {
-            return new UploadStatusPacket(buf.readBoolean(), buf.readUtf(256));
+            return new UploadStatusPacket(buf.readBoolean(), buf.readComponent());
         }
     }
 

@@ -7,6 +7,7 @@ import com.lowdragmc.photon.network.FxPackSync;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
@@ -41,25 +42,24 @@ public final class LocalFxResourceUpload {
     /** Ask the player before reading any local assets in response to a server upload request. */
     public static void begin(FxPackSync.UploadPromptPacket prompt) {
         pendingUploadPrompt = prompt;
-        feedbackWithActions("Photon: " + prompt.recipientName() + " will receive all files in <gameDir>/ldlib2/assets. "
-                        + "Photon must read and upload those files. Continue? ",
-                "/photon_client confirm_ldlib2_upload " + prompt.token(), "[Confirm upload]",
-                "/photon_client cancel_ldlib2_upload " + prompt.token(), "[Cancel]");
+        feedbackWithActions(Component.translatable("photon.fxpack.local.upload_prompt", prompt.recipientName()),
+                "/photon_client confirm_ldlib2_upload " + prompt.token(), Component.translatable("photon.fxpack.local.confirm_upload"),
+                "/photon_client cancel_ldlib2_upload " + prompt.token(), Component.translatable("photon.fxpack.local.cancel"));
     }
 
     public static void confirmUpload(long token) {
         var prompt = pendingUploadPrompt;
         if (prompt == null || prompt.token() != token) {
-            feedback("Photon: this upload confirmation has expired.");
+            feedback(Component.translatable("photon.fxpack.local.upload_expired"));
             return;
         }
         pendingUploadPrompt = null;
         if (!UPLOADING.compareAndSet(false, true)) {
-            feedback("Photon: another ldlib2/assets transfer is already running.");
+            feedback(Component.translatable("photon.fxpack.local.upload_busy"));
             return;
         }
         activeToken = prompt.token();
-        feedback("Photon: packaging ldlib2/assets for " + prompt.recipientName() + "…");
+        feedback(Component.translatable("photon.fxpack.local.packaging_for", prompt.recipientName()));
         CompletableFuture.runAsync(() -> upload(prompt));
     }
 
@@ -67,37 +67,37 @@ public final class LocalFxResourceUpload {
         var prompt = pendingUploadPrompt;
         if (prompt != null && prompt.token() == token) {
             pendingUploadPrompt = null;
-            feedback("Photon: resource upload cancelled; no local files were read.");
+            feedback(Component.translatable("photon.fxpack.local.upload_cancelled"));
         }
     }
 
     /** Ask for explicit confirmation before creating a standalone shareable .fxpack. */
     public static void exportLocal() {
         if (!EXPORT_CONFIRMATION_PENDING.compareAndSet(false, true)) {
-            feedback("Photon: an LDLib2 export confirmation is already pending.");
+            feedback(Component.translatable("photon.fxpack.local.export_pending"));
             return;
         }
-        feedbackWithActions("Photon: this will read all files in <gameDir>/ldlib2/assets and create a local .fxpack. Continue? ",
-                "/photon_client confirm_export_ldlib2_assets", "[Confirm export]",
-                "/photon_client cancel_export_ldlib2_assets", "[Cancel]");
+        feedbackWithActions(Component.translatable("photon.fxpack.local.export_prompt"),
+                "/photon_client confirm_export_ldlib2_assets", Component.translatable("photon.fxpack.local.confirm_export"),
+                "/photon_client cancel_export_ldlib2_assets", Component.translatable("photon.fxpack.local.cancel"));
     }
 
     public static void cancelLocalExport() {
         if (EXPORT_CONFIRMATION_PENDING.compareAndSet(true, false)) {
-            feedback("Photon: local export cancelled; no files were read.");
+            feedback(Component.translatable("photon.fxpack.local.export_cancelled"));
         }
     }
 
     public static void confirmLocalExport() {
         if (!EXPORT_CONFIRMATION_PENDING.compareAndSet(true, false)) {
-            feedback("Photon: there is no pending LDLib2 export confirmation.");
+            feedback(Component.translatable("photon.fxpack.local.export_none_pending"));
             return;
         }
         if (!EXPORTING.compareAndSet(false, true)) {
-            feedback("Photon: an LDLib2 resource export is already running.");
+            feedback(Component.translatable("photon.fxpack.local.export_running"));
             return;
         }
-        feedback("Photon: packaging all of ldlib2/assets into a shareable .fxpack…");
+        feedback(Component.translatable("photon.fxpack.local.export_packaging"));
         CompletableFuture.runAsync(() -> {
             Path archive = null;
             try {
@@ -113,10 +113,10 @@ public final class LocalFxResourceUpload {
                     Files.move(archive, output);
                     archive = null;
                 }
-                feedback("Photon: share this file with your friend: " + output.toAbsolutePath());
+                feedback(Component.translatable("photon.fxpack.local.export_done", output.toAbsolutePath().toString()));
             } catch (Exception failure) {
                 Photon.LOGGER.warn("Could not export the local LDLib2 assets", failure);
-                feedback("Photon: local export failed — " + safeMessage(failure));
+                feedback(Component.translatable("photon.fxpack.local.export_failed", safeMessage(failure)));
             } finally {
                 deleteTemporary(archive);
                 EXPORTING.set(false);
@@ -145,12 +145,12 @@ public final class LocalFxResourceUpload {
                     offset += read;
                 }
             }
-            feedback("Photon: uploading " + String.format(java.util.Locale.ROOT, "%.1f MiB", size / 1048576.0)
-                    + " to the server for " + prompt.recipientName() + "…");
+            feedback(Component.translatable("photon.fxpack.local.uploading",
+                    String.format(java.util.Locale.ROOT, "%.1f", size / 1048576.0), prompt.recipientName()));
         } catch (Exception failure) {
             Photon.LOGGER.warn("Could not package or upload the local LDLib2 assets", failure);
             if (activeToken == prompt.token()) {
-                feedback("Photon: resource upload failed — " + safeMessage(failure));
+                feedback(Component.translatable("photon.fxpack.local.upload_failed", safeMessage(failure)));
                 UPLOADING.set(false);
                 activeToken = -1;
             }
@@ -230,7 +230,7 @@ public final class LocalFxResourceUpload {
     public static void status(FxPackSync.UploadStatusPacket status) {
         UPLOADING.set(false);
         activeToken = -1;
-        feedback("Photon: " + status.message());
+        feedback(Component.translatable("photon.fxpack.upload.status", status.message()));
     }
 
     public static void onClientLogout() {
@@ -265,25 +265,25 @@ public final class LocalFxResourceUpload {
         return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
     }
 
-    private static void feedbackWithActions(String message, String acceptCommand, String acceptLabel,
-                                            String rejectCommand, String rejectLabel) {
+    private static void feedbackWithActions(MutableComponent message, String acceptCommand, MutableComponent acceptLabel,
+                                            String rejectCommand, MutableComponent rejectLabel) {
         Minecraft.getInstance().execute(() -> {
             var player = Minecraft.getInstance().player;
             if (player == null) return;
-            var accept = Component.literal(acceptLabel).withStyle(Style.EMPTY
+            var accept = acceptLabel.withStyle(Style.EMPTY
                     .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, acceptCommand))
                     .withUnderlined(true));
-            var reject = Component.literal(rejectLabel).withStyle(Style.EMPTY
+            var reject = rejectLabel.withStyle(Style.EMPTY
                     .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, rejectCommand))
                     .withUnderlined(true));
-            player.sendSystemMessage(Component.literal(message).append(accept).append(" ").append(reject));
+            player.sendSystemMessage(message.append(accept).append(" ").append(reject));
         });
     }
 
-    private static void feedback(String message) {
+    private static void feedback(Component message) {
         Minecraft.getInstance().execute(() -> {
             var player = Minecraft.getInstance().player;
-            if (player != null) player.sendSystemMessage(Component.literal(message));
+            if (player != null) player.sendSystemMessage(message);
         });
     }
 }

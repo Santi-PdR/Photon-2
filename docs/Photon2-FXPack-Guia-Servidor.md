@@ -147,7 +147,7 @@ servidor que los empaquete y se los entregue a un jugador conectado:
 
 Reemplaza `Oz` por el nombre del jugador. Quien ejecuta el comando debe ser operador (permiso 2),
 y tanto quien envía como quien recibe deben tener Photon y estar conectados para iniciar el envío.
-Antes de leer archivos, el cliente muestra botones **Confirm upload** y **Cancel**; sólo al confirmar
+Antes de leer archivos, el cliente muestra botones **[Confirmar subida]** y **[Cancelar]** (en el idioma del juego; en inglés, *Confirm upload* / *Cancel*); sólo al confirmar
 comienza a empaquetar y subir. La exportación local también pide confirmación antes de leer archivos.
 Photon empaqueta **todo** `ldlib2/assets`, lo sube al servidor y entrega el pack solo a ese jugador;
 no lo añade al conjunto público que reciben los demás. El servidor guarda el pack por UUID bajo

@@ -169,7 +169,7 @@ public class AudioTrackEditor extends ClipTrackEditor {
                 }, defaultSound, true, BuiltInRegistries.SOUND_EVENT,
                 UIElementProvider.text(sound -> {
                     var key = BuiltInRegistries.SOUND_EVENT.getKey(sound);
-                    return Component.literal(key == null ? "unknown" : key.toString());
+                    return key == null ? Component.translatable("photon.gui.editor.timeline.audio.unknown_sound") : Component.literal(key.toString());
                 })));
         Button importedSoundButton = new Button();
         importedSoundButton.setText(Component.literal(audio.sound().toString()));

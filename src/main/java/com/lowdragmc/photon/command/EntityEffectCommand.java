@@ -63,7 +63,7 @@ public class EntityEffectCommand extends EffectCommand {
         private static final Collection<String> EXAMPLES = Arrays.asList("none", "forward", "look", "xrot");
         private static final com.mojang.brigadier.exceptions.SimpleCommandExceptionType INVALID_VALUE =
                 new com.mojang.brigadier.exceptions.SimpleCommandExceptionType(
-                        net.minecraft.network.chat.Component.literal("Expected none, forward, look, or xrot"));
+                        net.minecraft.network.chat.Component.translatable("photon.command.entity_fx.invalid_facing"));
 
         public AutoRotateType() {
         }
@@ -145,8 +145,8 @@ public class EntityEffectCommand extends EffectCommand {
         command.setLocation(ResourceLocationArgument.getId(context, "location"));
         var selected = EntityArgument.getEntities(context, "entities");
         if (selected.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
-            context.getSource().sendFailure(net.minecraft.network.chat.Component.literal(
-                    "Photon: entity FX commands support at most " + EntityIdListCodec.MAX_ENTITY_IDS + " entities"));
+            context.getSource().sendFailure(net.minecraft.network.chat.Component.translatable(
+                    "photon.command.entity_fx.too_many", EntityIdListCodec.MAX_ENTITY_IDS));
             return 0;
         }
         command.setEntities(selected.stream().map(e -> (Entity) e).toList());

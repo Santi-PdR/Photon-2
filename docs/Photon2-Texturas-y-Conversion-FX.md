@@ -23,7 +23,7 @@ salen con el cuadriculado violeta o que faltan efectos en la lista.
 Los resultados anidados que queden de partidas anteriores se reportan en el log, no se mueven solos.
 
 Al terminar, si convirtió algo, **recarga los recursos solo** y te avisa en el chat
-(`photon: resources reloaded, the effect list is up to date`). No hace falta F3+T; si querés
+(`Photon: recursos recargados, la lista de efectos está al día`; en inglés, `Photon: resources reloaded, the effect list is up to date`). No hace falta F3+T; si querés
 forzarlo igual, `/photon_client reload` es el equivalente exacto.
 
 ## 2. «Las partículas no cargan las imágenes»

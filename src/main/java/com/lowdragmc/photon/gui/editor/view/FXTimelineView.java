@@ -1303,6 +1303,23 @@ public class FXTimelineView extends View implements TimelineContext {
         return -1;
     }
 
+    /** Whether pasted clips can land at the playhead: none may overlap an existing clip on its track, nor
+     *  another pasted clip on the same track (the editor's own conflict rule, so control tracks keep
+     *  allowing different-target clips side by side). Mirrors {@link #groupMoveValid(List)}. */
+    private boolean pasteFits(List<Map.Entry<Track, Clip>> pairs) {
+        for (var p : pairs) {
+            if (!(editorFor(p.getKey()) instanceof ClipTrackEditor cte)) return false;
+            for (var other : p.getKey().clips()) {
+                if (cte.clipsConflict(p.getValue(), other)) return false;
+            }
+            for (var q : pairs) {
+                if (q == p || q.getKey() != p.getKey()) continue;
+                if (cte.clipsConflict(p.getValue(), q.getValue())) return false;
+            }
+        }
+        return true;
+    }
+
     /** Valid iff every selected clip lands on an existing, same-type track without overlapping a
      *  non-selected clip (or another moving clip landing on the same track). */
     private boolean groupMoveValid(List<Track> tracks) {
@@ -2176,6 +2193,7 @@ public class FXTimelineView extends View implements TimelineContext {
                 pasted.add(copy);
             }
             if (pairs.isEmpty()) return;
+            if (!pasteFits(pairs)) return; // same rule as a group drag: a paste never creates an overlap
             pushEdit("photon.gui.editor.timeline.add_clip",
                     () -> { for (var p : pairs) p.getKey().clips().add(p.getValue()); rebuild(); selectClips(pasted, false); refreshPreview(); },
                     () -> { for (var p : pairs) p.getKey().clips().remove(p.getValue()); rebuild(); refreshPreview(); });

@@ -55,8 +55,8 @@ public class RemoveEntityEffectCommand {
         var command = new RemoveEntityEffectCommand();
         var selected = EntityArgument.getEntities(context, "entities");
         if (selected.size() > EntityIdListCodec.MAX_ENTITY_IDS) {
-            context.getSource().sendFailure(net.minecraft.network.chat.Component.literal(
-                    "Photon: entity FX removal supports at most " + EntityIdListCodec.MAX_ENTITY_IDS + " entities"));
+            context.getSource().sendFailure(net.minecraft.network.chat.Component.translatable(
+                    "photon.command.entity_fx.remove_too_many", EntityIdListCodec.MAX_ENTITY_IDS));
             return 0;
         }
         command.setEntities(selected.stream().map(e -> (Entity) e).toList());

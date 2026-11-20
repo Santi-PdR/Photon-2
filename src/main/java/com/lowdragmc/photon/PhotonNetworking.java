@@ -15,7 +15,7 @@ import java.util.Optional;
 import net.minecraftforge.network.NetworkDirection;
 
 public class PhotonNetworking {
-    private static final String PROTOCOL = "5";
+    private static final String PROTOCOL = "6"; // 6: UploadStatusPacket carries a Component instead of an English string
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Photon.MOD_ID, "main"), () -> PROTOCOL,
             PROTOCOL::equals, PROTOCOL::equals);

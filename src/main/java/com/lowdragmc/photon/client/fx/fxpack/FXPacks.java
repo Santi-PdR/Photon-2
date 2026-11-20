@@ -220,7 +220,7 @@ public final class FXPacks {
     }
 
     private static Pack createPack(String id, String displayName, Pack.ResourcesSupplier resources) {
-        var metadata = new Pack.Info(Component.literal("Photon FX pack " + displayName), 15, 15,
+        var metadata = new Pack.Info(Component.translatable("photon.resource_pack.fxpack", displayName), 15, 15,
                 FeatureFlagSet.of(), true);
         return Pack.create(id, Component.literal(displayName), true, resources, metadata,
                 PackType.CLIENT_RESOURCES, Pack.Position.BOTTOM, true, PackSource.BUILT_IN);
