@@ -2953,6 +2953,8 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();
         com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyLoadRegression.verify();
         Photon.LOGGER.info("[animated-property-load-smoke] unreadable animated properties are skipped without failing the track");
+        com.lowdragmc.photon.gui.editor.view.TimelineInsertTimeRegression.verify();
+        Photon.LOGGER.info("[timeline-insert-time-smoke] insert time only accepts a finite positive gap and its undo is exact");
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");

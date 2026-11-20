@@ -863,7 +863,7 @@ public class FXTimelineView extends View implements TimelineContext {
                 value -> validSectionStartText(timeline, section, value), value -> {
                     if (!timeline.sections().contains(section) || !validSectionStartText(timeline, section, value)) return;
                     var before = section.start();
-                    var after = Double.parseDouble(value);
+                    var after = parseDecimal(value);
                     if (before == after) return;
                     pushEdit("photon.gui.editor.timeline.section.move", () -> section.start(after),
                             () -> section.start(before));
@@ -871,10 +871,15 @@ public class FXTimelineView extends View implements TimelineContext {
     }
 
     private static boolean validSectionStartText(Timeline timeline, TimelineSection section, String value) {
+        return validSectionStart(timeline, section, parseDecimal(value)); // NaN (unparseable) fails the finite check
+    }
+
+    /** Typed decimal text → value, accepting the locale's comma as well as the dot; NaN when unparseable. */
+    static double parseDecimal(String text) {
         try {
-            return validSectionStart(timeline, section, Double.parseDouble(value));
+            return Double.parseDouble(text.trim().replace(',', '.'));
         } catch (NumberFormatException e) {
-            return false;
+            return Double.NaN;
         }
     }
 
@@ -926,20 +931,36 @@ public class FXTimelineView extends View implements TimelineContext {
         });
     }
 
+    /** Longest gap the insert-time dialog accepts, in seconds (one hour; keeps keyframe x in float precision). */
+    static final double MAX_INSERT_SECONDS = 3600;
+
+    /**
+     * The gap in ticks the insert-time dialog text asks for, or NaN when it must be refused: unparseable,
+     * non-finite, zero, negative or absurdly long. Only a positive gap is accepted because the undo of an
+     * insert is the same ripple with {@code -delta} — exact for a positive insert (everything at or after
+     * the point moved later, so it all moves back) but not for a negative one, which can pull clips,
+     * keyframes and markers back across the insertion point where the inverse no longer reaches them.
+     */
+    static double insertTicksFromDialog(String text) {
+        var seconds = parseDecimal(text);
+        if (!(seconds > 0) || seconds > MAX_INSERT_SECONDS) return Double.NaN; // NaN/-x/0/huge all fail here
+        return seconds * 20;
+    }
+
     /** Prompt for an amount of time (seconds) to ripple-insert at {@code atTick}. */
     private void openInsertTimeDialog(double atTick) {
         Dialog.stringEditorDialog("photon.gui.editor.timeline.insert_time", "1.0",
-                s -> { try { Double.parseDouble(s); return true; } catch (NumberFormatException ex) { return false; } },
+                s -> !Double.isNaN(insertTicksFromDialog(s)),
                 s -> {
-                    double delta;
-                    try { delta = Double.parseDouble(s) * 20; } catch (NumberFormatException ex) { return; }
-                    if (delta == 0) return;
+                    var delta = insertTicksFromDialog(s);
+                    if (Double.isNaN(delta)) return;
                     insertTime(atTick, delta);
                 }).show(fxEditor);
     }
 
     /** Ripple-insert {@code delta} ticks of time at {@code atTick} across the whole timeline (undoable).
-     *  The inverse is the same op with {@code -delta} (undo shifts the just-shifted content back). */
+     *  The inverse is the same op with {@code -delta} (undo shifts the just-shifted content back) — which
+     *  is why only positive deltas reach here (see {@link #insertTicksFromDialog}). */
     private void insertTime(double atTick, double delta) {
         if (fxEditor.runtime == null) return;
         var timeline = fxEditor.runtime.fxData.timeline();
