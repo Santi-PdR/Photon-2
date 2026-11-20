@@ -16,6 +16,8 @@ public final class FXPackDependencyRegression {
 
     public static void verify() throws Exception {
         verifySyncPacketTokens();
+        verifyEffectCommandCodecBounds();
+        verifyUnsafeEntryNameParity();
         var traversalId = FXPackExporter.fxId("../unsafe", "../../../../pack.mcmeta");
         var rawTraversalId = new net.minecraft.resources.ResourceLocation("test", "../../pack.mcmeta");
         var fxDirectory = Path.of("assets").resolve(traversalId.getNamespace()).resolve("fx").normalize();
@@ -188,6 +190,98 @@ public final class FXPackDependencyRegression {
             }
         } finally {
             chunkBuffer.release();
+        }
+    }
+
+    /**
+     * Entity FX packets must bound their id list against the bytes actually left, <b>including</b> the trailing
+     * replay flag — counting it as payload once let a crafted packet pass the check and read past the buffer.
+     */
+    private static void verifyEffectCommandCodecBounds() {
+        var id = new net.minecraft.resources.ResourceLocation("test", "effect");
+        var good = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            writeEffectCommandPrefix(good, id);
+            good.writeVarInt(0); // no ids
+            good.writeBoolean(false); // replay flag
+            com.lowdragmc.photon.command.EntityEffectCommand.decodePacket(good); // must not throw
+        } finally {
+            good.release();
+        }
+        var bad = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            writeEffectCommandPrefix(bad, id);
+            bad.writeVarInt(2); // claims two ids...
+            bad.writeVarInt(1); // ...but only one id byte follows
+            bad.writeBoolean(false); // the trailing replay flag the bound check must reserve
+            try {
+                com.lowdragmc.photon.command.EntityEffectCommand.decodePacket(bad);
+                throw new IllegalStateException("Entity FX packet accepted an id list larger than the remaining bytes");
+            } catch (io.netty.handler.codec.DecoderException expected) {
+                // the clean rejection the trailing-byte bound guarantees
+            }
+        } finally {
+            bad.release();
+        }
+    }
+
+    private static void writeEffectCommandPrefix(net.minecraft.network.FriendlyByteBuf buffer,
+                                                 net.minecraft.resources.ResourceLocation id) {
+        buffer.writeResourceLocation(id);
+        for (int i = 0; i < 9; i++) buffer.writeDouble(0d); // offset, rotation, scale
+        buffer.writeVarInt(0); // delay
+        buffer.writeBoolean(false); // forcedDeath
+        buffer.writeBoolean(false); // allowMulti
+        buffer.writeEnum(com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
+    }
+
+    /**
+     * The names {@link LocalFxResourceUpload} skips when packing {@code ldlib2/assets} must be exactly the names
+     * server-side pack validation rejects as zip entries — otherwise one oddly named file either breaks the whole
+     * transfer late or is skipped while the pack would have carried it fine.
+     */
+    private static void verifyUnsafeEntryNameParity() throws Exception {
+        for (var name : java.util.List.of("ns/fx/a.fx", "ns/textures/with space.png",
+                "ns/fx/nombre-único.fx", "a.b-c_d/e.fx", "ns/fx/..hidden.fx")) {
+            if (!LocalFxResourceUpload.isSafeEntryName(name)) {
+                throw new IllegalStateException("LDLib2 export would skip a safe relative path: " + name);
+            }
+        }
+        var unsafe = java.util.List.of("ns\\fx\\a.fx", "ns/fo:o.fx", "..", "a/../b.fx", "a/./b.fx",
+                "", " ", "/abs.fx", "a//b.fx", "a/\u0001b.fx");
+        for (var name : unsafe) {
+            if (LocalFxResourceUpload.isSafeEntryName(name)) {
+                throw new IllegalStateException("LDLib2 export would accept an unsafe relative path: " + name);
+            }
+        }
+        var directory = Files.createTempDirectory("photon-entry-parity-");
+        try {
+            for (var name : unsafe) {
+                var archive = directory.resolve("parity.fxpack");
+                Files.deleteIfExists(archive);
+                try (var zip = new ZipOutputStream(Files.newOutputStream(archive))) {
+                    zip.putNextEntry(new ZipEntry("assets/" + name));
+                    zip.write(1);
+                    zip.closeEntry();
+                }
+                if (com.lowdragmc.photon.network.FxPackSync.isValidFxPack(archive)) {
+                    throw new IllegalStateException("Pack validation accepted the unsafe entry " + name);
+                }
+            }
+            var safe = directory.resolve("safe.fxpack");
+            try (var zip = new ZipOutputStream(Files.newOutputStream(safe))) {
+                zip.putNextEntry(new ZipEntry("assets/ns/fx/a.fx"));
+                zip.write(new byte[]{1, 2, 3});
+                zip.closeEntry();
+            }
+            if (!com.lowdragmc.photon.network.FxPackSync.isValidFxPack(safe)) {
+                throw new IllegalStateException("Pack validation rejected a pack of safe entry names");
+            }
+        } finally {
+            try (var files = Files.list(directory)) {
+                for (var file : files.toList()) Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(directory);
         }
     }
 

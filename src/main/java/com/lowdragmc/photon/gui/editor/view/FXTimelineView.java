@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Locale;
 
 /**
  * Unity/Premiere-style timeline editor panel and the generic host for the extensible track framework.
@@ -246,11 +247,11 @@ public class FXTimelineView extends View implements TimelineContext {
     @Override public float scrollTicks() { return scrollTicks; }
     @Override public long currentTimeTicks() { return fxEditor.sceneView.particleManager.getTime(); }
     @Override public double majorTickInterval() { return niceInterval(60 / scale); }
-    @Override public void pushEdit(String name, Runnable doFn, Runnable undoFn) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(doFn, undoFn));
+    @Override public void pushEdit(Component label, Runnable doFn, Runnable undoFn) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(doFn, undoFn));
     }
-    @Override public void pushApplied(String name, Runnable redo, Runnable undo) {
-        fxEditor.historyView.pushHistory(Component.translatable(name), EditAction.of(redo, undo), false);
+    @Override public void pushApplied(Component label, Runnable redo, Runnable undo) {
+        fxEditor.historyView.pushHistory(label, EditAction.of(redo, undo), false);
     }
     // coalesced: edit actions can fire many refreshes per frame; only the last one replays
     @Override public void refreshPreview() { fxEditor.sceneView.requestSimulateTo(currentTimeTicks()); }
@@ -391,18 +392,18 @@ public class FXTimelineView extends View implements TimelineContext {
     private UIElement createTimeField() {
         // plain STRING mode + a numeric regex — NOT setNumbersOnlyDouble, whose NUMBER_DOUBLE mode
         // normalizes the text on setText (strips trailing zeros, so "1.00" would show as "1")
-        var field = new TextField().setTextRegexValidator("\\d*\\.?\\d*");
+        var field = new TextField().setTextRegexValidator("\\d*[.,]?\\d*"); // dot or the locale's comma
         field.setText("0.00", false);
         field.setId("timeline.time").layout(layout -> layout.flexGrow(1).maxWidth(70).alignSelf(AlignItems.CENTER))
                 .style(style -> style.tooltips("photon.gui.editor.timeline.time.tip"));
         // while not being typed in, mirror the live playhead time (no notify so it doesn't fight editing)
         field.addEventListener(UIEvents.TICK, e -> {
-            if (!field.isFocused()) field.setText("%.2f".formatted(currentTimeTicks() / 20f), false);
+            if (!field.isFocused()) field.setText(String.format(Locale.ROOT, "%.2f", currentTimeTicks() / 20f), false);
         });
         // commit on blur: parse seconds → jump the playhead (coalesced seek)
         field.addEventListener(UIEvents.FOCUS_OUT, e -> {
             try {
-                var seconds = Double.parseDouble(field.getText());
+                var seconds = Double.parseDouble(field.getText().replace(',', '.'));
                 fxEditor.sceneView.requestSimulateTo(Math.max(0, Math.round(seconds * 20)));
             } catch (NumberFormatException ignored) {
             }

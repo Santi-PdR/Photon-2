@@ -22,6 +22,7 @@ import oshi.util.tuples.Pair;
 import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.Locale;
 
 public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
     public final TextField upperBound = new TextField();
@@ -64,7 +65,7 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         this.curveGraph.setOnCurveChangeListener(curves -> updateValue());
         // the drag readout shows the mapped value (lower..upper) instead of the normalized 0..1
         this.curveGraph.setCoordFormatter((x, y) ->
-                "(%.2f, %.2f)".formatted(x, value.getLower() + (value.getUpper() - value.getLower()) * y));
+                String.format(Locale.ROOT, "(%.2f, %.2f)", x, value.getLower() + (value.getUpper() - value.getLower()) * y));
 
         inlineContainer.addChildren(curvePreview.layout(layout -> {
             layout.height(14);
