@@ -881,7 +881,6 @@ public class ParticleEmitter extends Emitter {
         return config.emission.isLegacyTickEmission() ? ageF > getLifetime() : super.hasReachedEnd();
     }
 
-    @Override
     /**
      * Longest prewarm simulated, in ticks (60 s). The prewarm runs synchronously, one full emission and
      * particle update per tick, before the emitter's first visible frame; the field had no upper bound, so an
@@ -901,6 +900,7 @@ public class ParticleEmitter extends Emitter {
         return looping ? ticks : Math.min(ticks, Math.max(lifetime - 1, 0));
     }
 
+    @Override
     public void update(float dt) {
         if (!hasFirstUpdate) {
             hasFirstUpdate = true;
