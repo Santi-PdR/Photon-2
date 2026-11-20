@@ -17,7 +17,7 @@ import org.joml.Vector3f;
 public class Function implements IShape {
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.x", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -26,7 +26,7 @@ public class Function implements IShape {
     private String x = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.y", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -35,7 +35,7 @@ public class Function implements IShape {
     private String y = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.z", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -45,7 +45,7 @@ public class Function implements IShape {
 
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedX", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -54,7 +54,7 @@ public class Function implements IShape {
     private String speedX = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedY", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -63,7 +63,7 @@ public class Function implements IShape {
     private String speedY = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedZ", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
