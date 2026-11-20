@@ -285,19 +285,24 @@ jobs:
               echo "== $which: no log"
               continue
             fi
-            summary=$(grep -aE '/(WARN|ERROR)\]' "$log" \
+            relevant=$(grep -aE '/(WARN|ERROR)\]' "$log" \
               | grep -aEi 'photon|ldlib|kila' \
-              | grep -avE 'authlib|Expected BEGIN_OBJECT|AuthenticationUnavailable' \
+              | grep -avE 'authlib|Expected BEGIN_OBJECT|AuthenticationUnavailable' || true)
+            # vanilla ShaderInstance warns for every uniform/sampler a shader JSON declares but the GLSL
+            # never reads (the linker drops it); harmless, and numerous enough to crowd out the real lines
+            unused_uniforms=$(printf '%s\n' "$relevant" | grep -acE 'could not find (uniform|sampler) named' || true)
+            summary=$(printf '%s\n' "$relevant" \
+              | grep -avE 'could not find (uniform|sampler) named' \
               | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//; s/\b[0-9]+(\.[0-9]+)?\b/N/g' \
               | sort | uniq -c | sort -rn | head -n 40 | cut -c1-200 || true)
             count=$(printf '%s\n' "$summary" | grep -c . || true)
-            echo "== $which: $count distinct Photon WARN/ERROR lines"
+            echo "== $which: $count distinct Photon WARN/ERROR lines ($unused_uniforms declared-but-unused uniform warnings left out)"
             printf '%s\n' "$summary"
             if [ "$count" -gt 0 ]; then
               encoded=$(printf '%s' "$summary" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-3900)
-              echo "::notice title=photon $which WARN/ERROR summary ($count distinct)::$encoded"
+              echo "::notice title=photon $which WARN/ERROR summary ($count distinct, $unused_uniforms unused-uniform lines left out)::$encoded"
             else
-              echo "::notice title=photon $which WARN/ERROR summary::none"
+              echo "::notice title=photon $which WARN/ERROR summary::none ($unused_uniforms unused-uniform lines left out)"
             fi
           done
 
@@ -649,6 +654,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*-all.jar' -print)
@@ -657,9 +663,13 @@ jobs:
             exit 1
           fi
           tag="preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # On pull_request runs GITHUB_SHA is the synthetic merge commit, which GitHub rebuilds on the
+          # next push to the branch; a release targeting the superseded one is refused (HTTP 403,
+          # "Resource not accessible by integration"). Target the branch commit instead.
+          target="${PR_HEAD_SHA:-$GITHUB_SHA}"
           gh release create "$tag" "${jars[0]}" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "Photon Forge 1.20.1 preview ${GITHUB_SHA:0:7}" \
-            --notes "Test build from commit $GITHUB_SHA. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
+            --repo "$GITHUB_REPOSITORY" --target "$target" --prerelease \
+            --title "Photon Forge 1.20.1 preview ${target:0:7}" \
+            --notes "Test build from commit $target. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
           printf '### Direct JAR download\n\n[Download %s](https://github.com/%s/releases/download/%s/%s)\n' \
             "$(basename "${jars[0]}")" "$GITHUB_REPOSITORY" "$tag" "$(basename "${jars[0]}")" >> "$GITHUB_STEP_SUMMARY"
