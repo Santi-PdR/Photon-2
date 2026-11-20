@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.gameobject.emitter.aratrail;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigNumber;
+import com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle;
 import com.lowdragmc.lowdraglib2.configurator.annotation.ConfigSelector;
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
@@ -25,7 +26,9 @@ import org.joml.Vector3f;
 @Setter
 @Getter
 public class AraPhysicsSetting extends ToggleGroup {
+    /** Seconds of simulation run before the trail first shows; {@link AraTrailParticle#MAX_WARMUP_SECONDS} bounds it. */
     @Configurable(name = "AraTrails.warmup", tips = "AraTrails.warmup.tips")
+    @ConfigNumber(range = {0, AraTrailParticle.MAX_WARMUP_SECONDS})
     public float warmup = 0;               /**< simulation warmup seconds.*/
     @Configurable(name = "AraTrails.gravity", tips = "AraTrails.gravity.tips")
     public Vector3f gravity = new Vector3f();  /**< gravity applied to the trail, in {@link #gravitySpace} axes. */

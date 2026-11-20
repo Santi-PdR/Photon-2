@@ -260,9 +260,23 @@ public class AraTrailParticle implements IParticle {
         }
     }
 
+    /**
+     * How long a warmup may pre-simulate, in seconds: the loop runs a physics and emission step per fixed delta
+     * (20 a second) synchronously when the trail is created, and the field had no bound, so an authored, loaded or
+     * timeline value such as 1e9 kept the client in that loop for good. 60 s is 1200 steps, far beyond what a
+     * trail needs to look "already running".
+     */
+    public static final float MAX_WARMUP_SECONDS = 60f;
+
+    /** The warmup actually simulated for a requested value: bounded above, and nothing for NaN or negatives. */
+    public static float warmupSeconds(float requested) {
+        if (!(requested > 0) || !Float.isFinite(requested)) return 0f;
+        return Math.min(requested, MAX_WARMUP_SECONDS);
+    }
+
     private void warmup() {
         if (!runtime.physics.isEnable()) return;
-        float simulatedTime = runtime.physics.warmup.get();
+        float simulatedTime = warmupSeconds(runtime.physics.warmup.get());
         var fixedDeltaTime = getFixedDeltaTime();
         updateDynamicData(0);
         while (simulatedTime > fixedDeltaTime) {

@@ -882,14 +882,29 @@ public class ParticleEmitter extends Emitter {
     }
 
     @Override
+    /**
+     * Longest prewarm simulated, in ticks (60 s). The prewarm runs synchronously, one full emission and
+     * particle update per tick, before the emitter's first visible frame; the field had no upper bound, so an
+     * authored, loaded or timeline value in the millions kept the client in that loop for minutes or for good.
+     * A looping emitter reaches its steady state within a particle lifetime plus a duration, which 1200 ticks
+     * covers for anything that is not itself minutes long.
+     */
+    public static final int MAX_PREWARM_TICKS = 1200;
+
+    /**
+     * The prewarm actually simulated for {@code requested} ticks: at most {@link #MAX_PREWARM_TICKS}, and for a
+     * non-looping emitter fewer than its {@code lifetime} (a prewarm past its duration would age it to death
+     * before its first visible frame).
+     */
+    public static int prewarmTicks(int requested, boolean looping, int lifetime) {
+        int ticks = Math.min(Math.max(requested, 0), MAX_PREWARM_TICKS);
+        return looping ? ticks : Math.min(ticks, Math.max(lifetime - 1, 0));
+    }
+
     public void update(float dt) {
         if (!hasFirstUpdate) {
             hasFirstUpdate = true;
-            int prewarm = runtime().prewarm.get();
-            if (!isLooping()) {
-                // prewarm >= duration would age a non-looping emitter to death before its first visible frame
-                prewarm = Math.min(prewarm, Math.max(getLifetime() - 1, 0));
-            }
+            int prewarm = prewarmTicks(runtime().prewarm.get(), isLooping(), getLifetime());
             if (prewarm > 0) {
                 for (int i = 0; i < prewarm; i++) {
                     emitParticle(1f); // prewarm always simulates whole ticks

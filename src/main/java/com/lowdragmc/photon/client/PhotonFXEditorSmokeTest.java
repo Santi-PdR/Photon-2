@@ -3029,6 +3029,29 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[expression-safety-smoke] formulas parse once per source, reject unknown identifiers and never yield NaN");
         com.lowdragmc.photon.client.gameobject.emitter.data.SubEmitterCycleRegression.verify(minecraft.level);
         Photon.LOGGER.info("[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run");
+        // A particle emitter's prewarm runs one full emission and update per tick synchronously before its first
+        // frame; the field had no upper bound, so a looping emitter with millions of ticks froze the client.
+        if (ParticleEmitter.prewarmTicks(Integer.MAX_VALUE, true, 100) != ParticleEmitter.MAX_PREWARM_TICKS
+                || ParticleEmitter.prewarmTicks(50, true, 20) != 50
+                || ParticleEmitter.prewarmTicks(50, false, 20) != 19
+                || ParticleEmitter.prewarmTicks(-5, true, 100) != 0) {
+            throw new IllegalStateException("Particle prewarm was not bounded");
+        }
+        var prewarmed = new ParticleEmitter();
+        prewarmed.config.setPrewarm(Integer.MAX_VALUE);
+        prewarmed.config.setMaxParticles(20);
+        prewarmed.config.emission.setEmissionRate(com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.constant(1));
+        prewarmed.setLevel(minecraft.level);
+        long prewarmStarted = System.nanoTime();
+        prewarmed.update(1f);
+        long prewarmMillis = (System.nanoTime() - prewarmStarted) / 1_000_000L;
+        int prewarmedParticles = prewarmed.getParticleAmount();
+        prewarmed.remove(true);
+        if (prewarmedParticles == 0 || prewarmMillis > 10_000L) {
+            throw new IllegalStateException("A looping emitter with an unbounded prewarm did not come up bounded: particles="
+                    + prewarmedParticles + " ms=" + prewarmMillis);
+        }
+        Photon.LOGGER.info("[prewarm-bound-smoke] a looping emitter pre-simulates at most 1200 ticks ({} ms for an unbounded request)", prewarmMillis);
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");
@@ -3158,6 +3181,43 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Trail colour gradient did not reach its rendered endpoints");
         }
         Photon.LOGGER.info("[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours");
+        // Smoothing splits each raw segment by the square of its length over the minimum vertex distance; a far
+        // teleport of the followed entity leaves a raw gap of hundreds of blocks, so without a bound one tick
+        // asked for millions of interpolated points and the client froze or ran out of memory.
+        if (TrailParticle.smoothStepCount(0.2f, 0.1f) != 4
+                || TrailParticle.smoothStepCount(0.1f, 0.1f) != 1
+                || TrailParticle.smoothStepCount(1_000f, 0.1f) != 64
+                || TrailParticle.smoothStepCount(Float.NaN, 0.1f) != 1
+                || TrailParticle.smoothStepCount(1f, Float.NaN) != 64) {
+            throw new IllegalStateException("Trail smoothing changed its density below the bound or did not bound a teleport gap");
+        }
+        var smoothEmitter = new TrailEmitter(); // the editor's default trail: smoothing on, 0.1 minimum vertex distance
+        var smoothTrail = new TrailParticle(smoothEmitter, smoothEmitter.config);
+        com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(true);
+        try {
+            smoothTrail.updateTick(1f);
+            smoothEmitter.transform().localPosition(new org.joml.Vector3f(1f, 0f, 0f));
+            smoothTrail.updateTick(1f);
+            smoothEmitter.transform().localPosition(new org.joml.Vector3f(1f, 0f, 100_000f)); // /tp far along z: a corner, then a 100 000-block gap
+            smoothTrail.updateTick(1f);
+        } finally {
+            com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(oldFastSimulation);
+        }
+        int smoothRaw = smoothTrail.getRawTails().size();
+        int smoothed = smoothTrail.getTails().size();
+        if (smoothRaw > 2 + 64 + 10 || smoothed <= smoothRaw || smoothed > smoothRaw + 2 * 64) {
+            throw new IllegalStateException("A teleported trail was not smoothed within its bound: raw=" + smoothRaw + " smoothed=" + smoothed);
+        }
+        Photon.LOGGER.info("[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere");
+        // An Ara trail's physics warmup runs 20 synchronous steps per second when the trail is created; the field had
+        // no bound, so 1e9 seconds kept the client in that loop for good.
+        if (com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(1e9f) != 60f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(5f) != 5f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(Float.NaN) != 0f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(-1f) != 0f) {
+            throw new IllegalStateException("Ara trail warmup was not bounded to 60 seconds");
+        }
+        Photon.LOGGER.info("[aratrail-warmup-bound-smoke] an Ara trail pre-simulates at most 60 seconds, nothing for NaN or negative values");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
