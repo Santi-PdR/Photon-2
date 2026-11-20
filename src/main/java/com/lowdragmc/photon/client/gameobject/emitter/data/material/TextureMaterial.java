@@ -232,17 +232,10 @@ public class TextureMaterial extends ShaderInstanceMaterial {
                             Dialog.showFileDialog("ldlib.gui.editor.tips.select_image", PhotonPaths.getDataDir(), true, Dialog.suffixFilter(".png"), r -> {
                                 if (r == null || !r.isFile()) return;
                                 var location = getTextureFromFile(r);
-                                if (location == null) {
-                                    // silence here read as "the button does nothing": say why the pick was refused
-                                    var player = net.minecraft.client.Minecraft.getInstance().player;
-                                    if (player != null) player.displayClientMessage(
-                                            net.minecraft.network.chat.Component.literal("Photon: " + r.getName()
-                                                    + " is not a readable PNG under an assets/<namespace>/ folder; "
-                                                    + "put a valid image under photon/assets/<namespace>/textures/... and pick it again"),
-                                            false);
-                                    com.lowdragmc.photon.Photon.LOGGER.warn("photon: refused texture {} ({})", r, location);
-                                    return;
-                                }
+                                // silence here read as "the button does nothing": say why the pick was refused, and
+                                // for a name a resource id cannot carry (Fire.png, "mi textura.png") what to rename it to
+                                if (!com.lowdragmc.photon.client.util.AssetPickRejection.accepted(location,
+                                        PhotonPaths.getAssetsDir().toPath(), r.toPath(), mui.ui.rootElement)) return;
                                 texture = location;
                                 configurator.notifyChanges();
                                 // a picked file from outside the packs is adopted at once, so the preview and the

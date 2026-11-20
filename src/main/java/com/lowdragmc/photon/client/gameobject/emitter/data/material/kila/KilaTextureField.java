@@ -163,8 +163,10 @@ public class KilaTextureField extends ValueConfigurator<ResourceLocation> {
         if (mui == null) return;
         Dialog.showFileDialog("ldlib.gui.editor.tips.select_image", PhotonPaths.getDataDir(), true,
                 Dialog.suffixFilter(".png"), file -> {
+                    if (file == null || !file.isFile()) return;
                     var location = KilaUI.textureFromFile(file);
-                    if (location != null) pick(location);
+                    if (com.lowdragmc.photon.client.util.AssetPickRejection.accepted(location,
+                            PhotonPaths.getAssetsDir().toPath(), file.toPath(), mui.ui.rootElement)) pick(location);
                 }).show(mui.ui.rootElement);
     }
 

@@ -558,7 +558,8 @@ public class AnimatedGltfModelSource implements IModelSource, IDynamicMesh {
                 }, r -> {
                     if (r != null && r.isFile()) {
                         var location = IModelSource.getAssetLocationFromFile(r);
-                        if (location != null) onPicked.accept(location);
+                        if (com.lowdragmc.photon.client.util.AssetPickRejection.accepted(location,
+                                PhotonPaths.getAssetsDir().toPath(), r.toPath(), root)) onPicked.accept(location);
                     }
                 }).show(root);
     }

@@ -1555,6 +1555,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Texture file path selected an earlier assets folder instead of its resource root: "
                     + nestedId);
         }
+        verifyAssetPickRejections();
         var loaded = com.lowdragmc.photon.client.util.PhotonTextureCatalogue.listLoaded();
         boolean hasParticle = loaded.stream().anyMatch(id -> id.getNamespace().equals("photon")
                 && id.getPath().contains("particle"));
@@ -1576,6 +1577,50 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[loaded-texture-catalogue-smoke] editor can pick {} loaded textures; bounded search returned {}, filtered search returned {}",
                 loaded.size(), matches.size(), filtered.size());
+    }
+
+    /**
+     * A picked file whose path a resource id cannot carry ({@code Fire Ball.png}, an accented folder) used to make
+     * the picker do nothing: {@link com.lowdragmc.photon.client.util.PhotonAssetPath#fromFile} is null for it, exactly
+     * as for a file outside any assets tree. The two must now be told apart, the bad name must come with the rename
+     * that fixes it, and an acceptable file must not be flagged.
+     */
+    private static void verifyAssetPickRejections() {
+        var root = java.nio.file.Path.of("photon", "assets");
+        var shouted = root.resolve(java.nio.file.Path.of("MyFX", "textures", "particle", "Fire Ball.png"));
+        var raw = com.lowdragmc.photon.client.util.PhotonAssetPath.rawId(root, shouted);
+        if (!"MyFX:textures/particle/Fire Ball.png".equals(raw)
+                || com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, shouted) != null) {
+            throw new IllegalStateException("Raw asset id of a badly named file was not reported, or it parsed: " + raw);
+        }
+        var badName = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, shouted);
+        if (badName == null || badName.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.INVALID_NAME
+                || !"myfx:textures/particle/fire_ball.png".equals(badName.suggestedId())) {
+            throw new IllegalStateException("Badly named asset was not explained with a rename: " + badName);
+        }
+        var accented = root.resolve(java.nio.file.Path.of("photon", "textures", "humo añil.png"));
+        var accentedRejection = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, accented);
+        if (accentedRejection == null || !"photon:textures/humo_anil.png".equals(accentedRejection.suggestedId())) {
+            throw new IllegalStateException("Accented asset name was not folded into a valid rename: " + accentedRejection);
+        }
+        var outside = java.nio.file.Path.of("downloads", "fire.png");
+        var outsideRejection = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, outside);
+        if (outsideRejection == null
+                || outsideRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.NOT_UNDER_ASSETS) {
+            throw new IllegalStateException("File outside every assets tree was not reported as such: " + outsideRejection);
+        }
+        var fine = root.resolve(java.nio.file.Path.of("myfx", "textures", "particle", "fire_ball.png"));
+        if (com.lowdragmc.photon.client.util.AssetPickRejection.of(root, fine) != null
+                || !new ResourceLocation("myfx", "textures/particle/fire_ball.png")
+                .equals(com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, fine))) {
+            throw new IllegalStateException("A valid asset file was refused by the pick explainer");
+        }
+        // the explanation itself must be translated, not a raw key, and must carry the rename
+        var message = badName.message().getString();
+        if (message.startsWith("photon.") || !message.contains("myfx:textures/particle/fire_ball.png")) {
+            throw new IllegalStateException("Asset pick rejection message is raw or lacks the rename: " + message);
+        }
+        Photon.LOGGER.info("[asset-pick-rejection-smoke] badly named, accented and outside-assets picks are explained; valid files pass");
     }
 
     /** Material previews are retained textures; asking for one each frame must not allocate a new wrapper. */
@@ -5075,6 +5120,16 @@ public final class PhotonFXEditorSmokeTest {
                 || mappedGradient.getCompound("data").getCompound("gradientColor0").getList("rgb", Tag.TAG_FLOAT).size() != 8
                 || mappedGradient.getCompound("data").getCompound("gradientColor1").getList("rgb", Tag.TAG_FLOAT).size() != 8)
             throw new IllegalStateException("Photon 1 random gradients were not preserved");
+        // two Photon 1 stops on the same t (both dragged to the left edge) used to convert to a NaN colour stop (0/0)
+        var doubledStops = com.lowdragmc.photon.client.fx.compat.MapperUtils.gradient(floatList(0f, 1f, 1f, 1f),
+                floatList(0f, 0.2f, 0f, 0.8f, 1f, 1f), floatList(0f, 0.5f, 1f, 0.5f), floatList(0f, 0.25f, 1f, 0.75f));
+        var doubledRgb = doubledStops.getList("rgb", Tag.TAG_FLOAT);
+        for (int i = 0; i < doubledRgb.size(); i++) {
+            if (!Float.isFinite(doubledRgb.getFloat(i)))
+                throw new IllegalStateException("Photon 1 gradient with two stops on the same t converted to NaN: " + doubledRgb);
+        }
+        if (doubledRgb.size() != 8 || Math.abs(doubledRgb.getFloat(1) - 0.8f) > 0.0001f)
+            throw new IllegalStateException("Photon 1 gradient with two stops on the same t lost its later stop: " + doubledRgb);
         // a skipped file is reported by name, not swallowed: "converted everything and nothing appears" needs an answer
         Photon.LOGGER.info("[photon1-conversion-report-smoke] a second pass reported {} skip(s)", second.skipped().size());
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");

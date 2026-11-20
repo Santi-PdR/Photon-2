@@ -260,7 +260,9 @@ public class MapperUtils {
                     var s = data.get(i);
                     var e = data.get(i + 1);
                     if (t >= s.x && t <= e.x) {
-                        value = s.y * (e.x - t) / (e.x - s.x) + e.y * (t - s.x) / (e.x - s.x);
+                        // two stops on the same t (both dragged to an edge in the Photon 1 editor) make a
+                        // zero-width span: 0/0 would seed the converted stop with NaN, so take the later stop
+                        value = e.x > s.x ? s.y * (e.x - t) / (e.x - s.x) + e.y * (t - s.x) / (e.x - s.x) : e.y;
                         found = true;
                         break;
                     }
