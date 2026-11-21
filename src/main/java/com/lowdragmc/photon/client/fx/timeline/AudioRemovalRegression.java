@@ -27,8 +27,10 @@ import java.util.UUID;
  * that cut the effect in one frame instead of letting it fade):
  * <ol>
  * <li>A 3D clip plays from the effect's root when its track has no target (it used to need one, silently), with a
- * linear falloff over its own range, and the sound engine's distance model is kept out of it — its range is the
- * sound file's {@code attenuation_distance}, 16 blocks for every imported sound, which no clip setting could change.</li>
+ * perceptual falloff over its own range — quieter with every block, not the linear gain that sounds like a step
+ * near the edge ("it only updates every 20 blocks") — and the sound engine's distance model is kept out of it: its
+ * range is the sound file's {@code attenuation_distance}, 16 blocks for every imported sound, which no clip setting
+ * could change. The default range is the 250 blocks its authors asked for.</li>
  * <li>An audio track's "on remove" sound is saved with the track, copied with it, and started exactly once by
  * {@link FXRuntime#destroy}, forced or not — and not by {@link FXRuntime#discard()}, which is a swap.</li>
  * <li>{@code /photon fx remove} without a {@code force} argument is the graceful removal.</li>
@@ -50,12 +52,23 @@ public final class AudioRemovalRegression {
     }
 
     private static void verifyFalloff() {
-        check(TimelineSoundInstance.falloff(0, 48) == 1f, "a listener at the source does not hear full volume");
-        check(Math.abs(TimelineSoundInstance.falloff(30, 48) - 0.375f) < 1e-4f,
-                "30 blocks out of 48 is not heard at three eighths: " + TimelineSoundInstance.falloff(30, 48));
-        check(TimelineSoundInstance.falloff(48, 48) == 0f && TimelineSoundInstance.falloff(100, 48) == 0f,
+        check(AudioClip.DEFAULT_RANGE == 250f, "a new 3D clip does not carry 250 blocks: " + AudioClip.DEFAULT_RANGE);
+        check(TimelineSoundInstance.falloff(0, 250) == 1f, "a listener at the source does not hear full volume");
+        // half as loud (-10 dB, a gain of 0.316) a third of the way out, whatever the range
+        check(Math.abs(TimelineSoundInstance.falloff(250 / 3.0, 250) - 0.3162f) < 1e-3f
+                        && Math.abs(TimelineSoundInstance.falloff(16, 48) - 0.3162f) < 1e-3f,
+                "a third of the range out is not half as loud: " + TimelineSoundInstance.falloff(250 / 3.0, 250));
+        check(TimelineSoundInstance.falloff(250, 250) == 0f && TimelineSoundInstance.falloff(400, 250) == 0f,
                 "a listener at or past the range still hears the sound");
-        check(TimelineSoundInstance.falloff(Double.NaN, 48) == 1f && TimelineSoundInstance.falloff(10, 0) == 1f
+        // continuous: every block further is quieter, by a bounded step, all the way to the edge (no stair, no cliff)
+        var previous = 1f;
+        for (int block = 1; block <= 250; block++) {
+            var gain = TimelineSoundInstance.falloff(block, 250);
+            check(gain < previous && previous - gain < 0.02f, "the falloff is not a steady fade at block " + block
+                    + ": " + previous + " -> " + gain);
+            previous = gain;
+        }
+        check(TimelineSoundInstance.falloff(Double.NaN, 250) == 1f && TimelineSoundInstance.falloff(10, 0) == 1f
                 && TimelineSoundInstance.falloff(10, Float.NaN) == 1f, "a broken distance or range did not fall back to audible");
         var event = SoundEvent.createVariableRangeEvent(Photon.id("audio_removal_regression"));
         var positional = new TimelineSoundInstance(event, SoundSource.MASTER, 1f, 1f, false, true,

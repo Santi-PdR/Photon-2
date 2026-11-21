@@ -26,8 +26,10 @@ import java.util.function.Supplier;
  * The engine's own distance model is left off either way ({@link SoundInstance.Attenuation#NONE}): its LINEAR mode
  * fades over the sound file's {@code attenuation_distance} — 16 blocks unless the {@code sounds.json} says otherwise,
  * and an imported sound's never does — fixed per sound, not per clip, so an effect-sized sound was silent past 16
- * blocks and nothing in the editor could change that. The same linear falloff is applied to the volume here instead,
- * per tick, over the clip's own range. A 3D source still plays from its position (not relative), so it pans.
+ * blocks and nothing in the editor could change that. The falloff is applied to the volume here instead, per tick,
+ * over the clip's own range, and it is perceptual rather than linear (see {@link #falloff(double, float)}). A 3D
+ * source still plays from its position (not relative), so a mono sound pans — OpenAL plays a stereo file everywhere,
+ * unpositioned, which is why {@link AudioConverter} imports sounds as mono.
  */
 @OnlyIn(Dist.CLIENT)
 public class TimelineSoundInstance extends AbstractTickableSoundInstance {
@@ -100,15 +102,34 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
     }
 
     /**
-     * The gain a positional sound has for a listener {@code distance} blocks away: full at the source, fading
-     * linearly to silence at {@code range} (what the vanilla engine's LINEAR attenuation does over its 16 blocks).
+     * Decibels a positional sound has dropped by at the edge of its range, before the last stretch eases it into
+     * silence: 30 dB is an eighth of the loudness, "faint" — and it makes a third of the range the distance at which
+     * the sound is half as loud (10 dB), whatever the range is.
+     */
+    public static final float EDGE_DROP_DB = 30f;
+    /** The fraction of the range over which the gain is eased from its edge value to zero (no step at the edge). */
+    private static final double EASE_FRACTION = 0.1;
+
+    /**
+     * The gain a positional sound has for a listener {@code distance} blocks away: full at the source, silent at
+     * {@code range}, and in between the <em>loudness</em> falls evenly with distance — the gain is exponential, a
+     * fixed number of decibels per block ({@link #EDGE_DROP_DB} over the range), with the last tenth of the range
+     * easing into silence. The vanilla engine's linear gain is not what a listener hears: hearing is logarithmic, so
+     * a linear ramp sounds like nothing changes over the first half of the range and then the sound drops away all at
+     * once ("it only updates every 20 blocks", as a tester put it); an exponential one sounds like a steady fade.
      * 1 for no range and for a distance that is not a number, so a broken position is heard rather than lost.
      */
     public static float falloff(double distance, float range) {
         if (!(range > 0) || !(distance >= 0)) {
             return 1f;
         }
-        return (float) Mth.clamp(1 - distance / range, 0, 1);
+        var t = distance / range;
+        if (t >= 1) {
+            return 0f;
+        }
+        var gain = Math.pow(10, -EDGE_DROP_DB / 20 * t);
+        var ease = Math.min(1, (1 - t) / EASE_FRACTION);
+        return (float) Mth.clamp(gain * ease, 0, 1);
     }
 
     private float falloff() {

@@ -30,11 +30,13 @@ public class AudioClip extends Clip {
     /** Default sound of a freshly created clip (a short, always-present vanilla sound). */
     public static final ResourceLocation DEFAULT_SOUND = SoundEvents.UI_BUTTON_CLICK.value().getLocation();
     /**
-     * Default {@link #range()}: three times the 16 blocks a vanilla sound carries. An effect worth a timeline is
-     * usually big (an aura, a boss ability) and wanted audible from across a fight, lower the further away one
-     * stands — 30 blocks out still hears it at roughly a third.
+     * Default {@link #range()}: an effect worth a timeline is usually big (an aura, a boss ability) and wanted
+     * audible from across a whole arena, lower the further away one stands — 250 blocks is what its authors asked
+     * for after trying 48 ("make it 250 by default, heard at that distance, quieter and from over there when far").
+     * The falloff is perceptual ({@link TimelineSoundInstance#falloff}), so even over 250 blocks a listener hears
+     * the sound grow and fade with every step rather than only in the last stretch.
      */
-    public static final float DEFAULT_RANGE = 48f;
+    public static final float DEFAULT_RANGE = 250f;
     /** Bounds for {@link #range(float)}; a range this small is as good as off, this large as good as global. */
     public static final float MIN_RANGE = 1f, MAX_RANGE = 512f;
 
@@ -129,9 +131,10 @@ public class AudioClip extends Clip {
     }
 
     /**
-     * How far a 3D sound carries, in blocks: full volume at the source, fading linearly to silence at this
-     * distance (the same linear falloff the vanilla engine applies, whose fixed 16 blocks are too short for an
-     * effect-sized sound). Ignored while {@link #attenuation()} is off.
+     * How far a 3D sound carries, in blocks: full volume at the source, silent at this distance, and in between
+     * the loudness falls evenly with distance — half as loud a third of the way out, a quarter at two thirds
+     * ({@link TimelineSoundInstance#falloff}). The vanilla engine's own falloff is fixed at a sound file's 16 blocks,
+     * too short for an effect-sized sound. Ignored while {@link #attenuation()} is off.
      */
     public float range() {
         return range;

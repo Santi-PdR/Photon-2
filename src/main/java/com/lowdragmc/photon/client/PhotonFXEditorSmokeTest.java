@@ -3869,6 +3869,8 @@ public final class PhotonFXEditorSmokeTest {
 
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
+        // every saved project into one pack at once (File > Export > Export All Projects to FXPack...)
+        com.lowdragmc.photon.gui.editor.ExportAllRegression.verify(source);
         var encoded = NbtIo.read(projectFile.toFile());
         var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");

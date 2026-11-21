@@ -15,53 +15,72 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Best-effort cache of a {@code SoundEvent}'s length in ticks, decoded off-thread from its OGG so an
- * {@link AudioClip} can draw one loop sub-division per repeat. The first lookup for an id kicks off an
- * async decode (via Minecraft's own {@link JOrbisAudioStream}) and returns 0 until it resolves; a
- * sound that can't be measured (missing / event-reference / decode error) caches 0 and is not retried.
+ * Best-effort cache of a {@code SoundEvent}'s length in ticks and channel count, read off-thread from its
+ * OGG headers so an {@link AudioClip} can draw one loop sub-division per repeat and the editor can warn
+ * about a stereo sound (which the game cannot place in the world). The first lookup for an id kicks off
+ * an async read and returns 0 until it resolves; a sound that can't be measured (missing / event-reference
+ * / decode error) caches 0 and is not retried.
  */
 @OnlyIn(Dist.CLIENT)
 public class SoundLengthCache {
-    private static final Map<ResourceLocation, Double> LENGTHS = new ConcurrentHashMap<>();
+    /** What one OGG told us: length in ticks and channels, 0 for whatever could not be read. */
+    private record Info(double ticks, int channels) {
+        static final Info UNKNOWN = new Info(0, 0);
+    }
+
+    private static final Map<ResourceLocation, Info> INFOS = new ConcurrentHashMap<>();
     private static final Set<ResourceLocation> PENDING = ConcurrentHashMap.newKeySet();
 
     /** Forget durations after resources are replaced or a server-synced sound pack changes. */
     public static void clear() {
-        LENGTHS.clear();
+        INFOS.clear();
         PENDING.clear();
     }
 
     /** Length of {@code soundId} in ticks, or 0 when unknown / not yet decoded (triggers a load). */
     public static double getTicks(@Nullable ResourceLocation soundId) {
-        if (soundId == null) return 0;
-        var cached = LENGTHS.get(soundId);
+        return info(soundId).ticks();
+    }
+
+    /**
+     * Channels of the OGG behind {@code soundId} (1 mono, 2 stereo), or 0 when unknown / not yet read (triggers a
+     * load). Only a mono sound can be placed in the world: OpenAL plays a stereo one everywhere, unpositioned.
+     */
+    public static int getChannels(@Nullable ResourceLocation soundId) {
+        return info(soundId).channels();
+    }
+
+    private static Info info(@Nullable ResourceLocation soundId) {
+        if (soundId == null) return Info.UNKNOWN;
+        var cached = INFOS.get(soundId);
         if (cached != null) return cached;
         requestLoad(soundId);
-        return 0;
+        return Info.UNKNOWN;
     }
 
     private static void requestLoad(ResourceLocation soundId) {
         if (!PENDING.add(soundId)) return; // already loading
         CompletableFuture
-                .supplyAsync(() -> computeTicks(soundId), Util.backgroundExecutor())
-                .whenComplete((ticks, error) -> {
-                    LENGTHS.put(soundId, error != null || ticks == null ? 0.0 : ticks);
+                .supplyAsync(() -> computeInfo(soundId), Util.backgroundExecutor())
+                .whenComplete((info, error) -> {
+                    INFOS.put(soundId, error != null || info == null ? Info.UNKNOWN : info);
                     PENDING.remove(soundId);
                 });
     }
 
-    private static double computeTicks(ResourceLocation soundId) {
+    private static Info computeInfo(ResourceLocation soundId) {
         try {
             var mc = Minecraft.getInstance();
             var weighed = mc.getSoundManager().getSoundEvent(soundId);
-            if (weighed == null) return 0;
+            if (weighed == null) return Info.UNKNOWN;
             var sound = weighed.getSound(RandomSource.create());
-            if (sound == null || sound.getType() != Sound.Type.FILE) return 0;
+            if (sound == null || sound.getType() != Sound.Type.FILE) return Info.UNKNOWN;
             try (var input = mc.getResourceManager().open(sound.getPath())) {
-                return oggDurationTicks(input.readAllBytes());
+                var data = input.readAllBytes();
+                return new Info(oggDurationTicks(data), AudioConverter.vorbisChannels(data));
             }
         } catch (Exception e) {
-            return 0;
+            return Info.UNKNOWN;
         }
     }
 

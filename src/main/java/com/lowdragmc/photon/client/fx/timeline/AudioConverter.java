@@ -1,5 +1,7 @@
 package com.lowdragmc.photon.client.fx.timeline;
 
+import com.mojang.blaze3d.audio.OggAudioStream;
+
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -20,12 +22,20 @@ import javax.sound.sampled.AudioSystem;
  * soundtrack of an mp4, a wav, an m4a… This decodes them to 16-bit little-endian PCM and
  * re-encodes with the pure-Java jVorbisEnc port of libvorbis — no ffmpeg, no natives.
  *
- * <p>Supported: {@code .ogg} (validated passthrough), {@code .mp3}, {@code .wav},
- * {@code .aif/.aiff}, {@code .mp4/.m4a} (AAC audio track), {@code .aac} (ADTS).
+ * <p>Everything comes out <b>mono</b>. A timeline sound is positional by default, and OpenAL only places a
+ * mono source in the world: a stereo file plays at the same volume from everywhere, with no direction, however
+ * the clip is set up (vanilla's own rule — its positional sounds are all mono). Folding the channels down at
+ * import is what makes "3D" mean something; a stereo image is nothing an effect's sound needs.
+ *
+ * <p>Supported: {@code .ogg} (a mono one passes through untouched, a stereo one is decoded with the game's own
+ * decoder and folded down), {@code .mp3}, {@code .wav}, {@code .aif/.aiff}, {@code .mp4/.m4a} (AAC audio track),
+ * {@code .aac} (ADTS).
  */
 public final class AudioConverter {
     /** Hard ceiling on decoded channels; anything above this is rejected instead of guessing. */
     private static final int MAX_CHANNELS = 8;
+    /** Bytes of an Ogg file that are read to find its Vorbis identification header (it sits in the first page). */
+    private static final int VORBIS_HEADER_PROBE = 16 * 1024;
 
     private AudioConverter() {
     }
@@ -59,8 +69,36 @@ public final class AudioConverter {
     }
 
     /**
-     * Converts {@code source} to a temporary .ogg file and returns its path. The caller owns
-     * (and must delete) the result. Already-Ogg inputs are copied and validated, not re-encoded.
+     * Channels of the Ogg Vorbis file {@code source}, read from its identification header without decoding it,
+     * or 0 when it is not an Ogg Vorbis file (another codec in an Ogg container, or not Ogg at all).
+     */
+    public static int oggChannels(File source) {
+        if (source == null || !source.isFile()) return 0;
+        try (var input = Files.newInputStream(source.toPath())) {
+            return vorbisChannels(input.readNBytes(VORBIS_HEADER_PROBE));
+        } catch (IOException failure) {
+            return 0;
+        }
+    }
+
+    /**
+     * Channels declared by the Vorbis identification header found in {@code data} (the head of an Ogg file), or 0
+     * when there is none. The header packet is {@code 0x01 "vorbis"}, a 4-byte version, then the channel count byte
+     * and the little-endian sample rate.
+     */
+    public static int vorbisChannels(byte[] data) {
+        for (int i = 0; i + 12 <= data.length; i++) {
+            if (data[i] == 1 && data[i + 1] == 'v' && data[i + 2] == 'o' && data[i + 3] == 'r'
+                    && data[i + 4] == 'b' && data[i + 5] == 'i' && data[i + 6] == 's') {
+                return data[i + 11] & 0xff;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Converts {@code source} to a temporary mono .ogg file and returns its path. The caller owns
+     * (and must delete) the result. An Ogg input that already is mono is copied and validated, not re-encoded.
      */
     public static Path convertToOgg(File source) throws IOException {
         if (source == null || !source.isFile()) throw new IOException("Select an audio file");
@@ -80,21 +118,31 @@ public final class AudioConverter {
         }
     }
 
-    /** Converts {@code source} to an Ogg Vorbis stream written to {@code out}. */
+    /** Converts {@code source} to a mono Ogg Vorbis stream written to {@code out}; see the class comment for why mono. */
     public static void toOgg(File source, OutputStream out) throws IOException {
         if (source == null || !source.isFile()) throw new IOException("Select an audio file");
-        if (isOggFile(source)) { // already playable by Minecraft — copy it through untouched
+        if (isOggFile(source) && oggChannels(source) == 1) { // already what the game places in the world — untouched
             try (var in = Files.newInputStream(source.toPath())) {
                 in.transferTo(out);
             }
             return;
         }
-        PcmSource pcm = openSource(source);
+        PcmSource pcm = isOggFile(source) ? new OggPcmSource(source) : openSource(source);
         try {
-            OggVorbisWriter.encode(pcm.channels() > 2 ? new DownmixSource(pcm) : pcm, out);
+            OggVorbisWriter.encode(mono(pcm), out);
         } finally {
             pcm.close();
         }
+    }
+
+    /** {@code pcm} folded down to one channel, or itself when it already is mono. */
+    static PcmSource mono(PcmSource pcm) {
+        return pcm.channels() == 1 ? pcm : new MonoSource(pcm);
+    }
+
+    /** Decoded PCM of any supported non-Ogg file; for tests that need the original channels. */
+    static PcmSource open(File file) throws IOException {
+        return openSource(file);
     }
 
     // ------------------------------------------------------------------ decode sources
@@ -622,19 +670,88 @@ public final class AudioConverter {
         }
     }
 
-    /** Folds surround/extra channels down to stereo: left averages even sources, right odd ones. */
-    private static final class DownmixSource implements PcmSource {
+    /**
+     * An Ogg Vorbis file decoded by the game's own decoder ({@link OggAudioStream}, stb_vorbis), as 16-bit PCM in
+     * the platform's byte order — little-endian everywhere the game runs, which is what the encoder reads.
+     */
+    private static final class OggPcmSource implements PcmSource {
+        private final InputStream input;
+        private final OggAudioStream stream;
+        private final int channels;
+        private final int sampleRate;
+        private java.nio.ByteBuffer pending;
+
+        OggPcmSource(File file) throws IOException {
+            input = new BufferedInputStream(Files.newInputStream(file.toPath()));
+            try {
+                stream = new OggAudioStream(input);
+            } catch (IOException | RuntimeException failure) {
+                closeQuietly(input, failure);
+                throw new IOException("Could not decode " + file.getName() + " as Ogg Vorbis: " + failure.getMessage(), failure);
+            }
+            var format = stream.getFormat();
+            channels = format.getChannels();
+            sampleRate = (int) format.getSampleRate();
+            if (channels < 1 || channels > MAX_CHANNELS || sampleRate <= 0) {
+                var failure = new IOException(file.getName() + " has an unsupported Vorbis layout: " + channels
+                        + " channels at " + sampleRate + " Hz");
+                closeQuietly(stream, failure);
+                closeQuietly(input, failure);
+                throw failure;
+            }
+        }
+
+        @Override
+        public int channels() {
+            return channels;
+        }
+
+        @Override
+        public int sampleRate() {
+            return sampleRate;
+        }
+
+        @Override
+        public int read(byte[] dst, int start, int length) throws IOException {
+            if (pending == null || !pending.hasRemaining()) {
+                try {
+                    pending = stream.read(Math.max(length, 4096));
+                } catch (RuntimeException failure) { // the game's decoder refuses more than two channels this way
+                    throw new IOException("Could not decode the Ogg Vorbis stream: " + failure.getMessage(), failure);
+                }
+                if (pending == null || !pending.hasRemaining()) return -1;
+            }
+            int count = Math.min(length, pending.remaining());
+            pending.get(dst, start, count);
+            return count;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                stream.close();
+            } finally {
+                input.close();
+            }
+        }
+    }
+
+    /**
+     * Folds every channel down to one, the average of all of them per frame. A positional sound has to be mono:
+     * OpenAL plays a multi-channel source everywhere, unpositioned, whatever the game asks of it.
+     */
+    private static final class MonoSource implements PcmSource {
         private final PcmSource delegate;
         private final int sourceChannels;
 
-        DownmixSource(PcmSource delegate) {
+        MonoSource(PcmSource delegate) {
             this.delegate = delegate;
             this.sourceChannels = delegate.channels();
         }
 
         @Override
         public int channels() {
-            return 2;
+            return 1;
         }
 
         @Override
@@ -644,32 +761,21 @@ public final class AudioConverter {
 
         @Override
         public int read(byte[] dst, int start, int length) throws IOException {
-            int frames = length / 4;
+            int frames = length / 2;
             if (frames <= 0) return 0;
             byte[] chunk = new byte[frames * sourceChannels * 2];
             int read = readFully(delegate, chunk);
             if (read <= 0) return -1;
             int complete = read / (sourceChannels * 2);
             for (int frame = 0; frame < complete; frame++) {
-                int left = 0;
-                int right = 0;
-                int leftSources = 0;
-                int rightSources = 0;
+                int sum = 0;
                 for (int channel = 0; channel < sourceChannels; channel++) {
                     int index = (frame * sourceChannels + channel) * 2;
-                    int sample = (short) ((chunk[index] & 0xFF) | (chunk[index + 1] << 8));
-                    if ((channel & 1) == 0) {
-                        left += sample;
-                        leftSources++;
-                    } else {
-                        right += sample;
-                        rightSources++;
-                    }
+                    sum += (short) ((chunk[index] & 0xFF) | (chunk[index + 1] << 8));
                 }
-                writeShort(dst, start + frame * 4, clamp(left / Math.max(1, leftSources)));
-                writeShort(dst, start + frame * 4 + 2, clamp(right / Math.max(1, rightSources)));
+                writeShort(dst, start + frame * 2, clamp(sum / sourceChannels));
             }
-            return complete * 4;
+            return complete * 2;
         }
 
         @Override

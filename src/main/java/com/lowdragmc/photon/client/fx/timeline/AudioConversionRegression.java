@@ -21,9 +21,11 @@ import javax.sound.sampled.AudioSystem;
 /**
  * The automatic audio → Ogg conversion behind "pick an mp3 (or the sound of an mp4) and use it".
  * Verifies the whole chain the way Minecraft will consume it: the converted stream must open in
- * {@link STBVorbis} (vanilla's own Ogg Vorbis decoder), carry the expected length/channels, and
- * decode with audible energy. CI generates the mp3/m4a/mp4 fixtures with ffmpeg before the client
- * starts; the synthesized wav path always runs, so the smoke is meaningful even without fixtures.
+ * {@link STBVorbis} (vanilla's own Ogg Vorbis decoder), be <b>mono</b> (the only kind of sound OpenAL
+ * places in the world — a stereo file plays everywhere at the same volume, so 3D attenuation did nothing
+ * for every sound imported stereo), carry the expected length, and decode with audible energy. CI
+ * generates the mp3/m4a/mp4 fixtures with ffmpeg before the client starts; the synthesized wav path
+ * always runs, so the smoke is meaningful even without fixtures.
  */
 public final class AudioConversionRegression {
     private AudioConversionRegression() {
@@ -34,14 +36,41 @@ public final class AudioConversionRegression {
         var fixtures = gameDir.resolve("photon").resolve("smoke-fixtures");
         Path work = Files.createTempDirectory("photon-audio-smoke");
         try {
-            // synthesized sine wav → ogg, and playable with the same decoder Minecraft uses
+            // synthesized stereo sine wav → mono ogg, and playable with the same decoder Minecraft uses
             var wav = work.resolve("tone.wav");
             writeSineWav(wav, 44100, 2, 0.3f);
             var ogg = AudioConverter.convertToOgg(wav.toFile());
             try {
-                verifyOgg(ogg, 44100, 2, 0.3f, true);
+                verifyOgg(ogg, 44100, 1, 0.3f, true);
+                if (AudioConverter.oggChannels(ogg.toFile()) != 1) {
+                    throw new IllegalStateException("the Vorbis header of a converted sound does not read as mono");
+                }
             } finally {
                 Files.deleteIfExists(ogg);
+            }
+
+            // a stereo .ogg (what every earlier build imported) is folded down, not passed through; a mono one is copied
+            var stereoOgg = work.resolve("stereo.ogg");
+            try (var pcm = AudioConverter.open(wav.toFile()); var out = Files.newOutputStream(stereoOgg)) {
+                OggVorbisWriter.encode(pcm, out);
+            }
+            if (AudioConverter.oggChannels(stereoOgg.toFile()) != 2) {
+                throw new IllegalStateException("the stereo fixture does not read as stereo: "
+                        + AudioConverter.oggChannels(stereoOgg.toFile()));
+            }
+            var folded = AudioConverter.convertToOgg(stereoOgg.toFile());
+            try {
+                verifyOgg(folded, 44100, 1, 0.3f, true);
+                var copied = AudioConverter.convertToOgg(folded.toFile());
+                try {
+                    if (!java.util.Arrays.equals(Files.readAllBytes(copied), Files.readAllBytes(folded))) {
+                        throw new IllegalStateException("a mono .ogg was re-encoded instead of copied through");
+                    }
+                } finally {
+                    Files.deleteIfExists(copied);
+                }
+            } finally {
+                Files.deleteIfExists(folded);
             }
 
             // the importer registers the converted sound and the workspace copy plays
@@ -52,7 +81,7 @@ public final class AudioConversionRegression {
                     || !Files.isRegularFile(registered)) {
                 throw new IllegalStateException("importSound did not register the converted sound: " + id);
             }
-            verifyOgg(registered, 44100, 2, 0.3f, true);
+            verifyOgg(registered, 44100, 1, 0.3f, true);
             var soundsJson = PhotonPaths.getAssetsDir().toPath().resolve("photon").resolve("sounds.json");
             var root = JsonParser.parseString(Files.readString(soundsJson)).getAsJsonObject();
             if (!root.has(id.getPath())) {
@@ -79,7 +108,7 @@ public final class AudioConversionRegression {
         } finally {
             deleteRecursively(work);
         }
-        Photon.LOGGER.info("[audio-conversion-smoke] user audio formats convert to playable Ogg Vorbis");
+        Photon.LOGGER.info("[audio-conversion-smoke] user audio formats convert to playable mono Ogg Vorbis");
     }
 
     private static void verifyFixture(Path fixture, int expectedRate) throws IOException {
@@ -89,7 +118,7 @@ public final class AudioConversionRegression {
         }
         var ogg = AudioConverter.convertToOgg(fixture.toFile());
         try {
-            verifyOgg(ogg, expectedRate, 2, 0.5f, true);
+            verifyOgg(ogg, expectedRate, 1, 0.5f, true);
         } finally {
             Files.deleteIfExists(ogg);
         }

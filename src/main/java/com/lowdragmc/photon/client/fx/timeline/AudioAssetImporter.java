@@ -11,7 +11,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
@@ -23,34 +22,29 @@ public final class AudioAssetImporter {
 
     /**
      * Imports any supported user sound — mp3, wav/aiff, the audio of an mp4/m4a, aac, or an
-     * .ogg — converting it to Ogg Vorbis when needed, and returns the dynamic sound event id to
-     * store in the FX. Conversion is automatic: users pick the file they have.
+     * .ogg — converting it to mono Ogg Vorbis when needed, and returns the dynamic sound event id to
+     * store in the FX. Conversion is automatic: users pick the file they have. Mono because that is the
+     * only kind of sound the game can place in the world (see {@link AudioConverter}); a stereo file
+     * imported by an earlier build keeps playing everywhere until it is imported again.
      */
     public static ResourceLocation importSound(File source) throws IOException {
         if (source == null || !source.isFile()) {
             throw new IOException("Select an audio file");
         }
-        Path temp = null;
+        var temp = AudioConverter.convertToOgg(source);
         try {
-            File ogg = source;
-            if (!AudioConverter.isOggFile(source)) {
-                temp = AudioConverter.convertToOgg(source);
-                ogg = temp.toFile();
-            }
-            return registerOgg(ogg, baseName(source));
+            return registerOgg(temp.toFile(), baseName(source));
         } finally {
-            if (temp != null) {
-                Files.deleteIfExists(temp);
-            }
+            Files.deleteIfExists(temp);
         }
     }
 
-    /** Copies {@code source} to photon/assets and returns the dynamic sound event id to store in the FX. */
+    /** Imports a Minecraft .ogg (folded down to mono when stereo) and returns the dynamic sound event id to store in the FX. */
     public static ResourceLocation importOgg(File source) throws IOException {
         if (source == null || !source.isFile() || !source.getName().toLowerCase(Locale.ROOT).endsWith(".ogg")) {
             throw new IOException("Select a Minecraft .ogg sound file");
         }
-        return registerOgg(source, baseName(source));
+        return importSound(source);
     }
 
     private static ResourceLocation registerOgg(File source, String baseName) throws IOException {
