@@ -27,8 +27,8 @@ import java.util.UUID;
  * that cut the effect in one frame instead of letting it fade):
  * <ol>
  * <li>A 3D clip plays from the effect's root when its track has no target (it used to need one, silently), with a
- * linear falloff over its own range, and the sound engine's distance model is kept out of it — a LINEAR source is
- * refused when the listener starts out of range, and a clip's instance is created once.</li>
+ * linear falloff over its own range, and the sound engine's distance model is kept out of it — its range is the
+ * sound file's {@code attenuation_distance}, 16 blocks for every imported sound, which no clip setting could change.</li>
  * <li>An audio track's "on remove" sound is saved with the track, copied with it, and started exactly once by
  * {@link FXRuntime#destroy}, forced or not — and not by {@link FXRuntime#discard()}, which is a swap.</li>
  * <li>{@code /photon fx remove} without a {@code force} argument is the graceful removal.</li>
@@ -69,7 +69,7 @@ public final class AudioRemovalRegression {
         // the flag without a position source (the editor preview) is non-positional too
         var preview = new TimelineSoundInstance(event, SoundSource.MASTER, 1f, 1f, true, true, null, 48f);
         check(!preview.isPositional() && preview.isRelative(), "a 3D flag with no position source was treated as positional");
-        check(positional.canStartSilent(), "a 3D sound that starts out of range would be refused by the engine");
+        check(positional.canStartSilent(), "a 3D sound whose listener starts out of range (volume 0) would be refused by the engine");
     }
 
     private static void verifyRootFallback() {

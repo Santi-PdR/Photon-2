@@ -23,11 +23,11 @@ import java.util.function.Supplier;
  * (3D) it follows a supplied world position and fades with the listener's distance over the clip's
  * {@link AudioClip#range() range}; otherwise it plays relative to the listener at full volume.
  * <p>
- * The engine's own distance model is left off either way ({@link SoundInstance.Attenuation#NONE}): a LINEAR source
- * is refused outright when the listener starts out of range ("too far"), and this instance is created once, on clip
- * enter — a player who walks up to a running aura would never hear it. The falloff is applied to the volume here
- * instead, per tick, with the same linear shape the engine uses but over the clip's own range rather than the 16
- * blocks a sound file is born with. A 3D source still plays from its position (not relative), so it pans.
+ * The engine's own distance model is left off either way ({@link SoundInstance.Attenuation#NONE}): its LINEAR mode
+ * fades over the sound file's {@code attenuation_distance} — 16 blocks unless the {@code sounds.json} says otherwise,
+ * and an imported sound's never does — fixed per sound, not per clip, so an effect-sized sound was silent past 16
+ * blocks and nothing in the editor could change that. The same linear falloff is applied to the volume here instead,
+ * per tick, over the clip's own range. A 3D source still plays from its position (not relative), so it pans.
  */
 @OnlyIn(Dist.CLIENT)
 public class TimelineSoundInstance extends AbstractTickableSoundInstance {
