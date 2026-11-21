@@ -69,9 +69,11 @@ prioridad lo tapa ("shadowed") o si hay que recargar recursos ("not mounted" →
 
 1. Copia el `.fxpack` dentro de `<instancia>/photon/fxpacks/`.
    - Si el archivo lo hizo el mismo juego, seguramente ya está ahí.
-2. Espera un segundo. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete nuevo o
-   reemplazado (avisa en el log: `fxpacks: detected new pack ...` y luego `reloading resources
-   automatically`).
+2. Espera un par de segundos. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete
+   nuevo, reemplazado o borrado, en cuanto el archivo deja de crecer (avisa en el log: `fxpacks:
+   detected new pack ...` y luego `reloading resources automatically`). Vale copiarlo en el menú
+   principal (recarga ahí mismo) o mientras carga un mundo (recarga al entrar); con el juego
+   cerrado, se monta solo al arrancar. Las carpetas descomprimidas no se vigilan: para esas, F3+T.
 3. Si querés forzarlo, `/photon_client reload` hace exactamente lo mismo que **F3+T**, sin salir del
    juego ni buscar la tecla.
 

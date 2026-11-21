@@ -762,7 +762,7 @@
   "photon.fxpack.warnings": "有 %s 条警告，详见日志。",
   "photon.fxpack.live": "已生效，可直接在游戏中播放。",
   "photon.fxpack.shadowed": "但 %s 提供了同名特效且优先级更高，游戏中播放的是那一个。",
-  "photon.fxpack.not_mounted": "该包尚未加载，现在重载资源吗？",
+  "photon.fxpack.not_mounted": "该包尚未加载；Photon 稍后会自动重载资源。现在就重载吗？",
   "photon.fxpack.not_loadable": "游戏只加载直接放在 photon/fxpacks 下的 .fxpack，不会加载这个包。",
   "photon.fxpack.join": "%s%s",
   "photon.fxpack.reload": "重载资源",

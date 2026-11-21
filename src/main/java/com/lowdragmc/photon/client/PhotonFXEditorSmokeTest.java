@@ -75,6 +75,9 @@ public final class PhotonFXEditorSmokeTest {
     private static Throwable exportReloadFailure;
     private static boolean serverFxPackSyncLogged;
     private static int serverFxPackSyncTicks;
+    /** A pack copied into photon/fxpacks near the end of the run: the folder watcher has to mount it by itself. */
+    private static File watcherPack;
+    private static int watcherPackTick;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -2895,8 +2898,24 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[first-person-scan-gpu-smoke] owner billboard rendered");
                 System.clearProperty("photon.firstPersonSmoke");
                 System.clearProperty("photon.firstPersonGpuSmoke");
-                finished = true;
-                minecraft.stop();
+                if (firstPersonEffect.getRuntime() != null) firstPersonEffect.getRuntime().destroy(true);
+                com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
+                // Last: a pack that lands in photon/fxpacks the way a player copies one in. Nothing here reloads
+                // the resources; the folder watcher has to notice the file, wait for it to stop changing, reload,
+                // and the pack has to be mounted afterwards — the whole point of not needing F3+T.
+                watcherPack = new File(com.lowdragmc.photon.client.fx.fxpack.FXPacks.getFxPacksDir(), "ci_watcher.fxpack");
+                writeMarkerPack(watcherPack);
+                watcherPackTick = ticks;
+            } else if (watcherPack != null) {
+                var marker = new ResourceLocation("ci_watcher", "textures/watcher_marker.txt");
+                if (com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
+                        && minecraft.getResourceManager().getResource(marker).isPresent()) {
+                    Photon.LOGGER.info("[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T");
+                    finished = true;
+                    minecraft.stop();
+                } else if (ticks >= watcherPackTick + 600) {
+                    throw new IllegalStateException("The folder watcher did not mount a pack copied into photon/fxpacks");
+                }
             }
         } catch (Throwable failure) {
             finished = true;
@@ -2925,6 +2944,24 @@ public final class PhotonFXEditorSmokeTest {
         minecraft.screen.mouseMoved(pos.x, pos.y);
         minecraft.screen.mouseClicked(pos.x, pos.y, 0);
         minecraft.screen.mouseReleased(pos.x, pos.y, 0);
+    }
+
+    /**
+     * A pack holding one marker resource, written the way a file copy lands: built beside its destination and moved
+     * into place whole, so the watcher sees a finished file rather than one being written.
+     */
+    private static void writeMarkerPack(File pack) throws java.io.IOException {
+        var folder = pack.getParentFile();
+        if (!folder.isDirectory() && !folder.mkdirs()) {
+            throw new IllegalStateException("Could not create " + folder);
+        }
+        var part = new File(folder, pack.getName() + ".part");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(part.toPath()))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/ci_watcher/textures/watcher_marker.txt"));
+            zip.write("copied in while the game was running".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static void verifyBlendPresetClassification() {
@@ -3046,6 +3083,7 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.LooseTexturePathRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackWatcherRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
         com.lowdragmc.photon.command.LateReplayRegression.verify();
         com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();

@@ -420,7 +420,7 @@
   "photon.fxpack.join": "%s %s",
   "photon.fxpack.live": "Se reproduce en el juego de inmediato.",
   "photon.fxpack.not_loadable": "El juego solo carga archivos .fxpack colocados directamente en photon/fxpacks; este pack no se cargará.",
-  "photon.fxpack.not_mounted": "El pack aún no está cargado. ¿Recargar los recursos ahora?",
+  "photon.fxpack.not_mounted": "El pack aún no está cargado; Photon recarga los recursos solo en un momento. ¿Recargarlos ahora?",
   "photon.fxpack.shadowed": "Pero %s ofrece el mismo id con mayor prioridad; el juego utilizará ese recurso.",
   "photon.fxpack.warnings": "%s advertencias; consulta el registro.",
   "photon.manage_fxpack": "Administrar FXPack…",

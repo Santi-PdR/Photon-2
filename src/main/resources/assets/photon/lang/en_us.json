@@ -765,7 +765,7 @@
   "photon.fxpack.warnings": "%s warnings, see the log.",
   "photon.fxpack.live": "It plays in game right away.",
   "photon.fxpack.shadowed": "But %s provides the same id with a higher priority, so the game plays that one.",
-  "photon.fxpack.not_mounted": "The pack is not loaded yet. Reload resources now?",
+  "photon.fxpack.not_mounted": "The pack is not loaded yet; Photon reloads resources by itself in a moment. Reload them now?",
   "photon.fxpack.not_loadable": "The game only loads .fxpack files placed directly in photon/fxpacks, so it will not load this one.",
   "photon.fxpack.join": "%s %s",
   "photon.fxpack.reload": "Reload Resources",
