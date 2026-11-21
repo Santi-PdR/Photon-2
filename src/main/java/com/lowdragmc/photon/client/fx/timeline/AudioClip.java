@@ -10,8 +10,11 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 /**
  * A {@link Clip} on an {@link AudioTrack}: plays a registered {@code SoundEvent} for the clip's span.
  * The sound is stored by its {@link ResourceLocation} (registry id) so it serializes cleanly, plus
- * volume / pitch / category / attenuation. It is intentionally a client-side subclass (unlike the
- * {@code net.minecraft}-free base {@link Clip}) so it can reference the sound registry types directly.
+ * volume / pitch / category / 3D attenuation + range. It is intentionally a client-side subclass (unlike
+ * the {@code net.minecraft}-free base {@link Clip}) so it can reference the sound registry types directly.
+ * <p>
+ * An {@link AudioTrack}'s "on remove" sound is an {@code AudioClip} too (same fields, never on the
+ * timeline): its envelopes are sampled at their start since it plays once, as a one-shot.
  * <p>
  * The sound is <b>always looping</b>; {@link #duration()} is the clip's span on the timeline and so
  * decides when the timeline stops it (a clip shorter than the sound cuts it early, a longer one loops
@@ -26,6 +29,14 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 public class AudioClip extends Clip {
     /** Default sound of a freshly created clip (a short, always-present vanilla sound). */
     public static final ResourceLocation DEFAULT_SOUND = SoundEvents.UI_BUTTON_CLICK.value().getLocation();
+    /**
+     * Default {@link #range()}: three times the 16 blocks a vanilla sound carries. An effect worth a timeline is
+     * usually big (an aura, a boss ability) and wanted audible from across a fight, lower the further away one
+     * stands — 30 blocks out still hears it at roughly a third.
+     */
+    public static final float DEFAULT_RANGE = 48f;
+    /** Bounds for {@link #range(float)}; a range this small is as good as off, this large as good as global. */
+    public static final float MIN_RANGE = 1f, MAX_RANGE = 512f;
 
     /** The SoundEvent registry id to play; never null (defaults to {@link #DEFAULT_SOUND}). */
     private ResourceLocation sound = DEFAULT_SOUND;
@@ -36,8 +47,14 @@ public class AudioClip extends Clip {
     private SoundSource category = SoundSource.MASTER;
     /** Repeat the sound until the clip ends. Defaults to true for compatibility with existing projects. */
     private boolean loop = true;
-    /** When true (and the track has a bound target) the sound plays positional/attenuated at the target. */
-    private boolean attenuation = false;
+    /**
+     * 3D sound: played from the track's target object (the effect's root when none is bound) and fading with
+     * the listener's distance over {@link #range()}. Off: the same volume for everyone, wherever they stand.
+     * A new clip is 3D; projects saved before the setting existed read back as what they were (off).
+     */
+    private boolean attenuation = true;
+    /** Blocks from the sound's position at which a 3D sound fades to silence; see {@link #range()}. */
+    private float range = DEFAULT_RANGE;
 
     public AudioClip() {
         super();
@@ -111,6 +128,21 @@ public class AudioClip extends Clip {
         return this;
     }
 
+    /**
+     * How far a 3D sound carries, in blocks: full volume at the source, fading linearly to silence at this
+     * distance (the same linear falloff the vanilla engine applies, whose fixed 16 blocks are too short for an
+     * effect-sized sound). Ignored while {@link #attenuation()} is off.
+     */
+    public float range() {
+        return range;
+    }
+
+    /** Sets {@link #range()}, clamped to {@link #MIN_RANGE}..{@link #MAX_RANGE}; a non-finite value is the default. */
+    public AudioClip range(float range) {
+        this.range = Float.isFinite(range) ? net.minecraft.util.Mth.clamp(range, MIN_RANGE, MAX_RANGE) : DEFAULT_RANGE;
+        return this;
+    }
+
     @Override
     public AudioClip copy() {
         var clip = new AudioClip(start(), duration(), speed());
@@ -121,6 +153,7 @@ public class AudioClip extends Clip {
         clip.category = category;
         clip.loop = loop;
         clip.attenuation = attenuation;
+        clip.range = range;
         return clip;
     }
 }

@@ -3,6 +3,8 @@ package com.lowdragmc.photon.gui.editor.view.timeline;
 import com.lowdragmc.lowdraglib2.configurator.ui.BooleanConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurator;
+import com.lowdragmc.lowdraglib2.configurator.ui.NumberConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.RegistrySearchComponent;
 import com.lowdragmc.lowdraglib2.configurator.ui.SelectorConfigurator;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
@@ -15,6 +17,7 @@ import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
 import com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter;
 import com.lowdragmc.photon.client.fx.timeline.AudioClip;
 import com.lowdragmc.photon.client.fx.timeline.AudioConverter;
+import com.lowdragmc.photon.client.fx.timeline.AudioTrack;
 import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
 import com.lowdragmc.photon.client.fx.timeline.Track;
@@ -42,10 +45,11 @@ import java.util.List;
 import java.io.File;
 
 /**
- * Editor for {@code audio} tracks: an optional bound-target header (position source for 3D playback) +
- * a lane of {@link AudioClip}s. Each clip picks a {@code SoundEvent} and plays it for the clip's span;
- * the inspector exposes sound / volume / pitch / category / attenuation / loop-length, and the clip
- * draws loop sub-divisions so the user sees how many times the sound repeats.
+ * Editor for {@code audio} tracks: an optional bound-target header (position source for 3D playback; the
+ * effect itself when none is bound) + a lane of {@link AudioClip}s. Each clip picks a {@code SoundEvent} and
+ * plays it for the clip's span; the inspector exposes sound / volume / pitch / category / 3D + range / loop,
+ * and the clip draws loop sub-divisions so the user sees how many times the sound repeats. The track's own
+ * inspector adds the sound played when the effect is removed ({@link AudioTrack#onRemove()}).
  */
 @OnlyIn(Dist.CLIENT)
 public class AudioTrackEditor extends ClipTrackEditor {
@@ -155,9 +159,34 @@ public class AudioTrackEditor extends ClipTrackEditor {
         }
     }
 
+    /** The track inspector's own rows, above mute/lock: what plays when the effect is removed. */
+    @Override
+    protected void buildHeaderConfigurator(ConfiguratorGroup group, TimelineContext ctx, Track track) {
+        if (!(track instanceof AudioTrack audioTrack)) return;
+        // "nothing" / "play a sound", the sound's settings unfolding under the latter: the same rows as a clip,
+        // minus loop (a one-shot), with the clip preview button to hear it without removing anything
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>("photon.gui.editor.timeline.audio.on_remove",
+                audioTrack::onRemoveEnabled, v -> { audioTrack.onRemoveEnabled(v); ctx.refreshPreview(); },
+                audioTrack.onRemoveEnabled(), true, List.of(false, true),
+                enabled -> enabled ? "photon.gui.editor.timeline.audio.on_remove.sound"
+                        : "photon.gui.editor.timeline.audio.on_remove.none",
+                (enabled, sub) -> {
+                    if (enabled) buildAudioConfigurator(sub, ctx, audioTrack.onRemove(), false);
+                }).setTips("photon.gui.editor.timeline.audio.on_remove.tip"));
+    }
+
     @Override
     protected void buildClipConfigurator(ConfiguratorGroup group, TimelineContext ctx, Track track, Clip clip) {
         if (!(clip instanceof AudioClip audio)) return;
+        buildAudioConfigurator(group, ctx, audio, true);
+    }
+
+    /**
+     * The rows of one sound's settings: for a clip on the lane, and for the track's "on remove" sound
+     * ({@code withLoop} false: it plays once, a loop would never end).
+     */
+    private static void buildAudioConfigurator(ConfiguratorGroup group, TimelineContext ctx, AudioClip audio,
+                                               boolean withLoop) {
         var defaultSound = resolveSound(audio.sound());
         group.addConfigurator(new RegistrySearchComponent<>("photon.gui.editor.timeline.audio.sound",
                 () -> resolveSound(audio.sound()),
@@ -217,9 +246,16 @@ public class AudioTrackEditor extends ClipTrackEditor {
                 audio::category, v -> { audio.category(v); ctx.refreshPreview(); }, audio.category(), true,
                 List.of(SoundSource.values()), SoundSource::getName));
         group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.attenuation",
-                audio::attenuation, v -> { audio.attenuation(v); ctx.refreshPreview(); }, audio.attenuation(), true));
-        group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.loop",
-                audio::loop, v -> { audio.loop(v); ctx.refreshPreview(); }, audio.loop(), true));
+                audio::attenuation, v -> { audio.attenuation(v); ctx.refreshPreview(); }, audio.attenuation(), true)
+                .setTips("photon.gui.editor.timeline.audio.attenuation.tip"));
+        group.addConfigurator(new NumberConfigurator("photon.gui.editor.timeline.audio.range",
+                () -> (double) audio.range(), v -> { audio.range(v.floatValue()); ctx.refreshPreview(); },
+                (double) audio.range(), true).setRange(AudioClip.MIN_RANGE, AudioClip.MAX_RANGE)
+                .setTips("photon.gui.editor.timeline.audio.range.tip"));
+        if (withLoop) {
+            group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.loop",
+                    audio::loop, v -> { audio.loop(v); ctx.refreshPreview(); }, audio.loop(), true));
+        }
     }
 
     /** Play the clip's sound once, non-positional, honoring its category/volume/pitch, for previewing.

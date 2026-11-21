@@ -18,6 +18,19 @@ su inspector. Photon copia el audio a `photon/assets/photon/sounds/user/`, lo re
 el audio suena una vez. Los controles de volumen, pitch, categoría y atenuación espacial siguen siendo
 editables. Al exportar el efecto, Photon incluye el `.ogg` y su registro junto al FX en el `.fxpack`.
 
+**Sonido 3D**: con **3D attenuation** marcada (los clips nuevos nacen así) el sonido suena desde el objeto
+destino de la pista o, si no tiene, desde el propio FX (la entidad o el bloque), y baja linealmente con la
+distancia hasta quedar en silencio en **3D range (blocks)** (48 por defecto: a 30 bloques se oye a un tercio
+aproximado). Desmarcada, todos los que ven el FX lo oyen al mismo volumen. Un jugador que llega después de
+empezar el clip también lo oye al acercarse.
+
+**Sonido al eliminar el FX**: en el inspector de la pista Audio (clic en su cabecera), **When the FX is
+removed → play a sound** define un sonido (con volumen, tono, categoría y los mismos ajustes 3D) que suena una
+vez cuando el FX se elimina: `/photon fx remove …`, la entidad a la que sigue muere o el FX de bloque pierde su
+bloque. Suena en el momento en que empieza la eliminación, junto con la sección de salida si la hay; pensado
+para el apagado de un aura. `/photon fx remove …` sin `force` deja que el FX termine como fue construido
+(sección de salida y drenado de lo que queda); `… true` lo corta en el acto.
+
 ### Sincronización de FX desde un servidor
 
 Con Photon instalado tanto en el servidor como en el cliente, el administrador coloca los `.fxpack` en

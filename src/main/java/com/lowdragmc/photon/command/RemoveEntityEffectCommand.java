@@ -60,9 +60,9 @@ public class RemoveEntityEffectCommand {
             return 0;
         }
         command.setEntities(selected.stream().map(e -> (Entity) e).toList());
-        // The ordinary remove command must also remove long-lived particles. Explicit false
-        // retains the original graceful-drain behavior for callers that need it.
-        command.setForce(!force || BoolArgumentType.getBool(context, "force"));
+        // unqualified: the effect fades out the way it was built to (release section, remnants drain);
+        // `true` drops it at once, long-lived particles included — see EffectRemoval.force
+        command.setForce(EffectRemoval.force(force, force && BoolArgumentType.getBool(context, "force")));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }

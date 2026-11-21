@@ -464,23 +464,23 @@ public class TimelinePlayer {
                     audioInstances.remove(audioTrack);
                 }
                 audioClips.put(audioTrack, clip);
-                if (clip != null && clip.sound() != null) {
-                    var soundManagerEvent = soundManager.getSoundEvent(clip.sound());
-                    if (soundManagerEvent != null) {
-                        var soundEvent = BuiltInRegistries.SOUND_EVENT.get(clip.sound());
-                        if (soundEvent == null) soundEvent = net.minecraft.sounds.SoundEvent.createVariableRangeEvent(clip.sound());
+                if (clip != null) {
+                    var soundEvent = resolveSound(soundManager, clip);
+                    if (soundEvent != null) {
                         var supplier = attenuatedSupplier(audioTrack, clip);
                         // volume/pitch are envelopes over the clip — sample them at clip-local time
                         var local = time - clip.start();
                         var newInstance = new TimelineSoundInstance(soundEvent, clip.category(),
-                                clip.volumeAt(local), clip.pitchAt(local), clip.loop(), supplier != null, supplier);
+                                clip.volumeAt(local), clip.pitchAt(local), clip.loop(), supplier != null, supplier,
+                                clip.range());
                         soundManager.queueTickingSound(newInstance);
                         audioInstances.put(audioTrack, newInstance);
                     }
                 }
             } else if (instance != null && clip != null) {
                 var local = time - clip.start();
-                instance.update(clip.volumeAt(local), clip.pitchAt(local), attenuatedSupplier(audioTrack, clip));
+                instance.update(clip.volumeAt(local), clip.pitchAt(local), attenuatedSupplier(audioTrack, clip),
+                        clip.range());
             }
         }
         // stop instances whose track was removed / muted since last evaluation
@@ -500,18 +500,76 @@ public class TimelinePlayer {
     }
 
     /**
-     * A world-position source for positional (attenuated) playback, or null when the clip isn't
-     * attenuated / has no bound target, or when in editor preview (forced non-positional so it stays
-     * audible). A null supplier makes the sound play non-positional at the listener.
+     * The sound event a clip plays, or null when the sound manager has no such sound (nothing registered it: an
+     * unknown id, or an imported sound whose resource pack is not loaded yet). A sound that is known to the sound
+     * manager but has no registered event (an imported sound) plays through an ad-hoc event, like the editor's
+     * preview button does.
+     */
+    @Nullable
+    private static net.minecraft.sounds.SoundEvent resolveSound(net.minecraft.client.sounds.SoundManager soundManager,
+                                                                 AudioClip clip) {
+        if (clip.sound() == null || soundManager.getSoundEvent(clip.sound()) == null) {
+            return null;
+        }
+        var soundEvent = BuiltInRegistries.SOUND_EVENT.get(clip.sound());
+        return soundEvent != null ? soundEvent : net.minecraft.sounds.SoundEvent.createVariableRangeEvent(clip.sound());
+    }
+
+    /**
+     * The effect is being removed ({@code FXRuntime.destroy}): start each audio track's "on remove" sound, once, where
+     * its clips play (the bound target, or the effect's root). It is a one-shot the sound engine ends by itself, kept
+     * out of {@link #audioInstances} on purpose: the removal goes on to {@link #stop} this player, which would cut it.
+     *
+     * @return how many sounds were started
+     */
+    public int playRemovalSounds() {
+        if (!audioDispatch()) {
+            return 0;
+        }
+        var soundManager = Minecraft.getInstance().getSoundManager();
+        int started = 0;
+        for (var track : timeline.leafTracks(false)) {
+            if (track.mute() || !(track instanceof AudioTrack audioTrack) || !audioTrack.onRemoveEnabled()) {
+                continue;
+            }
+            var clip = audioTrack.onRemove();
+            var soundEvent = resolveSound(soundManager, clip);
+            if (soundEvent == null) {
+                continue;
+            }
+            var supplier = attenuatedSupplier(audioTrack, clip);
+            soundManager.queueTickingSound(new TimelineSoundInstance(soundEvent, clip.category(), clip.volumeAt(0),
+                    clip.pitchAt(0), false, supplier != null, supplier, clip.range()));
+            started++;
+        }
+        return started;
+    }
+
+    /**
+     * A world-position source for positional (3D) playback, or null when the clip is not 3D or in editor
+     * preview (forced non-positional so it stays audible). A null supplier makes the sound play
+     * non-positional at the listener.
      */
     @Nullable
     private Supplier<Vector3f> attenuatedSupplier(AudioTrack track, AudioClip clip) {
-        if (editorPreview() || !clip.attenuation() || track.targetId() == null) {
+        if (editorPreview() || !clip.attenuation()) {
             return null;
         }
-        var id = track.targetId();
+        return soundPosition(runtime, track.targetId());
+    }
+
+    /**
+     * Where a 3D sound of {@code runtime} plays from: the object {@code targetId} names, or the runtime's root — where
+     * the effect is (the entity or block it was started on, moving with it) — when the track has no target or names
+     * an object that is gone. A track used to need a bound target for its 3D flag to do anything, which is not what
+     * the flag reads like; the root is what nearly every effect means by "here".
+     */
+    public static Supplier<Vector3f> soundPosition(FXRuntime runtime, @Nullable UUID targetId) {
         return () -> {
-            var object = runtime.objects.get(id);
+            var object = targetId == null ? null : runtime.objects.get(targetId);
+            if (object == null) {
+                object = runtime.root;
+            }
             return object == null ? null : object.transform().position();
         };
     }

@@ -112,7 +112,7 @@ public abstract class FXEffectExecutor implements IFXEffectExecutor {
                     return true;
                 }
                 if (effect.runtime != null) {
-                    effect.runtime.destroy(true);
+                    effect.runtime.discard();
                 }
                 effect.notifyFinished();
                 iter.remove();

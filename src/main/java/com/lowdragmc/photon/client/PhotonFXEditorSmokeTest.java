@@ -3297,6 +3297,11 @@ public final class PhotonFXEditorSmokeTest {
             Files.deleteIfExists(brokenAudioDir);
         }
         Photon.LOGGER.info("[audio-source-release-smoke] a broken mp3, aac and m4a are refused with their file released");
+        // How an effect sounds from afar and on its way out: a 3D clip without a bound target was heard at the same
+        // volume everywhere (it silently needed a target), there was no sound for an effect being removed, and an
+        // unqualified /photon fx remove cut the effect in one frame instead of letting it fade out as built.
+        com.lowdragmc.photon.client.fx.timeline.AudioRemovalRegression.verify(minecraft);
+        Photon.LOGGER.info("[audio-3d-remove-smoke] a 3D clip plays from the effect and fades over its range, the on-remove sound starts once per removal, and an unforced remove fades the effect out");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
