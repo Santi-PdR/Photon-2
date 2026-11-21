@@ -69,6 +69,8 @@ public final class PhotonFXEditorSmokeTest {
     private static com.lowdragmc.photon.client.fx.EntityEffectExecutor firstPersonEffect;
     private static boolean exportReloadComplete;
     private static boolean exportServerCommandVerified;
+    private static int removeIssuedTick = -1;
+    private static boolean removeWindDownSeen;
     private static boolean exportRemoveVerified;
     private static Throwable exportReloadFailure;
     private static boolean serverFxPackSyncLogged;
@@ -1734,6 +1736,14 @@ public final class PhotonFXEditorSmokeTest {
                 || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 41, lifetime, endAge) - 1f) > 1e-4) {
             throw new IllegalStateException("A cyclic particle did not finish and hold its last cycle value");
         }
+        // a once-only particle with more life left than the wind-down window ends at the window, the rest of its T
+        // compressed into it: from 0.25 when the window opens at age 10 to 1 at its end, holding 1 from there on
+        var windowEnd = 10 + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS;
+        if (Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 10) - 0.25f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 30) - 0.625f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 60) - 1f) > 1e-4) {
+            throw new IllegalStateException("A long-lived particle's remaining T was not compressed into the wind-down window");
+        }
         Photon.LOGGER.info("[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns "
                 + "({} -> {} -> {})", out, back, returned);
 
@@ -2813,6 +2823,7 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[export-server-command-smoke] server command delivered exported FX over Forge networking");
                 exportServerCommandVerified = true;
                 removedEntityRuntime = attached.get(attached.size() - 1).getRuntime();
+                removeIssuedTick = ticks;
                 var server = minecraft.getSingleplayerServer();
                 var playerId = minecraft.player.getUUID();
                 server.execute(() -> {
@@ -2824,13 +2835,19 @@ public final class PhotonFXEditorSmokeTest {
                 if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
                     throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
                 Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
-            } else if (ticks >= 325 && exportServerCommandVerified && !exportRemoveVerified) {
-                if (removedEntityRuntime == null || !removedEntityRuntime.isFinished()
-                        || removedEntityRuntime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
-                        .map(ParticleEmitter.class::cast).anyMatch(emitter -> emitter.getParticleAmount() != 0))
-                    throw new IllegalStateException("Remove command left the long-lived shield particles visible");
-                Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
-                exportRemoveVerified = true;
+            } else if (exportServerCommandVerified && !removeWindDownSeen && ticks >= removeIssuedTick + 10 && ticks < 335) {
+                // an unqualified remove is the graceful one: a dozen ticks after the command the runtime has been told to
+                // go, and the shield (one particle of ten million ticks) is still there, winding down rather than cut
+                if (removedEntityRuntime == null || removedEntityRuntime.isValid()) {
+                    if (ticks < 334) return;
+                    throw new IllegalStateException("Remove command did not reach the client's effect");
+                }
+                if (removedEntityRuntime.isFinished() || removedEntityRuntime.objects.values().stream()
+                        .filter(ParticleEmitter.class::isInstance).map(ParticleEmitter.class::cast)
+                        .noneMatch(emitter -> emitter.getParticleAmount() != 0))
+                    throw new IllegalStateException("Default remove dropped the shield at once instead of winding it down");
+                Photon.LOGGER.info("[remove-server-command-smoke] default remove winds the shield down instead of cutting it");
+                removeWindDownSeen = true;
             } else if (ticks == 335) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString()));
@@ -2861,6 +2878,17 @@ public final class PhotonFXEditorSmokeTest {
                 firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(gpuScan.getFx(), minecraft.level,
                         minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
                 firstPersonEffect.start();
+            } else if (removeWindDownSeen && !exportRemoveVerified && ticks >= removeIssuedTick + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS + 8) {
+                // ... and within the wind-down window the long-lived particle has ended with its emitter: the graceful
+                // remove must not leave a shield on screen for good (its lifetime is as good as infinite)
+                if (!removedEntityRuntime.isFinished() || removedEntityRuntime.objects.values().stream()
+                        .filter(ParticleEmitter.class::isInstance).map(ParticleEmitter.class::cast)
+                        .anyMatch(emitter -> emitter.getParticleAmount() != 0)) {
+                    if (ticks < removeIssuedTick + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS + 30) return;
+                    throw new IllegalStateException("Remove command left the long-lived shield particles visible");
+                }
+                Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
+                exportRemoveVerified = true;
             } else if (ticks == 425) {
                 if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
                     throw new IllegalStateException("GPU first-person scan did not draw a camera-centred owner billboard");

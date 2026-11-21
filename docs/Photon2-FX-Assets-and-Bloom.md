@@ -29,7 +29,9 @@ removed → play a sound** define un sonido (con volumen, tono, categoría y los
 vez cuando el FX se elimina: `/photon fx remove …`, la entidad a la que sigue muere o el FX de bloque pierde su
 bloque. Suena en el momento en que empieza la eliminación, junto con la sección de salida si la hay; pensado
 para el apagado de un aura. `/photon fx remove …` sin `force` deja que el FX termine como fue construido
-(sección de salida y drenado de lo que queda); `… true` lo corta en el acto.
+(sección de salida y drenado de lo que queda: deja de emitir y cada partícula acaba su vida); una partícula a la
+que le quede más de **2 segundos** de vida (un escudo con lifetime enorme, por ejemplo) termina a los 2 segundos,
+recorriendo hasta el final sus curvas de tamaño/color: su propio fundido, más rápido. `… true` lo corta en el acto.
 
 ### Sincronización de FX desde un servidor
 
