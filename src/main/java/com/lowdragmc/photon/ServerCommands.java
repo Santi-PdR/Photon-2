@@ -25,8 +25,8 @@ public class ServerCommands {
                                         com.lowdragmc.photon.network.FxPackSync.onRefreshRequest(player);
                                     }
                                     final int count = players.size();
-                                    context.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal(
-                                            "Photon: re-offered FX packs to " + count + " player(s)"), true);
+                                    context.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.translatable(
+                                            "photon.command.fxpacks.reoffered", count), true);
                                     return count;
                                 }))
                         .then(Commands.literal("fx").requires(source -> source.hasPermission(2))

@@ -91,7 +91,7 @@ public class EntityEffectExecutor extends FXEffectExecutor {
             // copy while the runtime is still live, so the current timeline section survives destroy()
             neu.copyPlacementFrom(old);
             if (old.runtime != null) {
-                old.runtime.destroy(true);
+                old.runtime.discard();
             }
             old.retire(CACHE, old.entity);
             neu.start();

@@ -12,6 +12,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.TextField;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Toggle;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.fx.FX;
@@ -33,6 +34,7 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -40,8 +42,8 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
- * The FX editor's own File-menu entries. Exporting needs an open project; converting {@code .fx} definitions
- * into projects and managing {@code .fxpack} files work without one.
+ * The FX editor's own File-menu entries. Exporting the open project needs one; exporting every saved project at
+ * once, converting {@code .fx} definitions into projects and managing {@code .fxpack} files work without one.
  */
 @OnlyIn(Dist.CLIENT)
 public final class FXFileActions {
@@ -54,17 +56,20 @@ public final class FXFileActions {
             if (project == null) {
                 PhotonMenus.disabledLeaf(export, "photon.export_fx");
                 PhotonMenus.disabledLeaf(export, "photon.export_fxpack");
-                return;
+            } else {
+                export.leaf("photon.save_project", () -> Minecraft.getInstance().tell(() -> showSaveProjectDialog(editor, project)));
+                // plain .fx: pure definition data (references only) — usable wherever the
+                // referenced resources already exist (this machine, a mod jar, an .fxpack)
+                // Let the submenu close before the dialog takes focus.
+                export.leaf("photon.export_fx", () -> Minecraft.getInstance().tell(() -> showExportFxDialog(editor, project)));
+                // .fxpack: a resource-pack zip carrying the fx plus everything it references —
+                // the self-contained distribution format (additive: exports into the same pack
+                // accumulate, shared resources are stored once)
+                export.leaf("photon.export_fxpack", () -> Minecraft.getInstance().tell(() -> showExportFxPackDialog(editor, project)));
             }
-            export.leaf("photon.save_project", () -> Minecraft.getInstance().tell(() -> showSaveProjectDialog(editor, project)));
-            // plain .fx: pure definition data (references only) — usable wherever the
-            // referenced resources already exist (this machine, a mod jar, an .fxpack)
-            // Let the submenu close before the dialog takes focus.
-            export.leaf("photon.export_fx", () -> Minecraft.getInstance().tell(() -> showExportFxDialog(editor, project)));
-            // .fxpack: a resource-pack zip carrying the fx plus everything it references —
-            // the self-contained distribution format (additive: exports into the same pack
-            // accumulate, shared resources are stored once)
-            export.leaf("photon.export_fxpack", () -> Minecraft.getInstance().tell(() -> showExportFxPackDialog(editor, project)));
+            // every saved project of the projects folder into one pack in one go, instead of opening and
+            // exporting them one by one (what authors with a dozen effects were doing)
+            export.leaf("photon.export_fxpack_all", () -> Minecraft.getInstance().tell(() -> showExportAllFxPackDialog(editor, project)));
         });
         menu.leaf(Icons.IMPORT, "photon.convert_fx", () -> showConvertFxDialog(editor));
         menu.leaf(Icons.FOLDER, "photon.manage_fxpack", () -> showManageFxPackDialog(editor));
@@ -193,9 +198,9 @@ public final class FXFileActions {
             case SHADOWED -> notify(editor, "photon.export_fxpack",
                     join(message, Component.translatable("photon.fxpack.shadowed", resolution.sourcePackId())));
             case NOT_MOUNTED -> {
-                // the folder watcher reloads on its own within a second of a pack appearing, so the box stays as
-                // the "do it now" shortcut rather than the only way to make the export usable
-                com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.reset();
+                // the folder watcher (FxPackWatcher) reloads on its own a second or two after the file stops changing,
+                // and takes a reload started from this box as settling the matter, so the box is the "do it now"
+                // shortcut rather than the only way to make the export usable
                 Dialog.showCheckBox("photon.export_fxpack",
                         join(message, Component.translatable("photon.fxpack.not_mounted")), reload -> {
                             if (reload) {
@@ -204,6 +209,207 @@ public final class FXFileActions {
                         }).show(editor);
             }
         }
+    }
+
+    // ---- export all --------------------------------------------------------------------------------
+
+    /**
+     * One saved project the batch export offers: its file and the name it is exported as (the id becomes
+     * {@code <pack>:<fxName>}, the way the one-project export names it after the file).
+     */
+    record ProjectCandidate(File file, String fxName) {
+    }
+
+    /**
+     * Every {@code .fxproj} under the projects folder, each named by its path there without the suffix — the name
+     * the one-project export suggests. The working copies {@code /photon fx editfx} writes under {@code editfx/}
+     * are named by the effect they edit (its path), so exporting them into the pack they came from replaces it.
+     */
+    static List<ProjectCandidate> findProjects(File projectsDir) {
+        var out = new ArrayList<ProjectCandidate>();
+        var root = projectsDir.getAbsoluteFile().toPath();
+        if (!Files.isDirectory(root)) return out;
+        var suffix = FXProject.TYPE.getSuffix();
+        try (var walk = Files.walk(root)) {
+            walk.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(suffix))
+                    .sorted()
+                    .forEach(path -> {
+                        var relative = root.relativize(path).toString().replace('\\', '/');
+                        var name = relative.substring(0, relative.length() - suffix.length());
+                        if (name.startsWith("editfx/")) {
+                            var edited = FXProject.editFxIdFromProjectFile(path.toFile());
+                            if (edited == null) return; // not <namespace>/<path>: nothing it stands for
+                            name = edited.getPath();
+                        }
+                        out.add(new ProjectCandidate(path.toFile(), name));
+                    });
+        } catch (java.io.IOException e) {
+            Photon.LOGGER.error("Could not list the projects in {}", projectsDir, e);
+        }
+        return out;
+    }
+
+    private static void showExportAllFxPackDialog(Editor editor, @Nullable FXProject openProject) {
+        var candidates = findProjects(PhotonPaths.getProjectsDir());
+        if (candidates.isEmpty()) {
+            notify(editor, "photon.export_fxpack_all", Component.translatable("photon.export_fxpack_all.none",
+                    PhotonPaths.getProjectsDir().getAbsolutePath()));
+            return;
+        }
+        var directory = FXPacks.getFxPacksDir();
+        Dialog.showFileDialog("ldlib.gui.editor.tips.save_as", directory, false, new File(directory, "effects" + FXPacks.SUFFIX),
+                Dialog.suffixFilter(FXPacks.SUFFIX), file -> {
+                    if (file == null || file.isDirectory()) return;
+                    showExportAllSelection(editor, openProject, withSuffix(file, FXPacks.SUFFIX), candidates);
+                }).show(editor.getModularUI());
+    }
+
+    private static final String EXPORT_ALL_SIZE_KEY = "photon_export_all_selection";
+
+    /** Lists what goes into the pack as what, every project ticked; the author unticks the ones to leave out. */
+    private static void showExportAllSelection(Editor editor, @Nullable FXProject openProject, File packFile,
+                                               List<ProjectCandidate> candidates) {
+        var namespace = baseName(packFile, FXPacks.SUFFIX);
+        var remembered = PhotonDialogSizes.get(EXPORT_ALL_SIZE_KEY);
+        float width = remembered != null ? remembered.x : PACK_CONTENTS_WIDTH;
+        float height = remembered != null ? remembered.y : PACK_CONTENTS_HEIGHT;
+        var dialog = new Dialog().windowMode(
+                editor.getPositionX() + Math.max(0, (editor.getSizeWidth() - width) / 2f),
+                editor.getPositionY() + Math.max(0, (editor.getSizeHeight() - height) / 2f),
+                width, height);
+        PhotonDialogSizes.remember(dialog, EXPORT_ALL_SIZE_KEY);
+        dialog.setTitle("photon.export_fxpack_all");
+        dialog.addContent(wrappedLabel(Component.translatable("photon.export_fxpack_all.intro", candidates.size(), packFile.getName())));
+        var list = new ScrollerView();
+        list.scrollerStyle(style -> style.mode(ScrollerMode.VERTICAL));
+        list.layout(layout -> {
+            layout.widthPercent(100);
+            layout.flex(1);
+        });
+        var selected = new java.util.LinkedHashSet<>(candidates);
+        var projectsDir = PhotonPaths.getProjectsDir().getAbsoluteFile().toPath();
+        for (var candidate : candidates) {
+            var fxId = FXPackExporter.fxId(namespace, candidate.fxName());
+            var row = new UIElement().layout(layout -> {
+                layout.widthPercent(100);
+                layout.flexDirection(FlexDirection.ROW);
+                layout.alignItems(AlignItems.CENTER);
+                layout.gapAll(4);
+            });
+            var toggle = new Toggle().noText().setOn(true, false).setOnToggleChanged(on -> {
+                if (on) selected.add(candidate);
+                else selected.remove(candidate);
+            });
+            var relative = projectsDir.relativize(candidate.file().getAbsoluteFile().toPath()).toString().replace('\\', '/');
+            var text = Component.translatable("photon.export_fxpack_all.row", fxId.toString(), relative);
+            // a long row is cut at the window, rolls while hovered and reads whole in the tooltip
+            var label = new Label().setText(text)
+                    .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
+                    .layout(layout -> layout.flex(1).minWidth(0));
+            label.setOverflowVisible(false);
+            label.style(style -> style.tooltips(text));
+            list.addScrollViewChild(row.addChildren(toggle, label));
+        }
+        dialog.addContent(list);
+        dialog.addButton(new Button().setOnClick(e -> {
+            dialog.close();
+            exportAllIntoFxPack(editor, openProject, packFile, candidates.stream().filter(selected::contains).toList());
+        }).setText("photon.export_fxpack_all.export").addClass("__confirm-button__"));
+        dialog.addButton(new Button().setOnClick(e -> dialog.close()).setText("ldlib.gui.tips.cancel"));
+        dialog.show(editor);
+    }
+
+    /** What one batch export did, for the summary: the ids written, the project files left out, warnings logged. */
+    record BatchOutcome(List<ResourceLocation> exported, List<String> skipped, int warnings) {
+    }
+
+    private static void exportAllIntoFxPack(Editor editor, @Nullable FXProject openProject, File packFile,
+                                            List<ProjectCandidate> chosen) {
+        var namespace = baseName(packFile, FXPacks.SUFFIX);
+        var outcome = exportProjects(openProject, editor.getCurrentProjectFile(), packFile, namespace, chosen);
+        Component message = Component.translatable("photon.export_fxpack_all.exported", outcome.exported().size(), packFile.getName());
+        if (!outcome.skipped().isEmpty()) {
+            message = join(message, Component.translatable("photon.export_fxpack_all.skipped",
+                    outcome.skipped().size(), String.join(", ", outcome.skipped())));
+        }
+        if (outcome.warnings() > 0) {
+            message = join(message, Component.translatable("photon.fxpack.warnings", outcome.warnings()));
+        }
+        if (outcome.exported().isEmpty()) {
+            notify(editor, "photon.export_fxpack_all", message);
+            return;
+        }
+        reportResolution(editor, packFile, outcome.exported().get(0), message);
+    }
+
+    /**
+     * Exports {@code chosen} into {@code packFile} one after another (the pack accumulates, shared resources are
+     * stored once). The open project is exported as it is in the editor, unsaved edits included, like the
+     * one-project export; the others are read from their files. A project that fails — unreadable, a cycle, a
+     * name another project already took — is logged and skipped, not the reason to stop the rest. Without
+     * dialogs so the smoke test can drive it.
+     */
+    static BatchOutcome exportProjects(@Nullable FXProject openProject, @Nullable File openProjectFile, File packFile,
+                                       String namespace, List<ProjectCandidate> chosen) {
+        var exported = new ArrayList<ResourceLocation>();
+        var skipped = new ArrayList<String>();
+        var warnings = 0;
+        var taken = new java.util.HashSet<ResourceLocation>();
+        for (var candidate : chosen) {
+            var fxId = FXPackExporter.fxId(namespace, candidate.fxName());
+            var shortName = candidate.file().getName();
+            if (!taken.add(fxId)) {
+                Photon.LOGGER.warn("fxpack export: {} would also export as {}, which another project already did; skipped",
+                        candidate.file(), fxId);
+                skipped.add(shortName);
+                continue;
+            }
+            FXProject project;
+            try {
+                project = openProject != null && sameFile(candidate.file(), openProjectFile)
+                        ? openProject : loadProject(candidate.file());
+            } catch (Exception e) {
+                Photon.LOGGER.error("fxpack export: could not read the project {}", candidate.file(), e);
+                skipped.add(shortName);
+                continue;
+            }
+            var through = cycleThrough(project, fxId);
+            if (through != null) {
+                Photon.LOGGER.warn("fxpack export: exporting {} as {} would make an FX instance in it place itself (through {}); skipped",
+                        candidate.file(), fxId, through);
+                skipped.add(shortName);
+                continue;
+            }
+            project.bakeEditorRoot();
+            FXPackExporter.Result result;
+            try {
+                result = FXPackExporter.exportInto(packFile, namespace, candidate.fxName(), project.getFx(), Platform.getFrozenRegistry());
+            } catch (Exception e) {
+                Photon.LOGGER.error("fxpack export: failed to export {} into {}", candidate.file(), packFile, e);
+                skipped.add(shortName);
+                continue;
+            }
+            result.warnings().forEach(warning -> Photon.LOGGER.warn("fxpack export ({}): {}", result.fxId(), warning));
+            warnings += result.warnings().size();
+            project.addKnownAs(result.fxId());
+            exported.add(result.fxId());
+            Photon.LOGGER.info("Exported fx '{}' from {} into {} ({} files)", result.fxId(), shortName, packFile, result.fileCount());
+        }
+        return new BatchOutcome(exported, skipped, warnings);
+    }
+
+    private static boolean sameFile(File a, @Nullable File b) {
+        if (b == null) return false;
+        try {
+            return a.getCanonicalFile().equals(b.getCanonicalFile());
+        } catch (java.io.IOException e) {
+            return a.getAbsoluteFile().equals(b.getAbsoluteFile());
+        }
+    }
+
+    private static FXProject loadProject(File file) throws Exception {
+        if (FXProject.TYPE.loadProjectFromFile(file) instanceof FXProject project) return project;
+        throw new IllegalStateException(file + " is not a Photon FX project");
     }
 
     // ---- conversion --------------------------------------------------------------------------------

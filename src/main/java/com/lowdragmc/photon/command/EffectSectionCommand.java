@@ -129,8 +129,8 @@ public class EffectSectionCommand {
         } else {
             var selected = EntityArgument.getEntities(context, "entities");
             if (selected.size() > MAX_ENTITY_TARGETS) {
-                context.getSource().sendFailure(net.minecraft.network.chat.Component.literal(
-                        "Photon: section action supports at most " + MAX_ENTITY_TARGETS + " entities; no action was sent"));
+                context.getSource().sendFailure(net.minecraft.network.chat.Component.translatable(
+                        "photon.command.section.too_many", MAX_ENTITY_TARGETS));
                 return 0;
             }
             var ids = new ArrayList<Integer>(selected.size());

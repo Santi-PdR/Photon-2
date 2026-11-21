@@ -3,17 +3,25 @@ package com.lowdragmc.photon.gui.editor.view.timeline;
 import com.lowdragmc.lowdraglib2.configurator.ui.BooleanConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.Configurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorSelectorConfigurator;
+import com.lowdragmc.lowdraglib2.configurator.ui.NumberConfigurator;
 import com.lowdragmc.lowdraglib2.configurator.ui.RegistrySearchComponent;
 import com.lowdragmc.lowdraglib2.configurator.ui.SelectorConfigurator;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
+import com.lowdragmc.lowdraglib2.gui.ui.data.TextWrap;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Dialog;
+import com.lowdragmc.lowdraglib2.gui.ui.elements.Label;
+import com.lowdragmc.lowdraglib2.gui.ui.event.UIEventListener;
+import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.utils.UIElementProvider;
 import com.lowdragmc.lowdraglib2.gui.util.DrawerHelper;
 import com.lowdragmc.lowdraglib2.gui.util.TreeBuilder;
-import com.lowdragmc.photon.client.fx.timeline.AudioClip;
 import com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter;
+import com.lowdragmc.photon.client.fx.timeline.AudioClip;
+import com.lowdragmc.photon.client.fx.timeline.AudioConverter;
+import com.lowdragmc.photon.client.fx.timeline.AudioTrack;
 import com.lowdragmc.photon.client.fx.timeline.Clip;
 import com.lowdragmc.photon.client.fx.timeline.SoundLengthCache;
 import com.lowdragmc.photon.client.fx.timeline.Track;
@@ -41,10 +49,11 @@ import java.util.List;
 import java.io.File;
 
 /**
- * Editor for {@code audio} tracks: an optional bound-target header (position source for 3D playback) +
- * a lane of {@link AudioClip}s. Each clip picks a {@code SoundEvent} and plays it for the clip's span;
- * the inspector exposes sound / volume / pitch / category / attenuation / loop-length, and the clip
- * draws loop sub-divisions so the user sees how many times the sound repeats.
+ * Editor for {@code audio} tracks: an optional bound-target header (position source for 3D playback; the
+ * effect itself when none is bound) + a lane of {@link AudioClip}s. Each clip picks a {@code SoundEvent} and
+ * plays it for the clip's span; the inspector exposes sound / volume / pitch / category / 3D + range / loop,
+ * and the clip draws loop sub-divisions so the user sees how many times the sound repeats. The track's own
+ * inspector adds the sound played when the effect is removed ({@link AudioTrack#onRemove()}).
  */
 @OnlyIn(Dist.CLIENT)
 public class AudioTrackEditor extends ClipTrackEditor {
@@ -68,27 +77,29 @@ public class AudioTrackEditor extends ClipTrackEditor {
             layout.gapAll(2);
         });
         header.addChild(buildTargetSlot(ctx, track, true));
-        // One click from the track itself imports an OGG and creates a clip at the playhead; users
+        // One click from the track itself imports a sound and creates a clip at the playhead; users
         // no longer need to create an empty clip first and discover the import button in the inspector.
-        header.addChild(new Button().setText("OGG+").setOnClick(event -> {
+        // mp3/wav/mp4/… are converted to Ogg Vorbis automatically on import.
+        header.addChild(new Button().setText("\u266A+").setOnClick(event -> {
             var mui = event.currentElement.getModularUI();
-            if (mui != null) importOggAsClip(ctx, track, mui.ui.rootElement);
+            if (mui != null) importSoundAsClip(ctx, track, mui.ui.rootElement);
         }).layout(layout -> layout.width(34).heightPercent(100))
-                .style(style -> style.tooltips("photon.gui.editor.timeline.audio.import_ogg")));
+                .style(style -> style.tooltips("photon.gui.editor.timeline.audio.import_audio")));
         return header;
     }
 
-    private static void importOggAsClip(TimelineContext ctx, Track track, UIElement host) {
-        Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
-                new File(System.getProperty("user.home")), true, Dialog.suffixFilter(".ogg"), file -> {
+    private static void importSoundAsClip(TimelineContext ctx, Track track, UIElement host) {
+        Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_audio",
+                new File(System.getProperty("user.home")), true,
+                Dialog.suffixFilter(AudioConverter.supportedSuffixes()), file -> {
                     if (file == null || !file.isFile()) return;
                     try {
-                        var sound = AudioAssetImporter.importOgg(file);
+                        var sound = AudioAssetImporter.importSound(file);
                         Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
                                 Minecraft.getInstance().execute(() -> {
                                     if (failure != null) {
                                         com.lowdragmc.photon.Photon.LOGGER.error(
-                                                "Failed to register imported Photon OGG", failure);
+                                                "Failed to register imported Photon audio", failure);
                                         return;
                                     }
                                     double duration = SoundLengthCache.getTicks(sound);
@@ -99,9 +110,19 @@ public class AudioTrackEditor extends ClipTrackEditor {
                                     ctx.refreshPreview();
                                 }));
                     } catch (Exception exception) {
-                        com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
+                        com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon audio {}", file, exception);
+                        reportImportFailure(exception);
                     }
                 }).show(host);
+    }
+
+    /** Tells the user why their file could not be imported instead of only logging it. */
+    private static void reportImportFailure(Exception exception) {
+        var player = Minecraft.getInstance().player;
+        if (player == null) return;
+        var reason = exception.getMessage() == null ? exception.toString() : exception.getMessage();
+        player.displayClientMessage(Component.translatable(
+                "photon.gui.editor.timeline.audio.import_failed", reason), false);
     }
 
     @Override
@@ -142,9 +163,34 @@ public class AudioTrackEditor extends ClipTrackEditor {
         }
     }
 
+    /** The track inspector's own rows, above mute/lock: what plays when the effect is removed. */
+    @Override
+    protected void buildHeaderConfigurator(ConfiguratorGroup group, TimelineContext ctx, Track track) {
+        if (!(track instanceof AudioTrack audioTrack)) return;
+        // "nothing" / "play a sound", the sound's settings unfolding under the latter: the same rows as a clip,
+        // minus loop (a one-shot), with the clip preview button to hear it without removing anything
+        group.addConfigurator(new ConfiguratorSelectorConfigurator<>("photon.gui.editor.timeline.audio.on_remove",
+                audioTrack::onRemoveEnabled, v -> { audioTrack.onRemoveEnabled(v); ctx.refreshPreview(); },
+                audioTrack.onRemoveEnabled(), true, List.of(false, true),
+                enabled -> enabled ? "photon.gui.editor.timeline.audio.on_remove.sound"
+                        : "photon.gui.editor.timeline.audio.on_remove.none",
+                (enabled, sub) -> {
+                    if (enabled) buildAudioConfigurator(sub, ctx, audioTrack.onRemove(), false);
+                }).setTips("photon.gui.editor.timeline.audio.on_remove.tip"));
+    }
+
     @Override
     protected void buildClipConfigurator(ConfiguratorGroup group, TimelineContext ctx, Track track, Clip clip) {
         if (!(clip instanceof AudioClip audio)) return;
+        buildAudioConfigurator(group, ctx, audio, true);
+    }
+
+    /**
+     * The rows of one sound's settings: for a clip on the lane, and for the track's "on remove" sound
+     * ({@code withLoop} false: it plays once, a loop would never end).
+     */
+    private static void buildAudioConfigurator(ConfiguratorGroup group, TimelineContext ctx, AudioClip audio,
+                                               boolean withLoop) {
         var defaultSound = resolveSound(audio.sound());
         group.addConfigurator(new RegistrySearchComponent<>("photon.gui.editor.timeline.audio.sound",
                 () -> resolveSound(audio.sound()),
@@ -156,40 +202,26 @@ public class AudioTrackEditor extends ClipTrackEditor {
                 }, defaultSound, true, BuiltInRegistries.SOUND_EVENT,
                 UIElementProvider.text(sound -> {
                     var key = BuiltInRegistries.SOUND_EVENT.getKey(sound);
-                    return Component.literal(key == null ? "unknown" : key.toString());
+                    return key == null ? Component.translatable("photon.gui.editor.timeline.audio.unknown_sound") : Component.literal(key.toString());
                 })));
         Button importedSoundButton = new Button();
         importedSoundButton.setText(Component.literal(audio.sound().toString()));
         importedSoundButton.layout(layout -> layout.flex(1));
         var oggConfigurator = new Configurator("photon.gui.editor.timeline.audio.ogg")
                 .addInlineChild(importedSoundButton)
-                .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_ogg", true)
+                .addInlineChild(new Button().setText("photon.gui.editor.timeline.audio.import_audio", true)
                         .setOnClick(event -> {
                             var mui = event.currentElement.getModularUI();
                             if (mui == null) return;
-                            Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_ogg",
+                            Dialog.showFileDialog("photon.gui.editor.timeline.audio.import_audio",
                                     new File(System.getProperty("user.home")), true,
-                                    Dialog.suffixFilter(".ogg"), file -> {
+                                    Dialog.suffixFilter(AudioConverter.supportedSuffixes()), file -> {
                                         if (file == null || !file.isFile()) return;
-                                        try {
-                                            audio.sound(AudioAssetImporter.importOgg(file));
-                                            ctx.refreshPreview();
-                                            Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
-                                                    Minecraft.getInstance().execute(() -> {
-                                                        if (failure != null) {
-                                                            com.lowdragmc.photon.Photon.LOGGER.error(
-                                                                    "Failed to load imported Photon OGG", failure);
-                                                        } else {
-                                                            importedSoundButton.setText(Component.literal(audio.sound().toString()));
-                                                            ctx.refreshPreview();
-                                                        }
-                                                    }));
-                                        } catch (Exception exception) {
-                                            com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon OGG {}", file, exception);
-                                        }
+                                        importSound(ctx, audio, importedSoundButton, file);
                                     }).show(mui.ui.rootElement);
                         }).layout(layout -> layout.flex(1)));
         group.addConfigurator(oggConfigurator);
+        addStereoWarning(group, ctx, audio, importedSoundButton);
         // a preview button: play the sound once (non-positional) so the user can hear it
         group.addConfigurator(new Configurator("photon.gui.editor.timeline.audio.preview").addInlineChild(
                 new Button().setText("photon.gui.editor.timeline.audio.play", true)
@@ -203,9 +235,101 @@ public class AudioTrackEditor extends ClipTrackEditor {
                 audio::category, v -> { audio.category(v); ctx.refreshPreview(); }, audio.category(), true,
                 List.of(SoundSource.values()), SoundSource::getName));
         group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.attenuation",
-                audio::attenuation, v -> { audio.attenuation(v); ctx.refreshPreview(); }, audio.attenuation(), true));
-        group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.loop",
-                audio::loop, v -> { audio.loop(v); ctx.refreshPreview(); }, audio.loop(), true));
+                audio::attenuation, v -> { audio.attenuation(v); ctx.refreshPreview(); }, audio.attenuation(), true)
+                .setTips("photon.gui.editor.timeline.audio.attenuation.tip"));
+        group.addConfigurator(new NumberConfigurator("photon.gui.editor.timeline.audio.range",
+                () -> (double) audio.range(), v -> { audio.range(v.floatValue()); ctx.refreshPreview(); },
+                (double) audio.range(), true).setRange(AudioClip.MIN_RANGE, AudioClip.MAX_RANGE)
+                .setTips("photon.gui.editor.timeline.audio.range.tip"));
+        if (withLoop) {
+            group.addConfigurator(new BooleanConfigurator("photon.gui.editor.timeline.audio.loop",
+                    audio::loop, v -> { audio.loop(v); ctx.refreshPreview(); }, audio.loop(), true));
+        }
+    }
+
+    /**
+     * Imports {@code file} (converted to mono Ogg as needed), points the clip at it and reloads resources so the
+     * new sound event exists; the imported-sound button shows the id once the reload is through.
+     */
+    private static void importSound(TimelineContext ctx, AudioClip audio, Button importedSoundButton, File file) {
+        try {
+            audio.sound(AudioAssetImporter.importSound(file));
+            ctx.refreshPreview();
+            Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
+                    Minecraft.getInstance().execute(() -> {
+                        if (failure != null) {
+                            com.lowdragmc.photon.Photon.LOGGER.error("Failed to load imported Photon audio", failure);
+                        } else {
+                            importedSoundButton.setText(Component.literal(audio.sound().toString()));
+                            ctx.refreshPreview();
+                        }
+                    }));
+        } catch (Exception exception) {
+            com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon audio {}", file, exception);
+            reportImportFailure(exception);
+        }
+    }
+
+    /**
+     * A row, shown only while the clip is 3D and its sound file is stereo, saying that the game plays a stereo
+     * sound everywhere at the same volume (OpenAL only positions mono sources) with a button that re-imports the
+     * sound as mono. Sounds imported before this build were kept stereo, so most authors hit this once per clip.
+     */
+    private static void addStereoWarning(ConfiguratorGroup group, TimelineContext ctx, AudioClip audio,
+                                         Button importedSoundButton) {
+        var row = new Configurator("photon.gui.editor.timeline.audio.stereo");
+        row.inlineContainer.addChild(new Button().setText("photon.gui.editor.timeline.audio.stereo.fix", true)
+                .setOnClick(e -> makeMono(ctx, audio, importedSoundButton))
+                .layout(layout -> layout.flex(1).height(14)));
+        var reason = new Label().setText("photon.gui.editor.timeline.audio.stereo.reason");
+        reason.textStyle(style -> style.textWrap(TextWrap.WRAP).adaptiveHeight(true));
+        row.addChild(reason);
+        row.setDisplay(false);
+        group.addConfigurator(row);
+        var listener = new UIEventListener[1];
+        listener[0] = e -> {
+            if (row.getParent() == null) { // the inspector was rebuilt away: stop polling
+                group.removeEventListener(UIEvents.TICK, listener[0]);
+                return;
+            }
+            var stereo = audio.attenuation() && SoundLengthCache.getChannels(audio.sound()) > 1;
+            if (row.isDisplayed() != stereo) {
+                row.setDisplay(stereo);
+            }
+        };
+        group.addEventListener(UIEvents.TICK, listener[0]);
+    }
+
+    /** Re-imports the clip's current sound file as a mono workspace sound (see {@link #addStereoWarning}). */
+    private static void makeMono(TimelineContext ctx, AudioClip audio, Button importedSoundButton) {
+        var mc = Minecraft.getInstance();
+        File copy = null;
+        try {
+            var weighed = mc.getSoundManager().getSoundEvent(audio.sound());
+            var sound = weighed == null ? null : weighed.getSound(net.minecraft.util.RandomSource.create());
+            if (sound == null || sound.getType() != net.minecraft.client.resources.sounds.Sound.Type.FILE) {
+                throw new java.io.IOException("The sound " + audio.sound() + " has no file to convert");
+            }
+            var path = sound.getPath().getPath(); // sounds/<name>.ogg
+            var name = path.substring(path.lastIndexOf('/') + 1);
+            // the import keeps the file's base name: the same name again replaces the stereo workspace file,
+            // a vanilla / other mod sound becomes a workspace copy
+            var folder = java.nio.file.Files.createTempDirectory("photon-mono");
+            copy = folder.resolve(name.endsWith(".ogg") ? name : name + ".ogg").toFile();
+            try (var input = mc.getResourceManager().open(sound.getPath())) {
+                java.nio.file.Files.copy(input, copy.toPath());
+            }
+            SoundLengthCache.clear();
+            importSound(ctx, audio, importedSoundButton, copy);
+        } catch (Exception exception) {
+            com.lowdragmc.photon.Photon.LOGGER.error("Could not fold {} down to mono", audio.sound(), exception);
+            reportImportFailure(exception);
+        } finally {
+            if (copy != null) {
+                copy.delete();
+                copy.getParentFile().delete();
+            }
+        }
     }
 
     /** Play the clip's sound once, non-positional, honoring its category/volume/pitch, for previewing.

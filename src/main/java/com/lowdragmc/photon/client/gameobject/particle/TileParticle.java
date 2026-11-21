@@ -73,6 +73,11 @@ public class TileParticle implements IParticle {
      * makes it finish the cycle it is in when its emitter winds down. Ported from Photon 26.3.
      */
     protected float endAge = -1;
+    /**
+     * Age and T at which a once-only particle's remaining life was compressed into the wind-down window ending at
+     * {@link #endAge} ({@code windDownAge} is -1 while it was not); see {@link ParticleLifetime#WIND_DOWN_TICKS}.
+     */
+    protected float windDownAge = -1, windDownT;
     @Setter @Getter
     protected boolean isRemoved;
 
@@ -219,8 +224,34 @@ public class TileParticle implements IParticle {
             // interpolating the stored t would run past the end of a cycle between ticks
             return ParticleLifetime.t(mode, age + partialTicks, getLifetime(), endAge);
         }
-        if (config.emission.isLegacyTickEmission()) return t + partialTicks / getLifetime();
-        return Mth.clamp(t + partialTicks / getLifetime(), 0, 1);
+        if (config.emission.isLegacyTickEmission()) return t + partialTicks * tPerTick();
+        return Mth.clamp(t + partialTicks * tPerTick(), 0, 1);
+    }
+
+    /** T a once-only particle gains per tick: over its lifetime, or over its wind-down window once that opened. */
+    private float tPerTick() {
+        if (windDownAge >= 0 && endAge > windDownAge) return (1 - windDownT) / (endAge - windDownAge);
+        return 1f / getLifetime();
+    }
+
+    /**
+     * The emitter is winding down (an unforced removal, a draining control clip): decide, once, when this particle
+     * ends. What never dies of age ends with its emitter — an infinite particle now, a cyclic one at the end of the
+     * cycle it is in (Photon 26.3) — and a once-only particle that would outlive the wind-down by more than
+     * {@link ParticleLifetime#WIND_DOWN_TICKS} ends at that window instead, its remaining T compressed into it so its
+     * curves still reach their end. A particle with less life left than the window is left to finish on its own.
+     */
+    private void windDownIfNeeded(boolean cyclic) {
+        if (endAge >= 0 || !(emitter instanceof FXObject object) || !object.isWindingDown()) return;
+        if (cyclic) {
+            endAge = ParticleLifetime.endOfCycle(age, lifetime);
+        } else if (lifetime <= 0) {
+            endAge = age;
+        } else if (lifetime - age > ParticleLifetime.WIND_DOWN_TICKS) {
+            endAge = age + ParticleLifetime.WIND_DOWN_TICKS;
+            windDownAge = age;
+            windDownT = t;
+        }
     }
 
     /** A file naming no known mode reads as null: play once, which is what this port always did. */
@@ -508,7 +539,8 @@ public class TileParticle implements IParticle {
         if (lifetime > 0 && config.emission.isLegacyTickEmission() && mode == ParticleLifetime.Mode.Once) {
             // Photon 1 increments age, fires Death, then performs the final update using the
             // previous progress; Tick fires after the update and progress is stored last.
-            boolean dies = lifetime > 0 && age >= lifetime;
+            windDownIfNeeded(false);
+            boolean dies = age >= (endAge >= 0 ? endAge : lifetime);
             age += dt;
             if (dies) {
                 setRemoved(true);
@@ -516,16 +548,15 @@ public class TileParticle implements IParticle {
             }
             update(dt);
             if (runtime.subEmitters.isEnable()) runtime.subEmitters.triggerTickEvent(this, dt);
-            if (lifetime > 0) t = age / lifetime;
+            t = windDownAge >= 0 ? ParticleLifetime.windDownT(windDownT, windDownAge, endAge, age) : age / lifetime;
             return;
         }
         var cyclic = mode.cyclic() && lifetime > 0;
-        // what never dies of age ends with its emitter winding down: an infinite particle now, a cyclic one at the end
-        // of the cycle it is in, so a Loop/PingPong particle stops instead of living forever
-        if (endAge < 0 && (cyclic || lifetime <= 0) && emitter instanceof FXObject object && object.isWindingDown()) {
-            endAge = cyclic ? ParticleLifetime.endOfCycle(age, lifetime) : age;
-        }
-        var deathAge = cyclic || lifetime <= 0 ? endAge : lifetime;
+        // what never dies of age ends with its emitter winding down (an infinite particle now, a cyclic one at the end
+        // of the cycle it is in, so a Loop/PingPong particle stops instead of living forever), and what would outlive
+        // the wind-down by more than the window ends at the window
+        windDownIfNeeded(cyclic);
+        var deathAge = endAge >= 0 ? endAge : lifetime > 0 ? lifetime : -1;
         // death: snap t to its final value and apply the final visual state (no motion) so over-lifetime curves
         // reach their endpoints on the frames the dead particle still renders before removal.
         // lifetime <= 0 intentionally never age-dies (infinite particles; they die via collision or emitter
@@ -549,7 +580,9 @@ public class TileParticle implements IParticle {
         if (lifetime > 0) {
             // recompute BEFORE update so curves sample this step's t (was one tick late), and clamp:
             // fractional dt can push age past lifetime here, which previously produced t > 1
-            t = cyclic ? ParticleLifetime.t(mode, age, lifetime, endAge) : Math.min(age / lifetime, 1f);
+            t = cyclic ? ParticleLifetime.t(mode, age, lifetime, endAge)
+                    : windDownAge >= 0 ? ParticleLifetime.windDownT(windDownT, windDownAge, endAge, age)
+                    : Math.min(age / lifetime, 1f);
         }
 
         // update data

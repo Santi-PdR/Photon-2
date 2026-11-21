@@ -75,9 +75,9 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 var root = PhotonPaths.getDataDir().toPath();
                 com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter.repairLegacySoundDefinitions();
                 if (!Files.isDirectory(PhotonPaths.getAssetsDir().toPath())) return;
-                var info = new Pack.Info(Component.literal("Photon workspace"), 15, 15,
+                var info = new Pack.Info(Component.translatable("photon.resource_pack.workspace"), 15, 15,
                         FeatureFlagSet.of(), true);
-                var pack = Pack.create("photon/workspace", Component.literal("Photon workspace"), true,
+                var pack = Pack.create("photon/workspace", Component.translatable("photon.resource_pack.workspace"), true,
                         id -> new PathPackResources(id, root, false), info, PackType.CLIENT_RESOURCES,
                         Pack.Position.TOP, true, PackSource.BUILT_IN);
                 if (pack != null) consumer.accept(pack);
@@ -138,11 +138,6 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.15) == 0
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.65) == 0) {
             PhotonConfig.INSTANCE.bloomThreshold.set(0.5);
-            changed = true;
-        }
-        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
-                || Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 1.0) == 0) {
-            PhotonConfig.INSTANCE.bloomIntensity.set(0.18);
             changed = true;
         }
         // Persist the guard even when neither value matched: the migration must not reinterpret a

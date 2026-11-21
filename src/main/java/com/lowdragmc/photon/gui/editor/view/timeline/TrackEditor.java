@@ -147,7 +147,7 @@ public abstract class TrackEditor {
         var label = new Label().bindDataSource(SupplierDataSource.of(() -> {
             var r = ctx.runtime();
             var b = (r == null || track.targetId() == null) ? null : r.objects.get(track.targetId());
-            return Component.literal(b == null ? "None" : b.getName());
+            return b == null ? Component.translatable("photon.gui.editor.timeline.target.none") : Component.literal(b.getName());
         }));
         TimelineContext.styleLabel(label);
         label.layout(layout -> layout.flex(1).heightPercent(100));

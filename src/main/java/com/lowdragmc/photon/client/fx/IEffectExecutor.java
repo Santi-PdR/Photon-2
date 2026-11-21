@@ -9,6 +9,8 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
+
 /**
  * The context an {@link com.lowdragmc.photon.client.fx.FXRuntime} plays inside: supplies the level
  * and receives per-tick / per-frame callbacks from every emitted {@link IFXObject}.
@@ -64,6 +66,20 @@ public interface IEffectExecutor {
     @Nullable
     default FX legacySubEffect(String name) {
         return this instanceof IFXEffectExecutor whole ? whole.getFx().getLegacySubFXs().get(name) : null;
+    }
+
+    /**
+     * The ids ({@link SpawnChain} form) of the effect this executor plays — its file's location here; the
+     * editor adds what its project was imported from and exported to. A sub-emitter inside it that spawns
+     * one of them would spawn the effect inside itself without end, so {@code SubEmittersSetting} refuses
+     * it. Empty when unknown, which only loses that first-level check (the chain still stops the cycle one
+     * level further in).
+     */
+    default List<String> playingAs() {
+        if (this instanceof IFXEffectExecutor whole && whole.getFx().getFxLocation() != null) {
+            return List.of(SpawnChain.id(whole.getFx().getFxLocation()));
+        }
+        return List.of();
     }
 
     /**

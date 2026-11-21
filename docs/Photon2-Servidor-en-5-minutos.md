@@ -46,7 +46,7 @@ Si eres operador y quieres mandar tu carpeta local `<instancia>/ldlib2/assets` a
 /photon fx send Oz
 ```
 
-El cliente del operador primero muestra **Confirm upload / Cancel**; no se lee ningún archivo hasta que confirmes. Después el servidor entrega el pack solo a Oz, lo conserva para sus próximas conexiones y su cliente recarga los recursos automáticamente.
+El cliente del operador primero muestra **[Confirmar subida] / [Cancelar]** (en el idioma del juego); no se lee ningún archivo hasta que confirmes. Después el servidor entrega el pack solo a Oz, lo conserva para sus próximas conexiones y su cliente recarga los recursos automáticamente.
 
 Para crear un archivo y compartirlo por Discord u otro servicio, ejecuta en tu cliente:
 

@@ -8,7 +8,12 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraft.world.level.Level;
 import com.lowdragmc.photon.client.fx.FX;
+import com.lowdragmc.photon.client.fx.SpawnChain;
 import org.jetbrains.annotations.Nullable;
+import net.minecraft.resources.ResourceLocation;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -26,6 +31,8 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
     private Supplier<FX> definitionSupplier = () -> null;
     @Setter
     private Supplier<String> diagnosticLabel = () -> "unsaved-editor-project";
+    /** The ids the previewed project is known by (converted from, exported to), beyond its definition's location. */
+    private Supplier<Collection<ResourceLocation>> knownAs = List::of;
 
     public void setDefinitionSupplier(Supplier<FX> definitionSupplier) {
         this.definitionSupplier = definitionSupplier == null ? () -> null : definitionSupplier;
@@ -37,6 +44,28 @@ public class FXProjectEffectExecutor implements IEffectExecutor {
 
     public String diagnosticLabel() {
         return diagnosticLabel.get();
+    }
+
+    public void setKnownAs(Supplier<Collection<ResourceLocation>> knownAs) {
+        this.knownAs = knownAs == null ? List::of : knownAs;
+    }
+
+    /**
+     * The previewed project's ids: a sub-emitter in it that spawns one of them would spawn the project
+     * inside itself, in the preview exactly as in the world once saved.
+     */
+    @Override
+    public List<String> playingAs() {
+        var ids = new LinkedHashSet<String>();
+        var definition = definitionSupplier.get();
+        if (definition != null && definition.getFxLocation() != null) ids.add(SpawnChain.id(definition.getFxLocation()));
+        var known = knownAs.get();
+        if (known != null) {
+            for (var id : known) {
+                if (id != null) ids.add(SpawnChain.id(id));
+            }
+        }
+        return List.copyOf(ids);
     }
     @Getter
     public final RandomSource randomSource = RandomSource.create(seed);

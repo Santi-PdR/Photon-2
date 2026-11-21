@@ -42,6 +42,11 @@ public class FXRuntime implements IScene {
     private boolean destroyed = false;
     /** Whether a non-forced {@link #destroy} is still playing the timeline's release section. */
     private boolean releasing;
+    /** Whether this playback's removal already started the audio tracks' "on remove" sounds (once per emit). */
+    @Getter(AccessLevel.NONE)
+    private boolean removalSoundPlayed;
+    /** How many "on remove" sounds the last {@link #destroy} started; diagnostics. */
+    private int removalSoundsStarted;
     /** The particle engine this runtime was emitted into (vanilla or an editor manager); see {@link #isValid()}. */
     @Nullable
     private ParticleTickHost host;
@@ -49,6 +54,8 @@ public class FXRuntime implements IScene {
     private int generationAtEmit;
     /** Playback rate for this whole runtime; see {@link #setRate}. */
     private float rate = 1f;
+    /** The effects that spawned this runtime, outermost first; empty for a top-level effect. See {@link SpawnChain}. */
+    private List<String> spawnChain = List.of();
 
     public FXRuntime(FXData fxData) {
         this.fxData = fxData;
@@ -227,6 +234,19 @@ public class FXRuntime implements IScene {
         root.setSelfTimeScale(this.rate);
     }
 
+    /**
+     * The effects a sub-emitter chain spawned this runtime through, outermost first (ids as
+     * {@link SpawnChain} writes them); empty for an effect an executor plays directly. Not persisted.
+     */
+    public List<String> spawnChain() {
+        return spawnChain;
+    }
+
+    /** Set by the sub-emitter that spawned this runtime, before {@link #emit}. */
+    public void spawnChain(List<String> chain) {
+        this.spawnChain = List.copyOf(chain);
+    }
+
     /** Start playback: emit every object into the executor's particle engine and reset the timeline. */
     public void emit(IEffectExecutor effect) {
         emit(effect, 0);
@@ -253,6 +273,8 @@ public class FXRuntime implements IScene {
         emitted = true;
         destroyed = false;
         releasing = false;
+        removalSoundPlayed = false;
+        removalSoundsStarted = 0;
         // track the owning engine for isValid(): same resolution as IFXObject.emit's engine pick
         this.host = effect.getLevel() instanceof DummyWorld dummyWorld
                 && dummyWorld.getParticleManager() instanceof ParticleTickHost tickHost
@@ -385,8 +407,16 @@ public class FXRuntime implements IScene {
      * drops everything at once. Otherwise the timeline's release section plays out first, if it has
      * one, then everything winds down: nothing new starts and remnants drain. A later {@link #emit}
      * revives the runtime (editor replay).
+     * <p>
+     * Either way the effect is being removed, so the audio tracks' "on remove" sounds start now, once per
+     * playback — at the start of the release section, not after it: the sound is the removal's own, like
+     * the release section is. A runtime that is merely swapped for another is {@link #discard()}ed instead.
      */
     public void destroy(boolean force) {
+        if (emitted && !removalSoundPlayed) {
+            removalSoundPlayed = true;
+            removalSoundsStarted = timelinePlayer.playRemovalSounds();
+        }
         if (force) {
             destroyed = true;
             releasing = false;
@@ -405,6 +435,16 @@ public class FXRuntime implements IScene {
             return;
         }
         windDownAll();
+    }
+
+    /**
+     * {@link #destroy Destroy} at once and silently: for a runtime another one takes the place of (the effect
+     * file was reloaded, a newer effect supersedes it), which is not the effect being removed. No "on remove"
+     * sound plays; the replacement starts in the same tick.
+     */
+    public void discard() {
+        removalSoundPlayed = true;
+        destroy(true);
     }
 
     /** Bring the effect down for good: nothing new starts, what is already out there is left to finish. */

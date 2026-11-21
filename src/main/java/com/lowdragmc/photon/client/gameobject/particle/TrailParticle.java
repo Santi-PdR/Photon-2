@@ -35,6 +35,8 @@ public class TrailParticle implements IParticle {
     private static final int MAX_HEAD_SAMPLES_PER_TICK = 64;
     /** At least this spatial frequency is kept even when the authored minimum distance is tiny. */
     private static final float FAST_MOVE_SAMPLE_SPACING = 0.1f;
+    /** Hard bound for the sub-segments smoothing splits one raw segment into; see {@link #smoothStepCount}. */
+    private static final int MAX_SMOOTH_STEPS_PER_SEGMENT = 64;
     public enum UVMode {
         Stretch,
         Tile
@@ -270,13 +272,29 @@ public class TrailParticle implements IParticle {
         return Mth.clamp((int) Math.ceil(distance / spacing), 1, MAX_HEAD_SAMPLES_PER_TICK);
     }
 
+    /**
+     * How many sub-segments smoothing splits a raw segment of {@code distance} into: the square of its ratio to
+     * the minimum vertex distance (as it always was, so ordinary movement looks the same), but never more than
+     * {@link #MAX_SMOOTH_STEPS_PER_SEGMENT}. One means no interpolated point. Unbounded, a teleport of the
+     * followed entity left a raw gap of hundreds of blocks (the head samples are capped per tick) whose square
+     * asked for millions of interpolated points — per tick, for the trail's whole lifetime — and the client
+     * froze or ran out of memory.
+     */
+    public static int smoothStepCount(float distance, float minVertexDistance) {
+        float spacing = Math.max(minVertexDistance, 0.05f);
+        if (!(spacing > 0) || !Float.isFinite(spacing)) spacing = 0.05f;
+        if (!(distance > spacing) || !Float.isFinite(distance)) return 1;
+        float ratio = distance / spacing;
+        if (ratio * ratio >= MAX_SMOOTH_STEPS_PER_SEGMENT) return MAX_SMOOTH_STEPS_PER_SEGMENT;
+        return Math.max(1, (int) (ratio * ratio));
+    }
+
     public TailArray generateSmoothPath(TailArray vertices, TailArray lastSmooth, float distance) {
         if (vertices.size() <= 2) {
             return vertices;
         }
 
         TailArray smoothPath = new TailArray();
-        float minDistanceSq = Math.max(distance, 0.05f) * Math.max(distance, 0.05f);
         Vector3f prevDir = null;
 
         for (int i = 0; i < vertices.size() - 1; i++) {
@@ -291,9 +309,8 @@ public class TrailParticle implements IParticle {
                 continue;
             }
 
-            float distSq = curr.distanceSquared(next);
-            if (distSq > minDistanceSq) {
-                int steps = (int) (distSq / minDistanceSq);
+            int steps = smoothStepCount(curr.distance(next), distance);
+            if (steps > 1) {
                 for (int j = 1; j < steps; j++) {
                     float t = j / (float) steps;
                     Vector3f interpPos = catmullRomInterpolate(

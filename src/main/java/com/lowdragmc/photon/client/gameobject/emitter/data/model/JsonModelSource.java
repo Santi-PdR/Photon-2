@@ -218,7 +218,8 @@ public class JsonModelSource implements IModelSource {
             }, r -> {
                 if (r != null && r.isFile()) {
                     var newModel = getModelLocationFromFile(r);
-                    if (newModel == null) return;
+                    if (!com.lowdragmc.photon.client.util.AssetPickRejection.acceptedUnder(newModel,
+                            PhotonPaths.getAssetsDir().toPath(), r.toPath(), "models/", mui.ui.rootElement)) return;
                     if (newModel.equals(modelLocation)) return;
                     setModelLocation(newModel);
                     buttonConfigurator.notifyChanges();

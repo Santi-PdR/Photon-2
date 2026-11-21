@@ -653,7 +653,8 @@ public class CustomShaderMaterial extends ShaderInstanceMaterial {
                     Dialog.showFileDialog("photon.select_shader", PhotonPaths.getDataDir(), true, Dialog.suffixFilter(".json"), r -> {
                         if (r != null && r.isFile()) {
                             var location = getShaderFromFile(r);
-                            if (location == null) return;
+                            if (!com.lowdragmc.photon.client.util.AssetPickRejection.acceptedUnder(location,
+                                    PhotonPaths.getAssetsDir().toPath(), r.toPath(), "shaders/core/", mui.ui.rootElement)) return;
                             setShader(location);
                             reloadShaderConfigurator(shaderConfigurator);
                             configurator.notifyChanges();

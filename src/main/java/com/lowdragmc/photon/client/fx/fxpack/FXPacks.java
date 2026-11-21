@@ -220,7 +220,7 @@ public final class FXPacks {
     }
 
     private static Pack createPack(String id, String displayName, Pack.ResourcesSupplier resources) {
-        var metadata = new Pack.Info(Component.literal("Photon FX pack " + displayName), 15, 15,
+        var metadata = new Pack.Info(Component.translatable("photon.resource_pack.fxpack", displayName), 15, 15,
                 FeatureFlagSet.of(), true);
         return Pack.create(id, Component.literal(displayName), true, resources, metadata,
                 PackType.CLIENT_RESOURCES, Pack.Position.BOTTOM, true, PackSource.BUILT_IN);
@@ -557,6 +557,11 @@ public final class FXPacks {
             referenced.add(entryKey(entry.id().getNamespace(), "fx/" + entry.id().getPath() + FX.SUFFIX));
             try (var in = Files.newInputStream(entry.path())) {
                 mark(NbtIo.readCompressed(in), zip, referenced, visited);
+            } catch (StackOverflowError tooDeep) {
+                // NBT nesting overflowed the trace: no trace is logged (it would be megabytes), and the
+                // same keep-everything rule applies — never sweep from an incomplete mark
+                Photon.LOGGER.warn("fxpack gc: {} nests too deeply — keeping everything", entry.path());
+                return;
             } catch (Exception e) {
                 Photon.LOGGER.warn("fxpack gc: failed to read {} — keeping everything", entry.path(), e);
                 return; // never sweep on a partial mark

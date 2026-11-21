@@ -69,9 +69,11 @@ prioridad lo tapa ("shadowed") o si hay que recargar recursos ("not mounted" →
 
 1. Copia el `.fxpack` dentro de `<instancia>/photon/fxpacks/`.
    - Si el archivo lo hizo el mismo juego, seguramente ya está ahí.
-2. Espera un segundo. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete nuevo o
-   reemplazado (avisa en el log: `fxpacks: detected new pack ...` y luego `reloading resources
-   automatically`).
+2. Espera un par de segundos. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete
+   nuevo, reemplazado o borrado, en cuanto el archivo deja de crecer (avisa en el log: `fxpacks:
+   detected new pack ...` y luego `reloading resources automatically`). Vale copiarlo en el menú
+   principal (recarga ahí mismo) o mientras carga un mundo (recarga al entrar); con el juego
+   cerrado, se monta solo al arrancar. Las carpetas descomprimidas no se vigilan: para esas, F3+T.
 3. Si querés forzarlo, `/photon_client reload` hace exactamente lo mismo que **F3+T**, sin salir del
    juego ni buscar la tecla.
 
@@ -147,7 +149,7 @@ servidor que los empaquete y se los entregue a un jugador conectado:
 
 Reemplaza `Oz` por el nombre del jugador. Quien ejecuta el comando debe ser operador (permiso 2),
 y tanto quien envía como quien recibe deben tener Photon y estar conectados para iniciar el envío.
-Antes de leer archivos, el cliente muestra botones **Confirm upload** y **Cancel**; sólo al confirmar
+Antes de leer archivos, el cliente muestra botones **[Confirmar subida]** y **[Cancelar]** (en el idioma del juego; en inglés, *Confirm upload* / *Cancel*); sólo al confirmar
 comienza a empaquetar y subir. La exportación local también pide confirmación antes de leer archivos.
 Photon empaqueta **todo** `ldlib2/assets`, lo sube al servidor y entrega el pack solo a ese jugador;
 no lo añade al conjunto público que reciben los demás. El servidor guarda el pack por UUID bajo
@@ -233,10 +235,12 @@ un proyecto viejo.
 
 - En la barra superior de la vista **Scene** hay, junto al icono de bloom, un **control de
   intensidad**: un deslizador de `0.00` a `2.00` con su valor al lado.
-- Escribe directamente `bloom_intensity` de la configuración: es el mismo valor que
-  **Mods → Photon → Config**, y el deslizador se sincroniza si lo cambias ahí.
-- El valor por defecto (`0.18`) **no cambia**: sólo se modifica lo que muevas tú.
-- El icono de bloom de al lado sigue siendo el encendido/apagado de la vista previa (tecla `B`).
+- Escribe la intensidad **del FX que tienes abierto** (`bloomIntensity` dentro del efecto), no un
+  ajuste global: dos efectos pueden brillar distinto y el valor viaja con el FX al exportarlo.
+- El valor por defecto (`0.18`) **no cambia**: sólo se modifica lo que muevas tú. Si varios FX
+  brillan a la vez, el pase usa la intensidad más alta.
+- El icono de bloom de al lado activa/desactiva el bloom **de ese FX** (tecla `B`); el interruptor
+  global sigue siendo **Enable Bloom** en **Mods → Photon → Config**.
 
 ---
 
