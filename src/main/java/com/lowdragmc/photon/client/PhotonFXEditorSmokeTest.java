@@ -3087,6 +3087,7 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
         com.lowdragmc.photon.command.LateReplayRegression.verify();
         com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.SoundLengthRegression.verify();
         com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyLoadRegression.verify();
         Photon.LOGGER.info("[animated-property-load-smoke] unreadable animated properties are skipped without failing the track");
         com.lowdragmc.photon.gui.editor.view.TimelineInsertTimeRegression.verify();

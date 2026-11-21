@@ -95,20 +95,26 @@ public class AudioTrackEditor extends ClipTrackEditor {
                     if (file == null || !file.isFile()) return;
                     try {
                         var sound = AudioAssetImporter.importSound(file);
-                        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) ->
-                                Minecraft.getInstance().execute(() -> {
-                                    if (failure != null) {
-                                        com.lowdragmc.photon.Photon.LOGGER.error(
-                                                "Failed to register imported Photon audio", failure);
-                                        return;
-                                    }
-                                    double duration = SoundLengthCache.getTicks(sound);
-                                    if (duration <= 0) duration = ctx.defaultClipDuration(track.targetId());
-                                    var clip = new AudioClip(Math.max(0, ctx.currentTimeTicks()), Math.max(1, duration), 1.0f)
-                                            .sound(sound);
-                                    ctx.addClip(track, clip);
-                                    ctx.refreshPreview();
-                                }));
+                        Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) -> {
+                            if (failure != null) {
+                                com.lowdragmc.photon.Photon.LOGGER.error(
+                                        "Failed to register imported Photon audio", failure);
+                                return;
+                            }
+                            // the clip is as long as the sound. Its length is read off-thread the first time it
+                            // is asked for, and the reload that just registered the sound forgot every length:
+                            // asking once right here always answered 0, and every imported clip took the
+                            // default length instead of the sound's. Wait for the measurement (a few ms).
+                            SoundLengthCache.ticksWhenKnown(sound)
+                                    .completeOnTimeout(0.0, 10, java.util.concurrent.TimeUnit.SECONDS)
+                                    .thenAccept(ticks -> Minecraft.getInstance().execute(() -> {
+                                        double duration = ticks > 0 ? Math.ceil(ticks) : ctx.defaultClipDuration(track.targetId());
+                                        var clip = new AudioClip(Math.max(0, ctx.currentTimeTicks()), Math.max(1, duration), 1.0f)
+                                                .sound(sound);
+                                        ctx.addClip(track, clip);
+                                        ctx.refreshPreview();
+                                    }));
+                        });
                     } catch (Exception exception) {
                         com.lowdragmc.photon.Photon.LOGGER.error("Could not import Photon audio {}", file, exception);
                         reportImportFailure(exception);

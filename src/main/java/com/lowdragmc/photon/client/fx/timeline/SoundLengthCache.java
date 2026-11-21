@@ -10,16 +10,22 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nullable;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Best-effort cache of a {@code SoundEvent}'s length in ticks and channel count, read off-thread from its
  * OGG headers so an {@link AudioClip} can draw one loop sub-division per repeat and the editor can warn
  * about a stereo sound (which the game cannot place in the world). The first lookup for an id kicks off
  * an async read and returns 0 until it resolves; a sound that can't be measured (missing / event-reference
- * / decode error) caches 0 and is not retried.
+ * / decode error) caches 0 and is not retried. Code that needs the measured value rather than "what is
+ * known right now" (a clip sized to the sound it was just imported with) waits on {@link #ticksWhenKnown}.
+ * <p>
+ * Every answer belongs to the resources it was read from: {@link #clear()} (run by Photon's reload
+ * listener) starts a new generation, and a read that was still running across the reload is thrown away
+ * and repeated against the new packs instead of caching what the old ones said — or, for a sound that was
+ * being imported, that there was no such sound at all.
  */
 @OnlyIn(Dist.CLIENT)
 public class SoundLengthCache {
@@ -29,10 +35,14 @@ public class SoundLengthCache {
     }
 
     private static final Map<ResourceLocation, Info> INFOS = new ConcurrentHashMap<>();
-    private static final Set<ResourceLocation> PENDING = ConcurrentHashMap.newKeySet();
+    /** Reads in flight, so a sound asked for from several places (a draw per frame) is measured once. */
+    private static final Map<ResourceLocation, CompletableFuture<Info>> PENDING = new ConcurrentHashMap<>();
+    /** Bumped by {@link #clear()}; a read finished under an older generation describes resources that are gone. */
+    private static final AtomicLong GENERATION = new AtomicLong();
 
     /** Forget durations after resources are replaced or a server-synced sound pack changes. */
     public static void clear() {
+        GENERATION.incrementAndGet();
         INFOS.clear();
         PENDING.clear();
     }
@@ -50,22 +60,50 @@ public class SoundLengthCache {
         return info(soundId).channels();
     }
 
+    /**
+     * Length of {@code soundId} in ticks once it has actually been measured: completes at once when the sound is
+     * already known, otherwise after its OGG headers were read off-thread, with 0 for a sound that cannot be
+     * measured. {@link #getTicks} answers 0 for a sound not read yet, which right after a resource reload (that
+     * forgot every length) is every sound — the wrong answer to size a clip by. Completes on the reading thread:
+     * hop to the client thread before touching the editor.
+     */
+    public static CompletableFuture<Double> ticksWhenKnown(@Nullable ResourceLocation soundId) {
+        if (soundId == null) return CompletableFuture.completedFuture(0.0);
+        return load(soundId).thenApply(Info::ticks);
+    }
+
     private static Info info(@Nullable ResourceLocation soundId) {
         if (soundId == null) return Info.UNKNOWN;
         var cached = INFOS.get(soundId);
         if (cached != null) return cached;
-        requestLoad(soundId);
+        load(soundId);
         return Info.UNKNOWN;
     }
 
-    private static void requestLoad(ResourceLocation soundId) {
-        if (!PENDING.add(soundId)) return; // already loading
+    /** The cached answer, or the one read in flight for this id (started here when nobody asked before). */
+    private static CompletableFuture<Info> load(ResourceLocation soundId) {
+        var cached = INFOS.get(soundId);
+        if (cached != null) return CompletableFuture.completedFuture(cached);
+        var fresh = new CompletableFuture<Info>();
+        var inFlight = PENDING.putIfAbsent(soundId, fresh);
+        if (inFlight != null) return inFlight;
+        var generation = GENERATION.get();
         CompletableFuture
                 .supplyAsync(() -> computeInfo(soundId), Util.backgroundExecutor())
                 .whenComplete((info, error) -> {
-                    INFOS.put(soundId, error != null || info == null ? Info.UNKNOWN : info);
-                    PENDING.remove(soundId);
+                    var result = error != null || info == null ? Info.UNKNOWN : info;
+                    PENDING.remove(soundId, fresh);
+                    if (generation == GENERATION.get()) {
+                        INFOS.put(soundId, result);
+                        fresh.complete(result);
+                        return;
+                    }
+                    // the resources changed while this was being read (a reload, typically the one that
+                    // registers a sound just imported): what it found describes the old packs, measure again
+                    load(soundId).whenComplete((again, ignored) ->
+                            fresh.complete(again == null ? Info.UNKNOWN : again));
                 });
+        return fresh;
     }
 
     private static Info computeInfo(ResourceLocation soundId) {
@@ -114,4 +152,3 @@ public class SoundLengthCache {
         return sampleRate > 0 && lastGranule > 0 ? lastGranule * 20.0 / sampleRate : 0;
     }
 }
-
