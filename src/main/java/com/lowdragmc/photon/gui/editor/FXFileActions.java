@@ -327,7 +327,7 @@ public final class FXFileActions {
                                             List<ProjectCandidate> chosen) {
         var namespace = baseName(packFile, FXPacks.SUFFIX);
         var outcome = exportProjects(openProject, editor.getCurrentProjectFile(), packFile, namespace, chosen);
-        var message = Component.translatable("photon.export_fxpack_all.exported", outcome.exported().size(), packFile.getName());
+        Component message = Component.translatable("photon.export_fxpack_all.exported", outcome.exported().size(), packFile.getName());
         if (!outcome.skipped().isEmpty()) {
             message = join(message, Component.translatable("photon.export_fxpack_all.skipped",
                     outcome.skipped().size(), String.join(", ", outcome.skipped())));
