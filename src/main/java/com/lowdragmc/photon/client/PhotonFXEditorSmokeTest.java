@@ -78,6 +78,8 @@ public final class PhotonFXEditorSmokeTest {
     /** A pack copied into photon/fxpacks near the end of the run: the folder watcher has to mount it by itself. */
     private static File watcherPack;
     private static int watcherPackTick;
+    private static boolean watcherMountLogged;
+    private static int twinSessionsBefore;
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -2914,15 +2916,39 @@ public final class PhotonFXEditorSmokeTest {
                 watcherPack = new File(com.lowdragmc.photon.client.fx.fxpack.FXPacks.getFxPacksDir(), "ci_watcher.fxpack");
                 writeMarkerPack(watcherPack);
                 watcherPackTick = ticks;
+                // The integrated server scans this same folder. Asked for its list again it offers ci_watcher.fxpack
+                // (and the server-only fixture): the client has to recognise the installed file and not download it
+                // back as a server-<hash> copy, which is what singleplayer did ("why are there two random files").
+                twinSessionsBefore = com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions();
+                com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(com.lowdragmc.photon.network.FxPackSync.refreshRequest());
             } else if (watcherPack != null) {
                 var marker = new ResourceLocation("ci_watcher", "textures/watcher_marker.txt");
-                if (com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
-                        && minecraft.getResourceManager().getResource(marker).isPresent()) {
+                boolean mounted = com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
+                        && minecraft.getResourceManager().getResource(marker).isPresent();
+                if (!watcherMountLogged && mounted) {
                     Photon.LOGGER.info("[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T");
+                    watcherMountLogged = true;
+                }
+                if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions() <= twinSessionsBefore
+                        && (ticks - watcherPackTick) % 120 == 0) {
+                    // the server answers a requested offer at most once every five seconds; ask again if the first was too soon
+                    com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(com.lowdragmc.photon.network.FxPackSync.refreshRequest());
+                }
+                if (watcherMountLogged && com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions() > twinSessionsBefore) {
+                    var copy = new File(watcherPack.getParentFile(), "server-" + sha256Hex(watcherPack.toPath()) + ".fxpack");
+                    if (copy.isFile()) {
+                        throw new IllegalStateException("The server's offer of the installed pack was downloaded again as " + copy.getName());
+                    }
+                    if (!mounted) {
+                        throw new IllegalStateException("The installed pack stopped being mounted after the server offered it");
+                    }
+                    Photon.LOGGER.info("[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy");
                     finished = true;
                     minecraft.stop();
                 } else if (ticks >= watcherPackTick + 600) {
-                    throw new IllegalStateException("The folder watcher did not mount a pack copied into photon/fxpacks");
+                    throw new IllegalStateException(watcherMountLogged
+                            ? "The server's re-offer did not finish on the client after an installed pack appeared"
+                            : "The folder watcher did not mount a pack copied into photon/fxpacks");
                 }
             }
         } catch (Throwable failure) {
@@ -2954,9 +2980,25 @@ public final class PhotonFXEditorSmokeTest {
         minecraft.screen.mouseReleased(pos.x, pos.y, 0);
     }
 
+    private static String sha256Hex(java.nio.file.Path path) throws java.io.IOException {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(path)) {
+                var buffer = new byte[64 * 1024];
+                int count;
+                while ((count = input.read(buffer)) >= 0) digest.update(buffer, 0, count);
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required by Java", e);
+        }
+    }
+
     /**
      * A pack holding one marker resource, written the way a file copy lands: built beside its destination and moved
-     * into place whole, so the watcher sees a finished file rather than one being written.
+     * into place whole, so the watcher sees a finished file rather than one being written. It also carries an fx
+     * entry, which is what the server's scan requires of a pack it offers: the integrated server has to offer this
+     * one for the installed-copy check at the end of the smoke to mean anything.
      */
     private static void writeMarkerPack(File pack) throws java.io.IOException {
         var folder = pack.getParentFile();
@@ -2967,6 +3009,9 @@ public final class PhotonFXEditorSmokeTest {
         try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(part.toPath()))) {
             zip.putNextEntry(new java.util.zip.ZipEntry("assets/ci_watcher/textures/watcher_marker.txt"));
             zip.write("copied in while the game was running".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/ci_watcher/fx/watcher_probe.fx"));
+            zip.write("folder watcher probe; never played".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zip.closeEntry();
         }
         Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -3092,6 +3137,7 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackWatcherRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.InstalledCopyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
         com.lowdragmc.photon.command.LateReplayRegression.verify();
         com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();

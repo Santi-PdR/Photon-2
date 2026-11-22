@@ -58,6 +58,8 @@ public final class ClientFxPackSync {
     /** Package-visible so the stall sweep can be regression-tested against a synthetic session. */
     static volatile SyncSession activeSession;
     private static long lastRequestToken = -1;
+    /** Sessions that reached {@link #finish} (game thread); the smoke test waits on it after asking for a re-offer. */
+    private static volatile int finishedSessions;
 
     private ClientFxPackSync() {}
 
@@ -167,6 +169,18 @@ public final class ClientFxPackSync {
         var temp = target.resolveSibling(target.getFileName() + ".part");
         try {
             Files.createDirectories(target.getParent());
+            var installed = installedCopy(target.getParent(), entry);
+            if (installed != null) {
+                // Every .fxpack in photon/fxpacks is mounted by this client on its own, so the offer is already met:
+                // nothing to download and nothing to mount a second time. The usual case is singleplayer, where the
+                // integrated server scans this very folder and offered the player their own exports, which came
+                // back as server-<hash>.fxpack copies of them ("why are there two random files").
+                Photon.LOGGER.info("Photon FX pack {} offered by the server is already installed as {}; using that copy",
+                        entry.fileName(), installed.getFileName());
+                dropDuplicateCache(target, installed);
+                if (activeSession == session) finishOne(session);
+                return;
+            }
             if (Files.isRegularFile(target) && Files.size(target) == entry.size()
                     && sha256(target).equals(entry.sha256())) {
                 var validation = inspectPack(session, target);
@@ -297,6 +311,51 @@ public final class ClientFxPackSync {
         return validation;
     }
 
+    /**
+     * A pack the player installed themselves — a {@code .fxpack} directly in {@code directory} whose name is not ours
+     * ({@code server-*}) — with exactly the offered content, or null. Only files of the offered size are hashed.
+     */
+    @javax.annotation.Nullable
+    static Path installedCopy(Path directory, FxPackSync.PackEntry entry) {
+        if (!Files.isDirectory(directory)) return null;
+        try (var files = Files.list(directory)) {
+            for (var path : files.sorted().toList()) {
+                var name = path.getFileName().toString();
+                if (name.startsWith("server-") || !name.endsWith(FXPacks.SUFFIX)
+                        || !Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue;
+                try {
+                    if (Files.size(path) == entry.size() && sha256(path).equals(entry.sha256())) return path;
+                } catch (IOException | RuntimeException unreadable) {
+                    // a pack being written or unreadable is simply not a match
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            Photon.LOGGER.warn("Could not look for an installed copy of Photon FX pack {}", entry.fileName(), e);
+        }
+        return null;
+    }
+
+    /**
+     * A {@code server-<hash>} copy made before installed packs were recognised duplicates one the player has; it is
+     * our own cache file, so drop it. Best effort: while it is mounted, Windows refuses the delete — the next offer,
+     * once it is no longer active, gets it.
+     */
+    private static void dropDuplicateCache(Path target, Path installed) {
+        try {
+            if (Files.deleteIfExists(target)) {
+                Photon.LOGGER.info("Removed {}, a cached copy of the installed Photon FX pack {}",
+                        target.getFileName(), installed.getFileName());
+            }
+        } catch (IOException | RuntimeException busy) {
+            Photon.LOGGER.debug("Could not remove cached Photon FX pack copy {} yet", target, busy);
+        }
+    }
+
+    /** How many sync sessions have finished since the client started. */
+    public static int finishedSessions() {
+        return finishedSessions;
+    }
+
     private static void finishOne(SyncSession session) {
         if (activeSession != session) return;
         if (session.remaining.decrementAndGet() == 0) finish(session);
@@ -305,6 +364,7 @@ public final class ClientFxPackSync {
     private static void finish(SyncSession session) {
         Minecraft.getInstance().execute(() -> {
             if (activeSession != session) return;
+            finishedSessions++;
             boolean activeSetChanged = FXPacks.setActiveServerPacks(session.completed);
             if (!session.downloaded && !activeSetChanged) return;
             Photon.LOGGER.info("Photon FX server sync finished; reloading client assets automatically");
