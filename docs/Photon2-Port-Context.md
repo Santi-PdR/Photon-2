@@ -53,6 +53,7 @@ El objetivo ha sido conservar las funciones de Photon 2 y adaptar el código que
 | Java | 17 | Toolchain y runtime esperado |
 | LDLib2 | `2.2.39.a` (= upstream `2.2.39.a+forge.1.20.1` con el runtime Kotlin relocalizado bajo `com.lowdragmc.photon.internal.embedded`; `libs/upstream/README.md`) | Editor y APIs usadas por Photon; empaquetado dentro del JAR distributivo |
 | KilaGraph | `20.1.0.15` | Grafo/materiales Kila; empaquetado dentro del JAR distributivo |
+| jLayer `1.0.6` · JAAD `0.8.8-MILESTONE` · jVorbisEnc `0.0.2` | Conversión de audio del timeline (mp3/aac/mp4 → Ogg Vorbis); desde la ronda 19 van **relocalizados** por `shadowJar` a `com.lowdragmc.photon.internal.embedded.{javazoom,jaad,biniu}` dentro del `-all.jar` (ya no son Jar-in-Jar: como módulos propios chocaban con Citadel, que lleva JAAD) |
 | LDLib | `1.0.52.a` | Dependencia externa del entorno; no queda sustituida por LDLib2 |
 | Oculus/Iris | Opcional | Compatibilidad de shaders; Bloom con shaderpack tiene un ajuste aparte |
 

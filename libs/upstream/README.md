@@ -20,5 +20,10 @@ export package kotlin.contracts to module create_pillagers_arise
 
 Jar-in-Jar version selection cannot reconcile that (the two carry different identifiers), so the
 only distribution that coexists with Kotlin for Forge — and with any other mod embedding a Kotlin
-runtime — is the relocated one. The CI step "Verify the distributable embeds the relocated Kotlin
-runtime" fails the build if a loose `kotlin/` package root ever comes back.
+runtime — is the relocated one. The CI step "Verify the distributable isolates its embedded
+libraries" fails the build if a loose `kotlin/` package root ever comes back.
+
+The audio codecs (jLayer, JAAD, jVorbisEnc) hit the same wall in round 19 — Citadel carries its own
+JAAD, so a nested `jaad-….jar` split `net.sourceforge.jaad.*` with it — and are no longer nested at
+all: `shadowJar` in `build.gradle` relocates them into `com.lowdragmc.photon.internal.embedded`
+inside the mod jar. Nothing Photon ships may export a package under a third party's name.

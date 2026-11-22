@@ -96,21 +96,22 @@ jobs:
           jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
           jar tf "$jar_file" | grep -Fxq 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.class'
 
-      # The JarJar task embeds whichever libs/ jar its version pin resolves to. The upstream LDLib2 build
-      # nests a loose kotlin-stdlib, which becomes a JPMS module `kotlin.stdlib` exporting kotlin.*: a split
-      # package with Kotlin for Forge, and the game refuses to start for every Kotlin mod on the instance
-      # ("Modules thedarkcolour.kotlinforforge and kotlin.stdlib export package kotlin.contracts ...").
-      # Only libs/ldlib2-2.2.39.a.jar, whose Kotlin runtime is relocated under
-      # com.lowdragmc.photon.internal.embedded, may ship. Every nested jar, two levels deep, is listed as
-      # a notice annotation so an audit can read what the distributable carries without downloading it.
-      - name: Verify the distributable embeds the relocated Kotlin runtime
+      # What the -all jar carries must never export a package another mod can also export: the loader
+      # builds one JPMS layer from every mod jar and two modules exporting one package stop the game
+      # ("Modules thedarkcolour.kotlinforforge and kotlin.stdlib export package kotlin.contracts ...",
+      # "Modules citadel and jaad.MILESTONE export package net.sourceforge.jaad.spi.javasound ..."). So:
+      # LDLib2 ships as libs/ldlib2-2.2.39.a.jar, whose Kotlin runtime is relocated under
+      # com.lowdragmc.photon.internal.embedded, and the audio codecs are relocated by shadowJar into the
+      # same package instead of being nested. Every nested jar, two levels deep, is listed as a notice
+      # annotation so an audit can read what the distributable carries without downloading it.
+      - name: Verify the distributable isolates its embedded libraries
         shell: bash
         run: |
           jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
           test -n "$jar_file"
           work="$RUNNER_TEMP/jarjar-audit"
           rm -rf "$work"
-          mkdir -p "$work/level1" "$work/level2"
+          mkdir -p "$work/level1" "$work/level2" "$work/classes"
           unzip -p "$jar_file" META-INF/jarjar/metadata.json > "$work/photon-metadata.json"
           python3 - "$work/photon-metadata.json" <<'PY'
           import json, sys
@@ -118,18 +119,79 @@ jobs:
           for jar in jars:
               ident = jar["identifier"]
               print("::notice title=jar-in-jar (photon)::%s:%s %s -> %s" % (ident["group"], ident["artifact"], jar["version"]["artifactVersion"], jar["path"]))
-          ldlib2 = [jar for jar in jars if jar["identifier"] == {"group": "local", "artifact": "ldlib2"}]
-          assert len(ldlib2) == 1, "LDLib2 is not embedded exactly once: %r" % ldlib2
-          assert ldlib2[0]["path"] == "META-INF/jarjar/ldlib2-2.2.39.a.jar", "the JarJar pin resolved LDLib2 to %s, not the relocated libs/ldlib2-2.2.39.a.jar" % ldlib2[0]["path"]
-          assert not any(jar["identifier"]["artifact"].startswith("kotlin") for jar in jars), "a Kotlin library is nested directly in the distributable: %r" % jars
+          idents = sorted(jar["identifier"]["group"] + ":" + jar["identifier"]["artifact"] for jar in jars)
+          assert idents == ["local:kilagraph", "local:ldlib2"], "unexpected Jar-in-Jar set (codecs are relocated into the mod jar, never nested): %r" % idents
+          ldlib2 = [jar for jar in jars if jar["identifier"]["artifact"] == "ldlib2"][0]
+          assert ldlib2["path"] == "META-INF/jarjar/ldlib2-2.2.39.a.jar", "the JarJar pin resolved LDLib2 to %s, not the relocated libs/ldlib2-2.2.39.a.jar" % ldlib2["path"]
+          PY
+          # Package roots no module of ours may contain: the Kotlin runtime and the three codecs under
+          # their original names. Listings go through files: `unzip | grep -q` under pipefail reports
+          # grep's early exit as a failure.
+          forbidden_roots='^(kotlin|kotlinx|net/sourceforge|javazoom|biniu)/'
+          unzip -Z1 "$jar_file" > "$work/all.txt"
+          for entry in \
+            com/lowdragmc/photon/internal/embedded/jaad/aac/Decoder.class \
+            com/lowdragmc/photon/internal/embedded/jaad/mp4/MP4Container.class \
+            com/lowdragmc/photon/internal/embedded/javazoom/jl/decoder/Decoder.class \
+            com/lowdragmc/photon/internal/embedded/javazoom/jl/decoder/l3reorder.ser \
+            com/lowdragmc/photon/internal/embedded/biniu/vorbis/VorbisEnc.class \
+            com/lowdragmc/photon/internal/embedded/biniu/ogg/StreamState.class \
+            com/lowdragmc/photon/client/fx/timeline/AudioConverter.class \
+            com/lowdragmc/photon/client/fx/timeline/OggVorbisWriter.class; do
+            if ! grep -Fxq "$entry" "$work/all.txt"; then
+              echo "::error title=relocated codecs::$entry is missing from the distributable"
+              exit 1
+            fi
+          done
+          if grep -Eq "$forbidden_roots" "$work/all.txt"; then
+            echo "::error title=split package::the distributable carries a library under its original package root: $(grep -E "$forbidden_roots" "$work/all.txt" | head -n 3 | tr '\n' ' ')"
+            exit 1
+          fi
+          if grep -Eq '^(module-info\.class|META-INF/versions/[0-9]+/module-info\.class|META-INF/services/javax\.sound\..*|META-INF/services/javazoom\..*)$' "$work/all.txt"; then
+            echo "::error title=relocated codecs::a codec module descriptor or service registration leaked into the distributable"
+            exit 1
+          fi
+          # Every class in the jar — Photon's and the relocated codecs' — may reference the codecs only
+          # under the relocated package: an original name left in a constant pool is a NoClassDefFoundError
+          # in production (dev runs the unrelocated originals and cannot notice).
+          unzip -q -o "$jar_file" 'com/lowdragmc/photon/*.class' -d "$work/classes"
+          python3 - "$work/classes" <<'PY'
+          import os, re, struct, sys
+          roots = re.compile(r'(?:^|L)(?:net/sourceforge/jaad|javazoom/jl|biniu/(?:ogg|vorbis)|kotlin/|kotlinx/)')
+          def utf8_entries(data):
+              n = struct.unpack('>H', data[8:10])[0]; i = 10; idx = 1
+              while idx < n:
+                  tag = data[i]; i += 1
+                  if tag == 1:
+                      l = struct.unpack('>H', data[i:i+2])[0]; i += 2
+                      yield data[i:i+l].decode('utf-8', 'replace'); i += l
+                  elif tag in (3, 4): i += 4
+                  elif tag in (5, 6): i += 8; idx += 1
+                  elif tag in (7, 8, 16, 19, 20): i += 2
+                  elif tag in (9, 10, 11, 12, 17, 18): i += 4
+                  elif tag == 15: i += 3
+                  else: raise ValueError('constant pool tag %d' % tag)
+                  idx += 1
+          offenders = []
+          scanned = 0
+          for folder, _, files in os.walk(sys.argv[1]):
+              for name in files:
+                  if not name.endswith('.class'): continue
+                  path = os.path.join(folder, name); scanned += 1
+                  for entry in utf8_entries(open(path, 'rb').read()):
+                      if roots.search(entry):
+                          offenders.append('%s: %s' % (os.path.relpath(path, sys.argv[1]), entry[:120])); break
+          print('scanned %d classes under com/lowdragmc/photon' % scanned)
+          assert scanned > 500, 'the distributable holds too few Photon classes to be real'
+          for line in offenders[:20]: print('::error title=unrelocated reference::' + line)
+          assert not offenders, '%d classes still reference a codec or Kotlin under its original package' % len(offenders)
           PY
           unzip -q -o "$jar_file" 'META-INF/jarjar/*.jar' -d "$work/level1"
           offenders=0
-          # listings go through files: `unzip | grep -q` under pipefail reports grep's early exit as a failure
-          inspect() { # <jar> <label>: a loose Kotlin runtime has a kotlin/ package root or a kotlin.* module name
+          inspect() { # <jar> <label>: a nested jar may not carry a forbidden package root or a kotlin.* module name
             unzip -Z1 "$1" > "$work/listing.txt"
-            if grep -Eq '^kotlin/' "$work/listing.txt"; then
-              echo "::error title=loose kotlin runtime::$2 carries a kotlin/ package root"
+            if grep -Eq "$forbidden_roots" "$work/listing.txt"; then
+              echo "::error title=split package::$2 carries $(grep -E "$forbidden_roots" "$work/listing.txt" | head -n 1 | cut -d/ -f1-2)/ under its original package root"
               offenders=$((offenders + 1))
             fi
             : > "$work/manifest.txt"
@@ -137,7 +199,7 @@ jobs:
               unzip -p "$1" META-INF/MANIFEST.MF | tr -d '\r' > "$work/manifest.txt"
             fi
             if grep -Eq '^Automatic-Module-Name: kotlin' "$work/manifest.txt"; then
-              echo "::error title=loose kotlin runtime::$2 declares a kotlin.* module name"
+              echo "::error title=split package::$2 declares a kotlin.* module name"
               offenders=$((offenders + 1))
             fi
           }
@@ -160,14 +222,14 @@ jobs:
           test -f "$ldlib2_inner/metadata.json"
           grep -Fq '"artifact": "photon-kotlin-runtime"' "$ldlib2_inner/metadata.json"
           if grep -Fq 'kotlin-stdlib' "$ldlib2_inner/metadata.json"; then
-            echo "::error title=loose kotlin runtime::the embedded LDLib2 still declares kotlin-stdlib in its Jar-in-Jar metadata"
+            echo "::error title=split package::the embedded LDLib2 still declares kotlin-stdlib in its Jar-in-Jar metadata"
             exit 1
           fi
           runtime=$(find "$ldlib2_inner" -maxdepth 1 -name 'photon-kotlin-runtime-*.jar' -print -quit)
           test -n "$runtime"
           unzip -Z1 "$runtime" > "$work/listing.txt"
           grep -Fxq 'com/lowdragmc/photon/internal/embedded/kotlin/Unit.class' "$work/listing.txt"
-          echo "Distributable embeds $(basename "$runtime") under com.lowdragmc.photon.internal.embedded; no loose Kotlin runtime found."
+          echo "Distributable: codecs relocated under com.lowdragmc.photon.internal.embedded, LDLib2 with $(basename "$runtime"); no library under its original package root."
 
       - name: Upload distributable
         id: distributable
@@ -238,6 +300,38 @@ jobs:
           ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k run/photon/smoke-fixtures/beat.m4a
           ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -ar 48000 run/photon/smoke-fixtures/beat48k.wav
           ffmpeg -loglevel error -f lavfi -i "testsrc=size=64x64:duration=0.5" -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:v libx264 -c:a aac -shortest run/photon/smoke-fixtures/beat.mp4
+
+      # The dev-run smoke tests below exercise the original codec libraries from the Gradle classpath;
+      # only the packaged jar carries the copies shadowJar relocated under
+      # com.lowdragmc.photon.internal.embedded. Decode and encode with those, compiled against the
+      # distributable alone, so a relocation that lost a class, a resource or a reference fails here.
+      - name: Exercise the relocated audio codecs from the distributable
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          work="$RUNNER_TEMP/relocated-codecs"
+          rm -rf "$work"
+          mkdir -p "$work/classes"
+          cp run/photon/smoke-fixtures/beat.mp3 run/photon/smoke-fixtures/beat.m4a "$work/"
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k -f adts "$work/beat.aac"
+          javac -d "$work/classes" -cp "$jar_file" .github/scripts/RelocatedCodecsCheck.java
+          if ! java -cp "$work/classes:$jar_file" RelocatedCodecsCheck "$work" > "$work/check.log" 2>&1; then
+            cat "$work/check.log"
+            echo "::error title=relocated codecs::the relocated jLayer/JAAD/jVorbisEnc inside the distributable failed: $(grep -m1 -E 'Exception|Error' "$work/check.log" || true)"
+            exit 1
+          fi
+          cat "$work/check.log"
+          # What the relocated encoder wrote must be Ogg Vorbis to an independent decoder as well.
+          ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "$work/relocated.ogg" > "$work/probe.txt"
+          cat "$work/probe.txt"
+          grep -Fxq 'codec_name=vorbis' "$work/probe.txt"
+          grep -Fxq 'sample_rate=44100' "$work/probe.txt"
+          grep -Fxq 'channels=2' "$work/probe.txt"
+          ffmpeg -v error -xerror -i "$work/relocated.ogg" -f null -
+          duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/relocated.ogg")
+          python3 -c 'import sys; d = float(sys.argv[1]); assert 0.3 <= d <= 0.9, "relocated.ogg lasts %s s" % d' "$duration"
+          echo "::notice title=relocated codecs::$(tail -n 1 "$work/check.log")"
 
       - name: Smoke-test Forge client startup without a physical display
         shell: bash
