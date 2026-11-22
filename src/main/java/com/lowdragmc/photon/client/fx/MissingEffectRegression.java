@@ -29,35 +29,32 @@ public final class MissingEffectRegression {
     public static void verify(Level level) {
         var missing = new ResourceLocation("photon_probe", "missing_effect/" + Long.toUnsignedString(System.nanoTime(), 36));
         int reads = FXHelper.readAttempts(missing);
-        check(FXHelper.getFX(missing) == null, "an effect no pack provides was loaded");
-        check(FXHelper.readAttempts(missing) == reads + 1, "the first ask for a missing effect read " + (FXHelper.readAttempts(missing) - reads) + " file(s)");
-        check(FXHelper.isKnownMissing(missing), "the missing effect was not remembered");
-        for (int i = 0; i < 200; i++) {
-            check(FXHelper.getFX(missing) == null, "a remembered missing effect was answered with an effect");
-        }
-        check(FXHelper.readAttempts(missing) == reads + 1, "200 asks for a remembered missing effect read the packs "
-                + (FXHelper.readAttempts(missing) - reads - 1) + " more time(s)");
-
-        // once the cool-down is over the next ask reads again (silently) and the miss is remembered again
+        // 1. with no cool-down every ask reads the packs again — the retry path — the first logged, the rest silent
         FXHelper.missingRetryNanos = 0;
         try {
+            check(FXHelper.getFX(missing) == null, "an effect no pack provides was loaded");
+            check(FXHelper.readAttempts(missing) == reads + 1, "the first ask for a missing effect read "
+                    + (FXHelper.readAttempts(missing) - reads) + " file(s)");
             check(FXHelper.getFX(missing) == null, "the retry after the cool-down was answered with an effect");
             check(FXHelper.readAttempts(missing) == reads + 2, "the retry after the cool-down did not read the packs");
         } finally {
             FXHelper.missingRetryNanos = FXHelper.MISSING_RETRY_NANOS;
         }
-        // (remembered with the restored cool-down: the retry above ran with a zero cool-down, so ask once more)
-        check(FXHelper.getFX(missing) == null, "the ask after the retry was answered with an effect");
+        // 2. with the cool-down back, the next ask reads once more (the last miss expired at once) and is then remembered
+        check(FXHelper.getFX(missing) == null, "the ask after a zero cool-down retry was answered with an effect");
         check(FXHelper.readAttempts(missing) == reads + 3, "the ask after a zero cool-down retry did not read the packs");
-        check(FXHelper.isKnownMissing(missing), "the retried missing effect was not remembered");
-        check(FXHelper.getFX(missing) == null && FXHelper.readAttempts(missing) == reads + 3,
-                "a remembered miss was read again within the cool-down");
+        check(FXHelper.isKnownMissing(missing), "the missing effect was not remembered");
+        for (int i = 0; i < 200; i++) {
+            check(FXHelper.getFX(missing) == null, "a remembered missing effect was answered with an effect");
+        }
+        check(FXHelper.readAttempts(missing) == reads + 3, "200 asks for a remembered missing effect read the packs "
+                + (FXHelper.readAttempts(missing) - reads - 3) + " more time(s)");
 
-        // a reload or an invalidation forgets the miss, so an effect exported meanwhile is found at once
+        // 3. a reload or an invalidation forgets the miss, so an effect exported meanwhile is found at once
         FXHelper.invalidate(List.of(missing));
         check(!FXHelper.isKnownMissing(missing), "invalidate kept the missing effect in memory");
 
-        // the report's path: a sub-emitter naming the missing effect, spawning at every birth
+        // 4. the report's path: a sub-emitter naming the missing effect, spawning at every birth, reads it once
         var probe = new FX();
         probe.setFxLocation(new ResourceLocation("photon_probe", "missing_effect/parent"));
         var emitter = new ParticleEmitter();

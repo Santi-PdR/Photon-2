@@ -95,6 +95,10 @@ Notas útiles:
   empaquetado sin tocar el paquete.
 - Los paquetes que un servidor te manda se guardan como `server-<hash>.fxpack` en la misma carpeta y
   sólo se montan mientras estás conectado a ese servidor (al salir se retiran).
+- Si ya tienes instalado un paquete **idéntico** (mismo contenido, con tu propio nombre de archivo), el
+  servidor no te lo vuelve a mandar: se usa el tuyo. Por eso en **un solo jugador**, donde el servidor
+  integrado ofrece los paquetes de esta misma carpeta, no aparecen copias `server-<hash>.fxpack` de tus
+  exportaciones (las que dejó una versión anterior se borran solas al entrar al mundo).
 
 ---
 
@@ -133,8 +137,10 @@ Photon ya trae ese circuito hecho. Funciona así:
 
 1. El servidor calcula un **SHA-256** de cada `.fxpack` y manda al cliente una lista con nombre,
    tamaño y hash.
-2. El cliente mira su caché local:
-   - si ya tiene ese hash exacto → no descarga nada;
+2. El cliente mira lo que ya tiene:
+   - si un `.fxpack` instalado en `photon/fxpacks/` tiene ese tamaño y ese hash → usa ese archivo
+     (no descarga ni monta nada más);
+   - si ya tiene ese hash exacto en su caché `server-<hash>.fxpack` → no descarga nada;
    - si no lo tiene o cambió → pide el archivo por trozos de 24 KB.
 3. Al terminar, verifica el hash y el contenido (tiene que traer al menos un `assets/*/fx/*.fx`),
    lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**.
@@ -217,7 +223,9 @@ lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparec
 
 - Servidor: el log debe decir `Offered N Photon FX pack(s) to <jugador>` al entrar.
 - Cliente: `Downloading Photon FX pack ...` y luego `Server Photon FX packs are ready`.
-- En el cliente, `photon/fxpacks/server-<hash>.fxpack` existe y pesa lo mismo que el original.
+- En el cliente, `photon/fxpacks/server-<hash>.fxpack` existe y pesa lo mismo que el original (salvo que
+  el jugador ya tuviera instalado un paquete idéntico: entonces el log dice
+  `Photon FX pack <nombre> offered by the server is already installed as <archivo>; using that copy`).
 - Si algo falla, el cliente registra `Photon FX pack transfer failed ...` o
   `Downloaded Photon FX pack failed integrity or format validation`.
 
