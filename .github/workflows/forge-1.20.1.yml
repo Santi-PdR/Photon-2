@@ -845,9 +845,13 @@ jobs:
             grep -F '[gpu-error] stage=' "$RUNNER_TEMP/photon-client.log" | grep -Fv 'stage=regression'
             exit 1
           fi
+          # The tick-30 regression batch runs in one client tick, longer than the threshold on llvmpipe: the watchdog
+          # fires on a slow frame, not a hang. That is allowed, but the render thread does come back, so the report
+          # must have been closed as RESOLVED (the INFO line below); a report left open on the runner is a bug.
           if grep -Fq '[freeze-watchdog] the render thread has produced no frame' "$RUNNER_TEMP/photon-client.log"; then
             echo '::warning::the freeze watchdog fired during the smoke run (llvmpipe stalls are slow frames, not GPU hangs):'
             grep -F '[freeze-watchdog]' "$RUNNER_TEMP/photon-client.log" | head -5
+            grep -Fq '[freeze-watchdog] the render thread resumed after' "$RUNNER_TEMP/photon-client.log"
           fi
 
       - name: Require Photon 1 entity FX to stay on the torso
