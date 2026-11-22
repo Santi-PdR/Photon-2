@@ -59,6 +59,8 @@ El objetivo ha sido conservar las funciones de Photon 2 y adaptar el código que
 
 Las restricciones definitivas están en `src/main/resources/META-INF/mods.toml`; las versiones de compilación están en `gradle.properties` y `build.gradle`.
 
+**Convivencia en el editor (ronda 21):** la escena del editor vive en un nivel virtual de LDLib2 y `DummyWorld.tickWorld()` publicaba `LevelTickEvent` de Forge para ese nivel en cada tick de pantalla; un mod que castea `event.level` a `ClientLevel` sin comprobarlo (Brutality 0.8.7, `DelayedTaskScheduler.onLevelTick`) tumbaba el editor («Ticking screen»). Photon ya no deja salir esos eventos (`DummyWorldMixin` sobre la LDLib2 embebida; la escena del editor usa `EditorSceneLevel`, que tickea sin ellos) y, si una fase del tick falla dentro del código de otro mod, se salta ese tick y se registra `[scene-tick]` con el origen probable en vez de cerrar el juego.
+
 ## Archivos del usuario y recursos
 
 El workspace del editor y los paquetes se guardan en la carpeta de datos de la instancia, no se inyectan en caliente dentro del JAR de Photon:
