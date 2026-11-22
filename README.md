@@ -20,6 +20,8 @@ The FX editor runs inside an LDLib2 virtual level, and LDLib2's `DummyWorld.tick
 
 An effect id that no pack provides (a sub-emitter pointing at an effect that was never exported, say) is read and logged once — one line naming the file that is missing, no stack trace — and answered from memory afterwards; a reload, an export or `/photon_client reload` forgets the miss so a file added meanwhile is found. In singleplayer the integrated server offers the player's own `photon/fxpacks` back to them: a pack that is already installed (same bytes under the player's own file name) now satisfies the offer in place instead of being downloaded again as a `server-<hash>.fxpack` copy, and copies left by earlier versions are removed on the next join.
 
+A pack replaced in a server's `photon/fxpacks` reaches the players already online by itself: the server lists that folder once a second and, once a file added, replaced or removed has held still for three seconds, offers the current list to everyone connected (at most three offers a minute; `/photon fxpacks` still forces one). Each client downloads only what it lacks, reloads its resources automatically and then removes the `server-<hash>.fxpack` copies the server no longer serves, plus any no server has listed in a week. The server never publishes files named like those cache copies, which in singleplayer kept an updated pack's old version mounted next to the new one.
+
 ## Port notes
 
 The source adapts the Minecraft APIs, Forge networking and shader integration, resource serialization, and editor UI to the Forge 1.20.1 / LDLib2 2.2.39.a APIs. The upstream interactive UI scenarios are excluded from the production source set because they target newer LDLib2 APIs and are developer-only tools.
