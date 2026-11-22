@@ -18,6 +18,8 @@ Photon does not need Kotlin for Forge and does not conflict with it. The embedde
 
 The FX editor runs inside an LDLib2 virtual level, and LDLib2's `DummyWorld.tickWorld()` posts Forge's `LevelTickEvent` for that level: any mod whose listener casts `event.level` to `ClientLevel` without checking (Brutality 0.8.7 does) crashed the editor with a "Ticking screen" `ClassCastException`. Photon keeps those events off the bus (`DummyWorldMixin` on the embedded LDLib2, and the editor's own `EditorSceneLevel` ticks without them), and a tick that fails inside another mod's code is skipped and logged as `[scene-tick]` with the probable origin instead of crashing the game. The client smoke test registers a listener with that cast and fails the build if a virtual level reaches it again.
 
+An effect id that no pack provides (a sub-emitter pointing at an effect that was never exported, say) is read and logged once — one line naming the file that is missing, no stack trace — and answered from memory afterwards; a reload, an export or `/photon_client reload` forgets the miss so a file added meanwhile is found. In singleplayer the integrated server offers the player's own `photon/fxpacks` back to them: a pack that is already installed (same bytes under the player's own file name) now satisfies the offer in place instead of being downloaded again as a `server-<hash>.fxpack` copy, and copies left by earlier versions are removed on the next join.
+
 ## Port notes
 
 The source adapts the Minecraft APIs, Forge networking and shader integration, resource serialization, and editor UI to the Forge 1.20.1 / LDLib2 2.2.39.a APIs. The upstream interactive UI scenarios are excluded from the production source set because they target newer LDLib2 APIs and are developer-only tools.
