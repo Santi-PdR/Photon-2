@@ -22,38 +22,44 @@ import java.util.function.Predicate;
  * <p>
  * Photon mounts fx packs through a {@code RepositorySource}, which Minecraft only re-runs on a resource reload, so a
  * file appearing in that folder is invisible until then. A per-second directory listing is cheap (one folder, a
- * handful of files) and is the only way to notice a copy that was not done by the game itself.
+ * handful of files) and is the only way to notice a copy that was not done by the game itself. What it notices is
+ * mounted, remounted or unmounted in the running resource manager ({@link FxPackHotMount}) — no reload, nothing on
+ * screen disturbed; a resource reload is the fallback for a manager that cannot be edited, which no vanilla or Forge
+ * client has.
  * <p>
  * Three deliberate silences:
  * <ul>
  *   <li>a pack that is still being written is not "new" yet: the file must keep the same size and modification time
  *       across two scans, so a half-copied zip never gets mounted.</li>
- *   <li>the reload is not requested while another one is running, and a change is forgotten the moment a reload that
- *       covers it starts — never earlier, never twice — so a broken pack cannot put the client into a reload loop and a
- *       change noticed on the title screen or during a loading screen is still reloaded for once the world is up.</li>
- *   <li>{@code server-*} packs belong to the server sync session, which reloads by itself; unzipped pack folders are
- *       mounted on the next reload but not watched, there being no cheap way to tell a finished folder copy.</li>
+ *   <li>nothing is mounted while a reload is running, and a change is forgotten the moment it is served — never
+ *       earlier, never twice — so a broken pack cannot put the client into a loop and a change noticed during a
+ *       loading screen is still served once the world is up.</li>
+ *   <li>{@code server-*} packs belong to the server sync session, which mounts them by itself; unzipped pack folders
+ *       are mounted on the next reload but not watched, there being no cheap way to tell a finished folder copy.</li>
  * </ul>
  */
 @OnlyIn(Dist.CLIENT)
 public final class FxPackWatcher {
     /** How often the folder is listed. One second is well under the time it takes to alt-tab back into the game. */
     static final int SCAN_INTERVAL_TICKS = 20;
-    /** A guard against a pathological folder: a reload loop is worse than a late notification. */
+    /** A guard against a pathological folder: a mount loop is worse than a late notification. */
     static final int MAX_RELOADS_PER_MINUTE = 3;
     /** The minute the guard counts over, in scans: {@link #tick} counts it down once per scan, not once per tick. */
     static final int RELOAD_WINDOW_SCANS = 60 * 20 / SCAN_INTERVAL_TICKS;
-    /** Packs the server sync session writes and reloads for by itself. */
+    /** Packs the server sync session writes and mounts by itself. */
     static final String SERVER_PACK_PREFIX = "server-";
 
     private static final Tracker TRACKER = new Tracker();
     private static int ticks;
     private static int reloads;
     private static int reloadWindowScans;
-    /** Whether the reload this class asked for is still running. */
+    /** Whether the reload this class fell back to is still running. */
     private static boolean reloadPending;
     /** Whether the quota message was logged for the current wait, so a long wait does not log it every second. */
     private static boolean quotaWarned;
+    /** Times the folder's changes were served in place, and times a resource reload had to be asked for instead. */
+    private static volatile int hotMounts;
+    private static volatile int fullReloads;
 
     private FxPackWatcher() {
     }
@@ -75,21 +81,32 @@ public final class FxPackWatcher {
         }
         var reason = TRACKER.scan(listing, name -> FXPacks.isMounted(new File(dir, name)));
         if (reason != null) {
-            requestReload(reason);
+            serve(reason, listing.keySet());
         }
     }
 
+    /** Times the folder's changes were mounted in the running manager, without a reload. */
+    public static int hotMounts() {
+        return hotMounts;
+    }
+
+    /** Times a resource reload had to be asked for instead; the smoke test expects zero. */
+    public static int fullReloads() {
+        return fullReloads;
+    }
+
     /**
-     * Asks for one resource reload. When that is not possible right now — one is running, a world or a reload is
-     * loading, or the minute's quota is spent — nothing is lost: the tracker keeps the change and the next scan asks
-     * again.
+     * Serves the folder's changes: the packs that appeared or changed are mounted (again) in the running resource
+     * manager, the ones that left are unmounted. When that is not possible right now — a reload is running, a world
+     * is loading, or the minute's quota is spent — nothing is lost: the tracker keeps the change and the next scan asks
+     * again. Only a manager that cannot be edited at all gets the resource reload of old.
      */
-    private static void requestReload(String reason) {
+    private static void serve(String reason, Set<String> present) {
         if (reloadPending) return;
         if (reloads >= MAX_RELOADS_PER_MINUTE) {
             if (!quotaWarned) {
                 quotaWarned = true;
-                Photon.LOGGER.warn("fxpacks: {} but {} reloads already ran this minute; it is reloaded for when the minute is up (or press F3+T)",
+                Photon.LOGGER.warn("fxpacks: {} but packs were already mounted {} times this minute; it is served when the minute is up (or press F3+T)",
                         reason, reloads);
             }
             return;
@@ -97,10 +114,23 @@ public final class FxPackWatcher {
         var minecraft = Minecraft.getInstance();
         if (!canReloadNow(minecraft)) return;
         quotaWarned = false;
-        reloadPending = true;
         reloads++;
         reloadWindowScans = RELOAD_WINDOW_SCANS;
+        var changed = TRACKER.pendingNames();
         TRACKER.served();
+        FxPackHotMount.Result result = null;
+        try {
+            result = FxPackHotMount.sync(name -> !name.startsWith(SERVER_PACK_PREFIX), present, changed);
+        } catch (RuntimeException e) {
+            Photon.LOGGER.error("fxpacks: {} but mounting in place failed; reloading resources instead", reason, e);
+        }
+        if (result != null) {
+            hotMounts++;
+            Photon.LOGGER.info("fxpacks: {} — served in place, no resource reload", reason);
+            return;
+        }
+        fullReloads++;
+        reloadPending = true;
         Photon.LOGGER.info("fxpacks: {} — reloading resources automatically", reason);
         try {
             minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> minecraft.execute(() -> {
@@ -215,7 +245,12 @@ public final class FxPackWatcher {
             return gone.isEmpty() ? "a pack was added or replaced" : "packs were added and removed";
         }
 
-        /** A reload is starting: what the folder holds now is what the game serves from here on; no debt is left. */
+        /** The packs that appeared or changed since the last time the folder was served, in the order noticed. */
+        Set<String> pendingNames() {
+            return new LinkedHashSet<>(pending);
+        }
+
+        /** The folder is being served: what it holds now is what the game serves from here on; no debt is left. */
         void served() {
             mounted.clear();
             mounted.addAll(seen.keySet());

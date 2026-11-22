@@ -198,9 +198,9 @@ public final class FXFileActions {
             case SHADOWED -> notify(editor, "photon.export_fxpack",
                     join(message, Component.translatable("photon.fxpack.shadowed", resolution.sourcePackId())));
             case NOT_MOUNTED -> {
-                // the folder watcher (FxPackWatcher) reloads on its own a second or two after the file stops changing,
-                // and takes a reload started from this box as settling the matter, so the box is the "do it now"
-                // shortcut rather than the only way to make the export usable
+                // the folder watcher (FxPackWatcher) mounts the pack in place on its own a second or two after the file
+                // stops changing, with no reload, and takes a reload started from this box as settling the matter, so
+                // the box is the "do it now" shortcut rather than the only way to make the export usable
                 Dialog.showCheckBox("photon.export_fxpack",
                         join(message, Component.translatable("photon.fxpack.not_mounted")), reload -> {
                             if (reload) {

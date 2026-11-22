@@ -92,6 +92,8 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // both the loaded effects and the list of loadable ones are answers about the packs, so a reload
         // (a pack toggled, an .fxpack mounted, F3+T) is exactly when they stop being true
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
+            // the manager was rebuilt from the folder: packs mounted in the running one by hand are history
+            com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.onResourceReload();
             FXHelper.clearCache();
             // files on disk and the packs that serve them both just changed: the loose-texture answers are stale
             LooseTextures.invalidate();

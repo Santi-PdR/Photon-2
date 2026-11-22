@@ -86,6 +86,11 @@ public final class PhotonFXEditorSmokeTest {
     private static File supersededServerCopy;
     private static int updatedServerPackTick;
     private static final String UPDATED_SERVER_SYNC_MARKER = "replaced by the admin while players were online";
+    /** Resource reloads seen when the hot-mount checks start: none may be added by the watcher or the server sync. */
+    private static int reloadsBaseline = -1;
+    /** The sound events the server-only fixture declares: the first version's (workflow) and the replacement's. */
+    private static final ResourceLocation SERVER_SYNC_SOUND = new ResourceLocation("photon_sync_probe", "hot_probe");
+    private static final ResourceLocation UPDATED_SERVER_SYNC_SOUND = new ResourceLocation("photon_sync_probe", "hot_probe_v2");
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -2431,14 +2436,23 @@ public final class PhotonFXEditorSmokeTest {
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) {
                 serverFxPackSyncTicks++;
                 var marker = new ResourceLocation("photon_sync_probe", "textures/server_sync_marker.txt");
-                if (minecraft.getResourceManager().getResource(marker).isPresent()) {
-                    Photon.LOGGER.info("[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload");
+                // Round 24: the pack is mounted in the running resource manager, not by a resource reload, and its
+                // sounds.json has to reach the sound manager all the same (a reload is the only time vanilla reads it)
+                boolean served = minecraft.getResourceManager().getResource(marker).isPresent();
+                boolean heard = minecraft.getSoundManager().getSoundEvent(SERVER_SYNC_SOUND) != null;
+                if (served && heard) {
+                    if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() != 0) {
+                        throw new IllegalStateException("The server FX pack sync fell back to a resource reload");
+                    }
+                    Photon.LOGGER.info("[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted in the running resource manager, sounds included, without a resource reload");
                     serverFxPackSyncLogged = true;
                 } else if (serverFxPackSyncTicks >= 600) {
-                    throw new IllegalStateException("Server FX pack did not reach the client after login");
+                    throw new IllegalStateException(served
+                            ? "The server FX pack is served but its sound event " + SERVER_SYNC_SOUND + " is unknown to the sound manager"
+                            : "Server FX pack did not reach the client after login");
                 }
             }
-            // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
+            // Server pack sync mounts its packs on the game thread. Let it finish before starting editor particle checks.
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
                 // the LDLib2 in this run must link against the relocated Kotlin runtime, as the distributable does
@@ -2922,6 +2936,9 @@ public final class PhotonFXEditorSmokeTest {
                 watcherPack = new File(com.lowdragmc.photon.client.fx.fxpack.FXPacks.getFxPacksDir(), "ci_watcher.fxpack");
                 writeMarkerPack(watcherPack);
                 watcherPackTick = ticks;
+                // Round 24: from here on nothing may reload the resources — the watcher and the server sync mount
+                // in place; the export reload above (tick 260) is the last one and is already counted
+                reloadsBaseline = com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen();
                 // The integrated server scans this same folder. Asked for its list again it offers ci_watcher.fxpack
                 // (and the server-only fixture): the client has to recognise the installed file and not download it
                 // back as a server-<hash> copy, which is what singleplayer did ("why are there two random files").
@@ -2945,6 +2962,31 @@ public final class PhotonFXEditorSmokeTest {
                         throw new IllegalStateException("The updated server pack is served, but not from its own copy " + fresh.getName());
                     }
                     Photon.LOGGER.info("[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T");
+                    // Round 24: all of that happened in the running resource manager. The superseded copy was mounted
+                    // by the export reload at tick 260 (a reload's own entry, not one Photon put there), so its removal
+                    // exercised the unmount of a reload-mounted pack, and the sound manager has to follow: the new
+                    // version's event registered, the old version's taken out, with no reload and no fallback.
+                    var reloads = com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen();
+                    if (reloads != reloadsBaseline) {
+                        throw new IllegalStateException("Mounting packs in place still reloaded the resources " + (reloads - reloadsBaseline) + " time(s)");
+                    }
+                    if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() != 0
+                            || com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() != 0) {
+                        throw new IllegalStateException("A pack mount fell back to a resource reload (sync "
+                                + com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() + ", watcher "
+                                + com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() + ")");
+                    }
+                    if (com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.hotMounts() == 0) {
+                        throw new IllegalStateException("The folder watcher did not mount ci_watcher.fxpack in place");
+                    }
+                    var soundManager = minecraft.getSoundManager();
+                    if (soundManager.getSoundEvent(UPDATED_SERVER_SYNC_SOUND) == null) {
+                        throw new IllegalStateException("The updated server pack's sound event " + UPDATED_SERVER_SYNC_SOUND + " is unknown to the sound manager");
+                    }
+                    if (soundManager.getSoundEvent(SERVER_SYNC_SOUND) != null) {
+                        throw new IllegalStateException("The superseded server pack's sound event " + SERVER_SYNC_SOUND + " is still registered");
+                    }
+                    Photon.LOGGER.info("[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack's sounds.json events were registered and the old pack's taken out");
                     finished = true;
                     minecraft.stop();
                 } else if (ticks >= updatedServerPackTick + 1200) {
@@ -2958,6 +3000,10 @@ public final class PhotonFXEditorSmokeTest {
                 boolean mounted = com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
                         && minecraft.getResourceManager().getResource(marker).isPresent();
                 if (!watcherMountLogged && mounted) {
+                    if (com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen() != reloadsBaseline
+                            || com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() != 0) {
+                        throw new IllegalStateException("The folder watcher mounted ci_watcher.fxpack through a resource reload");
+                    }
                     Photon.LOGGER.info("[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T");
                     watcherMountLogged = true;
                 }
@@ -3059,6 +3105,14 @@ public final class PhotonFXEditorSmokeTest {
             zip.closeEntry();
             zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/textures/server_sync_marker.txt"));
             zip.write(markerText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            // a sound event the first version (written by the workflow) does not declare, and not the one it does:
+            // the sound manager has to pick this one up and let go of the other without a reload
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/sounds.json"));
+            zip.write("{\"hot_probe_v2\": {\"sounds\": [\"photon_sync_probe:hot_probe_v2\"]}}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/sounds/hot_probe_v2.ogg"));
+            zip.write("not decoded: only its presence is checked".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             zip.closeEntry();
         }
         try {

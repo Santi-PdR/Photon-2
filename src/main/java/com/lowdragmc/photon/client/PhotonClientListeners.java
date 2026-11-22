@@ -84,8 +84,9 @@ public class PhotonClientListeners {
         PhotonLights.tick();
         DynamicLightRenderer.tick();
         PhotonMeshCache.INSTANCE.tick();
-        // a .fxpack dropped into photon/fxpacks only becomes mountable on a reload, so notice it ourselves
+        // a .fxpack dropped into photon/fxpacks is noticed by Photon and mounted in the running resource manager
         com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.tick();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.tick();
     }
 
     /**

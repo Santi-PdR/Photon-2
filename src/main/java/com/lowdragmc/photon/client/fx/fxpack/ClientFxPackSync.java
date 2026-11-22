@@ -26,7 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Client cache and automatic ResourceManager reload for FX packs received from a Photon server.
+ * Client cache for FX packs received from a Photon server, mounted in the running resource manager the moment they
+ * are complete ({@link FxPackHotMount}): the player sees no resource reload, no loading screen, and hears no sound
+ * engine restart — the effects are simply there. A resource reload is asked for only if the running manager cannot be
+ * edited at all, which no vanilla or Forge client is.
  * <p>
  * Chunk transfers are driven by request/response: if the server stops sending (half-open connection,
  * crash after the manifest), a transfer would wait forever and the session would never activate its
@@ -60,6 +63,10 @@ public final class ClientFxPackSync {
     private static long lastRequestToken = -1;
     /** Sessions that reached {@link #finish} (game thread); the smoke test waits on it after asking for a re-offer. */
     private static volatile int finishedSessions;
+    /** The server's packs in photon/fxpacks: the hashed copies this class writes, and nothing a player put there. */
+    private static final java.util.function.Predicate<String> SERVER_SCOPE = name -> name.startsWith("server-");
+    /** Times the running manager could not be edited and a resource reload was asked for instead (none, normally). */
+    private static volatile int fullReloads;
 
     private ClientFxPackSync() {}
 
@@ -357,6 +364,11 @@ public final class ClientFxPackSync {
         return finishedSessions;
     }
 
+    /** How many times a sync or a disconnect had to fall back to a resource reload; the smoke test expects zero. */
+    public static int fullReloads() {
+        return fullReloads;
+    }
+
     private static void finishOne(SyncSession session) {
         if (activeSession != session) return;
         if (session.remaining.decrementAndGet() == 0) finish(session);
@@ -373,18 +385,44 @@ public final class ClientFxPackSync {
                 submitIO(() -> touchCache(active));
                 return;
             }
-            Photon.LOGGER.info("Photon FX server sync finished; reloading client assets automatically");
-            Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) -> {
-                if (failure != null) {
-                    Photon.LOGGER.error("Could not reload server Photon FX packs", failure);
-                    return;
-                }
-                Photon.LOGGER.info("Server Photon FX packs are ready");
-                // the reload closed the zip handles of whatever it stopped mounting; now the old copies can go
-                submitIO(() -> {
-                    touchCache(active);
-                    pruneCache(previouslyActive, active);
+            mountActive(previouslyActive, active);
+        });
+    }
+
+    /**
+     * Make the running resource manager serve exactly the active server packs, in place: the new ones are mounted,
+     * the ones the server stopped listing are unmounted and their zip handles closed, so their copies can go. Waits
+     * for a reload that happens to be running (it mounts the active set itself), and only if the manager cannot be
+     * edited at all asks for a reload the way earlier versions always did. Game thread.
+     */
+    private static void mountActive(java.util.Set<String> previouslyActive, java.util.Set<String> active) {
+        FxPackHotMount.whenEditable(() -> {
+            // a later session or a disconnect replaced the active set meanwhile: that one mounts its own
+            if (!FXPacks.activeServerPackNames().equals(active)) return;
+            var result = FxPackHotMount.sync(SERVER_SCOPE, active, java.util.Set.of());
+            if (result == null) {
+                fullReloads++;
+                Photon.LOGGER.warn("Photon FX server sync finished, but the running resource manager cannot be edited; reloading client assets instead");
+                Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) -> {
+                    if (failure != null) {
+                        Photon.LOGGER.error("Could not reload server Photon FX packs", failure);
+                        return;
+                    }
+                    Photon.LOGGER.info("Server Photon FX packs are ready");
+                    // the reload closed the zip handles of whatever it stopped mounting; now the old copies can go
+                    submitIO(() -> {
+                        touchCache(active);
+                        pruneCache(previouslyActive, active);
+                    });
                 });
+                return;
+            }
+            Photon.LOGGER.info("Server Photon FX packs are ready without a resource reload: {} mounted, {} unmounted in place",
+                    result.mounted().size(), result.unmounted().size());
+            // the unmounted packs are closed; now the old copies can go
+            submitIO(() -> {
+                touchCache(active);
+                pruneCache(previouslyActive, active);
             });
         });
     }
@@ -457,8 +495,19 @@ public final class ClientFxPackSync {
         var minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
             if (activeSession != null || !FXPacks.setActiveServerPacks(List.of())) return;
-            minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
-                if (failure != null) Photon.LOGGER.error("Could not clear disconnected server FX packs", failure);
+            FxPackHotMount.whenEditable(() -> {
+                // a new server's session took over meanwhile: it mounts its own packs and unmounts the rest
+                if (activeSession != null || !FXPacks.activeServerPackNames().isEmpty()) return;
+                var result = FxPackHotMount.sync(SERVER_SCOPE, java.util.Set.of(), java.util.Set.of());
+                if (result == null) {
+                    fullReloads++;
+                    minecraft.reloadResourcePacks().whenComplete((ignored, failure) -> {
+                        if (failure != null) Photon.LOGGER.error("Could not clear disconnected server FX packs", failure);
+                    });
+                } else if (!result.changedNothing()) {
+                    Photon.LOGGER.info("Unmounted {} server Photon FX packs on disconnect, no resource reload",
+                            result.unmounted().size());
+                }
             });
         });
     }

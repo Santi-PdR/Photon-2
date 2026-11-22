@@ -192,6 +192,18 @@ public final class LooseTextures {
     }
 
     /**
+     * Drop the cached answers for these ids only: a pack that serves them was mounted or unmounted in the running
+     * resource manager ({@code FxPackHotMount}), which changes who answers for them and nothing else.
+     */
+    public static void invalidate(java.util.Collection<ResourceLocation> ids) {
+        for (var id : ids) {
+            RESOLVED.remove(id.toString());
+            PACK_SERVES.remove(id);
+            FAILED_UPLOADS.remove(id);
+        }
+    }
+
+    /**
      * The id a draw should bind for {@code id}: {@code id} itself when a mounted pack serves it, otherwise an id in the
      * workspace that serves the same file, otherwise {@code id} unchanged (the caller draws the missing texture, as
      * before). Never throws: a broken search must not break a frame.

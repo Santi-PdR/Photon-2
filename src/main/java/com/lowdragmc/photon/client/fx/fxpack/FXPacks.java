@@ -66,9 +66,11 @@ import java.util.function.Consumer;
  * provides — mods, user resource packs and Photon's workspace assets all override them, so users can
  * reskin a packed fx with an ordinary resource pack and an author's local files always win. Vanilla
  * serves everything lazily from the zip (no parsing, no memory copies at reload); the fx definitions
- * inside load through the normal {@code FXHelper} path by id ({@code <ns>:<name>}). Dropping a new
- * file in requires a resource reload (F3+T) to be discovered, like any resource pack; the editor's
- * edits of a pack that is already mounted ({@link #rewrite}) are served right away.
+ * inside load through the normal {@code FXHelper} path by id ({@code <ns>:<name>}). A file dropped in,
+ * replaced or removed while the game runs is noticed by {@link FxPackWatcher} and mounted, remounted or
+ * unmounted in the running resource manager ({@link FxPackHotMount}) — no F3+T, no loading screen; packs a
+ * server sends ({@link ClientFxPackSync}) are mounted the same way. The editor's edits of a pack that is
+ * already mounted ({@link #rewrite}) are served right away.
  * <p>
  * Mods have three options, all equivalent at runtime: merge the layout straight into their
  * {@code assets/} (a mod jar already IS a resource pack), put an unzipped pack folder under
@@ -91,7 +93,10 @@ public final class FXPacks {
         return new File(Platform.getGamePath().toFile(), "photon/fxpacks");
     }
 
-    /** Replace the server-provided cache entries mounted by the next internal resource reload. */
+    /**
+     * Replace the server-provided cache entries a resource reload mounts; {@link ClientFxPackSync} mounts them in the
+     * running manager right away, so a reload only has to agree with it.
+     */
     public static boolean setActiveServerPacks(Collection<String> sha256Hashes) {
         var next = sha256Hashes.stream().map(hash -> "server-" + hash + SUFFIX)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -100,7 +105,7 @@ public final class FXPacks {
         return changed;
     }
 
-    /** File names ({@code server-<sha256>.fxpack}) of the server-provided cache entries a reload mounts right now. */
+    /** File names ({@code server-<sha256>.fxpack}) of the server-provided cache entries the client serves right now. */
     public static Set<String> activeServerPackNames() {
         return activeServerPacks;
     }
@@ -115,7 +120,8 @@ public final class FXPacks {
 
     /**
      * The repository source registered via {@code AddPackFindersEvent} (client resources). Re-runs on
-     * every pack-repository reload, so newly dropped files appear after F3+T. Discovers:
+     * every pack-repository reload, where it mounts the same files {@link FxPackHotMount} serves between
+     * reloads, so the two always agree. Discovers:
      * <ul>
      *   <li>{@code <gameDir>/photon/fxpacks/*.fxpack} — user-installed packs, mounted directly;</li>
      *   <li>{@code fxpacks/} at each mod jar's root — {@code <name>/} folders mount natively

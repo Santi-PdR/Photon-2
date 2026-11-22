@@ -76,13 +76,14 @@ prioridad lo tapa ("shadowed") o si hay que recargar recursos ("not mounted" →
 
 1. Copia el `.fxpack` dentro de `<instancia>/photon/fxpacks/`.
    - Si el archivo lo hizo el mismo juego, seguramente ya está ahí.
-2. Espera un par de segundos. Photon vigila esa carpeta y **recarga solo** cuando ve un paquete
-   nuevo, reemplazado o borrado, en cuanto el archivo deja de crecer (avisa en el log: `fxpacks:
-   detected new pack ...` y luego `reloading resources automatically`). Vale copiarlo en el menú
-   principal (recarga ahí mismo) o mientras carga un mundo (recarga al entrar); con el juego
-   cerrado, se monta solo al arrancar. Las carpetas descomprimidas no se vigilan: para esas, F3+T.
+2. Espera un par de segundos. Photon vigila esa carpeta y **monta solo** el paquete nuevo,
+   reemplazado o borrado en cuanto el archivo deja de crecer, **sin recargar recursos**: ni pantalla
+   de carga, ni F3+T, ni corte de sonido (avisa en el log: `fxpacks: detected new pack ...` y luego
+   `served in place, no resource reload`). Vale copiarlo en el menú principal o mientras carga un
+   mundo (se monta al entrar); con el juego cerrado, se monta solo al arrancar. Las carpetas
+   descomprimidas no se vigilan: para esas, F3+T.
 3. Si querés forzarlo, `/photon_client reload` hace exactamente lo mismo que **F3+T**, sin salir del
-   juego ni buscar la tecla.
+   juego ni buscar la tecla (una recarga completa; no hace falta para un `.fxpack`).
 
 No se toca `mods/`, no se toca `config/`.
 
@@ -130,8 +131,9 @@ Photon ya trae ese circuito hecho. Funciona así:
    (es decir, cuando la copia por SFTP terminó), vuelve a escanear y reenvía la lista a todos los
    jugadores online (en el log del servidor: `Photon FX packs changed on the server (1 replaced);
    offering the current list to N online player(s)`). Cada cliente compara hashes, descarga sólo lo
-   que le falta y **recarga los recursos solo** al terminar (`Server Photon FX packs are ready`).
-   No hay que reiniciar el servidor, ni pedirles que salgan, ni que recarguen nada a mano.
+   que le falta y lo **monta en el acto, sin recargar recursos** (`Server Photon FX packs are ready
+   without a resource reload: 1 mounted, 1 unmounted in place`). No hay que reiniciar el servidor,
+   ni pedirles que salgan, ni que recarguen nada a mano, y el jugador no ve ninguna pantalla de carga.
 
    Para subir una actualización, copia el archivo nuevo **encima** del viejo (mismo nombre): el
    cliente monta la versión nueva, desmonta la vieja y borra su copia `server-<hash viejo>.fxpack`.
@@ -143,9 +145,9 @@ Photon ya trae ese circuito hecho. Funciona así:
    (el vigilante compara tamaño y fecha de modificación; un reemplazo con los dos iguales es el
    único que no nota).
 
-   Ten en cuenta que la recarga de recursos en el cliente es la misma que F3+T: durante unos
-   segundos (más en modpacks grandes) el jugador ve la pantalla de carga mientras el mundo sigue
-   corriendo. Mejor publicar las actualizaciones en momentos tranquilos o avisar antes.
+   El cliente no recarga recursos para esto (desde la ronda 24): el paquete entra y sale del juego
+   en marcha, con sus sonidos, texturas y modelos. Los efectos que ya estaban sonando terminan con
+   la versión vieja; los que se lancen después usan la nueva.
 
 ### 4.2 Qué pasa cuando un jugador entra
 
@@ -157,10 +159,11 @@ Photon ya trae ese circuito hecho. Funciona así:
    - si ya tiene ese hash exacto en su caché `server-<hash>.fxpack` → no descarga nada;
    - si no lo tiene o cambió → pide el archivo por trozos de 24 KB.
 3. Al terminar, verifica el hash y el contenido (tiene que traer al menos un `assets/*/fx/*.fx`),
-   lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**. Tras esa
-   recarga borra las copias `server-<hash>.fxpack` que el servidor dejó de servir (las versiones
-   anteriores del mismo paquete) y, de paso, las que ningún servidor le ha listado en 7 días; las
-   de otros servidores que visita se conservan.
+   lo guarda como `photon/fxpacks/server-<hash>.fxpack` y lo **monta en el acto, sin recargar
+   recursos** (sin pantalla de carga). Después borra las copias `server-<hash>.fxpack` que el
+   servidor dejó de servir (las versiones anteriores del mismo paquete) y, de paso, las que ningún
+   servidor le ha listado en 7 días; las de otros servidores que visita se conservan. Al desconectar
+   los desmonta igual de silenciosamente.
 4. El efecto ya está cargado con sus texturas y materiales. Un operador puede probarlo en una entidad
    con `/photon fx namespace:nombre entity @p`, o en un bloque con
    `/photon fx namespace:nombre block ~ ~ ~`.
@@ -184,7 +187,7 @@ comienza a empaquetar y subir. La exportación local también pide confirmación
 Photon empaqueta **todo** `ldlib2/assets`, lo sube al servidor y entrega el pack solo a ese jugador;
 no lo añade al conjunto público que reciben los demás. El servidor guarda el pack por UUID bajo
 `<servidor>/photon/private-fxpacks/`, así que vuelve a ofrecérselo al destinatario cuando se conecte
-en otra ocasión. El cliente lo descarga por bloques y recarga sus recursos automáticamente.
+en otra ocasión. El cliente lo descarga por bloques y lo monta automáticamente, sin recargar recursos.
 
 ### 4.4 Crear un archivo local para Discord u otro servicio
 
@@ -198,7 +201,7 @@ Photon primero pide confirmación en el cliente; sólo después lee toda la carp
 `<instancia>/ldlib2/assets` y deja el resultado en
 `<instancia>/photon/fxpacks/ldlib2-assets-<hash>.fxpack`. Puedes adjuntar ese archivo en Discord o
 compartirlo con otro servicio de archivos. Quien lo reciba lo instala copiándolo a su propia carpeta
-`<instancia>/photon/fxpacks/` y recargando recursos si Photon no lo detecta automáticamente.
+`<instancia>/photon/fxpacks/` (Photon lo monta solo en un par de segundos; F3+T solo si no lo detecta).
 
 Ambos métodos aceptan como máximo **512 MiB comprimidos** y **2 GiB descomprimidos** por pack.
 El pack tiene que contener al menos un FX válido (`assets/<namespace>/fx/*.fx`); se omiten enlaces
@@ -245,8 +248,11 @@ lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparec
   `Photon FX packs changed on the server (...)` seguido de un `Offered` por jugador unos 3 segundos
   después de copiar un paquete.
 - Cliente, tras una actualización: `Downloaded Photon FX pack <nombre>`, `Server Photon FX packs are
-  ready` y `Removed server-<hash viejo>.fxpack, a Photon FX pack copy the server no longer serves`.
-- Cliente: `Downloading Photon FX pack ...` y luego `Server Photon FX packs are ready`.
+  ready without a resource reload: 1 mounted, 1 unmounted in place` y `Removed server-<hash
+  viejo>.fxpack, a Photon FX pack copy the server no longer serves`.
+- Cliente: `Downloading Photon FX pack ...` y luego `Server Photon FX packs are ready without a
+  resource reload`. Si alguna vez dice `reloading client assets instead`, otro mod sustituyó el
+  resource manager y Photon recurrió a la recarga completa de antes: mándame ese log.
 - En el cliente, `photon/fxpacks/server-<hash>.fxpack` existe y pesa lo mismo que el original (salvo que
   el jugador ya tuviera instalado un paquete idéntico: entonces el log dice
   `Photon FX pack <nombre> offered by the server is already installed as <archivo>; using that copy`).
@@ -299,11 +305,12 @@ entre recibe la versión nueva solo; para los que ya están dentro, `/photon fxp
 pide la lista al servidor en ese momento. Es el mismo camino que usa el login, así que sólo baja lo
 que le falta.
 
-**¿Cuándo hay que apretar F3+T entonces?** Casi nunca. Photon recarga solo en estos cuatro casos:
-un `.fxpack` que aparece o cambia en `photon/fxpacks/`, un paquete que llega del servidor, una
-exportación desde el editor, y una conversión de Photon 1 a 2 (`/photon_client convert`). El atajo
-manual sigue existiendo (`/photon_client reload` o F3+T) por si editás archivos fuera del juego
-—por ejemplo a mano dentro de `photon/assets/`— y querés verlo al instante.
+**¿Cuándo hay que apretar F3+T entonces?** Casi nunca. Un `.fxpack` que aparece o cambia en
+`photon/fxpacks/` y un paquete que llega del servidor se montan **sin** recarga (no hay pantalla de
+carga). Photon recarga solo en dos casos: una exportación desde el editor y una conversión de Photon
+1 a 2 (`/photon_client convert`). El atajo manual sigue existiendo (`/photon_client reload` o F3+T)
+por si editás archivos fuera del juego —por ejemplo a mano dentro de `photon/assets/`— y querés
+verlo al instante.
 
 **¿Cómo le mando mis recursos de LDLib2 solo a Oz?** Como operador, ejecuta `/photon fx send Oz` con Oz conectado. Photon empaqueta toda tu carpeta local `ldlib2/assets`, se la sube al servidor y el servidor guarda el pack privado para ofrecérselo a Oz también en conexiones futuras.
 

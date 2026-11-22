@@ -466,6 +466,9 @@ jobs:
           with ZipFile("run/photon/fxpacks/server-ci-server-sync.fxpack", "w", ZIP_DEFLATED) as pack:
               pack.writestr("assets/photon_sync_probe/fx/server_sync.fx", b"server fx pack sync probe")
               pack.writestr("assets/photon_sync_probe/textures/server_sync_marker.txt", b"delivered only by the integrated server")
+              # round 24: a sound event the client has to learn without a resource reload (the file is never decoded)
+              pack.writestr("assets/photon_sync_probe/sounds.json", b'{"hot_probe": {"sounds": ["photon_sync_probe:hot_probe"]}}')
+              pack.writestr("assets/photon_sync_probe/sounds/hot_probe.ogg", b"not decoded: only its presence is checked")
           PY
 
       - name: Install virtual display and software OpenGL
@@ -559,6 +562,7 @@ jobs:
             '[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy'
             '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself'
             '[fxpack-server-update-smoke] a pack replaced in the server'"'"'s photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T'
+            '[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack'"'"'s sounds.json events were registered and the old pack'"'"'s taken out'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -629,7 +633,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -672,9 +676,11 @@ jobs:
             fi
           done
 
-      - name: Require server FX pack download and automatic resource reload
+      # Round 24: the pack a server sends is mounted in the running resource manager — no reload, no loading screen,
+      # no sound engine restart — and its sounds.json still reaches the sound manager.
+      - name: Require server FX pack download and in-place mount without a resource reload
         shell: bash
-        run: grep -Fq '[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload' "$RUNNER_TEMP/photon-client.log"
+        run: grep -Fq '[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted in the running resource manager, sounds included, without a resource reload' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require exported FX over server network
         shell: bash
@@ -800,6 +806,21 @@ jobs:
           grep -Fq '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself' "$RUNNER_TEMP/photon-client.log"
           grep -Fq "[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T" "$RUNNER_TEMP/photon-client.log"
           grep -Fq 'Photon FX packs changed on the server (' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 24: none of the above may go through a resource reload any more. The server sync at login and on the
+      # update, and the folder watcher for ci_watcher.fxpack, mount and unmount in the running resource manager; the
+      # smoke counts the reloads Photon's reload listener sees from the watcher test on (zero), checks neither path
+      # fell back to one, and that the replaced pack's sounds.json event was swapped in the sound manager.
+      - name: Require packs to be mounted in place, without a resource reload
+        shell: bash
+        run: |
+          grep -Fq "[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack's sounds.json events were registered and the old pack's taken out" "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'served in place, no resource reload' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'Server Photon FX packs are ready without a resource reload' "$RUNNER_TEMP/photon-client.log"
+          if grep -Fq 'reloading client assets instead' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::error::a server FX pack sync fell back to a resource reload'
+            exit 1
+          fi
 
       - name: Require Photon 1 entity FX to stay on the torso
         shell: bash
