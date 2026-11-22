@@ -38,9 +38,13 @@ import com.lowdragmc.photon.internal.embedded.javazoom.jl.decoder.Header;
  * a class behind fails the build instead of the first import in the editor. Every stage runs even if an
  * earlier one failed, so one run reports everything that is wrong.
  *
- * <p>Usage: {@code java RelocatedCodecsCheck <dir>} with {@code beat.mp3}, {@code beat.m4a} and
- * {@code beat.aac} in that directory; writes {@code beat-notags.m4a} and {@code relocated.ogg} next to
- * them.
+ * <p>Usage: {@code java -p <-all.jar> --add-modules ALL-MODULE-PATH -cp <classes> RelocatedCodecsCheck <dir>}
+ * with {@code beat.mp3}, {@code beat.m4a} and {@code beat.aac} in that directory; writes
+ * {@code beat-notags.m4a} and {@code relocated.ogg} next to them. The distributable goes on the module
+ * path on purpose: in the game the mod jar is a named module of the loader's layer, and that is where
+ * resources are encapsulated and {@code Class.getResourceAsStream} resolves against the module — the
+ * codecs must be exercised from inside such a module, not from the class path, where every lookup
+ * succeeds. The check refuses to run if the jar ended up on the class path.
  */
 public final class RelocatedCodecsCheck {
     private record Pcm(int channels, int sampleRate, byte[] data, int frames) {
@@ -59,8 +63,11 @@ public final class RelocatedCodecsCheck {
                 // the only acceptable answer
             }
         }
+        var module = Bitstream.class.getModule();
+        require(module.isNamed(), "the distributable must be on the module path (java -p), not the class path; "
+                + "the codecs were loaded by the unnamed module");
         int failures = 0;
-        var summary = new StringBuilder("relocated codecs:");
+        var summary = new StringBuilder("relocated codecs (module " + module.getName() + "):");
         Pcm mp3 = null;
         for (String stage : List.of("mp3", "m4a", "aac", "ogg")) {
             try {

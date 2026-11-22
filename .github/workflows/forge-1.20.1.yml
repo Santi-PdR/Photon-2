@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       distributable_uploaded: ${{ steps.distributable.outcome == 'success' }}
+      forge_server_ok: ${{ steps.forge_server.outcome == 'success' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -231,6 +232,45 @@ jobs:
           grep -Fxq 'com/lowdragmc/photon/internal/embedded/kotlin/Unit.class' "$work/listing.txt"
           echo "Distributable: codecs relocated under com.lowdragmc.photon.internal.embedded, LDLib2 with $(basename "$runtime"); no library under its original package root."
 
+      # Since round 19 the -all jar is assembled from shadowJar's content rather than from the main
+      # output, and nothing in the dev runs (runClient/runServer, Gradle classpath) ever loads it. A
+      # resource dropped on the way — mods.toml, the access transformer, pack.mcmeta, a shader — would
+      # only show up on a player's instance, so every compiled class and every packaged resource must
+      # be in the distributable, with mods.toml expanded.
+      - name: Verify the distributable carries every class and packaged resource
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          python3 - "$jar_file" <<'PY'
+          import os, sys, zipfile
+          jar = zipfile.ZipFile(sys.argv[1])
+          names = set(jar.namelist())
+          roots = {"src/main/resources": None, "src/generated/resources": None,
+                   "build/classes/java/main": ".class", "build/classes/java/irisAccessors": ".class"}
+          counted, missing = {}, []
+          for root, suffix in roots.items():
+              counted[root] = 0
+              for folder, _, files in os.walk(root):
+                  for name in files:
+                      if suffix and not name.endswith(suffix): continue
+                      rel = os.path.relpath(os.path.join(folder, name), root).replace(os.sep, "/")
+                      counted[root] += 1
+                      if rel not in names: missing.append(rel)
+          for line in missing[:20]: print("::error title=distributable incomplete::" + line)
+          assert counted["src/main/resources"] > 150, "too few files under src/main/resources: %r" % counted
+          assert counted["build/classes/java/main"] > 500, "too few compiled classes: %r" % counted
+          assert counted["build/classes/java/irisAccessors"] >= 1, "the Iris accessor source set produced no class"
+          assert not missing, "%d classes or resources are missing from the distributable" % len(missing)
+          toml = jar.read("META-INF/mods.toml").decode("utf-8")
+          assert 'modId="photon"' in toml.replace(" ", ""), "mods.toml lost its modId"
+          assert "${" not in toml, "mods.toml was packaged without expanding its placeholders"
+          for required in ("META-INF/accesstransformer.cfg", "pack.mcmeta", "photon.mixins.json", "photon.refmap.json",
+                           "META-INF/jarjar/metadata.json", "META-INF/MANIFEST.MF", "icon.png"):
+              assert required in names, required + " is missing from the distributable"
+          print("Distributable carries every file: %s; %d entries in total." % (counted, len(names)))
+          PY
+
       - name: Upload distributable
         id: distributable
         uses: actions/upload-artifact@v4
@@ -239,6 +279,139 @@ jobs:
           path: build/libs/*-all.jar
           if-no-files-found: error
           retention-days: 90
+
+      # The dev smokes further down run from the Gradle classpath, where the embedded libraries are
+      # loose jars and the JPMS layer the loader builds from a mods folder never exists. Both start-up
+      # crashes reported from real instances (rounds 18 and 19) lived only in that layer: Photon's
+      # nested jars exported kotlin.* and net.sourceforge.jaad.* next to Kotlin for Forge and Citadel.
+      # So the distributable itself is installed on a real Forge server together with LDLib 1 and the
+      # newest Forge 1.20.1 builds of those two mods (Modrinth), and must reach the ready prompt with
+      # every mod file — the nested ones included — loaded. The artifact above stays available for
+      # inspection either way, but publish-preview requires this step: a jar that cannot start next
+      # to them is never handed out as a preview.
+      - name: Smoke-test the distributable on a Forge server next to Kotlin for Forge and Citadel
+        id: forge_server
+        shell: bash
+        env:
+          MODRINTH_COMPANIONS: kotlin-for-forge citadel
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          mc_version=$(sed -n 's/^minecraft_version=//p' gradle.properties | tr -d '\r[:space:]')
+          forge_version=$(sed -n 's/^forge_version=//p' gradle.properties | tr -d '\r[:space:]')
+          forge="$mc_version-$forge_version"
+          work="$RUNNER_TEMP/forge-server"
+          rm -rf "$work"
+          mkdir -p "$work/mods"
+          ua='Santi-PdR/Photon-2 CI (https://github.com/Santi-PdR/Photon-2)'
+          curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/installer.jar" \
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/$forge/forge-$forge-installer.jar"
+          if ! (cd "$work" && timeout 600s java -jar installer.jar --installServer "$work" > install.log 2>&1); then
+            tail -n 40 "$work/install.log"
+            echo "::error title=forge server::the Forge $forge server installer failed"
+            exit 1
+          fi
+          test -f "$work/libraries/net/minecraftforge/forge/$forge/unix_args.txt"
+          cp "$jar_file" "$work/mods/"
+          cp libs/ldlib1-1.0.52.a.jar "$work/mods/"
+          for project in $MODRINTH_COMPANIONS; do
+            curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/$project.json" \
+              "https://api.modrinth.com/v2/project/$project/version"
+            python3 - "$work/$project.json" "$work/$project.pick" "$mc_version" <<'PY'
+          import json, sys
+          mc = sys.argv[3]
+          versions = [v for v in json.load(open(sys.argv[1])) if "forge" in v["loaders"] and mc in v["game_versions"]]
+          assert versions, "Modrinth lists no Forge %s build of this project" % mc
+          versions.sort(key=lambda v: v["date_published"], reverse=True)
+          version = ([v for v in versions if v["version_type"] == "release"] or versions)[0]
+          file = ([f for f in version["files"] if f.get("primary")] or version["files"])[0]
+          assert file["filename"].endswith(".jar"), file["filename"]
+          open(sys.argv[2], "w").write("%s %s %s\n" % (file["url"], file["filename"], version["version_number"]))
+          PY
+            read -r url file version < "$work/$project.pick"
+            curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/mods/$file" "$url"
+            unzip -Z1 "$work/mods/$file" > "$work/listing.txt"
+            if ! grep -Fxq 'META-INF/mods.toml' "$work/listing.txt"; then
+              echo "::error title=companion mod::$file from Modrinth ($project $version) is not a Forge mod jar"
+              exit 1
+            fi
+            echo "::notice title=companion mod::$project $version ($file, $(stat -c %s "$work/mods/$file") B)"
+          done
+          printf 'eula=true\n' > "$work/eula.txt"
+          printf 'online-mode=false\nlevel-type=minecraft\\:flat\nview-distance=3\nsimulation-distance=3\nspawn-protection=0\nmax-players=1\nserver-port=25599\nsync-chunk-writes=false\n' > "$work/server.properties"
+          log="$work/server.log"
+          (cd "$work" && exec java @user_jvm_args.txt "@libraries/net/minecraftforge/forge/$forge/unix_args.txt" nogui) > "$log" 2>&1 < /dev/null &
+          pid=$!
+          ready=0
+          for _ in $(seq 1 72); do
+            sleep 5
+            if grep -Fq 'For help, type "help"' "$log"; then ready=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          if kill -0 "$pid" 2>/dev/null; then
+            kill -INT "$pid" 2>/dev/null || true
+            for _ in $(seq 1 12); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
+            kill -KILL "$pid" 2>/dev/null || true
+          fi
+          wait "$pid" 2>/dev/null || true
+          tr -d '\000' < "$log" > "$log.clean" && mv "$log.clean" "$log"
+          grep -F 'Found mod file' "$log" > "$work/found.txt" || true
+          echo "::group::mod files the loader found"
+          cat "$work/found.txt"
+          echo "::endgroup::"
+          grep -aE '/(WARN|ERROR|FATAL)\]' "$log" | grep -aiE 'photon|ldlib|kila|kotlin|citadel|jaad|module|mixin' \
+            | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//' | sort | uniq -c | sort -rn | head -n 30 > "$work/warnings.txt" || true
+          if [ -s "$work/warnings.txt" ]; then
+            echo "::group::WARN/ERROR lines mentioning the libraries"
+            cat "$work/warnings.txt"
+            echo "::endgroup::"
+            encoded=$(sed 's/%/%25/g' "$work/warnings.txt" | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-3900)
+            echo "::notice title=forge server WARN/ERROR summary::$encoded"
+          fi
+          fail=0
+          if [ "$ready" -ne 1 ]; then
+            echo "::error title=forge server::the distributable did not bring the Forge $forge server to its ready prompt"
+            fail=1
+          fi
+          # Loader-level failures, plus a missing class under one of our own package roots (an unrelocated
+          # reference, or a relocated class the jar lost); other mods' optional-class probes are not ours.
+          grep -aE 'java\.lang\.module\.ResolutionException|java\.lang\.LayerInstantiationException|Incompatible mod set|Missing or unsupported mandatory dependencies|Exception in thread "main"|MixinApplyError|InvalidInjectionException|ModLoadingException|Encountered an exception during mod loading|(NoClassDefFoundError|ClassNotFoundException): ?(com[./]lowdragmc|kotlin|javazoom|biniu|net[./]sourceforge)' "$log" > "$work/fatal.txt" || true
+          if [ -s "$work/fatal.txt" ]; then
+            head -n 10 "$work/fatal.txt" | while IFS= read -r line; do echo "::error title=forge server::$line"; done
+            fail=1
+          fi
+          for needle in \
+            "Found mod file $(basename "$jar_file") of type MOD" \
+            'Found mod file ldlib2-2.2.39.a.jar of type MOD' \
+            'Found mod file kilagraph-20.1.0.15.jar of type MOD' \
+            'Found mod file photon-kotlin-runtime-2.2.21.jar of type' \
+            'Found mod file ldlib1-1.0.52.a.jar of type MOD' \
+            'Photon is initializing on platform'; do
+            if ! grep -Fq "$needle" "$log"; then
+              echo "::error title=forge server::missing from the server log: $needle"
+              fail=1
+            fi
+          done
+          for companion in "$work"/mods/*.jar; do
+            if ! grep -Fq "Found mod file $(basename "$companion") of type" "$log"; then
+              echo "::error title=forge server::the loader never picked up $(basename "$companion")"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::group::last 60 server log lines"
+            tail -n 60 "$log"
+            echo "::endgroup::"
+            for report in "$work"/crash-reports/*.txt; do
+              [ -f "$report" ] || continue
+              echo "::group::$(basename "$report")"
+              head -n 80 "$report"
+              echo "::endgroup::"
+            done
+            exit 1
+          fi
+          ready_line=$(grep -F 'For help, type "help"' "$log" | head -n 1 | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//')
+          echo "::notice title=forge server::$(basename "$jar_file") reached the ready prompt on Forge $forge next to $(ls "$work/mods" | grep -v photon-forge | tr '\n' ' ')($ready_line)"
 
       - name: Smoke-test dedicated Forge server startup
         shell: bash
@@ -304,7 +477,8 @@ jobs:
       # The dev-run smoke tests below exercise the original codec libraries from the Gradle classpath;
       # only the packaged jar carries the copies shadowJar relocated under
       # com.lowdragmc.photon.internal.embedded. Decode and encode with those, compiled against the
-      # distributable alone, so a relocation that lost a class, a resource or a reference fails here.
+      # distributable alone and with the jar as a named module, so a relocation that lost a class, a
+      # resource or a reference fails here.
       - name: Exercise the relocated audio codecs from the distributable
         shell: bash
         run: |
@@ -316,7 +490,9 @@ jobs:
           cp run/photon/smoke-fixtures/beat.mp3 run/photon/smoke-fixtures/beat.m4a "$work/"
           ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k -f adts "$work/beat.aac"
           javac -d "$work/classes" -cp "$jar_file" .github/scripts/RelocatedCodecsCheck.java
-          if ! java -cp "$work/classes:$jar_file" RelocatedCodecsCheck "$work" > "$work/check.log" 2>&1; then
+          # The jar goes on the module path (an automatic module, as the loader makes a named module of
+          # it in the game) so that the codecs' resource lookups run under module encapsulation too.
+          if ! java -p "$jar_file" --add-modules ALL-MODULE-PATH -cp "$work/classes" RelocatedCodecsCheck "$work" > "$work/check.log" 2>&1; then
             cat "$work/check.log"
             # the whole trace as annotations: the step log is not always reachable from where this is read
             grep -E 'STAGE FAILED|Exception|Error|^\s+at (com\.lowdragmc|RelocatedCodecsCheck)' "$work/check.log" > "$work/trace.txt" || true
@@ -825,6 +1001,10 @@ jobs:
             ${{ runner.temp }}/photon-client.log
             run/logs/*.log
             run/screenshots/*.png
+            ${{ runner.temp }}/forge-server/install.log
+            ${{ runner.temp }}/forge-server/server.log
+            ${{ runner.temp }}/forge-server/logs/*.log
+            ${{ runner.temp }}/forge-server/crash-reports/*.txt
           if-no-files-found: ignore
           retention-days: 14
 
@@ -832,6 +1012,7 @@ jobs:
     needs: build
     if: >-
       always() && !cancelled() && needs.build.outputs.distributable_uploaded == 'true' &&
+      needs.build.outputs.forge_server_ok == 'true' &&
       ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')) ||
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
         startsWith(github.event.pull_request.head.ref, 'arena/')))
