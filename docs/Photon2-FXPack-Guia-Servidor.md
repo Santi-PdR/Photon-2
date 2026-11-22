@@ -125,13 +125,27 @@ Photon ya trae ese circuito hecho. Funciona así:
    (no en subcarpetas del servidor). El servidor **no** necesita recargar nada a mano: el hash se
    calcula al leer el archivo, y cada jugador que entra recibe el anuncio.
 
-3. Cuando quieras que los que **ya están conectados** lo reciban, no hace falta reiniciar el servidor
-   ni pedirles que salgan: corre `/photon fxpacks` en la consola o como operador. El servidor vuelve
-   a escanear la carpeta y reenvía la lista a todos los jugadores online. Cada cliente compara hashes,
-   descarga sólo lo que le falta y **recarga los recursos solo** al terminar
-   (`Server Photon FX packs are ready`). No hay que salir y volver a entrar.
+3. Los que **ya están conectados** lo reciben solos: el servidor vigila esa carpeta una vez por
+   segundo y, cuando un archivo aparece, se reemplaza o se borra y lleva 3 segundos sin cambiar
+   (es decir, cuando la copia por SFTP terminó), vuelve a escanear y reenvía la lista a todos los
+   jugadores online (en el log del servidor: `Photon FX packs changed on the server (1 replaced);
+   offering the current list to N online player(s)`). Cada cliente compara hashes, descarga sólo lo
+   que le falta y **recarga los recursos solo** al terminar (`Server Photon FX packs are ready`).
+   No hay que reiniciar el servidor, ni pedirles que salgan, ni que recarguen nada a mano.
 
-   Ese comando necesita el mod en el servidor y permiso de nivel 2 (operador o consola).
+   Para subir una actualización, copia el archivo nuevo **encima** del viejo (mismo nombre): el
+   cliente monta la versión nueva, desmonta la vieja y borra su copia `server-<hash viejo>.fxpack`.
+   Si copias varios paquetes seguidos, cuentan como un solo cambio mientras no pasen más de 3
+   segundos entre uno y otro; si una carpeta no para de cambiar, el servidor reenvía la lista como
+   mucho 3 veces por minuto y el cambio espera (no se pierde).
+
+   `/photon fxpacks` (consola u operador, permiso 2) sigue existiendo para forzar el reenvío a mano
+   (el vigilante compara tamaño y fecha de modificación; un reemplazo con los dos iguales es el
+   único que no nota).
+
+   Ten en cuenta que la recarga de recursos en el cliente es la misma que F3+T: durante unos
+   segundos (más en modpacks grandes) el jugador ve la pantalla de carga mientras el mundo sigue
+   corriendo. Mejor publicar las actualizaciones en momentos tranquilos o avisar antes.
 
 ### 4.2 Qué pasa cuando un jugador entra
 
@@ -143,7 +157,10 @@ Photon ya trae ese circuito hecho. Funciona así:
    - si ya tiene ese hash exacto en su caché `server-<hash>.fxpack` → no descarga nada;
    - si no lo tiene o cambió → pide el archivo por trozos de 24 KB.
 3. Al terminar, verifica el hash y el contenido (tiene que traer al menos un `assets/*/fx/*.fx`),
-   lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**.
+   lo guarda como `photon/fxpacks/server-<hash>.fxpack` y **recarga los recursos solo**. Tras esa
+   recarga borra las copias `server-<hash>.fxpack` que el servidor dejó de servir (las versiones
+   anteriores del mismo paquete) y, de paso, las que ningún servidor le ha listado en 7 días; las
+   de otros servidores que visita se conservan.
 4. El efecto ya está cargado con sus texturas y materiales. Un operador puede probarlo en una entidad
    con `/photon fx namespace:nombre entity @p`, o en un bloque con
    `/photon fx namespace:nombre block ~ ~ ~`.
@@ -215,13 +232,20 @@ lo que no llegue al cliente**: revisa el log del servidor cuando algo "no aparec
   sólo su interior.
 - **No** dejes el `.fxpack` en el servidor "para que lo vean los jugadores" sin Photon en el
   servidor: sin el mod, el servidor no anuncia nada y nada se descarga.
-- Los packs **públicos** no se vuelven a anunciar solos a quienes ya están conectados: usa
-  `/photon fxpacks` (servidor) o `/photon_client fxpacks` (cliente). El comando
-  `/photon fx send <jugador>` sí inicia una entrega privada inmediata a ese destinatario.
+- **No** llames a un paquete `server-<64 caracteres hexadecimales>.fxpack`: así nombra el cliente
+  sus copias descargadas, y el servidor ignora ese nombre (lo dice una vez en el log:
+  `Photon FX sync ignores ...: a file named like a client cache copy is not published`). Renómbralo.
+- Si un jugador no recibe un cambio, `/photon fxpacks` (servidor) o `/photon_client fxpacks`
+  (cliente) fuerzan el reenvío. El comando `/photon fx send <jugador>` inicia una entrega privada
+  inmediata a ese destinatario.
 
 ### 4.7 Comprobaciones rápidas
 
-- Servidor: el log debe decir `Offered N Photon FX pack(s) to <jugador>` al entrar.
+- Servidor: el log debe decir `Offered N Photon FX pack(s) to <jugador>` al entrar, y
+  `Photon FX packs changed on the server (...)` seguido de un `Offered` por jugador unos 3 segundos
+  después de copiar un paquete.
+- Cliente, tras una actualización: `Downloaded Photon FX pack <nombre>`, `Server Photon FX packs are
+  ready` y `Removed server-<hash viejo>.fxpack, a Photon FX pack copy the server no longer serves`.
 - Cliente: `Downloading Photon FX pack ...` y luego `Server Photon FX packs are ready`.
 - En el cliente, `photon/fxpacks/server-<hash>.fxpack` existe y pesa lo mismo que el original (salvo que
   el jugador ya tuviera instalado un paquete idéntico: entonces el log dice

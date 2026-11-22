@@ -46,6 +46,8 @@ public final class FxPackSync {
     private static final int MAX_ZIP_ENTRIES = 20_000;
     private static final int MAX_PACK_CANDIDATES = 4_096;
     private static final Pattern FX_ENTRY = Pattern.compile("assets/[^/]+/fx/.+\\.fx");
+    /** How the client names the copies it downloads from a server: {@code server-<sha256>.fxpack}. */
+    private static final Pattern CLIENT_CACHE_FILE = Pattern.compile("server-[0-9a-f]{64}\\" + SUFFIX);
     private static final int MAX_SERVER_PACKS = 32;
     private static final int MAX_PRIVATE_PACKS = 16;
     private static final int MAX_PACKS = MAX_SERVER_PACKS + MAX_PRIVATE_PACKS;
@@ -75,6 +77,8 @@ public final class FxPackSync {
      * against the file on the client before use anyway.
      */
     private static final Map<String, String> PRIVATE_HASH_CACHE = new ConcurrentHashMap<>();
+    /** Client cache copies found in the public folder that were already pointed out in the log. */
+    private static final java.util.Set<String> IGNORED_CACHE_COPIES = ConcurrentHashMap.newKeySet();
     /** Concurrent login/refresh offers share one disk scan for a server. */
     private static MinecraftServer scanServer;
     private static CompletableFuture<List<PackEntry>> activeScan;
@@ -92,6 +96,20 @@ public final class FxPackSync {
      */
     public static void onRefreshRequest(ServerPlayer player) {
         offer(player, true);
+    }
+
+    /**
+     * The server's pack folder changed and settled ({@link ServerFxPackWatcher}): every player online gets the current
+     * list, exactly as {@code /photon fxpacks} sends it, so an update reaches them without anyone typing the command.
+     * One disk scan is shared by all the offers, and each client skips what it already has.
+     */
+    public static void onPacksChanged(MinecraftServer server, String reason) {
+        var players = List.copyOf(server.getPlayerList().getPlayers());
+        Photon.LOGGER.info("Photon FX packs changed on the server ({}); offering the current list to {} online player(s)",
+                reason, players.size());
+        for (var player : players) {
+            offer(player, false);
+        }
     }
 
     /** Ask this player's client to upload its local {@code <gameDir>/ldlib2/assets} tree for one recipient. */
@@ -340,6 +358,7 @@ public final class FxPackSync {
         OFFER_TOKENS.clear();
         LATEST_OFFER_TOKENS.clear();
         PRIVATE_HASH_CACHE.clear();
+        IGNORED_CACHE_COPIES.clear();
         synchronized (FxPackSync.class) {
             activeScan = null;
             scanServer = null;
@@ -387,6 +406,7 @@ public final class FxPackSync {
         try (var files = Files.list(directory)) {
             var candidates = files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS))
                     .filter(file -> isSafePackFileName(file.getFileName().toString()))
+                    .filter(file -> !isIgnoredCacheCopy(file.getFileName().toString()))
                     .limit(MAX_PACK_CANDIDATES + 1L).sorted().toList();
             if (candidates.size() > MAX_PACK_CANDIDATES) {
                 Photon.LOGGER.warn("Photon FX pack scan limited to {} candidate files", MAX_PACK_CANDIDATES);
@@ -553,6 +573,31 @@ public final class FxPackSync {
         } catch (IOException | RuntimeException e) {
             return new FxPackValidation(false, expanded);
         }
+    }
+
+    /**
+     * A {@code server-<sha256>.fxpack} is what the client calls a copy it downloaded from a server, never a pack an
+     * admin publishes. In singleplayer the integrated server scans the client's own folder, so without this an
+     * updated pack's old version — still there as the client's cache copy — was offered right back, kept mounted next
+     * to the new one and never cleaned up. Said once per name, for the admin who uploads such a copy to a server.
+     */
+    private static boolean isIgnoredCacheCopy(String name) {
+        if (!isClientCacheFileName(name)) return false;
+        if (IGNORED_CACHE_COPIES.add(name)) {
+            Photon.LOGGER.info("Photon FX sync ignores {}: a file named like a client cache copy is not published; "
+                    + "rename it to serve it", name);
+        }
+        return true;
+    }
+
+    /** Whether {@code name} is how the client names its downloaded copies: {@code server-<sha256>.fxpack}. */
+    public static boolean isClientCacheFileName(String name) {
+        return name != null && CLIENT_CACHE_FILE.matcher(name).matches();
+    }
+
+    /** Whether a file of this name in the public folder is one the server publishes (and the folder watcher watches). */
+    public static boolean isPublishedPackFileName(String name) {
+        return isSafePackFileName(name) && !isClientCacheFileName(name);
     }
 
     private static boolean isSafePackFileName(String name) {

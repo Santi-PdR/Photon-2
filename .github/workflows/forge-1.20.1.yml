@@ -557,6 +557,8 @@ jobs:
             '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel'
             '[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload'
             '[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy'
+            '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself'
+            '[fxpack-server-update-smoke] a pack replaced in the server'"'"'s photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -627,7 +629,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -786,6 +788,18 @@ jobs:
       - name: Require installed packs to satisfy the server's offer without a copy
         shell: bash
         run: grep -Fq '[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 23: a pack replaced in the server's photon/fxpacks reached the players already online only through a
+      # reconnect, a dimension change, a respawn or /photon fxpacks, and every version a client ever downloaded stayed
+      # in its photon/fxpacks as a server-<hash> copy for good. The server now watches its folder and re-offers by
+      # itself once a change holds still; the smoke rewrites the server-only fixture after the login sync and sends no
+      # command: the client must download the new version, reload, serve the new content and drop the old copy.
+      - name: Require a pack replaced on the server to reach online players by itself
+        shell: bash
+        run: |
+          grep -Fq '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T" "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'Photon FX packs changed on the server (' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 entity FX to stay on the torso
         shell: bash

@@ -7,6 +7,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -21,13 +22,23 @@ public class PhotonCommonListeners {
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
         com.lowdragmc.photon.network.FxPackSync.onServerStarting(event.getServer());
+        com.lowdragmc.photon.network.ServerFxPackWatcher.onServerStarting(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         ActiveEntityEffects.clear();
         com.lowdragmc.photon.command.ActiveWorldEffects.clear();
+        com.lowdragmc.photon.network.ServerFxPackWatcher.onServerStopping();
         com.lowdragmc.photon.network.FxPackSync.onServerStopping();
+    }
+
+    /** A pack copied into, replaced in or removed from the server's photon/fxpacks reaches the players online by itself. */
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            com.lowdragmc.photon.network.ServerFxPackWatcher.tick();
+        }
     }
 
     @SubscribeEvent

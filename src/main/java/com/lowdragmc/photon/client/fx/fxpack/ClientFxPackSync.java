@@ -118,6 +118,7 @@ public final class ClientFxPackSync {
         lastRequestToken = requestToken;
         var previous = activeSession;
         var session = new SyncSession(requestToken, entries.size());
+        for (var entry : entries) session.offered.add(entry.sha256());
         activeSession = session;
         submitIO(() -> {
             if (previous != null) discardTemporaryFiles(previous);
@@ -365,14 +366,85 @@ public final class ClientFxPackSync {
         Minecraft.getInstance().execute(() -> {
             if (activeSession != session) return;
             finishedSessions++;
+            var previouslyActive = FXPacks.activeServerPackNames();
             boolean activeSetChanged = FXPacks.setActiveServerPacks(session.completed);
-            if (!session.downloaded && !activeSetChanged) return;
+            var active = FXPacks.activeServerPackNames();
+            if (!session.downloaded && !activeSetChanged) {
+                submitIO(() -> touchCache(active));
+                return;
+            }
             Photon.LOGGER.info("Photon FX server sync finished; reloading client assets automatically");
             Minecraft.getInstance().reloadResourcePacks().whenComplete((ignored, failure) -> {
-                if (failure != null) Photon.LOGGER.error("Could not reload server Photon FX packs", failure);
-                else Photon.LOGGER.info("Server Photon FX packs are ready");
+                if (failure != null) {
+                    Photon.LOGGER.error("Could not reload server Photon FX packs", failure);
+                    return;
+                }
+                Photon.LOGGER.info("Server Photon FX packs are ready");
+                // the reload closed the zip handles of whatever it stopped mounting; now the old copies can go
+                submitIO(() -> {
+                    touchCache(active);
+                    pruneCache(previouslyActive, active);
+                });
             });
         });
+    }
+
+    /** A cache copy that no server listed for this long is dropped by the next sync that reloads. */
+    static final long STALE_CACHE_MILLIS = TimeUnit.DAYS.toMillis(7);
+
+    /**
+     * Mark the copies a server just listed as in use. A copy's modification time is otherwise the moment it was
+     * downloaded, which says nothing about whether a server still serves it; this is what lets {@link #pruneCache}
+     * keep the packs of a server the player visits and drop the ones nobody has listed in a week.
+     */
+    private static void touchCache(java.util.Set<String> activeNames) {
+        var directory = FXPacks.getFxPacksDir().toPath();
+        var now = java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis());
+        for (var name : activeNames) {
+            try {
+                var path = directory.resolve(name);
+                if (Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) Files.setLastModifiedTime(path, now);
+            } catch (IOException | RuntimeException ignored) {
+                // a read-only cache is merely pruned earlier
+            }
+        }
+    }
+
+    /**
+     * Delete the {@code server-<sha256>.fxpack} copies this client no longer needs: the ones the sync that just
+     * finished stopped mounting (the server replaced or removed those packs — every version an admin ever published
+     * stayed in photon/fxpacks for good otherwise), and any not listed by a server in {@link #STALE_CACHE_MILLIS}.
+     * A copy the current session lists, or is still downloading, is never touched, whichever session asked for the
+     * prune; only our own hash-named files are considered, so a pack the player named {@code server-…} is theirs.
+     */
+    static void pruneCache(java.util.Set<String> previouslyActive, java.util.Set<String> active) {
+        var directory = FXPacks.getFxPacksDir().toPath();
+        if (!Files.isDirectory(directory)) return;
+        var session = activeSession;
+        var inUse = new java.util.HashSet<>(active);
+        if (session != null) {
+            for (var sha256 : session.offered) inUse.add("server-" + sha256 + FXPacks.SUFFIX);
+        }
+        var staleBefore = System.currentTimeMillis() - STALE_CACHE_MILLIS;
+        try (var files = Files.list(directory)) {
+            for (var path : files.toList()) {
+                var name = path.getFileName().toString();
+                if (!FxPackSync.isClientCacheFileName(name) || inUse.contains(name)
+                        || !Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue;
+                try {
+                    var superseded = previouslyActive.contains(name);
+                    if (!superseded && Files.getLastModifiedTime(path).toMillis() >= staleBefore) continue;
+                    if (Files.deleteIfExists(path)) {
+                        Photon.LOGGER.info("Removed {}, a Photon FX pack copy {}", name,
+                                superseded ? "the server no longer serves" : "no server has listed in a week");
+                    }
+                } catch (IOException | RuntimeException busy) {
+                    Photon.LOGGER.debug("Could not remove Photon FX pack copy {} yet", path, busy);
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            Photon.LOGGER.warn("Could not look for stale Photon FX pack copies in {}", directory, e);
+        }
     }
 
     /** Clear server-only assets on disconnect and invalidate any transfer still in flight. */
@@ -393,6 +465,8 @@ public final class ClientFxPackSync {
 
     static final class SyncSession {
         private final long requestToken;
+        /** The sha256 of every pack the manifest listed, cached or not: none of their copies may be pruned meanwhile. */
+        final java.util.Set<String> offered = ConcurrentHashMap.newKeySet();
         final Map<String, Transfer> transfers = new ConcurrentHashMap<>();
         private final java.util.Set<String> completed = ConcurrentHashMap.newKeySet();
         private final AtomicInteger remaining;

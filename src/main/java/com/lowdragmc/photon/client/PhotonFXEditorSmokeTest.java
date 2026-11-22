@@ -80,6 +80,12 @@ public final class PhotonFXEditorSmokeTest {
     private static int watcherPackTick;
     private static boolean watcherMountLogged;
     private static int twinSessionsBefore;
+    /** The server-only fixture, rewritten in place the way an admin replaces a pack on a running server. */
+    private static File updatedServerPack;
+    /** The client's server-<hash> copy of the fixture's first version: has to be unmounted and removed by the update. */
+    private static File supersededServerCopy;
+    private static int updatedServerPackTick;
+    private static final String UPDATED_SERVER_SYNC_MARKER = "replaced by the admin while players were online";
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -2921,6 +2927,32 @@ public final class PhotonFXEditorSmokeTest {
                 // back as a server-<hash> copy, which is what singleplayer did ("why are there two random files").
                 twinSessionsBefore = com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions();
                 com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(com.lowdragmc.photon.network.FxPackSync.refreshRequest());
+            } else if (updatedServerPack != null) {
+                var marker = new ResourceLocation("photon_sync_probe", "textures/server_sync_marker.txt");
+                String served = null;
+                var resource = minecraft.getResourceManager().getResource(marker).orElse(null);
+                if (resource != null) {
+                    try (var input = resource.open()) {
+                        served = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                }
+                boolean updated = UPDATED_SERVER_SYNC_MARKER.equals(served);
+                boolean oldGone = !supersededServerCopy.isFile()
+                        && !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(supersededServerCopy);
+                if (updated && oldGone) {
+                    var fresh = new File(updatedServerPack.getParentFile(), "server-" + sha256Hex(updatedServerPack.toPath()) + ".fxpack");
+                    if (!fresh.isFile() || !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(fresh)) {
+                        throw new IllegalStateException("The updated server pack is served, but not from its own copy " + fresh.getName());
+                    }
+                    Photon.LOGGER.info("[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T");
+                    finished = true;
+                    minecraft.stop();
+                } else if (ticks >= updatedServerPackTick + 1200) {
+                    throw new IllegalStateException(updated
+                            ? "The updated server pack is served, but the superseded copy " + supersededServerCopy.getName()
+                            + (supersededServerCopy.isFile() ? " is still on disk" : " is still mounted")
+                            : "The pack replaced on the server did not reach the client by itself; it still serves: " + served);
+                }
             } else if (watcherPack != null) {
                 var marker = new ResourceLocation("ci_watcher", "textures/watcher_marker.txt");
                 boolean mounted = com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
@@ -2943,8 +2975,23 @@ public final class PhotonFXEditorSmokeTest {
                         throw new IllegalStateException("The installed pack stopped being mounted after the server offered it");
                     }
                     Photon.LOGGER.info("[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy");
-                    finished = true;
-                    minecraft.stop();
+                    if (!Boolean.getBoolean("photon.serverFxPackSyncSmoke")) {
+                        finished = true;
+                        minecraft.stop();
+                        return;
+                    }
+                    // Last: the admin replaces a pack on the server while players are online. Nothing here asks the
+                    // server for its list: its folder watcher has to notice the changed file, let it settle and offer
+                    // the list again by itself, and the client has to download the new version, reload, serve the
+                    // new content and drop its copy of the old one — no command, no reinstall, no F3+T.
+                    var fixture = new File(watcherPack.getParentFile(), "server-ci-server-sync.fxpack");
+                    supersededServerCopy = new File(watcherPack.getParentFile(), "server-" + sha256Hex(fixture.toPath()) + ".fxpack");
+                    if (!supersededServerCopy.isFile() || !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(supersededServerCopy)) {
+                        throw new IllegalStateException("The server-only fixture is not mounted as " + supersededServerCopy.getName() + " before its update");
+                    }
+                    writeServerSyncFixture(fixture, UPDATED_SERVER_SYNC_MARKER);
+                    updatedServerPack = fixture;
+                    updatedServerPackTick = ticks;
                 } else if (ticks >= watcherPackTick + 600) {
                     throw new IllegalStateException(watcherMountLogged
                             ? "The server's re-offer did not finish on the client after an installed pack appeared"
@@ -3000,6 +3047,28 @@ public final class PhotonFXEditorSmokeTest {
      * entry, which is what the server's scan requires of a pack it offers: the integrated server has to offer this
      * one for the installed-copy check at the end of the smoke to mean anything.
      */
+    /**
+     * Rewrite the server-only sync fixture the workflow created, the way an admin replaces a pack on a running
+     * server: written beside it, then moved over it in one step.
+     */
+    private static void writeServerSyncFixture(File pack, String markerText) throws java.io.IOException {
+        var part = new File(pack.getParentFile(), pack.getName() + ".part");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(part.toPath()))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/fx/server_sync.fx"));
+            zip.write("server fx pack sync probe, second version".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/textures/server_sync_marker.txt"));
+            zip.write(markerText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        try {
+            Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+            Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     private static void writeMarkerPack(File pack) throws java.io.IOException {
         var folder = pack.getParentFile();
         if (!folder.isDirectory() && !folder.mkdirs()) {
@@ -3137,6 +3206,7 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackWatcherRegression.verify();
+        com.lowdragmc.photon.network.ServerFxPackWatcherRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.InstalledCopyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
         com.lowdragmc.photon.command.LateReplayRegression.verify();

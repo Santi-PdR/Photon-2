@@ -100,6 +100,11 @@ public final class FXPacks {
         return changed;
     }
 
+    /** File names ({@code server-<sha256>.fxpack}) of the server-provided cache entries a reload mounts right now. */
+    public static Set<String> activeServerPackNames() {
+        return activeServerPacks;
+    }
+
     /** Directory inside a mod jar scanned for shipped fx packs ({@code .fxpack} files or unzipped folders). */
     public static final String MOD_FXPACKS_DIR = "fxpacks";
 
