@@ -231,7 +231,7 @@
   "photon.configuration.debug.gpu_sync": "Esperar a la GPU tras cada pase",
   "photon.configuration.debug.gpu_sync.tooltip": "Termina cada pase de Photon con glFinish para que un congelamiento de la GPU se detenga dentro del pase que lo causó. Lento; solo para rastrear un congelamiento, junto con el informe de congelamiento.",
   "photon.configuration.debug.freeze_watchdog": "Informe de congelamiento",
-  "photon.configuration.debug.freeze_watchdog.tooltip": "Escribe photon/diagnostics/freeze-<fecha>.txt cuando el hilo de render no produce ningún frame durante 15 segundos dentro de un mundo.",
+  "photon.configuration.debug.freeze_watchdog.tooltip": "Escribe photon/diagnostics/freeze-<fecha>.txt cuando el hilo de render no produce ningún frame durante 30 segundos dentro de un mundo.",
   "photon.enum.gpu_profile.auto": "Auto (seguro en AMD/Intel)",
   "photon.enum.gpu_profile.full": "Completo",
   "photon.enum.gpu_profile.safe": "Seguro",

@@ -27,11 +27,13 @@ import java.util.Locale;
  *
  * <p>Armed by the first {@link #heartbeat()}; a report needs {@value #STALL_SECONDS} s without a heartbeat after one
  * taken inside a level with no loading overlay up, so world loads, resource reloads and the menus do not count. One
- * report per stall; the heartbeat re-arms it.
+ * report per stall; the heartbeat re-arms it. A stall the render thread comes back from — a shader compile burst on a
+ * software renderer, a long world save — was a slow frame, not a freeze: the report gets a closing line saying so and
+ * the log an INFO, so the file never has to be guessed at. A real GPU hang never gets that line.
  */
 @OnlyIn(Dist.CLIENT)
 public final class RenderWatchdog {
-    public static final int STALL_SECONDS = 15;
+    public static final int STALL_SECONDS = 30;
     private static final long POLL_MILLIS = 1000;
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT);
 
@@ -43,15 +45,22 @@ public final class RenderWatchdog {
     private static volatile boolean started;
     private static volatile boolean armed;
     private static volatile int reports;
+    private static volatile Path lastReport;
+    /** Set by the heartbeat that ends a reported stall: how long it lasted; the watchdog thread closes the report. */
+    private static volatile long resumedAfterNanos;
 
     private RenderWatchdog() {
     }
 
     /** Once per frame, on the render thread. */
     public static void heartbeat() {
-        lastHeartbeat = System.nanoTime();
+        long now = System.nanoTime();
+        if (reported) {
+            resumedAfterNanos = now - lastHeartbeat;
+            reported = false;
+        }
+        lastHeartbeat = now;
         frames++;
-        reported = false;
         if (!started) start();
         var mc = Minecraft.getInstance();
         inLevelAtHeartbeat = mc.level != null && mc.getOverlay() == null;
@@ -91,17 +100,36 @@ public final class RenderWatchdog {
             } catch (InterruptedException interrupted) {
                 return;
             }
+            long resumed = resumedAfterNanos;
+            if (resumed > 0) {
+                resumedAfterNanos = 0;
+                closeReport(resumed);
+            }
             long stalledNanos = System.nanoTime() - lastHeartbeat;
             if (stalledNanos < STALL_SECONDS * 1_000_000_000L || reported || !inLevelAtHeartbeat) continue;
             reported = true;
             try {
-                var path = report(String.format(Locale.ROOT, "no frame for %.1f s while a level was open", stalledNanos / 1e9));
+                var path = lastReport = report(String.format(Locale.ROOT, "no frame for %.1f s while a level was open", stalledNanos / 1e9));
                 Photon.LOGGER.error("[freeze-watchdog] the render thread has produced no frame for {} s; report written to {}. Last Photon GPU stage: {}",
                         String.format(Locale.ROOT, "%.1f", stalledNanos / 1e9), path, GpuCompat.lastStageDescription());
             } catch (Throwable t) {
                 Photon.LOGGER.error("[freeze-watchdog] the render thread has produced no frame for {} s and the report could not be written",
                         String.format(Locale.ROOT, "%.1f", stalledNanos / 1e9), t);
             }
+        }
+    }
+
+    /** The render thread came back: the last report described a slow frame, and says so from now on. */
+    private static void closeReport(long stalledNanos) {
+        var seconds = String.format(Locale.ROOT, "%.1f", stalledNanos / 1e9);
+        var path = lastReport;
+        Photon.LOGGER.info("[freeze-watchdog] the render thread resumed after {} s: {} describes a slow frame, not a freeze", seconds, path);
+        if (path == null) return;
+        try {
+            Files.writeString(path, "\nRESOLVED: the render thread resumed after " + seconds + " s. This was a slow frame, not a GPU freeze.\n",
+                    StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);
+        } catch (IOException ignored) {
+            // the file may have been collected already; the log line carries the same fact
         }
     }
 

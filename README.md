@@ -40,6 +40,14 @@ See [Photon 2 FX assets and bloom guide](docs/Photon2-FX-Assets-and-Bloom.md) fo
 - To create a standalone `.fxpack` for Discord or another file host, run `/photon_client export_ldlib2_assets` and confirm when prompted. The file is written to `<gameDir>/photon/fxpacks/`.
 - Current cap: 512 MiB compressed and 2 GiB expanded per pack. If the file is too large for a chat attachment, use file hosting.
 
+## GPU compatibility and freeze reports
+
+Photon reads the graphics driver on the first frame. On AMD and Intel Windows OpenGL drivers it keeps a conservative pipeline (screen-space light shadows instead of the voxel world, no volumetric lighting, FX composited in place, no GPU instancing); everything else gets the full pipeline. `config/photon-client.toml`:
+
+- `[compat] gpu_profile = "AUTO" | "FULL" | "SAFE"` — also in the in-game config screen; applies on the next frame.
+- `[debug] gpu_sync = false` — set `true` (or run with `-Dphoton.gpuSync=true`) when hunting a freeze: every Photon pass then waits for the GPU, so a hang stops inside the pass that caused it.
+- `[debug] freeze_watchdog = true` — when the render thread produces no frame for 30 seconds inside a world, `photon/diagnostics/freeze-<date>.txt` is written with the driver, the profile, the last Photon pass, the GL errors seen per pass, the last effects played, the effective config and the render thread's stack. Send that file together with `logs/latest.log` when reporting a freeze.
+
 ## License
 
 Photon is licensed under CC BY-NC-SA 4.0. See [LICENSE](LICENSE).

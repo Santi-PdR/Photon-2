@@ -170,7 +170,7 @@ public class PhotonConfig {
                         "the freeze report then names it. Same as -Dphoton.gpuSync=true.")
                 .translation("photon.configuration.debug.gpu_sync");
         gpuSync = builder.define("gpu_sync", false);
-        builder.comment("Write photon/diagnostics/freeze-<date>.txt when the render thread produces no frame for 15 s inside a level.")
+        builder.comment("Write photon/diagnostics/freeze-<date>.txt when the render thread produces no frame for 30 s inside a level.")
                 .translation("photon.configuration.debug.freeze_watchdog");
         freezeWatchdog = builder.define("freeze_watchdog", true);
         builder.pop();

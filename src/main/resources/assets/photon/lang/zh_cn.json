@@ -76,7 +76,7 @@
   "photon.configuration.debug.gpu_sync": "每个通道后等待 GPU",
   "photon.configuration.debug.gpu_sync.tooltip": "每个 Photon 通道以 glFinish 结束，使 GPU 冻结停在引发它的通道内。很慢；仅用于配合冻结报告定位冻结。",
   "photon.configuration.debug.freeze_watchdog": "冻结报告",
-  "photon.configuration.debug.freeze_watchdog.tooltip": "当渲染线程在世界内 15 秒未产生任何帧时，写入 photon/diagnostics/freeze-<日期>.txt。",
+  "photon.configuration.debug.freeze_watchdog.tooltip": "当渲染线程在世界内 30 秒未产生任何帧时，写入 photon/diagnostics/freeze-<日期>.txt。",
   "photon.enum.gpu_profile.auto": "自动（AMD/Intel 上安全）",
   "photon.enum.gpu_profile.full": "完整",
   "photon.enum.gpu_profile.safe": "安全",

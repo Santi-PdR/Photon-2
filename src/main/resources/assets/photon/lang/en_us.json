@@ -80,7 +80,7 @@
   "photon.configuration.debug.gpu_sync": "Wait for the GPU after each pass",
   "photon.configuration.debug.gpu_sync.tooltip": "Ends every Photon pass on glFinish so a GPU freeze stops inside the pass that caused it. Slow; only for tracking a freeze down, together with the freeze report.",
   "photon.configuration.debug.freeze_watchdog": "Freeze report",
-  "photon.configuration.debug.freeze_watchdog.tooltip": "Writes photon/diagnostics/freeze-<date>.txt when the render thread produces no frame for 15 seconds inside a world.",
+  "photon.configuration.debug.freeze_watchdog.tooltip": "Writes photon/diagnostics/freeze-<date>.txt when the render thread produces no frame for 30 seconds inside a world.",
   "photon.enum.gpu_profile.auto": "Auto (safe on AMD/Intel)",
   "photon.enum.gpu_profile.full": "Full",
   "photon.enum.gpu_profile.safe": "Safe",
