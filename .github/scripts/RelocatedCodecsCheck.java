@@ -33,9 +33,10 @@ import com.lowdragmc.photon.internal.embedded.javazoom.jl.decoder.Header;
  * {@code com.lowdragmc.photon.internal.embedded} when the mod jar is packaged; the dev-run smoke tests
  * therefore only ever see the original libraries. This program is compiled against the finished -all
  * jar alone and decodes an mp3, an m4a and an ADTS aac with the relocated decoders, then encodes the
- * result with the relocated Vorbis encoder, so a relocation that left a reference, a resource
- * ({@code javazoom/jl/decoder/*.ser}) or a class behind fails the build instead of the first import in
- * the editor.
+ * result with the relocated Vorbis encoder the way AudioConverter does (mono, quality 0.3 with the same
+ * fallbacks), so a relocation that left a reference, a resource ({@code javazoom/jl/decoder/*.ser}) or
+ * a class behind fails the build instead of the first import in the editor. Every stage runs even if an
+ * earlier one failed, so one run reports everything that is wrong.
  *
  * <p>Usage: {@code java RelocatedCodecsCheck <dir>} with {@code beat.mp3}, {@code beat.m4a} and
  * {@code beat.aac} in that directory; writes {@code beat-notags.m4a} and {@code relocated.ogg} next to
@@ -58,21 +59,58 @@ public final class RelocatedCodecsCheck {
                 // the only acceptable answer
             }
         }
-        Pcm mp3 = decodeMp3(dir.resolve("beat.mp3"));
-        Pcm m4a = decodeMp4(withoutTags(dir.resolve("beat.m4a")));
-        Pcm aac = decodeAdts(dir.resolve("beat.aac"));
-        for (var decoded : List.of(mp3, m4a, aac)) {
-            require(decoded.channels() == 2 && decoded.sampleRate() == 44100,
-                    "unexpected format " + decoded.channels() + " ch @ " + decoded.sampleRate() + " Hz");
-            require(decoded.seconds() >= 0.4 && decoded.seconds() <= 0.7,
-                    "decoded " + decoded.seconds() + " s of a 0.5 s fixture");
+        int failures = 0;
+        var summary = new StringBuilder("relocated codecs:");
+        Pcm mp3 = null;
+        for (String stage : List.of("mp3", "m4a", "aac", "ogg")) {
+            try {
+                switch (stage) {
+                    case "mp3" -> mp3 = checkDecoded(stage, decodeMp3(dir.resolve("beat.mp3")), summary);
+                    case "m4a" -> checkDecoded(stage, decodeMp4(withoutTags(dir.resolve("beat.m4a"))), summary);
+                    case "aac" -> checkDecoded(stage, decodeAdts(dir.resolve("beat.aac")), summary);
+                    default -> {
+                        require(mp3 != null, "nothing to encode: the mp3 stage failed");
+                        byte[] ogg = encodeVorbis(mono(mp3));
+                        require(ogg.length > 2000 && ogg[0] == 'O' && ogg[1] == 'g' && ogg[2] == 'g' && ogg[3] == 'S',
+                                "the Vorbis encoder produced " + ogg.length + " bytes that do not start an Ogg stream");
+                        Files.write(dir.resolve("relocated.ogg"), ogg);
+                        summary.append(String.format(" ogg %d bytes", ogg.length));
+                    }
+                }
+            } catch (Throwable failure) {
+                failures++;
+                System.out.println("STAGE FAILED: " + stage + ": " + failure);
+                failure.printStackTrace(System.out);
+            }
         }
-        byte[] ogg = encodeVorbis(mp3);
-        require(ogg.length > 2000 && ogg[0] == 'O' && ogg[1] == 'g' && ogg[2] == 'g' && ogg[3] == 'S',
-                "the Vorbis encoder produced " + ogg.length + " bytes that do not start an Ogg stream");
-        Files.write(dir.resolve("relocated.ogg"), ogg);
-        System.out.printf("relocated codecs: mp3 %d frames %.3f s, m4a %d frames %.3f s, aac %d frames %.3f s, ogg %d bytes%n",
-                mp3.frames(), mp3.seconds(), m4a.frames(), m4a.seconds(), aac.frames(), aac.seconds(), ogg.length);
+        require(failures == 0, failures + " stage(s) failed");
+        System.out.println(summary);
+    }
+
+    private static Pcm checkDecoded(String stage, Pcm decoded, StringBuilder summary) {
+        require(decoded.channels() == 2 && decoded.sampleRate() == 44100,
+                stage + ": unexpected format " + decoded.channels() + " ch @ " + decoded.sampleRate() + " Hz");
+        require(decoded.seconds() >= 0.4 && decoded.seconds() <= 0.7,
+                stage + ": decoded " + decoded.seconds() + " s of a 0.5 s fixture");
+        summary.append(String.format(" %s %d frames %.3f s,", stage, decoded.frames(), decoded.seconds()));
+        return decoded;
+    }
+
+    /** AudioConverter.MonoSource: the average of all channels per frame, 16-bit little-endian. */
+    private static Pcm mono(Pcm pcm) {
+        int frames = pcm.data().length / (pcm.channels() * 2);
+        byte[] out = new byte[frames * 2];
+        for (int frame = 0; frame < frames; frame++) {
+            int sum = 0;
+            for (int channel = 0; channel < pcm.channels(); channel++) {
+                int index = (frame * pcm.channels() + channel) * 2;
+                sum += (short) ((pcm.data()[index] & 0xFF) | (pcm.data()[index + 1] << 8));
+            }
+            int sample = sum / pcm.channels();
+            out[frame * 2] = (byte) (sample & 0xFF);
+            out[frame * 2 + 1] = (byte) ((sample >>> 8) & 0xFF);
+        }
+        return new Pcm(1, pcm.sampleRate(), out, frames);
     }
 
     /** jLayer, as AudioConverter.Mp3Source drives it (own SampleBuffer, decodeFrame per header). */
@@ -203,14 +241,32 @@ public final class RelocatedCodecsCheck {
         }
     }
 
-    /** jVorbisEnc, the loop of OggVorbisWriter.encode at its default quality 0.3. */
+    /**
+     * jVorbisEnc, the loop of OggVorbisWriter.encode: default quality 0.3, then the same substitutes
+     * around jVorbisEnc 0.0.2's broken psy table (an ArrayIndexOutOfBoundsException from initVBR).
+     */
     private static byte[] encodeVorbis(Pcm pcm) throws Exception {
         var out = new ByteArrayOutputStream();
-        var info = new Info();
-        info.init();
-        var encoder = new VorbisEnc();
-        int ret = encoder.initVBR(info, pcm.channels(), pcm.sampleRate(), 0.3f);
-        require(ret == 0, "Vorbis refused quality 0.3 for " + pcm.channels() + " channel(s) at " + pcm.sampleRate() + " Hz: " + ret);
+        Info info = null;
+        Exception lastFailure = null;
+        for (float attempt : new float[]{0.3f, 0.3999f, 0.8f, 0.1f}) {
+            try {
+                var candidate = new Info();
+                candidate.init();
+                int ret = new VorbisEnc().initVBR(candidate, pcm.channels(), pcm.sampleRate(), attempt);
+                if (ret == 0) {
+                    info = candidate;
+                    System.out.printf("vorbis: quality %.4f accepted for %d channel(s) at %d Hz%n", attempt, pcm.channels(), pcm.sampleRate());
+                    break;
+                }
+                candidate.clear();
+                lastFailure = new IOException("Vorbis refused quality " + attempt + ": " + ret);
+            } catch (ArrayIndexOutOfBoundsException brokenPsyTable) {
+                System.out.printf("vorbis: quality %.4f hits the jVorbisEnc psy-table typo (%s), trying the next%n", attempt, brokenPsyTable.getMessage());
+                lastFailure = brokenPsyTable;
+            }
+        }
+        if (info == null) throw new IOException("Vorbis could not initialize an encoder at " + pcm.sampleRate() + " Hz", lastFailure);
         var comment = new Comment();
         comment.init();
         comment.addTag("ENCODER", "Photon relocated codec check");

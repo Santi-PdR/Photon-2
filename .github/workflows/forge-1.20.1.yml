@@ -318,16 +318,22 @@ jobs:
           javac -d "$work/classes" -cp "$jar_file" .github/scripts/RelocatedCodecsCheck.java
           if ! java -cp "$work/classes:$jar_file" RelocatedCodecsCheck "$work" > "$work/check.log" 2>&1; then
             cat "$work/check.log"
-            echo "::error title=relocated codecs::the relocated jLayer/JAAD/jVorbisEnc inside the distributable failed: $(grep -m1 -E 'Exception|Error' "$work/check.log" || true)"
+            # the whole trace as annotations: the step log is not always reachable from where this is read
+            grep -E 'STAGE FAILED|Exception|Error|^\s+at (com\.lowdragmc|RelocatedCodecsCheck)' "$work/check.log" > "$work/trace.txt" || true
+            head -n 24 "$work/trace.txt" | while IFS= read -r line; do
+              echo "::error title=relocated codecs::$line"
+            done
+            echo "::error title=relocated codecs::the relocated jLayer/JAAD/jVorbisEnc inside the distributable failed"
             exit 1
           fi
           cat "$work/check.log"
-          # What the relocated encoder wrote must be Ogg Vorbis to an independent decoder as well.
+          # What the relocated encoder wrote must be Ogg Vorbis to an independent decoder as well
+          # (mono: AudioConverter always downmixes before encoding, and so does the check).
           ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "$work/relocated.ogg" > "$work/probe.txt"
           cat "$work/probe.txt"
           grep -Fxq 'codec_name=vorbis' "$work/probe.txt"
           grep -Fxq 'sample_rate=44100' "$work/probe.txt"
-          grep -Fxq 'channels=2' "$work/probe.txt"
+          grep -Fxq 'channels=1' "$work/probe.txt"
           ffmpeg -v error -xerror -i "$work/relocated.ogg" -f null -
           duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/relocated.ogg")
           python3 -c 'import sys; d = float(sys.argv[1]); assert 0.3 <= d <= 0.9, "relocated.ogg lasts %s s" % d' "$duration"
