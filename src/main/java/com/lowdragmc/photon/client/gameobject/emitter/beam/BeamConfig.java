@@ -174,7 +174,7 @@ public class BeamConfig implements IConfigurable, IPersistedSerializable {
 
         @Override
         protected boolean useInstancing() {
-            return renderRuntime.isUseGPUInstance();
+            return renderRuntime.isUseGPUInstance() && com.lowdragmc.photon.client.compat.gpu.GpuCompat.gpuInstancing();
         }
 
         @Override

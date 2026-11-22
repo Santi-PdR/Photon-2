@@ -242,7 +242,8 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
 
         @Override
         protected boolean useInstancing() {
-            return renderRuntime.isUseGPUInstance() && renderRuntime.getRenderMode() != ParticleRendererSetting.Mode.None;
+            return renderRuntime.isUseGPUInstance() && com.lowdragmc.photon.client.compat.gpu.GpuCompat.gpuInstancing()
+                    && renderRuntime.getRenderMode() != ParticleRendererSetting.Mode.None;
         }
 
         @Override

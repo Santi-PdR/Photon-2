@@ -91,6 +91,7 @@ public class PhotonPostProcessing {
             bloomFailureReported = false;
             return srcTarget;
         }
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.begin("fx.bloom");
         try {
             if (!renderBloom(srcTarget)) {
                 bloomFailureReported = false;
@@ -113,6 +114,8 @@ public class PhotonPostProcessing {
             RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
             RenderSystem.defaultBlendFunc();
             return srcTarget;
+        } finally {
+            com.lowdragmc.photon.client.compat.gpu.GpuCompat.end("fx.bloom");
         }
     }
 

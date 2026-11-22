@@ -563,6 +563,9 @@ jobs:
             '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself'
             '[fxpack-server-update-smoke] a pack replaced in the server'"'"'s photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T'
             '[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack'"'"'s sounds.json events were registered and the old pack'"'"'s taken out'
+            '[gpu-compat-smoke] vendor='
+            '[freeze-watchdog-smoke] armed'
+            '[gpu-compat-regression-smoke] AMD/Intel Windows drivers get the conservative profile, uploads restore the texture state, pass errors are counted and the freeze report is complete'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -633,7 +636,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -820,6 +823,31 @@ jobs:
           if grep -Fq 'reloading client assets instead' "$RUNNER_TEMP/photon-client.log"; then
             echo '::error::a server FX pack sync fell back to a resource reload'
             exit 1
+          fi
+
+      # Round 25: an AMD Vega 11 (Windows driver) corrupted the terrain textures and hung the client in glfwSwapBuffers
+      # the moment any FX appeared, with Photon as the only mod; no way to bisect on that machine. Photon now reads the
+      # driver on the first frame and keeps a conservative GPU pipeline on AMD/Intel Windows drivers (gpu_profile =
+      # AUTO; FULL/SAFE override), restores the texture state after every data-texture upload, counts glGetError per
+      # pass, and a daemon thread writes photon/diagnostics/freeze-*.txt when the render thread stalls in a level. The
+      # runner's llvmpipe must stay on the full pipeline (everything above still tests it), the regression pins the
+      # detection, the profile's reach, the upload restore, the error counting and the report's contents.
+      - name: Require the GPU compatibility profile, upload restore and freeze report
+        shell: bash
+        run: |
+          grep -Fq '[gpu-compat-smoke] vendor=' "$RUNNER_TEMP/photon-client.log"
+          grep -F '[gpu-compat-smoke] vendor=' "$RUNNER_TEMP/photon-client.log" | grep -Fq 'safeMode=false'
+          grep -Fq '[freeze-watchdog-smoke] armed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-compat-regression-smoke] AMD/Intel Windows drivers get the conservative profile, uploads restore the texture state, pass errors are counted and the freeze report is complete' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-error] stage=regression glGetError=0x500 (GL_INVALID_ENUM)' "$RUNNER_TEMP/photon-client.log"
+          if grep -F '[gpu-error] stage=' "$RUNNER_TEMP/photon-client.log" | grep -Fv 'stage=regression' | grep -q .; then
+            echo '::error::a Photon GPU pass raised a GL error on the runner:'
+            grep -F '[gpu-error] stage=' "$RUNNER_TEMP/photon-client.log" | grep -Fv 'stage=regression'
+            exit 1
+          fi
+          if grep -Fq '[freeze-watchdog] the render thread has produced no frame' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::warning::the freeze watchdog fired during the smoke run (llvmpipe stalls are slow frames, not GPU hangs):'
+            grep -F '[freeze-watchdog]' "$RUNNER_TEMP/photon-client.log" | head -5
           fi
 
       - name: Require Photon 1 entity FX to stay on the torso

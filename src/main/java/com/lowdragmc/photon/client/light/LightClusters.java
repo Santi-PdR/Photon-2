@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.light;
 
+import com.lowdragmc.photon.client.compat.gpu.GlUploads;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.TextureUtil;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -9,6 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.system.MemoryUtil;
 
@@ -120,21 +122,21 @@ final class LightClusters {
         shader.safeGetUniform("VolumeTileInfo").set(TILE, tilesX, tilesY, 0);
     }
 
+    /**
+     * A texture for {@code texelFetch}: nearest, clamped, and explicitly one level deep, so it is complete whatever a
+     * driver assumes about mipmaps. Leaves the texture state as it found it; bind it again to give it storage.
+     */
     static int newDataTexture() {
         int id = TextureUtil.generateTextureId();
-        GlStateManager._bindTexture(id);
+        long token = GlUploads.bind(id);
         GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
         GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
         GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL30.GL_CLAMP_TO_EDGE);
         GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL30.GL_CLAMP_TO_EDGE);
+        GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, 0);
+        GlStateManager._texParameter(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, 0);
+        GlUploads.restore(token);
         return id;
-    }
-
-    static void resetUnpack() {
-        GlStateManager._pixelStore(GL11.GL_UNPACK_ROW_LENGTH, 0);
-        GlStateManager._pixelStore(GL11.GL_UNPACK_SKIP_PIXELS, 0);
-        GlStateManager._pixelStore(GL11.GL_UNPACK_SKIP_ROWS, 0);
-        GlStateManager._pixelStore(GL11.GL_UNPACK_ALIGNMENT, 1);
     }
 
     /** Lights per cell as (offset, count) into an index list, uploaded for a shader. */
@@ -219,9 +221,8 @@ final class LightClusters {
         }
 
         private void upload(int width, int height, int rows) {
-            resetUnpack();
             if (gridTexture == -1) gridTexture = newDataTexture();
-            GlStateManager._bindTexture(gridTexture);
+            long token = GlUploads.bind(gridTexture);
             grid.limit(width * height * 2).position(0);
             if (width != gridWidth || height != gridHeight) {
                 GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RG32F, width, height, 0, GL30.GL_RG, GL11.GL_FLOAT, grid);
@@ -242,7 +243,7 @@ final class LightClusters {
                 GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, INDEX_WIDTH, rows, GL11.GL_RED, GL11.GL_FLOAT, indices);
             }
             indices.clear();
-            GlStateManager._bindTexture(0);
+            GlUploads.restore(token);
         }
     }
 }

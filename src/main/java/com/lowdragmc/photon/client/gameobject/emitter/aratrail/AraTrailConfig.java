@@ -234,7 +234,7 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
 
         @Override
         protected boolean useInstancing() {
-            return renderRuntime.isUseGPUInstance() && instancedContext() != null;
+            return renderRuntime.isUseGPUInstance() && com.lowdragmc.photon.client.compat.gpu.GpuCompat.gpuInstancing() && instancedContext() != null;
         }
 
         @Override

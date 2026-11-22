@@ -1,5 +1,6 @@
 package com.lowdragmc.photon;
 
+import com.lowdragmc.photon.client.compat.gpu.GpuProfile;
 import com.lowdragmc.photon.client.compat.iris.IrisCompositeMode;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
 import com.lowdragmc.photon.client.light.ShadowMode;
@@ -86,6 +87,15 @@ public class PhotonConfig {
     public final ForgeConfigSpec.ConfigValue<Boolean> collisionParallel;
     public final ForgeConfigSpec.ConfigValue<Integer> collisionSectionCacheLimit;
 
+    /** Which GPU paths this client may use — see {@code GpuCompat}. AUTO keeps the conservative pipeline for the
+     *  AMD/Intel Windows drivers that have hung on Photon's full one; FULL and SAFE override the detection. */
+    public final ForgeConfigSpec.ConfigValue<GpuProfile> gpuProfile;
+    /** Every Photon pass ends on {@code glFinish}, so a GPU hang stops inside the pass that caused it. Slow; for
+     *  pinning a freeze down, together with the freeze report. */
+    public final ForgeConfigSpec.ConfigValue<Boolean> gpuSync;
+    /** The daemon thread that writes {@code photon/diagnostics/freeze-*.txt} when the render thread stalls in a level. */
+    public final ForgeConfigSpec.ConfigValue<Boolean> freezeWatchdog;
+
     private PhotonConfig(ForgeConfigSpec.Builder builder) {
         enableBloom = builder.define("enable_bloom", true);
         bloomMipLevel = builder.defineInRange("bloom_mip_level", 5, 2, 10);
@@ -145,6 +155,24 @@ public class PhotonConfig {
         collisionParallel = collision(builder, "parallel").define("parallel", true);
         collisionSectionCacheLimit = collision(builder, "section_cache_limit")
                 .defineInRange("section_cache_limit", 4096, 64, 16384);
+        builder.pop();
+
+        builder.push("compat");
+        builder.comment("Which GPU paths Photon may use. AUTO: the conservative pipeline (screen-space shadows, no volumetric",
+                        "lighting, FX composited in place, no GPU instancing) on AMD and Intel Windows drivers, everything",
+                        "elsewhere. FULL: everything, whatever the driver. SAFE: the conservative pipeline everywhere.")
+                .translation("photon.configuration.compat.gpu_profile");
+        gpuProfile = builder.defineEnum("gpu_profile", GpuProfile.AUTO);
+        builder.pop();
+
+        builder.push("debug");
+        builder.comment("Wait for the GPU after every Photon pass (glFinish). Slow. Turn on to find which pass a freeze happens in:",
+                        "the freeze report then names it. Same as -Dphoton.gpuSync=true.")
+                .translation("photon.configuration.debug.gpu_sync");
+        gpuSync = builder.define("gpu_sync", false);
+        builder.comment("Write photon/diagnostics/freeze-<date>.txt when the render thread produces no frame for 15 s inside a level.")
+                .translation("photon.configuration.debug.freeze_watchdog");
+        freezeWatchdog = builder.define("freeze_watchdog", true);
         builder.pop();
     }
 

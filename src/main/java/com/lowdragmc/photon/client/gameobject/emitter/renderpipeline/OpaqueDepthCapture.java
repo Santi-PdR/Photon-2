@@ -1,6 +1,5 @@
 package com.lowdragmc.photon.client.gameobject.emitter.renderpipeline;
 
-import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -77,6 +76,7 @@ public final class OpaqueDepthCapture {
         int viewportWidth = GlStateManager.Viewport.width();
         int viewportHeight = GlStateManager.Viewport.height();
 
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.begin("fx.depthCapture");
         allocate(mainTarget.width, mainTarget.height);
         assert target != null;
         target.copyDepthFrom(mainTarget);
@@ -84,6 +84,7 @@ public final class OpaqueDepthCapture {
 
         GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebuffer);
         RenderSystem.viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.end("fx.depthCapture");
     }
 
     /**
@@ -105,7 +106,7 @@ public final class OpaqueDepthCapture {
     private static boolean isWanted() {
         if (!ParticleQueueRenderType.TRANSLUCENT_QUEUE.hasQueuedParticles()) return false;
         return demandedLastFrame
-                || PhotonConfig.INSTANCE.fxCompositeMode.get() == FXCompositeMode.LATE;
+                || FXCompositeMode.globalDefault() == FXCompositeMode.LATE;
     }
 
     /** Record that a pass asked for {@link FXCompositeMode#LATE} this frame, so the next frame

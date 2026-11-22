@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client.postfx.runtime;
 
 import com.lowdragmc.lowdraglib2.client.shader.HDRTarget;
+import com.lowdragmc.photon.client.compat.gpu.GlUploads;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.mojang.blaze3d.platform.GlStateManager;
 import lombok.Getter;
@@ -42,7 +43,7 @@ public class FormatTarget extends HDRTarget {
 
     private void respecColor() {
         if (format == TargetFormat.RGBA16F) return; // already what HDRTarget allocated
-        GlStateManager._bindTexture(this.colorTextureId);
+        long token = GlUploads.bind(this.colorTextureId);
         switch (format) {
             case RGBA8 -> GlStateManager._texImage2D(GL30.GL_TEXTURE_2D, 0, GL30.GL_RGBA8,
                     this.width, this.height, 0, GL30.GL_RGBA, GL30.GL_UNSIGNED_BYTE, null);
@@ -54,7 +55,7 @@ public class FormatTarget extends HDRTarget {
                     this.width, this.height, 0, GL30.GL_RED, GL30.GL_UNSIGNED_BYTE, null);
             default -> { }
         }
-        GlStateManager._bindTexture(0);
+        GlUploads.restore(token);
         this.clear(Minecraft.ON_OSX);
     }
 }

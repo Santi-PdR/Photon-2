@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.client;
 
 import com.lowdragmc.photon.PhotonConfig;
+import com.lowdragmc.photon.client.compat.gpu.GpuProfile;
 import com.lowdragmc.photon.client.compat.iris.IrisCompositeMode;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.FXCompositeMode;
 import net.minecraft.client.gui.GuiGraphics;
@@ -57,7 +58,9 @@ public final class PhotonConfigScreen extends Screen {
         addBoolean("photon.configuration.enable_custom_effects_with_shader_pack",
                 config.enableCustomEffectsWithShaderPack, controlX, controlWidth, row++);
         addInt("photon.configuration.postfx_pool_budget_mb", config.postFxPoolBudgetMB, 16, 4096,
-                controlX, controlWidth, row);
+                controlX, controlWidth, row++);
+        addEnum("photon.configuration.compat.gpu_profile", config.gpuProfile, List.of(GpuProfile.values()),
+                GpuProfile::getTranslatedName, controlX, controlWidth, row);
 
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
                 .bounds(width / 2 - 100, height - 32, 200, 20).build());

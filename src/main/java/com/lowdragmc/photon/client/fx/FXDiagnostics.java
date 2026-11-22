@@ -39,6 +39,7 @@ public final class FXDiagnostics {
         int objectSignature = 1;
         for (var object : data.objects()) objectSignature = 31 * objectSignature + object.id().hashCode();
         var key = "play-" + label + "-" + objectSignature;
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.notePlayback(label);
         if (logAllowed("play-" + label)) {
             Photon.LOGGER.info("[fx-diagnostic] playback requested: fx={} executor={} objects={} delay={}; visibility not verified",
                     label, executor.getClass().getSimpleName(), data.objects().size(), delay);
