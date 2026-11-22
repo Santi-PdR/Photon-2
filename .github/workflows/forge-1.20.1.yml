@@ -554,6 +554,7 @@ jobs:
             '[sound-length-smoke] an imported sound reports its measured length once asked to wait for it instead of 0 on the first ask'
             '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry'
             '[kotlin-runtime-isolation-smoke] LDLib2'"'"'s Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads'
+            '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -624,7 +625,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -757,6 +758,16 @@ jobs:
       - name: Require the FXPack manager to remember its window size
         shell: bash
         run: grep -Fq '[fxpack-dialog-size-smoke] pack contents dialog size is remembered' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 21: LDLib2's DummyWorld.tickWorld() posted Forge's LevelTickEvent for the editor's virtual level and a
+      # listener that casts event.level to ClientLevel (Brutality 0.8.7) crashed the FX editor with "Ticking screen".
+      # The regression ticks an EditorSceneLevel and a plain TrackedDummyWorld with such a listener registered, so
+      # this gate fails if either the editor level or the DummyWorldMixin lets the event reach the bus again.
+      - name: Require LDLib2 virtual levels to stay off the Forge level tick bus
+        shell: bash
+        run: |
+          grep -Fq '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[virtual-level-tick] com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld is ticking inside a screen; Photon keeps Forge'"'"'s LevelTickEvent from being posted for LDLib2 virtual levels' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 entity FX to stay on the torso
         shell: bash

@@ -4054,6 +4054,8 @@ public final class PhotonFXEditorSmokeTest {
                 .map(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::cast).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the AraTrail"));
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
+        // the editor scene is ticking on screen from here on: its virtual level must reach no LevelTickEvent listener
+        com.lowdragmc.photon.client.virtuallevel.VirtualLevelTickRegression.verify(editor.sceneView.level);
     }
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */

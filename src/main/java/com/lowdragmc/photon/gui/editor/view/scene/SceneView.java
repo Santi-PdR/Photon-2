@@ -12,7 +12,6 @@ import com.lowdragmc.lowdraglib2.gui.ui.data.Vertical;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.*;
 import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
-import com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.client.FXSceneOptions;
 import com.lowdragmc.photon.client.PhotonIcons;
@@ -23,6 +22,7 @@ import com.lowdragmc.photon.client.collision.CollisionDebug;
 import com.lowdragmc.photon.client.collision.CollisionWorld;
 import com.lowdragmc.photon.client.gameobject.collider.ColliderObject;
 import com.lowdragmc.photon.client.light.DynamicLightManager;
+import com.lowdragmc.photon.client.virtuallevel.EditorSceneLevel;
 import com.lowdragmc.photon.client.fx.FXData;
 import com.lowdragmc.photon.gui.editor.FXEditor;
 import com.lowdragmc.photon.gui.editor.FXProject;
@@ -69,7 +69,10 @@ public class SceneView extends View implements FXSceneOptions {
     }
     public final FXEditor fxEditor;
     public final ParticleSceneEditor sceneEditor;
-    public final TrackedDummyWorld level = new TrackedDummyWorld();
+    /** Ticks like LDLib2's TrackedDummyWorld but never posts Forge's LevelTickEvent for the virtual level, and survives
+     *  a tick that fails in another mod's code (block entities copied by the real-world mode, listeners): see
+     *  {@link com.lowdragmc.photon.client.virtuallevel.VirtualLevelTickGuard}. */
+    public final EditorSceneLevel level = new EditorSceneLevel("editor.scene");
     public final PhotonParticleManager particleManager = new PhotonParticleManager(this);
     public final FXProjectEffectExecutor effect = new FXProjectEffectExecutor(level);
     public final FXObjectInfoView fxObjectInfoView = new FXObjectInfoView(this);

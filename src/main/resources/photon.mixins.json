@@ -7,6 +7,7 @@
   "plugin": "com.lowdragmc.photon.core.mixins.PhotonMixinPlugin",
   "client": [
     "ClientLevelMixin",
+    "DummyWorldMixin",
     "GameRendererMixin",
     "MinecraftMixin",
     "ParticleEngineMixin",
