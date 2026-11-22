@@ -55,6 +55,8 @@ public final class PhotonFXEditorSmokeTest {
     private static boolean bloomSmokeLogged;
     private static int ticks;
     private static int tornadoFrameWait;
+    /** Ticks held at 225 waiting for the frame that lays the window-mode dialog out. */
+    private static int dialogFrameWait;
     private static FXEditor editor;
     private static Screen previousScreen;
     private static Path projectFile;
@@ -2473,6 +2475,15 @@ public final class PhotonFXEditorSmokeTest {
                     return;
                 }
                 tornadoFrameWait = 0;
+            }
+            if (started && smokeTrail != null && ticks == 225
+                    && !com.lowdragmc.photon.gui.editor.DialogSizeRegression.laidOut()) {
+                // the window-mode dialog opened at tick 220 is measured at 226, once the UI has laid it out — which a
+                // rendered frame does, and the software renderer may run up to ten ticks between two frames: hold
+                // the clock until that frame has happened (round 24: with no resource reload at login the frames
+                // around here are the first busy ones of the session, and six ticks were not always a frame)
+                if (++dialogFrameWait > 200) throw new IllegalStateException("No rendered frame laid out the window-mode dialog");
+                return;
             }
             if (started && smokeTrail != null) {
                 ticks++;

@@ -46,6 +46,16 @@ public final class DialogSizeRegression {
         dialog = opened;
     }
 
+    /**
+     * Whether the UI has laid the dialog out yet: that happens on a rendered frame, not on a tick, and a slow software
+     * renderer can run several ticks between frames (round 24: with no resource reload at login the frames around the
+     * dialog are the first busy ones of the session, and six ticks were not always a frame).
+     */
+    public static boolean laidOut() {
+        var opened = dialog;
+        return opened != null && opened.overlay.getSizeWidth() > 100 && opened.overlay.getSizeHeight() > 100;
+    }
+
     public static void verify() {
         var opened = dialog;
         dialog = null;
