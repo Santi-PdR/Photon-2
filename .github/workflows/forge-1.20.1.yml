@@ -340,7 +340,9 @@ jobs:
           printf 'eula=true\n' > "$work/eula.txt"
           printf 'online-mode=false\nlevel-type=minecraft\\:flat\nview-distance=3\nsimulation-distance=3\nspawn-protection=0\nmax-players=1\nserver-port=25599\nsync-chunk-writes=false\n' > "$work/server.properties"
           log="$work/server.log"
-          (cd "$work" && exec java @user_jvm_args.txt "@libraries/net/minecraftforge/forge/$forge/unix_args.txt" nogui) > "$log" 2>&1 < /dev/null &
+          # The loader's "Found mod file … of type … with provider …" lines carry the SCAN marker, which
+          # Forge's log4j2.xml denies everywhere by default; they are the record of what was loaded.
+          (cd "$work" && exec java -Dforge.logging.marker.scan=ACCEPT @user_jvm_args.txt "@libraries/net/minecraftforge/forge/$forge/unix_args.txt" nogui) > "$log" 2>&1 < /dev/null &
           pid=$!
           ready=0
           for _ in $(seq 1 72); do
@@ -355,7 +357,9 @@ jobs:
           fi
           wait "$pid" 2>/dev/null || true
           tr -d '\000' < "$log" > "$log.clean" && mv "$log.clean" "$log"
-          grep -F 'Found mod file' "$log" > "$work/found.txt" || true
+          # console output plus the loader's debug log: the mod-file record is read from both
+          cat "$log" "$work"/logs/debug.log > "$work/all.log" 2>/dev/null || cp "$log" "$work/all.log"
+          grep -aE 'Found mod file|Found [0-9]+ dependencies|Loading [0-9]+ mods' "$work/all.log" | sort -u > "$work/found.txt" || true
           echo "::group::mod files the loader found"
           cat "$work/found.txt"
           echo "::endgroup::"
@@ -387,13 +391,13 @@ jobs:
             'Found mod file photon-kotlin-runtime-2.2.21.jar of type' \
             'Found mod file ldlib1-1.0.52.a.jar of type MOD' \
             'Photon is initializing on platform'; do
-            if ! grep -Fq "$needle" "$log"; then
+            if ! grep -Fq "$needle" "$work/all.log"; then
               echo "::error title=forge server::missing from the server log: $needle"
               fail=1
             fi
           done
           for companion in "$work"/mods/*.jar; do
-            if ! grep -Fq "Found mod file $(basename "$companion") of type" "$log"; then
+            if ! grep -Fq "Found mod file $(basename "$companion") of type" "$work/all.log"; then
               echo "::error title=forge server::the loader never picked up $(basename "$companion")"
               fail=1
             fi
