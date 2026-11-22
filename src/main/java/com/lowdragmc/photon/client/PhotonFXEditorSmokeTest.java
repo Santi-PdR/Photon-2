@@ -2624,6 +2624,12 @@ public final class PhotonFXEditorSmokeTest {
                 if (editor.getCurrentProject() != realShield || editor.runtime == null)
                     throw new IllegalStateException("Real shield project did not initialize in the editor");
                 System.setProperty("photon.realShieldSmoke", "true");
+            } else if (ticks == 220) {
+                // a window-mode dialog over the live editor, while nothing reloads; closed and measured six frames
+                // later, once the UI has laid it out (a resource reload's overlay would stop the frames)
+                com.lowdragmc.photon.gui.editor.DialogSizeRegression.open(editor);
+            } else if (ticks == 226) {
+                com.lowdragmc.photon.gui.editor.DialogSizeRegression.verify();
             } else if (ticks == 240) {
                 var shield = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
@@ -3908,7 +3914,7 @@ public final class PhotonFXEditorSmokeTest {
 
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
-        // every saved project into one pack at once (File > Export > Export All Projects to FXPack...)
+        // every saved project and workspace .fx into one pack at once (File > Export > Export All Effects to FXPack...)
         com.lowdragmc.photon.gui.editor.ExportAllRegression.verify(source);
         var encoded = NbtIo.read(projectFile.toFile());
         var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")

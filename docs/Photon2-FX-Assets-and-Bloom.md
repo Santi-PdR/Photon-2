@@ -19,10 +19,12 @@ el audio suena una vez. Los controles de volumen, pitch, categoría y atenuació
 editables. Al exportar el efecto, Photon incluye el `.ogg` y su registro junto al FX en el `.fxpack`.
 
 **Sonido 3D**: con **3D attenuation** marcada (los clips nuevos nacen así) el sonido suena desde el objeto
-destino de la pista o, si no tiene, desde el propio FX (la entidad o el bloque), y baja linealmente con la
-distancia hasta quedar en silencio en **3D range (blocks)** (48 por defecto: a 30 bloques se oye a un tercio
-aproximado). Desmarcada, todos los que ven el FX lo oyen al mismo volumen. Un jugador que llega después de
-empezar el clip también lo oye al acercarse.
+destino de la pista o, si no tiene, desde el propio FX (la entidad o el bloque), y baja con la distancia como
+un sonido real —volumen completo hasta 1/32 del alcance y, desde ahí, la mitad de ganancia por cada vez que se
+duplica la distancia— hasta quedar en silencio en **3D range (blocks)** (250 por defecto: fuerte hasta 8
+bloques, la mitad de fuerte a 25, un cuarto de ganancia a 30, apenas audible a 125). Desmarcada, todos los que
+ven el FX lo oyen al mismo volumen. Un jugador que llega después de empezar el clip también lo oye al
+acercarse. El preview del editor no es posicional: la atenuación se oye en el juego.
 
 **Sonido al eliminar el FX**: en el inspector de la pista Audio (clic en su cabecera), **When the FX is
 removed → play a sound** define un sonido (con volumen, tono, categoría y los mismos ajustes 3D) que suena una

@@ -33,8 +33,9 @@ public class AudioClip extends Clip {
      * Default {@link #range()}: an effect worth a timeline is usually big (an aura, a boss ability) and wanted
      * audible from across a whole arena, lower the further away one stands — 250 blocks is what its authors asked
      * for after trying 48 ("make it 250 by default, heard at that distance, quieter and from over there when far").
-     * The falloff is perceptual ({@link TimelineSoundInstance#falloff}), so even over 250 blocks a listener hears
-     * the sound grow and fade with every step rather than only in the last stretch.
+     * The falloff is the inverse-distance law ({@link TimelineSoundInstance#falloff}): full within 8 blocks, half as
+     * loud at 25, faint at the edge — so 250 is where the sound ends, not how far it stays loud; 30 blocks out it
+     * is unmistakably over there.
      */
     public static final float DEFAULT_RANGE = 250f;
     /** Bounds for {@link #range(float)}; a range this small is as good as off, this large as good as global. */
@@ -131,10 +132,11 @@ public class AudioClip extends Clip {
     }
 
     /**
-     * How far a 3D sound carries, in blocks: full volume at the source, silent at this distance, and in between
-     * the loudness falls evenly with distance — half as loud a third of the way out, a quarter at two thirds
-     * ({@link TimelineSoundInstance#falloff}). The vanilla engine's own falloff is fixed at a sound file's 16 blocks,
-     * too short for an effect-sized sound. Ignored while {@link #attenuation()} is off.
+     * How far a 3D sound carries, in blocks: silent at this distance, faint just inside it, and up close the
+     * inverse-distance law — full volume within a 32nd of the range, half the gain per doubling of the distance,
+     * half as loud a tenth of the way out ({@link TimelineSoundInstance#falloff}). The vanilla engine's own falloff
+     * is fixed at a sound file's 16 blocks, too short for an effect-sized sound. Ignored while {@link #attenuation()}
+     * is off.
      */
     public float range() {
         return range;

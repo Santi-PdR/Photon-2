@@ -214,10 +214,16 @@ public final class FXFileActions {
     // ---- export all --------------------------------------------------------------------------------
 
     /**
-     * One saved project the batch export offers: its file and the name it is exported as (the id becomes
-     * {@code <pack>:<fxName>}, the way the one-project export names it after the file).
+     * One effect the batch export offers: its file — a saved {@code .fxproj}, or a playable {@code .fx} of the
+     * workspace — and the name it is exported as (the id becomes {@code <pack>:<fxName>}, the way the one-project
+     * export names it after the file). {@code standsFor} is the id the file already plays as, when it has one: an
+     * {@code editfx/} working copy's effect, or the {@code .fx}'s own id; null for a plain project.
      */
-    record ProjectCandidate(File file, String fxName) {
+    record ProjectCandidate(File file, String fxName, @Nullable ResourceLocation standsFor) {
+        /** A playable definition rather than an editor project. */
+        boolean definition() {
+            return file.getName().endsWith(FX.SUFFIX);
+        }
     }
 
     /**
@@ -236,12 +242,13 @@ public final class FXFileActions {
                     .forEach(path -> {
                         var relative = root.relativize(path).toString().replace('\\', '/');
                         var name = relative.substring(0, relative.length() - suffix.length());
+                        ResourceLocation edited = null;
                         if (name.startsWith("editfx/")) {
-                            var edited = FXProject.editFxIdFromProjectFile(path.toFile());
+                            edited = FXProject.editFxIdFromProjectFile(path.toFile());
                             if (edited == null) return; // not <namespace>/<path>: nothing it stands for
                             name = edited.getPath();
                         }
-                        out.add(new ProjectCandidate(path.toFile(), name));
+                        out.add(new ProjectCandidate(path.toFile(), name, edited));
                     });
         } catch (java.io.IOException e) {
             Photon.LOGGER.error("Could not list the projects in {}", projectsDir, e);
@@ -249,11 +256,80 @@ public final class FXFileActions {
         return out;
     }
 
+    /**
+     * Every {@code .fx} under {@code assets/<namespace>/fx/} of the given asset roots, each named by its path under
+     * {@code fx/} — its id's path, the name an {@code editfx/} copy of it gets too — in root order, then path order.
+     * The ids in {@code covered} are left out, and an id met twice (the same effect in two roots) is listed once,
+     * from the first root. A file whose name no id allows (uppercase, a space: Export FX writes what was typed, and
+     * the game never loads it) is offered all the same, standing for no id; the pack names it the sanitized way the
+     * one-project export does.
+     */
+    static List<ProjectCandidate> findDefinitions(List<File> assetRoots, java.util.Set<ResourceLocation> covered) {
+        var out = new ArrayList<ProjectCandidate>();
+        var seen = new java.util.HashSet<>(covered);
+        for (var assets : assetRoots) {
+            var namespaces = assets.getAbsoluteFile().listFiles(File::isDirectory);
+            if (namespaces == null) continue;
+            java.util.Arrays.sort(namespaces);
+            for (var namespace : namespaces) {
+                var fxDir = new File(namespace, "fx").toPath();
+                if (!Files.isDirectory(fxDir)) continue;
+                try (var walk = Files.walk(fxDir)) {
+                    walk.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(FX.SUFFIX))
+                            .sorted()
+                            .forEach(path -> {
+                                var relative = fxDir.relativize(path).toString().replace('\\', '/');
+                                var name = relative.substring(0, relative.length() - FX.SUFFIX.length());
+                                var id = LDLib2.isValidResourceLocation(namespace.getName() + ":" + name)
+                                        ? new ResourceLocation(namespace.getName(), name) : null;
+                                if (id != null && !seen.add(id)) return; // a working copy, or an earlier root, stands for it
+                                out.add(new ProjectCandidate(path.toFile(), name, id));
+                            });
+                } catch (java.io.IOException e) {
+                    Photon.LOGGER.error("Could not list the effects in {}", fxDir, e);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the batch export offers: every saved project, then every playable {@code .fx} of the workspace that no
+     * project already stands for — an {@code editfx/} working copy is the same effect as the {@code .fx} it edits (and
+     * carries the author's unsaved edits when it is the open project), and a project named like an {@code .fx} is
+     * exported as that name, so the {@code .fx} would only be skipped as a name taken twice. Converted Photon 1
+     * effects, {@code Export FX} output and effects edited in place all live as {@code .fx} under
+     * {@code photon/assets} (older ones under {@code ldlib2/assets}); a batch that listed only the projects left most
+     * of an author's effects behind ("only 20 exported, and only the .fxproj").
+     */
+    static List<ProjectCandidate> findCandidates(File projectsDir, List<File> assetRoots) {
+        var out = new ArrayList<>(findProjects(projectsDir));
+        var covered = new java.util.HashSet<ResourceLocation>();
+        var names = new java.util.HashSet<String>();
+        for (var project : out) {
+            if (project.standsFor() != null) covered.add(project.standsFor());
+            names.add(project.fxName());
+        }
+        for (var definition : findDefinitions(assetRoots, covered)) {
+            if (names.contains(definition.fxName())) {
+                Photon.LOGGER.info("fxpack export: {} is exported from the project of the same name, not listed twice", definition.file());
+                continue;
+            }
+            out.add(definition);
+        }
+        return out;
+    }
+
+    /** The folders whose {@code assets/<namespace>/fx/*.fx} the batch export offers: the workspace, then the pre-workspace tree. */
+    static List<File> workspaceAssetRoots() {
+        return List.of(PhotonPaths.getAssetsDir(), LDLib2.getAssetsDir());
+    }
+
     private static void showExportAllFxPackDialog(Editor editor, @Nullable FXProject openProject) {
-        var candidates = findProjects(PhotonPaths.getProjectsDir());
+        var candidates = findCandidates(PhotonPaths.getProjectsDir(), workspaceAssetRoots());
         if (candidates.isEmpty()) {
             notify(editor, "photon.export_fxpack_all", Component.translatable("photon.export_fxpack_all.none",
-                    PhotonPaths.getProjectsDir().getAbsolutePath()));
+                    PhotonPaths.getProjectsDir().getAbsolutePath(), PhotonPaths.getAssetsDir().getAbsolutePath()));
             return;
         }
         var directory = FXPacks.getFxPacksDir();
@@ -287,7 +363,6 @@ public final class FXFileActions {
             layout.flex(1);
         });
         var selected = new java.util.LinkedHashSet<>(candidates);
-        var projectsDir = PhotonPaths.getProjectsDir().getAbsoluteFile().toPath();
         for (var candidate : candidates) {
             var fxId = FXPackExporter.fxId(namespace, candidate.fxName());
             var row = new UIElement().layout(layout -> {
@@ -300,8 +375,7 @@ public final class FXFileActions {
                 if (on) selected.add(candidate);
                 else selected.remove(candidate);
             });
-            var relative = projectsDir.relativize(candidate.file().getAbsoluteFile().toPath()).toString().replace('\\', '/');
-            var text = Component.translatable("photon.export_fxpack_all.row", fxId.toString(), relative);
+            var text = Component.translatable("photon.export_fxpack_all.row", fxId.toString(), shownPath(candidate.file()));
             // a long row is cut at the window, rolls while hovered and reads whole in the tooltip
             var label = new Label().setText(text)
                     .textStyle(style -> style.textWrap(TextWrap.HOVER_ROLL))
@@ -345,9 +419,9 @@ public final class FXFileActions {
     /**
      * Exports {@code chosen} into {@code packFile} one after another (the pack accumulates, shared resources are
      * stored once). The open project is exported as it is in the editor, unsaved edits included, like the
-     * one-project export; the others are read from their files. A project that fails — unreadable, a cycle, a
-     * name another project already took — is logged and skipped, not the reason to stop the rest. Without
-     * dialogs so the smoke test can drive it.
+     * one-project export; the others are read from their files — a playable {@code .fx} is converted in memory,
+     * nothing is written next to it. A candidate that fails — unreadable, a cycle, a name another one already
+     * took — is logged and skipped, not the reason to stop the rest. Without dialogs so the smoke test can drive it.
      */
     static BatchOutcome exportProjects(@Nullable FXProject openProject, @Nullable File openProjectFile, File packFile,
                                        String namespace, List<ProjectCandidate> chosen) {
@@ -367,9 +441,9 @@ public final class FXFileActions {
             FXProject project;
             try {
                 project = openProject != null && sameFile(candidate.file(), openProjectFile)
-                        ? openProject : loadProject(candidate.file());
+                        ? openProject : load(candidate);
             } catch (Exception e) {
-                Photon.LOGGER.error("fxpack export: could not read the project {}", candidate.file(), e);
+                Photon.LOGGER.error("fxpack export: could not read {}", candidate.file(), e);
                 skipped.add(shortName);
                 continue;
             }
@@ -410,6 +484,32 @@ public final class FXFileActions {
     private static FXProject loadProject(File file) throws Exception {
         if (FXProject.TYPE.loadProjectFromFile(file) instanceof FXProject project) return project;
         throw new IllegalStateException(file + " is not a Photon FX project");
+    }
+
+    /**
+     * What a candidate exports: the saved project read back, or — for a playable {@code .fx} — the definition
+     * converted in memory the way {@code /photon fx editfx} opens one, knowing the id it plays as so an FX instance
+     * leading back to it reads as the cycle it is. No project file is written.
+     */
+    private static FXProject load(ProjectCandidate candidate) throws Exception {
+        if (!candidate.definition()) return loadProject(candidate.file());
+        var tag = FXProjectConverter.readFileTag(candidate.file());
+        var result = FXProjectConverter.convertInMemory(tag, candidate.standsFor());
+        result.warnings().forEach(warning -> Photon.LOGGER.warn("fxpack export ({}): {}", candidate.file(), warning));
+        return result.project();
+    }
+
+    /**
+     * A candidate's file the way the author knows it: under the projects folder relative to it (the way projects
+     * were always shown), elsewhere relative to the game folder ({@code photon/assets/<ns>/fx/<name>.fx}).
+     */
+    private static String shownPath(File file) {
+        var path = file.getAbsoluteFile().toPath();
+        var projects = PhotonPaths.getProjectsDir().getAbsoluteFile().toPath();
+        if (path.startsWith(projects)) return projects.relativize(path).toString().replace('\\', '/');
+        var game = Platform.getGamePath().toAbsolutePath();
+        if (path.startsWith(game)) return game.relativize(path).toString().replace('\\', '/');
+        return path.toString();
     }
 
     // ---- conversion --------------------------------------------------------------------------------

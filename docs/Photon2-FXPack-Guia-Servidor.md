@@ -58,6 +58,13 @@ Para la guía resumida, consulta [Photon en tu servidor: explicación fácil](Ph
    - sonidos `.ogg` con su línea en `sounds.json`.
 6. Si el log avisa de un recurso que **no pudo** encontrar, ese archivo no existe en tu instancia y
    el exportador no puede inventarlo: consíguelo, ponlo en `photon/assets/...` y vuelve a exportar.
+
+Para meter **muchos efectos en un solo pack**: **File → Export → Export All Effects to FXPack...**
+(también sin proyecto abierto). Lista todos los proyectos guardados de `photon/projects/` **y** todos los
+`.fx` sueltos de `photon/assets/<namespace>/fx/` (los convertidos de Photon 1, los exportados con Export FX,
+los editados in situ; también los antiguos de `ldlib2/assets/`). Cada uno entra como `<pack>:<ruta>`;
+desmarca los que no quieras. Un `.fx` que ya representa un proyecto (`editfx/`) o que se llama igual que
+uno no se lista dos veces.
    El mensaje dice la ruta exacta que falta.
 
 Al exportar, el propio editor te dice si el paquete ya está montado ("live"), si otro paquete de más

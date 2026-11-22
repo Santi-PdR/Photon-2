@@ -27,9 +27,9 @@ import java.util.function.Supplier;
  * fades over the sound file's {@code attenuation_distance} — 16 blocks unless the {@code sounds.json} says otherwise,
  * and an imported sound's never does — fixed per sound, not per clip, so an effect-sized sound was silent past 16
  * blocks and nothing in the editor could change that. The falloff is applied to the volume here instead, per tick,
- * over the clip's own range, and it is perceptual rather than linear (see {@link #falloff(double, float)}). A 3D
- * source still plays from its position (not relative), so a mono sound pans — OpenAL plays a stereo file everywhere,
- * unpositioned, which is why {@link AudioConverter} imports sounds as mono.
+ * over the clip's own range, and it follows the inverse-distance law rather than a linear ramp (see
+ * {@link #falloff(double, float)}). A 3D source still plays from its position (not relative), so a mono sound pans —
+ * OpenAL plays a stereo file everywhere, unpositioned, which is why {@link AudioConverter} imports sounds as mono.
  */
 @OnlyIn(Dist.CLIENT)
 public class TimelineSoundInstance extends AbstractTickableSoundInstance {
@@ -103,21 +103,27 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
 
     /**
      * Decibels a positional sound has dropped by at the edge of its range, before the last stretch eases it into
-     * silence: 30 dB is an eighth of the loudness, "faint" — and it makes a third of the range the distance at which
-     * the sound is half as loud (10 dB), whatever the range is.
+     * silence: 30 dB is an eighth of the loudness, "faint". Under the inverse-distance law of {@link #falloff} it also
+     * fixes the reference distance the sound is at full volume within — {@code range / 10^(30/20)}, a 32nd of the
+     * range — and so the distance at which the sound is half as loud (10 dB down): a tenth of the range, whatever
+     * the range is.
      */
     public static final float EDGE_DROP_DB = 30f;
     /** The fraction of the range over which the gain is eased from its edge value to zero (no step at the edge). */
     private static final double EASE_FRACTION = 0.1;
 
     /**
-     * The gain a positional sound has for a listener {@code distance} blocks away: full at the source, silent at
-     * {@code range}, and in between the <em>loudness</em> falls evenly with distance — the gain is exponential, a
-     * fixed number of decibels per block ({@link #EDGE_DROP_DB} over the range), with the last tenth of the range
-     * easing into silence. The vanilla engine's linear gain is not what a listener hears: hearing is logarithmic, so
-     * a linear ramp sounds like nothing changes over the first half of the range and then the sound drops away all at
-     * once ("it only updates every 20 blocks", as a tester put it); an exponential one sounds like a steady fade.
-     * 1 for no range and for a distance that is not a number, so a broken position is heard rather than lost.
+     * The gain a positional sound has for a listener {@code distance} blocks away: full within the reference distance
+     * (a 32nd of the range: 8 blocks of 250), then the inverse-distance law — {@code reference / distance}, the way a
+     * real point source carries and what OpenAL's default model does: half the gain, 6 dB, for every doubling of the
+     * distance — down to {@link #EDGE_DROP_DB} at the edge, with the last tenth of the range easing into silence (no
+     * step at the edge). Over 250 blocks: 0.79 at 10, 0.26 at 30, 0.13 at 60, 0.06 at 125, 0 at 250. The curves
+     * before it were flat near the source, which is where a listener expects the change: the engine's linear gain
+     * ({@code 1 - d/range}) was 6 dB down only at half the range ("it only updates every 20 blocks", as a tester put
+     * it), and an even number of decibels per block was 4 dB down 30 blocks from a 250-block source — carrying across
+     * an arena, as asked, but 30 blocks away it played as if at the listener's ear ("I'm 30 blocks from the fx and it
+     * is right in my ear"). 1 for no range and for a distance that is not a number, so a broken position is heard
+     * rather than lost.
      */
     public static float falloff(double distance, float range) {
         if (!(range > 0) || !(distance >= 0)) {
@@ -127,7 +133,8 @@ public class TimelineSoundInstance extends AbstractTickableSoundInstance {
         if (t >= 1) {
             return 0f;
         }
-        var gain = Math.pow(10, -EDGE_DROP_DB / 20 * t);
+        var reference = range * Math.pow(10, -EDGE_DROP_DB / 20);
+        var gain = distance <= reference ? 1 : reference / distance;
         var ease = Math.min(1, (1 - t) / EASE_FRACTION);
         return (float) Mth.clamp(gain * ease, 0, 1);
     }

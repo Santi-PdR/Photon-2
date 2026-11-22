@@ -26,11 +26,12 @@ import java.util.UUID;
  * server (a 3D clip that was heard at the same volume everywhere; no way to give an aura an ending sound; a remove
  * that cut the effect in one frame instead of letting it fade):
  * <ol>
- * <li>A 3D clip plays from the effect's root when its track has no target (it used to need one, silently), with a
- * perceptual falloff over its own range — quieter with every block, not the linear gain that sounds like a step
- * near the edge ("it only updates every 20 blocks") — and the sound engine's distance model is kept out of it: its
- * range is the sound file's {@code attenuation_distance}, 16 blocks for every imported sound, which no clip setting
- * could change. The default range is the 250 blocks its authors asked for.</li>
+ * <li>A 3D clip plays from the effect's root when its track has no target (it used to need one, silently), with an
+ * inverse-distance falloff over its own range — half the gain per doubling of the distance from the source, the way
+ * a real sound carries, so the drop is heard where a listener expects it, near the source (a linear gain "only
+ * updates every 20 blocks"; an even dB-per-block one was "right in my ear" 30 blocks out) — and the sound engine's
+ * distance model is kept out of it: its range is the sound file's {@code attenuation_distance}, 16 blocks for every
+ * imported sound, which no clip setting could change. The default range is the 250 blocks its authors asked for.</li>
  * <li>An audio track's "on remove" sound is saved with the track, copied with it, and started exactly once by
  * {@link FXRuntime#destroy}, forced or not — and not by {@link FXRuntime#discard()}, which is a swap.</li>
  * <li>{@code /photon fx remove} without a {@code force} argument is the graceful removal.</li>
@@ -53,19 +54,27 @@ public final class AudioRemovalRegression {
 
     private static void verifyFalloff() {
         check(AudioClip.DEFAULT_RANGE == 250f, "a new 3D clip does not carry 250 blocks: " + AudioClip.DEFAULT_RANGE);
-        check(TimelineSoundInstance.falloff(0, 250) == 1f, "a listener at the source does not hear full volume");
-        // half as loud (-10 dB, a gain of 0.316) a third of the way out, whatever the range
-        check(Math.abs(TimelineSoundInstance.falloff(250 / 3.0, 250) - 0.3162f) < 1e-3f
-                        && Math.abs(TimelineSoundInstance.falloff(16, 48) - 0.3162f) < 1e-3f,
-                "a third of the range out is not half as loud: " + TimelineSoundInstance.falloff(250 / 3.0, 250));
+        // full volume at the source and within the reference distance (a 32nd of the range: 7.9 blocks of 250)
+        check(TimelineSoundInstance.falloff(0, 250) == 1f && TimelineSoundInstance.falloff(7, 250) == 1f,
+                "a listener at the source does not hear full volume");
+        // the inverse-distance law from there: half the gain per doubling, so 30 blocks from a 250-block source is
+        // clearly further away than 10 (0.26 against 0.79), and half as loud (-10 dB, 0.316) a tenth of the way out
+        check(Math.abs(TimelineSoundInstance.falloff(10, 250) - 0.7906f) < 1e-3f
+                        && Math.abs(TimelineSoundInstance.falloff(20, 250) - 0.3953f) < 1e-3f
+                        && Math.abs(TimelineSoundInstance.falloff(30, 250) - 0.2635f) < 1e-3f,
+                "30 blocks from a 250-block source is not a quarter of the gain: " + TimelineSoundInstance.falloff(30, 250));
+        check(Math.abs(TimelineSoundInstance.falloff(25, 250) - 0.3162f) < 1e-3f
+                        && Math.abs(TimelineSoundInstance.falloff(4.8, 48) - 0.3162f) < 1e-3f,
+                "a tenth of the range out is not half as loud: " + TimelineSoundInstance.falloff(25, 250));
         check(TimelineSoundInstance.falloff(250, 250) == 0f && TimelineSoundInstance.falloff(400, 250) == 0f,
                 "a listener at or past the range still hears the sound");
-        // continuous: every block further is quieter, by a bounded step, all the way to the edge (no stair, no cliff)
+        // continuous: never louder further out, quieter with every block past the reference distance, by a bounded
+        // step (the largest, 0.11, is the first block past it), all the way to the edge (no stair, no cliff)
         var previous = 1f;
         for (int block = 1; block <= 250; block++) {
             var gain = TimelineSoundInstance.falloff(block, 250);
-            check(gain < previous && previous - gain < 0.02f, "the falloff is not a steady fade at block " + block
-                    + ": " + previous + " -> " + gain);
+            check(gain <= previous && (block <= 8 || gain < previous) && previous - gain < 0.125f,
+                    "the falloff is not a steady fade at block " + block + ": " + previous + " -> " + gain);
             previous = gain;
         }
         check(TimelineSoundInstance.falloff(Double.NaN, 250) == 1f && TimelineSoundInstance.falloff(10, 0) == 1f
