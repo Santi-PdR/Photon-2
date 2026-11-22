@@ -555,6 +555,7 @@ jobs:
             '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry'
             '[kotlin-runtime-isolation-smoke] LDLib2'"'"'s Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads'
             '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel'
+            '[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -625,7 +626,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -768,6 +769,14 @@ jobs:
         run: |
           grep -Fq '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[virtual-level-tick] com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld is ticking inside a screen; Photon keeps Forge'"'"'s LevelTickEvent from being posted for LDLib2 virtual levels' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 22: FXHelper.getFX cached loaded effects but not failed loads, so a sub-emitter naming an effect that is
+      # not on the instance walked every pack and logged a stack trace per particle it emitted (63 traces in six
+      # minutes in a player's log). The regression asks for a missing id 200 times and runs such a sub-emitter for
+      # ten ticks: one read, one log line, forgotten by invalidate/clearCache.
+      - name: Require missing effects to be read and logged once
+        shell: bash
+        run: grep -Fq '[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require Photon 1 entity FX to stay on the torso
         shell: bash

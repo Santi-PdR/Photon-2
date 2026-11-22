@@ -3104,6 +3104,8 @@ public final class PhotonFXEditorSmokeTest {
         Photon.LOGGER.info("[expression-safety-smoke] formulas parse once per source, reject unknown identifiers and never yield NaN");
         com.lowdragmc.photon.client.gameobject.emitter.data.SubEmitterCycleRegression.verify(minecraft.level);
         Photon.LOGGER.info("[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run");
+        com.lowdragmc.photon.client.fx.MissingEffectRegression.verify(minecraft.level);
+        Photon.LOGGER.info("[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload");
         // A particle emitter's prewarm runs one full emission and update per tick synchronously before its first
         // frame; the field had no upper bound, so a looping emitter with millions of ticks froze the client.
         if (ParticleEmitter.prewarmTicks(Integer.MAX_VALUE, true, 100) != ParticleEmitter.MAX_PREWARM_TICKS
