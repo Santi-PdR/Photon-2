@@ -14,6 +14,8 @@ The distributable is `build/libs/photon-forge-1.20.1-26.2.2.9-forge.1.20.1-all.j
 
 The project also expects LDLib 1.0.52.a in the instance. It is a separate required mod and is listed in `META-INF/mods.toml`.
 
+Photon does not need Kotlin for Forge and does not conflict with it. The embedded LDLib2 is `libs/ldlib2-2.2.39.a.jar`, the upstream build with its Kotlin runtime relocated under `com.lowdragmc.photon.internal.embedded` (see `libs/upstream/README.md`): shipping the upstream jar with its loose `kotlin-stdlib` created a JPMS module `kotlin.stdlib` that split the `kotlin.*` packages with Kotlin for Forge and stopped the game from starting for every Kotlin mod on the instance. CI fails the build if a loose Kotlin runtime ever comes back into the distributable.
+
 ## Port notes
 
 The source adapts the Minecraft APIs, Forge networking and shader integration, resource serialization, and editor UI to the Forge 1.20.1 / LDLib2 2.2.39.a APIs. The upstream interactive UI scenarios are excluded from the production source set because they target newer LDLib2 APIs and are developer-only tools.

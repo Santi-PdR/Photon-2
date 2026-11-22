@@ -96,6 +96,79 @@ jobs:
           jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
           jar tf "$jar_file" | grep -Fxq 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.class'
 
+      # The JarJar task embeds whichever libs/ jar its version pin resolves to. The upstream LDLib2 build
+      # nests a loose kotlin-stdlib, which becomes a JPMS module `kotlin.stdlib` exporting kotlin.*: a split
+      # package with Kotlin for Forge, and the game refuses to start for every Kotlin mod on the instance
+      # ("Modules thedarkcolour.kotlinforforge and kotlin.stdlib export package kotlin.contracts ...").
+      # Only libs/ldlib2-2.2.39.a.jar, whose Kotlin runtime is relocated under
+      # com.lowdragmc.photon.internal.embedded, may ship. Every nested jar, two levels deep, is listed as
+      # a notice annotation so an audit can read what the distributable carries without downloading it.
+      - name: Verify the distributable embeds the relocated Kotlin runtime
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          work="$RUNNER_TEMP/jarjar-audit"
+          rm -rf "$work"
+          mkdir -p "$work/level1" "$work/level2"
+          unzip -p "$jar_file" META-INF/jarjar/metadata.json > "$work/photon-metadata.json"
+          python3 - "$work/photon-metadata.json" <<'PY'
+          import json, sys
+          jars = json.load(open(sys.argv[1]))["jars"]
+          for jar in jars:
+              ident = jar["identifier"]
+              print("::notice title=jar-in-jar (photon)::%s:%s %s -> %s" % (ident["group"], ident["artifact"], jar["version"]["artifactVersion"], jar["path"]))
+          ldlib2 = [jar for jar in jars if jar["identifier"] == {"group": "local", "artifact": "ldlib2"}]
+          assert len(ldlib2) == 1, "LDLib2 is not embedded exactly once: %r" % ldlib2
+          assert ldlib2[0]["path"] == "META-INF/jarjar/ldlib2-2.2.39.a.jar", "the JarJar pin resolved LDLib2 to %s, not the relocated libs/ldlib2-2.2.39.a.jar" % ldlib2[0]["path"]
+          assert not any(jar["identifier"]["artifact"].startswith("kotlin") for jar in jars), "a Kotlin library is nested directly in the distributable: %r" % jars
+          PY
+          unzip -q -o "$jar_file" 'META-INF/jarjar/*.jar' -d "$work/level1"
+          offenders=0
+          # listings go through files: `unzip | grep -q` under pipefail reports grep's early exit as a failure
+          inspect() { # <jar> <label>: a loose Kotlin runtime has a kotlin/ package root or a kotlin.* module name
+            unzip -Z1 "$1" > "$work/listing.txt"
+            if grep -Eq '^kotlin/' "$work/listing.txt"; then
+              echo "::error title=loose kotlin runtime::$2 carries a kotlin/ package root"
+              offenders=$((offenders + 1))
+            fi
+            : > "$work/manifest.txt"
+            if grep -Fxq 'META-INF/MANIFEST.MF' "$work/listing.txt"; then
+              unzip -p "$1" META-INF/MANIFEST.MF | tr -d '\r' > "$work/manifest.txt"
+            fi
+            if grep -Eq '^Automatic-Module-Name: kotlin' "$work/manifest.txt"; then
+              echo "::error title=loose kotlin runtime::$2 declares a kotlin.* module name"
+              offenders=$((offenders + 1))
+            fi
+          }
+          for nested in "$work"/level1/META-INF/jarjar/*.jar; do
+            name=$(basename "$nested")
+            inspect "$nested" "$name"
+            if grep -Fxq 'META-INF/jarjar/metadata.json' "$work/listing.txt"; then
+              inner="$work/level2/${name%.jar}"
+              mkdir -p "$inner"
+              unzip -q -o "$nested" 'META-INF/jarjar/*' -d "$inner"
+              for deep in "$inner"/META-INF/jarjar/*.jar; do
+                [ -f "$deep" ] || continue
+                echo "::notice title=jar-in-jar ($name)::$(basename "$deep") ($(stat -c %s "$deep") B)"
+                inspect "$deep" "$name -> $(basename "$deep")"
+              done
+            fi
+          done
+          test "$offenders" -eq 0
+          ldlib2_inner="$work/level2/ldlib2-2.2.39.a/META-INF/jarjar"
+          test -f "$ldlib2_inner/metadata.json"
+          grep -Fq '"artifact": "photon-kotlin-runtime"' "$ldlib2_inner/metadata.json"
+          if grep -Fq 'kotlin-stdlib' "$ldlib2_inner/metadata.json"; then
+            echo "::error title=loose kotlin runtime::the embedded LDLib2 still declares kotlin-stdlib in its Jar-in-Jar metadata"
+            exit 1
+          fi
+          runtime=$(find "$ldlib2_inner" -maxdepth 1 -name 'photon-kotlin-runtime-*.jar' -print -quit)
+          test -n "$runtime"
+          unzip -Z1 "$runtime" > "$work/listing.txt"
+          grep -Fxq 'com/lowdragmc/photon/internal/embedded/kotlin/Unit.class' "$work/listing.txt"
+          echo "Distributable embeds $(basename "$runtime") under com.lowdragmc.photon.internal.embedded; no loose Kotlin runtime found."
+
       - name: Upload distributable
         id: distributable
         uses: actions/upload-artifact@v4
@@ -197,6 +270,7 @@ jobs:
             '[audio-conversion-smoke] user audio formats convert to playable mono Ogg Vorbis'
             '[sound-length-smoke] an imported sound reports its measured length once asked to wait for it instead of 0 on the first ask'
             '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry'
+            '[kotlin-runtime-isolation-smoke] LDLib2'"'"'s Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -267,7 +341,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -467,6 +541,7 @@ jobs:
           grep -Fq '[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[sound-length-smoke] an imported sound reports its measured length once asked to wait for it instead of 0 on the first ask' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[kotlin-runtime-isolation-smoke] LDLib2's Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads" "$RUNNER_TEMP/photon-client.log"
 
       - name: Require self-contained shield FX pack
         shell: bash

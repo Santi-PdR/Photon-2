@@ -51,7 +51,7 @@ El objetivo ha sido conservar las funciones de Photon 2 y adaptar el código que
 | Minecraft | 1.20.1 | Versión objetivo |
 | Forge | build `47.4.28`; mínimo declarado `47.4.10` | Loader y runtime |
 | Java | 17 | Toolchain y runtime esperado |
-| LDLib2 | `2.2.39.a+forge.1.20.1` | Editor y APIs usadas por Photon; empaquetado dentro del JAR distributivo |
+| LDLib2 | `2.2.39.a` (= upstream `2.2.39.a+forge.1.20.1` con el runtime Kotlin relocalizado bajo `com.lowdragmc.photon.internal.embedded`; `libs/upstream/README.md`) | Editor y APIs usadas por Photon; empaquetado dentro del JAR distributivo |
 | KilaGraph | `20.1.0.15` | Grafo/materiales Kila; empaquetado dentro del JAR distributivo |
 | LDLib | `1.0.52.a` | Dependencia externa del entorno; no queda sustituida por LDLib2 |
 | Oculus/Iris | Opcional | Compatibilidad de shaders; Bloom con shaderpack tiene un ajuste aparte |

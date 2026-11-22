@@ -88,6 +88,11 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // Compile against the matching Forge 1.20.1 dependencies recovered from the
     // previous 2.2.2.3 port. The local artifacts are also used in Jar-in-Jar.
+    // libs/ldlib2-2.2.39.a.jar is the upstream LDLib2 build with its Kotlin runtime relocated under
+    // com.lowdragmc.photon.internal.embedded (see libs/upstream/README.md): a loose kotlin-stdlib
+    // nested in the distributable is a JPMS module exporting kotlin.*, which splits packages with
+    // Kotlin for Forge and stops the game from starting. The pin below must keep resolving to that
+    // file (flatDir picks the jar by "<name>-<version>.jar"); CI checks the packaged result.
     implementation fg.deobf('local:ldlib2:2.2.39.a')
     jarJar(fg.deobf('local:ldlib2:2.2.39.a'))
     compileOnly fg.deobf('local:ldlib1:1.0.52.a')
@@ -127,7 +132,10 @@ mixin {
 
 jarJar.versionInformation {
     ranged(dependency { it.group == 'local' && it.name == 'ldlib2' }, '[2.2.39.a,2.2.40)')
-    pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a+forge.1.20.1')
+    // The JarJar task re-resolves each dependency at its pinned version, so this pin decides which
+    // file in libs/ is embedded: '2.2.39.a' is the relocated build; '2.2.39.a+forge.1.20.1' used to
+    // embed the upstream jar with its loose kotlin-stdlib (the Kotlin for Forge split-package crash).
+    pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a')
     ranged(dependency { it.group == 'local' && it.name == 'kilagraph' }, '[20.1.0.15,20.1.0.16)')
     pin(dependency { it.group == 'local' && it.name == 'kilagraph' }, '20.1.0.15')
     ranged(dependency { it.name == 'jVorbisEnc' }, '[0.0.2,0.0.3)')

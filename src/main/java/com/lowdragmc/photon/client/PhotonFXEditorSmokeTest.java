@@ -2433,6 +2433,8 @@ public final class PhotonFXEditorSmokeTest {
             // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
+                // the LDLib2 in this run must link against the relocated Kotlin runtime, as the distributable does
+                com.lowdragmc.photon.integration.KotlinRuntimeIsolationRegression.verify();
                 verifyLegacyBlendSafety();
                 verifyBloomSceneMask();
                 verifyBloomDefaults();
