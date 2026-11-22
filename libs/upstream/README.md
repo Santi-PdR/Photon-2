@@ -26,4 +26,8 @@ libraries" fails the build if a loose `kotlin/` package root ever comes back.
 The audio codecs (jLayer, JAAD, jVorbisEnc) hit the same wall in round 19 — Citadel carries its own
 JAAD, so a nested `jaad-….jar` split `net.sourceforge.jaad.*` with it — and are no longer nested at
 all: `shadowJar` in `build.gradle` relocates them into `com.lowdragmc.photon.internal.embedded`
-inside the mod jar. Nothing Photon ships may export a package under a third party's name.
+inside the mod jar. Nothing Photon ships may export a package under a third party's name. Since
+round 20 the CI step "Smoke-test the distributable on a Forge server next to Kotlin for Forge and
+Citadel" proves it the way a player would notice: the packaged jar, LDLib 1 and the newest Forge
+1.20.1 builds of those two mods go into the `mods/` folder of a freshly installed Forge server, which
+must reach its ready prompt with every mod file (nested ones included) loaded.
