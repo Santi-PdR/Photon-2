@@ -330,9 +330,12 @@ jobs:
           PY
             read -r url file version < "$work/$project.pick"
             curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/mods/$file" "$url"
+            # a mod (mods.toml) or a language provider / game library (FMLModType in the manifest):
+            # Kotlin for Forge's -all jar is a LANGPROVIDER whose mods.toml lives in a nested jar
             unzip -Z1 "$work/mods/$file" > "$work/listing.txt"
-            if ! grep -Fxq 'META-INF/mods.toml' "$work/listing.txt"; then
-              echo "::error title=companion mod::$file from Modrinth ($project $version) is not a Forge mod jar"
+            unzip -p "$work/mods/$file" META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' > "$work/manifest.txt" || true
+            if ! grep -Fxq 'META-INF/mods.toml' "$work/listing.txt" && ! grep -q '^FMLModType:' "$work/manifest.txt"; then
+              echo "::error title=companion mod::$file from Modrinth ($project $version) is neither a mod nor an FML library jar"
               exit 1
             fi
             echo "::notice title=companion mod::$project $version ($file, $(stat -c %s "$work/mods/$file") B)"
