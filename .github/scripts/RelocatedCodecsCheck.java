@@ -4,6 +4,8 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -36,7 +38,8 @@ import com.lowdragmc.photon.internal.embedded.javazoom.jl.decoder.Header;
  * the editor.
  *
  * <p>Usage: {@code java RelocatedCodecsCheck <dir>} with {@code beat.mp3}, {@code beat.m4a} and
- * {@code beat.aac} in that directory; writes {@code relocated.ogg} next to them.
+ * {@code beat.aac} in that directory; writes {@code beat-notags.m4a} and {@code relocated.ogg} next to
+ * them.
  */
 public final class RelocatedCodecsCheck {
     private record Pcm(int channels, int sampleRate, byte[] data, int frames) {
@@ -56,7 +59,7 @@ public final class RelocatedCodecsCheck {
             }
         }
         Pcm mp3 = decodeMp3(dir.resolve("beat.mp3"));
-        Pcm m4a = decodeMp4(dir.resolve("beat.m4a"));
+        Pcm m4a = decodeMp4(withoutTags(dir.resolve("beat.m4a")));
         Pcm aac = decodeAdts(dir.resolve("beat.aac"));
         for (var decoded : List.of(mp3, m4a, aac)) {
             require(decoded.channels() == 2 && decoded.sampleRate() == 44100,
@@ -102,6 +105,53 @@ public final class RelocatedCodecsCheck {
         } finally {
             bitstream.close();
         }
+    }
+
+    /**
+     * ffmpeg writes iTunes tags ({@code moov > udta > meta > ilst}) that JAAD's box walker misparses
+     * ("box too large for parent") before it reaches the audio track; AudioConverter strips {@code udta}
+     * and {@code meta} before opening an MP4, so the check hands JAAD the same box subset. {@code moov}
+     * follows {@code mdat} in ffmpeg's default layout, so shrinking it leaves the chunk offsets valid.
+     */
+    private static Path withoutTags(Path file) throws IOException {
+        byte[] data = Files.readAllBytes(file);
+        var out = new ByteArrayOutputStream(data.length);
+        copyBoxes(data, 0, data.length, out);
+        Path stripped = file.resolveSibling("beat-notags.m4a");
+        Files.write(stripped, out.toByteArray());
+        return stripped;
+    }
+
+    /** Copies the boxes in [from, to), dropping udta/meta and rewriting moov/trak around what remains. */
+    private static void copyBoxes(byte[] buf, int from, int to, ByteArrayOutputStream out) throws IOException {
+        int i = from;
+        while (i + 8 <= to) {
+            long size = ByteBuffer.wrap(buf, i, 4).getInt() & 0xFFFFFFFFL;
+            String type = new String(buf, i + 4, 4, StandardCharsets.ISO_8859_1);
+            int header = 8;
+            if (size == 1 && i + 16 <= to) {
+                size = ByteBuffer.wrap(buf, i + 8, 8).getLong();
+                header = 16;
+            } else if (size == 0) {
+                size = to - i; // box to the end of the file
+            }
+            long end = i + size;
+            if (size < header || end > to) throw new IOException("malformed box " + type + " at " + i);
+            if (type.equals("udta") || type.equals("meta")) {
+                // dropped, as AudioConverter.scrubMp4Metadata does
+            } else if (type.equals("moov") || type.equals("trak")) {
+                var inner = new ByteArrayOutputStream((int) (end - i));
+                copyBoxes(buf, i + header, (int) end, inner);
+                byte[] body = inner.toByteArray();
+                out.write(ByteBuffer.allocate(4).putInt(body.length + 8).array());
+                out.write(type.getBytes(StandardCharsets.ISO_8859_1));
+                out.write(body);
+            } else {
+                out.write(buf, i, (int) (end - i));
+            }
+            i = (int) end;
+        }
+        if (i < to) out.write(buf, i, to - i);
     }
 
     /** JAAD's MP4 demuxer and AAC decoder, as AudioConverter.Mp4Source drives them. */
