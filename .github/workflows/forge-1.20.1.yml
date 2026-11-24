@@ -541,6 +541,7 @@ jobs:
             'ParticleEngineAccessor'
             'photon.mixins.json'
             '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact'
+            '[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)'
             '[fx-picker-smoke] the fx search lists every loadable effect'
             '[fx-instance-timeline-history-smoke] inspector snapshots persist FX instance timelines without crashing'
             '[bloom-control-smoke] dragging the scene bar'
@@ -638,7 +639,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]' '[mixin-audit-smoke]' '[mixin-audit-regression-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]' '[mixin-audit-smoke]' '[mixin-audit-regression-smoke]' '[bloom-mip-fit-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -705,6 +706,10 @@ jobs:
       - name: Require visible bloom from ordinary FX colors
         shell: bash
         run: grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the bloom pyramid to be clamped to the frame (bloom_mip_level 10 at 1080p used to crash)
+        shell: bash
+        run: grep -Fq '[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require built-in Photon material presets in the editor picker
         shell: bash

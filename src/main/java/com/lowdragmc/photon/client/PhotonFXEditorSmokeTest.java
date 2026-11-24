@@ -718,6 +718,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyEntityFxReplaysWhenTracked();
         verifyAddFxInstanceSurvivesBlankEncode();
         verifyPlayingFxBloomContribution();
+        verifyBloomMipChainFitsTheFrame();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
@@ -1062,6 +1063,78 @@ public final class PhotonFXEditorSmokeTest {
         }
         com.lowdragmc.photon.client.fx.FXBloom.endFrame();
         Photon.LOGGER.info("[playing-bloom-smoke] in-world FX contribute their authored bloom intensity");
+    }
+
+    /**
+     * {@code bloom_mip_level} goes up to 10, but the pyramid halves the frame once for the bright pass and once per
+     * level, and {@code HDRTarget} rejects a 0×0 allocation: a 1080p frame only holds 9 levels, a 720p frame 8, so
+     * the tenth (or ninth) level used to throw {@code IllegalArgumentException} out of the level render — a crash
+     * from a value the config screen offers. The chain is now clamped to what fits, and a frame too small for a
+     * single level (the editor preview collapsed, a minimised window) skips bloom instead of allocating.
+     */
+    private static void verifyBloomMipChainFitsTheFrame() {
+        int[][] cases = {
+                // configured, width, height, expected levels
+                {10, 1920, 1080, 9}, {10, 2560, 1440, 9}, {10, 3840, 2160, 10}, {10, 1280, 720, 8},
+                {5, 1920, 1080, 5}, {5, 64, 64, 5}, {10, 64, 64, 5}, {5, 4, 4, 1}, {5, 7, 500, 1},
+                {5, 3, 3, 0}, {5, 1, 1, 0}, {5, 0, 0, 0}, {2, 8, 8, 2}, {2, 6, 6, 1},
+        };
+        for (int[] c : cases) {
+            int levels = com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.fittingMipLevels(c[0], c[1], c[2]);
+            if (levels != c[3]) {
+                throw new IllegalStateException("fittingMipLevels(" + c[0] + ", " + c[1] + "x" + c[2] + ") = " + levels
+                        + ", expected " + c[3]);
+            }
+            // every level, and the half-size bright pass before it, keeps at least one texel on both axes
+            if (levels > 0 && (Math.min(c[1], c[2]) >> (levels + 1)) < 1) {
+                throw new IllegalStateException("fittingMipLevels(" + c[0] + ", " + c[1] + "x" + c[2]
+                        + ") = " + levels + " still ends in an empty level");
+            }
+        }
+        var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
+        int oldMipLevel = config.bloomMipLevel.get();
+        // releasing a chain unbinds the framebuffer (vanilla destroyBuffers); put the caller's state back after
+        int previousFramebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var source = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .resize(null, 2, 2, false);
+        try {
+            config.bloomMipLevel.set(10);
+            // 64x64 fits 5 of the 10 configured levels: used to throw at the sixth (64 / 128 = 0)
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(64, 64);
+            if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() != 5) {
+                throw new IllegalStateException("A 64x64 frame with bloom_mip_level=10 allocated "
+                        + com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() + " levels, expected 5");
+            }
+            // 2x2 holds none: the chain is released and the frame is handed back as it came
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(2, 2);
+            if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() != 0) {
+                throw new IllegalStateException("A 2x2 frame allocated a bloom pyramid");
+            }
+            com.lowdragmc.photon.client.fx.FXBloom.beginFrame();
+            var data = new com.lowdragmc.photon.client.fx.FXData();
+            data.setBloomIntensity(1f);
+            com.lowdragmc.photon.client.fx.FXBloom.contribute(data);
+            try {
+                if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.postTarget(source) != source) {
+                    throw new IllegalStateException("A 2x2 frame did not come back untouched from the bloom pass");
+                }
+            } finally {
+                com.lowdragmc.photon.client.fx.FXBloom.endFrame();
+            }
+        } finally {
+            config.bloomMipLevel.set(oldMipLevel);
+            source.destroyBuffers();
+            // leave the chain as the earlier bloom smoke built it (64x64 at the configured level count)
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(64, 64);
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
+                    previousFramebuffer);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+        Photon.LOGGER.info("[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)");
     }
 
     /** The audio inspector's loop checkbox must survive save/load, while older clips keep the looping default. */
