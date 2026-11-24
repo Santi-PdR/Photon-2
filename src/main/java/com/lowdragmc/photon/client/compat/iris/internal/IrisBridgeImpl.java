@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * The only Photon class allowed to import {@code net.irisshaders.**}. Instantiated reflectively by
- * {@code IrisCompat} once, and only when Iris is on the classpath.
+ * {@code IrisCompat} once, and only when the Iris API (Iris or Oculus) is on the classpath.
  */
 public final class IrisBridgeImpl implements IrisBridge {
     // the TAAU packs (Kappa, Nostalgia): their gbuffer vertex shaders squeeze the world into this share of the screen
