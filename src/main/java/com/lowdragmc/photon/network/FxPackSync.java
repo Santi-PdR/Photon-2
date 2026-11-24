@@ -54,6 +54,11 @@ public final class FxPackSync {
     private static final long MAX_PRIVATE_PACK_BYTES = 2L * 1024 * 1024 * 1024;
     private static final long MAX_SERVER_PACK_BYTES = 512L * 1024 * 1024;
     private static final long REFRESH_COOLDOWN_NANOS = 5_000_000_000L;
+    static final long UPLOAD_REQUEST_TIMEOUT_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
+    static final long UPLOAD_IDLE_TIMEOUT_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
+    static final long UPLOAD_MAX_DURATION_NANOS = java.util.concurrent.TimeUnit.HOURS.toNanos(1);
+    private static final long UPLOAD_SWEEP_INTERVAL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    private static long lastUploadSweepNanos = Long.MIN_VALUE;
     private static final Map<UUID, Map<String, PackEntry>> OFFERED = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, Path>> OFFERED_FILES = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, Long>> NEXT_CHUNK_OFFSETS = new ConcurrentHashMap<>();
@@ -112,6 +117,46 @@ public final class FxPackSync {
         }
     }
 
+    /** Expire abandoned prompt requests and partial uploads so a disconnected client cannot hold disk forever. */
+    public static void tickUploads(MinecraftServer server) {
+        long now = System.nanoTime();
+        if (lastUploadSweepNanos != Long.MIN_VALUE
+                && now - lastUploadSweepNanos < UPLOAD_SWEEP_INTERVAL_NANOS) return;
+        lastUploadSweepNanos = now;
+
+        for (var entry : UPLOAD_REQUESTS.entrySet()) {
+            var request = entry.getValue();
+            if (isUploadRequestExpired(request.createdAtNanos, now)
+                    && UPLOAD_REQUESTS.remove(entry.getKey(), request)) {
+                var sender = server.getPlayerList().getPlayer(entry.getKey());
+                if (sender != null) {
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_timeout"));
+                }
+            }
+        }
+        for (var entry : UPLOADS.entrySet()) {
+            var state = entry.getValue();
+            if (isUploadExpired(state.startedAtNanos, state.lastActivityNanos, now)
+                    && UPLOADS.remove(entry.getKey(), state)) {
+                deleteUpload(state);
+                var sender = server.getPlayerList().getPlayer(entry.getKey());
+                if (sender != null) {
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.transfer_timeout"));
+                }
+                Photon.LOGGER.warn("Expired abandoned private Photon FX upload from {}", entry.getKey());
+            }
+        }
+    }
+
+    static boolean isUploadRequestExpired(long createdAtNanos, long nowNanos) {
+        return nowNanos - createdAtNanos >= UPLOAD_REQUEST_TIMEOUT_NANOS;
+    }
+
+    static boolean isUploadExpired(long startedAtNanos, long lastActivityNanos, long nowNanos) {
+        return nowNanos - startedAtNanos >= UPLOAD_MAX_DURATION_NANOS
+                || nowNanos - lastActivityNanos >= UPLOAD_IDLE_TIMEOUT_NANOS;
+    }
+
     /** Ask this player's client to upload its local {@code <gameDir>/ldlib2/assets} tree for one recipient. */
     public static boolean beginLocalResourceUpload(ServerPlayer sender, ServerPlayer recipient) {
         if (sender == null || recipient == null || sender.getServer() == null
@@ -133,7 +178,7 @@ public final class FxPackSync {
         }
         var request = UPLOAD_REQUESTS.get(sender.getUUID());
         if (request == null || request.token != packet.token()) return;
-        if (System.nanoTime() - request.createdAtNanos > java.util.concurrent.TimeUnit.MINUTES.toNanos(10)) {
+        if (System.nanoTime() - request.createdAtNanos >= UPLOAD_REQUEST_TIMEOUT_NANOS) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
             sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_timeout"));
             return;
@@ -179,6 +224,7 @@ public final class FxPackSync {
             file.seek(state.received);
             file.write(packet.bytes());
             state.received += packet.bytes().length;
+            state.lastActivityNanos = System.nanoTime();
         } catch (IOException failure) {
             UPLOADS.remove(sender.getUUID(), state);
             deleteUpload(state);
@@ -359,6 +405,7 @@ public final class FxPackSync {
         LATEST_OFFER_TOKENS.clear();
         PRIVATE_HASH_CACHE.clear();
         IGNORED_CACHE_COPIES.clear();
+        lastUploadSweepNanos = Long.MIN_VALUE;
         synchronized (FxPackSync.class) {
             activeScan = null;
             scanServer = null;
@@ -371,6 +418,7 @@ public final class FxPackSync {
      */
     public static void onServerStarting(MinecraftServer server) {
         PRIVATE_HASH_CACHE.clear();
+        lastUploadSweepNanos = Long.MIN_VALUE;
         var incoming = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
         if (!Files.isDirectory(incoming)) return;
         try (var files = Files.list(incoming)) {
@@ -706,6 +754,8 @@ public final class FxPackSync {
         private final long size;
         private final String sha256;
         private final Path temp;
+        private final long startedAtNanos = System.nanoTime();
+        private long lastActivityNanos = startedAtNanos;
         private long received;
 
         private UploadState(long token, UUID recipient, long size, String sha256, Path temp) {

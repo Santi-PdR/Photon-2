@@ -782,6 +782,7 @@
   "photon.fxpack.upload.status": "Photon：%s",
   "photon.fxpack.upload.invalid_metadata": "上传元数据无效或超过 512 MiB。",
   "photon.fxpack.upload.prepare_timeout": "传输准备时间过长；请重新执行发送命令。",
+  "photon.fxpack.upload.transfer_timeout": "上传长时间没有进度或超过最长传输时间，服务器已取消。",
   "photon.fxpack.upload.recipient_offline": "接收者已离线。",
   "photon.fxpack.upload.prepare_failed": "无法在服务器上准备上传文件。",
   "photon.fxpack.upload.out_of_order": "资源上传数据顺序错乱；请重试。",

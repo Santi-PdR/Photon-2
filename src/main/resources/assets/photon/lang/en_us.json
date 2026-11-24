@@ -785,6 +785,7 @@
   "photon.fxpack.upload.status": "Photon: %s",
   "photon.fxpack.upload.invalid_metadata": "The upload metadata is invalid or exceeds 512 MiB.",
   "photon.fxpack.upload.prepare_timeout": "The transfer took too long to prepare; run the send command again.",
+  "photon.fxpack.upload.transfer_timeout": "The server canceled the upload after it stopped making progress or exceeded the maximum transfer time.",
   "photon.fxpack.upload.recipient_offline": "Recipient is no longer online.",
   "photon.fxpack.upload.prepare_failed": "Could not prepare the server upload file.",
   "photon.fxpack.upload.out_of_order": "The resource upload arrived out of order; please retry.",

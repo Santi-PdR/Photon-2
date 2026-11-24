@@ -38,6 +38,7 @@ public class PhotonCommonListeners {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END) {
             com.lowdragmc.photon.network.ServerFxPackWatcher.tick();
+            com.lowdragmc.photon.network.FxPackSync.tickUploads(event.getServer());
         }
     }
 

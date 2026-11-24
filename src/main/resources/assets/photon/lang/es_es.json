@@ -397,6 +397,7 @@
   "photon.fxpack.upload.status": "Photon: %s",
   "photon.fxpack.upload.invalid_metadata": "Los datos de la subida no son válidos o superan 512 MiB.",
   "photon.fxpack.upload.prepare_timeout": "La transferencia tardó demasiado en prepararse; vuelve a ejecutar el comando de envío.",
+  "photon.fxpack.upload.transfer_timeout": "El servidor canceló la subida tras quedarse sin progreso o superar el tiempo máximo de transferencia.",
   "photon.fxpack.upload.recipient_offline": "El destinatario ya no está conectado.",
   "photon.fxpack.upload.prepare_failed": "No se pudo preparar el archivo de subida en el servidor.",
   "photon.fxpack.upload.out_of_order": "La subida de recursos llegó desordenada; inténtalo de nuevo.",

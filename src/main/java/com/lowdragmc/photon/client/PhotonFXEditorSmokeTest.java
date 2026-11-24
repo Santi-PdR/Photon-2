@@ -3343,6 +3343,7 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.fx.LooseTexturePathRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
+        com.lowdragmc.photon.network.UploadTimeoutRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FxPackWatcherRegression.verify();
         com.lowdragmc.photon.network.ServerFxPackWatcherRegression.verify();
         com.lowdragmc.photon.client.compat.gpu.GpuCompatRegression.verify();
