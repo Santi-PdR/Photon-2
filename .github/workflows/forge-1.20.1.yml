@@ -566,6 +566,8 @@ jobs:
             '[gpu-compat-smoke] vendor='
             '[freeze-watchdog-smoke] armed'
             '[gpu-compat-regression-smoke] AMD/Intel Windows drivers get the conservative profile, uploads restore the texture state, pass errors are counted and the freeze report is complete'
+            '[mixin-audit-smoke] configs='
+            '[mixin-audit-regression-smoke] a bundled Photon 1 is called out, the render-path line names every config on a class and the live audit sees Photon'"'"'s own hooks'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -636,7 +638,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]' '[mixin-audit-smoke]' '[mixin-audit-regression-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -852,6 +854,34 @@ jobs:
             echo '::warning::the freeze watchdog fired during the smoke run (llvmpipe stalls are slow frames, not GPU hangs):'
             grep -F '[freeze-watchdog]' "$RUNNER_TEMP/photon-client.log" | head -5
             grep -Fq '[freeze-watchdog] the render thread resumed after' "$RUNNER_TEMP/photon-client.log"
+          fi
+
+      # Round 26: "it was a mixin of Photon 1" was the user's diagnosis of the AMD freeze, and nothing in a log or a freeze
+      # report could confirm or refute it (Mixin names its targets in debug.log only; a GPU hang writes no crash report).
+      # Photon now logs, at client setup and into every freeze report, each registered mixin config with the mod file
+      # that declares it, the configs on the render-path classes, and any other mod file shipping com.lowdragmc.photon
+      # classes or Photon 1's photon-common.mixins.json. On the runner: Photon's own config must be seen on GameRenderer,
+      # LDLib 1's on ParticleEngine next to it, and no old Photon anywhere.
+      - name: Require the mixin audit
+        shell: bash
+        run: |
+          grep -Fq '[mixin-audit-smoke] configs=' "$RUNNER_TEMP/photon-client.log"
+          grep -F '[mixin-audit-smoke] configs=' "$RUNNER_TEMP/photon-client.log" | grep -Fq 'photon1Remnants=0 own=photon.mixins.json'
+          # Photon's own hooks, and LDLib 1's ParticleEngineMixin next to Photon's on the same class: the foreign mixin
+          # on the frame path the audit exists to show (read from Forge's scan of the mod files, not from a manifest)
+          grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | grep -Eq 'GameRenderer <- [^;]*photon:GameRendererMixin'
+          if ! grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | grep -Eq 'ParticleEngine <- [^;]*ldlib:ParticleEngineMixin[^;]*photon:ParticleEngineMixin'; then
+            echo '::error::the mixin audit did not see LDLib 1 next to Photon on ParticleEngine in the development client:'
+            grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | head -2
+            exit 1
+          fi
+          grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | head -1
+          grep -Fq '[mixin-audit] Photon 1: no other mod file ships com.lowdragmc.photon classes' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[mixin-audit-regression-smoke] a bundled Photon 1 is called out, the render-path line names every config on a class and the live audit sees Photon's own hooks" "$RUNNER_TEMP/photon-client.log"
+          if grep -Fq '[mixin-audit] Photon 1 remnant' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::error::the mixin audit found an old Photon on the runner:'
+            grep -F '[mixin-audit] Photon 1 remnant' "$RUNNER_TEMP/photon-client.log"
+            exit 1
           fi
 
       - name: Require Photon 1 entity FX to stay on the torso

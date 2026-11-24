@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.core.mixins;
 
 import com.lowdragmc.lowdraglib2.gui.ui.elements.SearchComponent;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,6 +26,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(value = SearchComponent.class, remap = false)
 public abstract class SearchComponentMixin {
+    // the target's field is final; said here too, or Mixin warns about it at every launch
+    @Final
     @Shadow(remap = false)
     private com.lowdragmc.lowdraglib2.gui.ui.elements.TextField textField;
 

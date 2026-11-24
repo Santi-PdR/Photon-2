@@ -108,6 +108,8 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // before the deferred work, and before anything can be played with: the migration is a one-shot at
         // startup, so it can never undo a value picked later (the knob happens to pass through 1.0, an old default)
         migrateOldBloomDefaults();
+        // who is mixing into the frame, written down once: the answer to "it was mixin X" has to be in the log
+        com.lowdragmc.photon.client.compat.MixinAudit.log();
         e.enqueueWork(() -> {
             PhotonShaders.init();
             PhotonFXProjectSmokeTest.runIfEnabled();

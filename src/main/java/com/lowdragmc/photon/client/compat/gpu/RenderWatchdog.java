@@ -153,6 +153,10 @@ public final class RenderWatchdog {
         text.append('\n');
         appendConfig(text);
         text.append('\n');
+        // who else is on the frame: a "mixin of mod X" claim is checked against this, not against memory
+        for (var line : com.lowdragmc.photon.client.compat.MixinAudit.lines()) text.append(line).append('\n');
+        text.append(com.lowdragmc.photon.client.compat.MixinAudit.modListLine()).append('\n');
+        text.append('\n');
         var render = renderThread;
         text.append("Render thread: ").append(render == null ? "unknown" : render.getName() + " state=" + render.getState()).append('\n');
         if (render != null) {

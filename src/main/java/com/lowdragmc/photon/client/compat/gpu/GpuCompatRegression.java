@@ -93,6 +93,7 @@ public final class GpuCompatRegression {
         check(text.contains("Config: fx_composite_mode=") && text.contains("shadow_mode="), "the freeze report does not carry the config");
         check(text.contains("Render thread: ") && text.contains("    at "), "the freeze report has no render thread stack");
         check(text.contains("GL errors inside Photon's pass \"regression\": "), "the freeze report does not list the pass error counts");
+        check(text.contains("[mixin-audit] render path: ") && text.contains("\nMods ("), "the freeze report does not carry the mixin audit and the mod list");
         Files.deleteIfExists(report);
         check(RenderWatchdog.isArmed(), "the freeze watchdog is not armed");
 
