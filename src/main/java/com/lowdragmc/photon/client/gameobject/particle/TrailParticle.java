@@ -33,6 +33,10 @@ import java.util.function.Supplier;
 public class TrailParticle implements IParticle {
     /** Hard bound for fast-moving emitters; keeps sub-sampling from exploding on teleports. */
     private static final int MAX_HEAD_SAMPLES_PER_TICK = 64;
+    /** Retain only the newest raw points; a long/infinite configured tail lifetime must not grow forever. */
+    public static final int MAX_RAW_TAILS = 2046;
+    /** Bound the expanded CPU/GPU trail even when every raw segment requests maximum smoothing. */
+    public static final int MAX_SMOOTHED_TAILS = 8192;
     /** At least this spatial frequency is kept even when the authored minimum distance is tiny. */
     private static final float FAST_MOVE_SAMPLE_SPACING = 0.1f;
     /** Hard bound for the sub-segments smoothing splits one raw segment into; see {@link #smoothStepCount}. */
@@ -255,6 +259,11 @@ public class TrailParticle implements IParticle {
                     Vector3f position = last == null ? new Vector3f(headPos) : new Vector3f(last).lerp(headPos, t);
                     rawTails.add(new Tail(position, lifetime, new Vector4f(1, 1, 1, 1), 0.2f));
                 }
+                // Trim in batches: movementSampleCount is at most 64, so this amortizes array compaction while
+                // keeping persistent raw history at or below MAX_RAW_TAILS (and transiently at most +64).
+                if (rawTails.size() > MAX_RAW_TAILS) {
+                    rawTails.trimTo(MAX_RAW_TAILS - MAX_HEAD_SAMPLES_PER_TICK);
+                }
             } else if (rawTails.size() == 1) {
                 rawTails.posX[0] = headPos.x;
                 rawTails.posY[0] = headPos.y;
@@ -310,6 +319,11 @@ public class TrailParticle implements IParticle {
             }
 
             int steps = smoothStepCount(curr.distance(next), distance);
+            // Reserve one output slot for every remaining raw point and the final endpoint. A per-segment
+            // cap alone still allowed a long retained trail to allocate MAX_RAW_TAILS * 64 points per frame.
+            int remainingRawPoints = vertices.size() - i - 2;
+            int remainingInteriorBudget = MAX_SMOOTHED_TAILS - smoothPath.size() - remainingRawPoints - 1;
+            steps = Math.min(steps, Math.max(1, remainingInteriorBudget + 1));
             if (steps > 1) {
                 for (int j = 1; j < steps; j++) {
                     float t = j / (float) steps;
@@ -461,6 +475,24 @@ public class TrailParticle implements IParticle {
             if (size > 0) {
                 size--;
             }
+        }
+
+        /** Keep the newest {@code maxSize} entries and compact their column arrays in place. */
+        void trimTo(int maxSize) {
+            if (maxSize < 0) throw new IllegalArgumentException("maxSize must not be negative");
+            if (size <= maxSize) return;
+            int removed = size - maxSize;
+            int remaining = maxSize;
+            System.arraycopy(posX, removed, posX, 0, remaining);
+            System.arraycopy(posY, removed, posY, 0, remaining);
+            System.arraycopy(posZ, removed, posZ, 0, remaining);
+            System.arraycopy(colorR, removed, colorR, 0, remaining);
+            System.arraycopy(colorG, removed, colorG, 0, remaining);
+            System.arraycopy(colorB, removed, colorB, 0, remaining);
+            System.arraycopy(colorA, removed, colorA, 0, remaining);
+            System.arraycopy(width, removed, width, 0, remaining);
+            System.arraycopy(lifeTime, removed, lifeTime, 0, remaining);
+            size = remaining;
         }
 
         public Vector3f getPosition(int index) {

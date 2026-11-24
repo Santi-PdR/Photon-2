@@ -3547,6 +3547,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("A teleported trail was not smoothed within its bound: raw=" + smoothRaw + " smoothed=" + smoothed);
         }
         Photon.LOGGER.info("[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere");
+        com.lowdragmc.photon.client.gameobject.particle.TrailHistoryBoundsRegression.verify(smoothTrail);
         // An Ara trail's physics warmup runs 20 synchronous steps per second when the trail is created; the field had
         // no bound, so 1e9 seconds kept the client in that loop for good.
         if (com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(1e9f) != 60f
