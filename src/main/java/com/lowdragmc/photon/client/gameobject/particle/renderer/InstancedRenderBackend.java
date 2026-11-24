@@ -215,6 +215,7 @@ abstract class InstancedRenderBackend {
     private int maxPointsSize = 0;
     private int pointBufferTexelLimit = -1;
     private boolean recordLimitReported;
+    private boolean instanceStagingLimitReported;
     private int maxDataSize = 0;
     private int maxCustomSize = 0;
     private int instanceCount = 0;
@@ -638,6 +639,13 @@ abstract class InstancedRenderBackend {
     FloatBuffer beginUpload(int instanceCapacity) {
         init();
         if (resource == null) return null;
+        if (!fitsInstanceStaging(instanceCapacity, instanceDataSize)) {
+            if (!instanceStagingLimitReported) {
+                instanceStagingLimitReported = true;
+                Photon.LOGGER.warn("Instanced particle data exceeds Java staging-buffer capacity; falling back to CPU rendering");
+            }
+            return null;
+        }
 
         if (instanceCapacity > maxInstancesSize) {
             resize(instanceCapacity);
@@ -650,6 +658,12 @@ abstract class InstancedRenderBackend {
         glBindVertexArray(resource.vao);
         glBindBuffer(GL_ARRAY_BUFFER, resource.instanceVbo);
         return buffer;
+    }
+
+    /** Whether an instance batch's interleaved vertex data fits a Java FloatBuffer without int overflow. */
+    static boolean fitsInstanceStaging(long instances, int floatsPerInstance) {
+        return instances >= 0 && floatsPerInstance > 0
+                && instances <= Integer.MAX_VALUE / (long) floatsPerInstance;
     }
 
     /**

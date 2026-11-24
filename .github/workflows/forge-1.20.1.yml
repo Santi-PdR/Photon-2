@@ -959,7 +959,7 @@ jobs:
           grep -Fq '[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points' "$RUNNER_TEMP/photon-client.log"
-          grep -Fq '[point-buffer-capacity-smoke] point, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[aratrail-warmup-bound-smoke] an Ara trail pre-simulates at most 60 seconds, nothing for NaN or negative values' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[curve-bound-finite-smoke] curve range fields keep their bound for NaN, Infinity and non-numeric text' "$RUNNER_TEMP/photon-client.log"
