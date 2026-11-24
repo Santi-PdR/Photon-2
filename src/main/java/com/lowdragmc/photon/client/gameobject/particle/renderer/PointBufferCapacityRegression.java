@@ -20,7 +20,15 @@ public final class PointBufferCapacityRegression {
                 "a point capacity that overflows Java staging-buffer size was accepted");
         check(!InstancedRenderBackend.fitsPointBuffer(1, 0, 65_536),
                 "a zero-texel point layout was accepted");
-        Photon.LOGGER.info("[point-buffer-capacity-smoke] instanced point uploads respect OpenGL texture-buffer and Java staging limits");
+        check(InstancedRenderBackend.fitsPointBuffer(8_192, 8, 65_536),
+                "a shadergraph data batch at the texture-buffer boundary was rejected");
+        check(!InstancedRenderBackend.fitsPointBuffer(8_193, 8, 65_536),
+                "an oversized shadergraph data batch was accepted");
+        check(InstancedRenderBackend.fitsPointBuffer(16_384, 4, 65_536),
+                "a custom-data batch at the texture-buffer boundary was rejected");
+        check(!InstancedRenderBackend.fitsPointBuffer(16_385, 4, 65_536),
+                "an oversized custom-data batch was accepted");
+        Photon.LOGGER.info("[point-buffer-capacity-smoke] point, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits");
     }
 
     private static void check(boolean condition, String message) {

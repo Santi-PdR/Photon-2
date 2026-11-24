@@ -117,10 +117,12 @@ public class BeamParticleRenderer {
      * additional-data selection comes from the pass-owning config (batched passes share it).
      */
     public boolean uploadInstances(Collection<IParticle> particles, Camera camera, float partialTicks) {
+        var setting = config.additionalGPUDataSetting;
+        if ((setting.hasDataRecord() && !instanceBackend.supportsDataUpload(particles.size()))
+                || (setting.hasCustomRecord() && !instanceBackend.supportsCustomUpload(particles.size()))) return false;
         var buffer = instanceBackend.beginUpload(particles.size());
         if (buffer == null) return false;
 
-        var setting = config.additionalGPUDataSetting;
         var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(particles.size()) : null;
         var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(particles.size()) : null;
         var instanceCount = 0;

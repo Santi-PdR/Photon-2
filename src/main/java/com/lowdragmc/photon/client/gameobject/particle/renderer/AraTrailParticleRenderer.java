@@ -789,10 +789,13 @@ public class AraTrailParticleRenderer {
             }
         }
         if (pointCapacity == 0) return false;
-        if (!instanceBackend.supportsPointUpload(pointCapacity)) {
+        var setting = config.additionalGPUDataSetting;
+        if (!instanceBackend.supportsPointUpload(pointCapacity)
+                || (setting.hasDataRecord() && !instanceBackend.supportsDataUpload(pointCapacity))
+                || (setting.hasCustomRecord() && !instanceBackend.supportsCustomUpload(pointCapacity))) {
             if (!pointLimitReported) {
                 pointLimitReported = true;
-                com.lowdragmc.photon.Photon.LOGGER.warn("Ara trail instanced point upload exceeds the OpenGL texture-buffer limit; drawing this pass on the CPU");
+                com.lowdragmc.photon.Photon.LOGGER.warn("Ara trail point or channel upload exceeds the OpenGL texture-buffer limit; drawing this pass on the CPU");
             }
             return false;
         }
@@ -803,7 +806,6 @@ public class AraTrailParticleRenderer {
         var pointBuffer = instanceBackend.beginPointUpload(pointCountCapacity);
         if (pointBuffer == null) return false;
 
-        var setting = config.additionalGPUDataSetting;
         var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(pointCountCapacity) : null;
         var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(pointCountCapacity) : null;
         collectTube = instanceBackend.isTubeMode();

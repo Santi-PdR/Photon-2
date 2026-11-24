@@ -209,7 +209,10 @@ public class TrailParticleRenderer {
             }
         }
         if (instanceCapacity == 0) return false;
-        if (!instanceBackend.supportsPointUpload(pointCapacity)) return false;
+        var setting = config.additionalGPUDataSetting;
+        if (!instanceBackend.supportsPointUpload(pointCapacity)
+                || (setting.hasDataRecord() && !instanceBackend.supportsDataUpload(instanceCapacity))
+                || (setting.hasCustomRecord() && !instanceBackend.supportsCustomUpload(instanceCapacity))) return false;
         int instances = (int) instanceCapacity;
         int pointCountCapacity = (int) pointCapacity;
 
@@ -218,7 +221,6 @@ public class TrailParticleRenderer {
         var pointBuffer = instanceBackend.beginPointUpload(pointCountCapacity);
         if (pointBuffer == null) return false;
 
-        var setting = config.additionalGPUDataSetting;
         var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(instances) : null;
         var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(instances) : null;
         var instanceCount = 0;

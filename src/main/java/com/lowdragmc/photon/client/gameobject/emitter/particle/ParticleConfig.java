@@ -254,8 +254,7 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
             additionalGPUDataSetting.setMaterialMask(mask);
             additionalGPUDataSetting.setCustomDataMaterialUsed(custom);
             if (mask == 0 && !custom) return false;
-            tileParticleRenderer.beginCpuRecords(particleCapacity);
-            return true;
+            return tileParticleRenderer.beginCpuRecords(particleCapacity);
         }
 
         @Override
