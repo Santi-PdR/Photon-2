@@ -583,7 +583,7 @@ jobs:
             '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector'
             '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap'
             '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points'
-            '[point-buffer-capacity-smoke] point, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits'
+            '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits'
             '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate'
             '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours'
             '[fxproj-smoke] loaded synthetic .fxproj with burst'
