@@ -49,6 +49,9 @@ jobs:
       - name: Verify config screen covers every top-level Photon setting
         run: python3 .github/scripts/verify_config_screen_coverage.py
 
+      - name: Verify renderer mixin call-site hooks fail soft under third-party redirects
+        run: python3 .github/scripts/verify_renderer_mixin_fallback.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
