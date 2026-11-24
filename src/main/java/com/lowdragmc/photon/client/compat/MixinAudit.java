@@ -66,6 +66,12 @@ public final class MixinAudit {
             "net.minecraft.client.particle.ParticleEngine",
             "net.minecraft.client.renderer.ShaderInstance",
             "net.minecraft.client.renderer.LevelRenderer",
+            // Embeddium, EntityCulling and ImmediatelyFast commonly mix into these renderer entry points.
+            // Recording them makes a modpack's overlap visible without claiming that a mixin caused a failure.
+            "net.minecraft.client.renderer.entity.EntityRenderDispatcher",
+            "net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher",
+            "net.minecraft.client.renderer.RenderBuffers",
+            "com.mojang.blaze3d.vertex.BufferBuilder",
             "net.minecraft.client.renderer.PostChain",
             "net.minecraft.client.renderer.LightTexture",
             "net.minecraft.client.renderer.RenderType",

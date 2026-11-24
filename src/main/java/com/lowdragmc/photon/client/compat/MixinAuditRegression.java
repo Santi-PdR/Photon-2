@@ -34,6 +34,7 @@ public final class MixinAuditRegression {
         declared.put("net.minecraft.client.renderer.GameRenderer", List.of("photon:GameRendererMixin"));
         declared.put("net.minecraft.client.particle.ParticleEngine", List.of("photon:ParticleEngineMixin", "oldfx:ParticleEngineMixin", "ldlib:ParticleEngineMixin"));
         declared.put("net.minecraft.client.renderer.LevelRenderer", List.of("oldfx:LevelRendererMixin", "ldlib:WorldRendererMixin"));
+        declared.put("com.mojang.blaze3d.vertex.BufferBuilder", List.of("embeddium:BufferBuilderMixin", "immediatelyfast:BufferBuilderMixin"));
         declared.put("net.minecraft.world.entity.Entity", List.of("quiet:EntityMixin"));
         declared.put("com.lowdragmc.lowdraglib2.gui.ui.elements.Menu", List.of("photon:MenuMixin"));
         Map<String, Collection<String>> foreign = new TreeMap<>();
@@ -43,7 +44,7 @@ public final class MixinAuditRegression {
         var findings = MixinAudit.summarise(configs, owners, declared, foreign, "photon-forge-1.20.1-test-all.jar");
         var text = String.join("\n", findings.lines());
         check(findings.configs() == 5, "the synthetic audit did not count its five configs: " + findings.configs() + "\n" + text);
-        check(findings.renderPathTargets() == 3, "the render-path count is off: " + findings.renderPathTargets() + "\n" + text);
+        check(findings.renderPathTargets() == 4, "the render-path count is off: " + findings.renderPathTargets() + "\n" + text);
         check(findings.photon1Remnants() == 2, "a bundled Photon 1 (classes + config) was not counted twice: " + findings.photon1Remnants() + "\n" + text);
         check(text.contains("5 mixin config(s) registered, this mod's file is photon-forge-1.20.1-test-all.jar: "
                         + "ldlib-common.mixins.json, ldlib.mixins.json (ldlib1-1.0.52.a.jar); "
@@ -52,7 +53,8 @@ public final class MixinAuditRegression {
                 "the configs are not grouped by the file that ships them, in order:\n" + text);
         check(text.contains("[mixin-audit] render path: GameRenderer <- photon:GameRendererMixin; "
                         + "ParticleEngine <- ldlib:ParticleEngineMixin, oldfx:ParticleEngineMixin, photon:ParticleEngineMixin; "
-                        + "LevelRenderer <- ldlib:WorldRendererMixin, oldfx:LevelRendererMixin"),
+                        + "LevelRenderer <- ldlib:WorldRendererMixin, oldfx:LevelRendererMixin; "
+                        + "BufferBuilder <- embeddium:BufferBuilderMixin, immediatelyfast:BufferBuilderMixin"),
                 "the render-path line does not name every mixin on each class, in frame order and sorted:\n" + text);
         check(!text.contains("Entity <-") && !text.contains("Menu <-"), "a class off the render path was listed:\n" + text);
         check(text.contains("[mixin-audit] Photon 1 remnant: oldfx-1.0.jar ships 2 class(es) under com.lowdragmc.photon"
