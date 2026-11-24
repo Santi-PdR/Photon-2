@@ -199,24 +199,28 @@ public class TrailParticleRenderer {
     public boolean uploadInstances(Collection<IParticle> particles, Camera camera, float partialTicks) {
         // capacity pre-scan (upper bounds: one segment per tail incl. the pushed head;
         // points = tails + pushed head + 2 pads)
-        var instanceCapacity = 0;
-        var pointCapacity = 0;
+        long instanceCapacity = 0;
+        long pointCapacity = 0;
         for (var p : particles) {
             if (p instanceof TrailParticle trail && trail.getDelay() <= 0) {
                 instanceCapacity += trail.getTails().size();
-                pointCapacity += trail.getTails().size() + 3;
+                pointCapacity += (long) trail.getTails().size() + 3;
+                if (instanceCapacity > Integer.MAX_VALUE || pointCapacity > Integer.MAX_VALUE) return false;
             }
         }
         if (instanceCapacity == 0) return false;
+        if (!instanceBackend.supportsPointUpload(pointCapacity)) return false;
+        int instances = (int) instanceCapacity;
+        int pointCountCapacity = (int) pointCapacity;
 
-        var buffer = instanceBackend.beginUpload(instanceCapacity);
+        var buffer = instanceBackend.beginUpload(instances);
         if (buffer == null) return false;
-        var pointBuffer = instanceBackend.beginPointUpload(pointCapacity);
+        var pointBuffer = instanceBackend.beginPointUpload(pointCountCapacity);
         if (pointBuffer == null) return false;
 
         var setting = config.additionalGPUDataSetting;
-        var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(instanceCapacity) : null;
-        var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(instanceCapacity) : null;
+        var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(instances) : null;
+        var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(instances) : null;
         var instanceCount = 0;
         var pointCount = 0;
         var cameraPos = camera.getPosition().toVector3f();

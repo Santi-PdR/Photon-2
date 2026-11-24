@@ -15,6 +15,7 @@ import java.lang.ref.Cleaner;
 import java.nio.FloatBuffer;
 
 import static org.lwjgl.opengl.GL30.*;
+import static org.lwjgl.opengl.GL31.GL_MAX_TEXTURE_BUFFER_SIZE;
 import static org.lwjgl.opengl.GL33.*;
 
 /**
@@ -212,6 +213,7 @@ abstract class InstancedRenderBackend {
     protected int instanceDataSize = 0; // number of floats per instance
     private int maxInstancesSize = 0;
     private int maxPointsSize = 0;
+    private int pointBufferTexelLimit = -1;
     private int maxDataSize = 0;
     private int maxCustomSize = 0;
     private int instanceCount = 0;
@@ -394,6 +396,7 @@ abstract class InstancedRenderBackend {
         modelEboSize = 0;
         maxInstancesSize = 0;
         maxPointsSize = 0;
+        pointBufferTexelLimit = -1;
         maxDataSize = 0;
         maxCustomSize = 0;
         instanceCount = 0;
@@ -535,6 +538,28 @@ abstract class InstancedRenderBackend {
         glBindBuffer(GL_TEXTURE_BUFFER, 0);
     }
 
+    /** The device limit is stable for this backend's GL context. */
+    private int pointBufferTexelLimit() {
+        if (pointBufferTexelLimit < 0) {
+            pointBufferTexelLimit = GlStateManager._getInteger(GL_MAX_TEXTURE_BUFFER_SIZE);
+        }
+        return pointBufferTexelLimit;
+    }
+
+    /** Whether a point upload fits both the driver's texture-buffer limit and a Java staging buffer. */
+    boolean supportsPointUpload(long pointCapacity) {
+        int texels = pointTexelsPerPoint();
+        if (texels <= 0) return true;
+        return fitsPointBuffer(pointCapacity, texels, pointBufferTexelLimit());
+    }
+
+    static boolean fitsPointBuffer(long pointCapacity, int texelsPerPoint, int maxTextureBufferTexels) {
+        if (pointCapacity < 0 || texelsPerPoint <= 0 || maxTextureBufferTexels <= 0) return false;
+        long maxByTexture = maxTextureBufferTexels / (long) texelsPerPoint;
+        long maxByStaging = Integer.MAX_VALUE / (4L * texelsPerPoint);
+        return pointCapacity <= Math.min(maxByTexture, maxByStaging);
+    }
+
     /**
      * Prepare the point buffer texture for a fresh upload: (lazy-)create/grow the TBO and return
      * the cleared shared point staging buffer ({@link #pointTexelsPerPoint()} x 4 floats per
@@ -544,15 +569,17 @@ abstract class InstancedRenderBackend {
     @Nullable
     FloatBuffer beginPointUpload(int pointCapacity) {
         var texels = pointTexelsPerPoint();
-        if (resource == null || texels <= 0) return null;
+        if (resource == null || texels <= 0 || !supportsPointUpload(pointCapacity)) return null;
 
+        var maxPoints = pointBufferTexelLimit() / texels;
+        maxPoints = Math.min(maxPoints, Integer.MAX_VALUE / (texels * 4));
         var newTbo = resource.pointTbo == -1;
         if (newTbo) {
             resource.pointTbo = glGenBuffers();
         }
         if (newTbo || pointCapacity > maxPointsSize) {
             // grow with 1.5x headroom (see createOrResizeInstanceData)
-            maxPointsSize = Math.max(pointCapacity, maxPointsSize + (maxPointsSize >> 1));
+            maxPointsSize = Math.min(maxPoints, Math.max(pointCapacity, maxPointsSize + (maxPointsSize >> 1)));
             glBindBuffer(GL_TEXTURE_BUFFER, resource.pointTbo);
             glBufferData(GL_TEXTURE_BUFFER, ((long) maxPointsSize) * texels * 4 * Float.BYTES, GL_STREAM_DRAW);
             glBindBuffer(GL_TEXTURE_BUFFER, 0);

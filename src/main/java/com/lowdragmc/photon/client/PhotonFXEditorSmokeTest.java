@@ -3349,6 +3349,8 @@ public final class PhotonFXEditorSmokeTest {
         com.lowdragmc.photon.client.compat.gpu.GpuCompatRegression.verify();
         com.lowdragmc.photon.client.compat.iris.ShaderModPresenceRegression.verify();
         com.lowdragmc.photon.client.compat.MixinAuditRegression.verify();
+        com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailPointBoundsRegression.verify();
+        com.lowdragmc.photon.client.gameobject.particle.renderer.PointBufferCapacityRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.InstalledCopyRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
         com.lowdragmc.photon.command.LateReplayRegression.verify();

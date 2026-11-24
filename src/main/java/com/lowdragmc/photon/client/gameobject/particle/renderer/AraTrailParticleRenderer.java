@@ -77,6 +77,7 @@ public class AraTrailParticleRenderer {
     // reused per-trail life snapshot for renderAgedSpans (render thread only)
     private float[] savedLivesPool = new float[0];
     private float[] savedPositionsPool = new float[0];
+    private boolean pointLimitReported;
 
     // ---- instanced-collection scratch (active during uploadInstances; render thread only) ----
     private final Matrix4f collectMatrix = new Matrix4f();
@@ -178,7 +179,7 @@ public class AraTrailParticleRenderer {
         }
         Point tail = points.get(0);
         Vector3f savedTail = null;
-        if (config.smoothness <= 1 && !tail.discontinuous && tail.life < 0) {
+        if (AraTrailConfig.safeSmoothness(config.smoothness) <= 1 && !tail.discontinuous && tail.life < 0) {
             var next = points.get(1);
             float lerpDur = next.life - tail.life;   // segment life span (aging cancels in the difference)
             if (lerpDur > EPSILON) {
@@ -236,7 +237,7 @@ public class AraTrailParticleRenderer {
         var points = particle.getPoints();
         renderablePoints.clear();
 
-        if (config.smoothness <= 1) {
+        if (AraTrailConfig.safeSmoothness(config.smoothness) <= 1) {
             for (int i = start; i <= end; ++i)
                 renderablePoints.add(points.get(i));
             return renderablePoints;
@@ -245,7 +246,8 @@ public class AraTrailParticleRenderer {
         var data = points.getData();
 
         // calculate sample size in normalized coordinates:
-        float samplesize = 1.0f / config.smoothness;
+        int smoothness = AraTrailConfig.safeSmoothness(config.smoothness);
+        float samplesize = 1.0f / smoothness;
 
         Point interpolated = new Point(new Vector3f(), new Vector3f(), new Vector3f(), new Vector3f(), new Vector4f(1, 1, 1, 1), 0, 0, 0);
         Point culled = null;
@@ -292,7 +294,7 @@ public class AraTrailParticleRenderer {
             float cdz = data[i2].color.z();
             float cdw = data[i2].color.w();
 
-            for (int j = 0; j < config.smoothness; ++j)
+            for (int j = 0; j < smoothness; ++j)
             {
                 float t = j * samplesize;
 
@@ -778,22 +780,32 @@ public class AraTrailParticleRenderer {
      */
     public boolean uploadInstances(Collection<IParticle> particles, Camera camera, float partialTicks) {
         // capacity pre-scan (proven upper bound: renderable points per trail <= size * smoothness + 2)
-        var pointCapacity = 0;
+        long pointCapacity = 0;
         for (var p : particles) {
             if (p instanceof AraTrailParticle trail && trail.getPoints().size() > 1) {
-                pointCapacity += trail.getPoints().size() * Math.max(1, trail.config.smoothness) + 2;
+                pointCapacity += (long) trail.getPoints().size()
+                        * AraTrailConfig.safeSmoothness(trail.config.smoothness) + 2;
+                if (pointCapacity > Integer.MAX_VALUE) return false;
             }
         }
         if (pointCapacity == 0) return false;
+        if (!instanceBackend.supportsPointUpload(pointCapacity)) {
+            if (!pointLimitReported) {
+                pointLimitReported = true;
+                com.lowdragmc.photon.Photon.LOGGER.warn("Ara trail instanced point upload exceeds the OpenGL texture-buffer limit; drawing this pass on the CPU");
+            }
+            return false;
+        }
+        int pointCountCapacity = (int) pointCapacity;
 
-        var buffer = instanceBackend.beginUpload(pointCapacity); // instances per span = points - 1
+        var buffer = instanceBackend.beginUpload(pointCountCapacity); // instances per span = points - 1
         if (buffer == null) return false;
-        var pointBuffer = instanceBackend.beginPointUpload(pointCapacity);
+        var pointBuffer = instanceBackend.beginPointUpload(pointCountCapacity);
         if (pointBuffer == null) return false;
 
         var setting = config.additionalGPUDataSetting;
-        var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(pointCapacity) : null;
-        var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(pointCapacity) : null;
+        var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(pointCountCapacity) : null;
+        var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(pointCountCapacity) : null;
         collectTube = instanceBackend.isTubeMode();
         collectPointBuffer = pointBuffer;
         collectDataBuffer = dataBuffer;

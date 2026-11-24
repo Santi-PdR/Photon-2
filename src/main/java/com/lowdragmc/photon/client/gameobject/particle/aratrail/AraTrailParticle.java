@@ -26,6 +26,8 @@ import java.util.function.Supplier;
 
 public class AraTrailParticle implements IParticle {
     public final static float EPSILON = 0.00001f;
+    /** Prevent unbounded trail history when authored lifetime/min-distance values are extreme. */
+    public static final int MAX_POINTS = 2046;
 
     public final IParticleEmitter emitter;
     public final AraTrailConfig config;
@@ -352,6 +354,7 @@ public class AraTrailParticle implements IParticle {
      * Spawns a new point in the trail.
      */
     public void emitPoint(Vector3f position, boolean skipLast) {
+        trimOldestForEmission(points);
         // Adjust the current end of the trail, if any:
 //        if (adjustEnd && points.size() > 1) {
 //            Point lastPoint = points[points.Count - 1];
@@ -376,6 +379,13 @@ public class AraTrailParticle implements IParticle {
         } else {
             points.add(point);
         }
+    }
+
+    /** Drop the oldest sample before insertion so a non-expiring authored trail stays bounded. */
+    static boolean trimOldestForEmission(ElasticArray<Point> points) {
+        if (points.size() < MAX_POINTS) return false;
+        points.removeAt(0);
+        return true;
     }
 
     /**
@@ -425,7 +435,7 @@ public class AraTrailParticle implements IParticle {
                 // Unsmoothed trails: wait until the next (newer) point is also dead, so the render-time tail
                 // retract can shrink this segment to zero (f reaches 1 only when next.life hits 0) before
                 // removal. Removing at life<=0 would pop a whole segment when the emission interval > 1 tick.
-                if (config.smoothness <= 1)
+                if (AraTrailConfig.safeSmoothness(config.smoothness) <= 1)
                 {
                     if (points.get(Math.min(i + 1, points.size() - 1)).life <= 0)
                         points.removeAt(i);
