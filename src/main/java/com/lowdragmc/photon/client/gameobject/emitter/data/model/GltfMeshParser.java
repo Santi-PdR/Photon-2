@@ -87,6 +87,15 @@ public final class GltfMeshParser {
         return viewEnd <= bufferLength && first >= viewOffset && last <= viewEnd;
     }
 
+    static boolean declaredBufferFits(int declaredLength, int availableLength) {
+        return declaredLength >= 0 && availableLength >= 0 && declaredLength <= availableLength;
+    }
+
+    static boolean bufferViewRangeFits(int offset, int length, int declaredBufferLength) {
+        return offset >= 0 && length >= 0 && declaredBufferLength >= 0
+                && (long) offset + length <= declaredBufferLength;
+    }
+
     /** A rigid binding is one joint at full weight. */
     private static final float[] RIGID_WEIGHTS = {1f, 0f, 0f, 0f};
 
@@ -255,6 +264,7 @@ public final class GltfMeshParser {
         private final ExternalBufferResolver externalBuffers;
         private final PhotonMesh.Builder builder = new PhotonMesh.Builder();
         private final List<byte[]> buffers = new ArrayList<>();
+        private final List<Integer> declaredBufferLengths = new ArrayList<>();
         private long bufferBytes;
 
         // reused per triangle corner so a large mesh doesn't allocate per vertex; x,y,z,u,v,nx,ny,nz,
@@ -932,10 +942,13 @@ public final class GltfMeshParser {
             var declared = array("buffers");
             for (int i = 0; i < declared.size(); i++) {
                 var buffer = declared.get(i).getAsJsonObject();
+                if (!buffer.has("byteLength")) throw new IOException("buffer " + i + " has no byteLength");
+                int declaredLength = buffer.get("byteLength").getAsInt();
+                if (declaredLength < 0) throw new IOException("buffer " + i + " has a negative byteLength");
                 if (!buffer.has("uri")) {
                     // No uri = the GLB binary chunk, which by spec can only be buffer 0.
                     if (i == 0 && glbBin != null) {
-                        addBuffer(glbBin);
+                        addBuffer(glbBin, declaredLength);
                         continue;
                     }
                     throw new IOException("buffer " + i + " has no uri and there is no glb binary chunk");
@@ -946,23 +959,28 @@ public final class GltfMeshParser {
                         throw new IOException("buffer " + i + " points at external file '" + uri
                                 + "' but no model resource location was supplied");
                     }
-                    addBuffer(externalBuffers.load(uri));
+                    addBuffer(externalBuffers.load(uri), declaredLength);
                     continue;
                 }
                 int comma = uri.indexOf(',');
                 if (comma < 0 || uri.lastIndexOf("base64", comma) < 0) {
                     throw new IOException("buffer " + i + " uses a non-base64 data uri");
                 }
-                addBuffer(Base64.getDecoder().decode(uri.substring(comma + 1)));
+                addBuffer(Base64.getDecoder().decode(uri.substring(comma + 1)), declaredLength);
             }
         }
 
-        private void addBuffer(byte[] data) throws IOException {
+        private void addBuffer(byte[] data, int declaredLength) throws IOException {
+            if (!declaredBufferFits(declaredLength, data.length)) {
+                throw new IOException("glTF buffer declares " + declaredLength
+                        + " bytes but only " + data.length + " are available");
+            }
             if (data.length > ModelInput.MAX_FILE_BYTES - bufferBytes) {
                 throw new IOException("glTF decoded buffers exceed the " + ModelInput.MAX_FILE_BYTES + " byte limit");
             }
             bufferBytes += data.length;
             buffers.add(data);
+            declaredBufferLengths.add(declaredLength);
         }
 
         /** An accessor's values as floats, {@code components} per element, or null if unreadable. */
@@ -1048,7 +1066,8 @@ public final class GltfMeshParser {
             if (!view.has("byteLength")) return null;
             int length = view.get("byteLength").getAsInt();
             int stride = view.has("byteStride") ? view.get("byteStride").getAsInt() : 0;
-            if (offset < 0 || length < 0 || stride < 0 || (long) offset + length > data.limit()) return null;
+            if (stride < 0 || !bufferViewRangeFits(offset, length,
+                    declaredBufferLengths.get(bufferIndex))) return null;
             return new View(data, offset, length, stride);
         }
 

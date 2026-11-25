@@ -19,6 +19,16 @@ public final class GltfAccessorBoundsRegression {
         check(!GltfMeshParser.accessorRangeFits(Integer.MAX_VALUE - 4, 16,
                         Integer.MAX_VALUE, 0, 2, 4, 4),
                 "a view whose end overflows the backing buffer was accepted");
+        check(GltfMeshParser.declaredBufferFits(8, 11),
+                "a buffer with available trailing padding was rejected");
+        check(!GltfMeshParser.declaredBufferFits(12, 11),
+                "a buffer declaring more bytes than its payload was accepted");
+        check(GltfMeshParser.bufferViewRangeFits(4, 4, 8),
+                "a buffer view ending exactly at the declared buffer length was rejected");
+        check(!GltfMeshParser.bufferViewRangeFits(4, 8, 8),
+                "a view extending past the buffer's declared byteLength was accepted");
+        check(!GltfMeshParser.bufferViewRangeFits(Integer.MAX_VALUE - 2, 8, Integer.MAX_VALUE),
+                "a buffer-view end that overflows int was accepted");
         check(!GltfMeshParser.accessorRangeFits(0, Integer.MAX_VALUE,
                         Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE,
                         Integer.MAX_VALUE, 4),
