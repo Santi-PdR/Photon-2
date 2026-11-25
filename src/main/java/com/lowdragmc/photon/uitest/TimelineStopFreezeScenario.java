@@ -60,7 +60,9 @@ public class TimelineStopFreezeScenario implements UIScenario {
                     ctx.put("clockAtDestroy", clock(ctx));
                     runtime(ctx).destroy(false);
                 })
-                .waitUntil("40 ticks pass", ctx -> gameTime(ctx) >= ctx.<Long>get("destroyedAt") + 40)
+                // 35, not 40: A's particles (lifetime 80) have more life left than the wind-down window and end at
+                // destroyedAt + ParticleLifetime.WIND_DOWN_TICKS; the clock would have reached 45 by now anyway
+                .waitUntil("35 ticks pass", ctx -> gameTime(ctx) >= ctx.<Long>get("destroyedAt") + 35)
                 .step("nothing on the timeline ran after the destroy", ctx -> {
                     double stoppedAt = ctx.get("clockAtDestroy");
                     ctx.check("the clock stopped", clock(ctx) <= stoppedAt + 1, "<= " + (stoppedAt + 1), clock(ctx));
@@ -72,6 +74,13 @@ public class TimelineStopFreezeScenario implements UIScenario {
                     var a = (ParticleEmitter) object(ctx, A);
                     ctx.check("A's remnants drain where they were, not cut when its clip ended at 45",
                             a.isActive() && a.getParticleAmount() > 0, "active with particles", describe(a));
+                })
+                .waitUntil("the wind-down window passes", ctx -> gameTime(ctx) >= ctx.<Long>get("destroyedAt")
+                        + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS + 5)
+                .step("remnants with more life left than the window ended at the window", ctx -> {
+                    var a = (ParticleEmitter) object(ctx, A);
+                    ctx.check("A's particles (lifetime 80) are gone", a.getParticleAmount() == 0, 0, describe(a));
+                    ctx.check("the effect finished", runtime(ctx).isFinished(), "finished", "running");
                 })
                 .step("stop", TimelineStopFreezeScenario::stop)
 

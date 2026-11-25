@@ -46,6 +46,8 @@ public final class CpuParticleRecords {
     private FloatBuffer customStaging;
     private int dataCapacity;
     private int customCapacity;
+    private int maxTextureBufferTexels = -1;
+    private boolean capacityWarningLogged;
     @Nullable
     private AdditionalGPUDataSetting setting;
     private boolean writeData;
@@ -56,12 +58,41 @@ public final class CpuParticleRecords {
     private int memoData = -1, memoCustom = -1, memoVerts = -1;
 
     /** Start a frame's records; {@code setting} decides which of the two buffers are wanted. */
-    public void begin(AdditionalGPUDataSetting setting, int particleCapacity) {
-        this.setting = setting;
+    public boolean begin(AdditionalGPUDataSetting setting, int particleCapacity) {
+        this.setting = null;
         this.writeData = setting.hasDataRecord();
         this.writeCustom = setting.hasCustomRecord();
-        if (writeData) dataStaging = staging(dataStaging, particleCapacity * setting.dataTexels() * 4);
-        if (writeCustom) customStaging = staging(customStaging, particleCapacity * setting.customDataTexels() * 4);
+        if (!fitsRecordCapacity(particleCapacity, writeData ? setting.dataTexels() : 0,
+                writeCustom ? setting.customDataTexels() : 0, textureBufferTexelLimit())) {
+            writeData = false;
+            writeCustom = false;
+            if (!capacityWarningLogged) {
+                capacityWarningLogged = true;
+                com.lowdragmc.photon.Photon.LOGGER.warn("CPU particle records exceed OpenGL or Java staging capacity; rendering this batch without per-particle GPU records");
+            }
+            return false;
+        }
+        this.setting = setting;
+        if (writeData) dataStaging = staging(dataStaging, Math.toIntExact((long) particleCapacity * setting.dataTexels() * 4));
+        if (writeCustom) customStaging = staging(customStaging, Math.toIntExact((long) particleCapacity * setting.customDataTexels() * 4));
+        return true;
+    }
+
+    static boolean needsBufferAllocation(boolean newBuffer, int floats, int capacity) {
+        return newBuffer || floats > capacity || capacity == 0;
+    }
+
+    static boolean fitsRecordCapacity(long records, int dataTexels, int customTexels, int maxTextureBufferTexels) {
+        if (records < 0) return false;
+        return (dataTexels <= 0 || InstancedRenderBackend.fitsPointBuffer(records, dataTexels, maxTextureBufferTexels))
+                && (customTexels <= 0 || InstancedRenderBackend.fitsPointBuffer(records, customTexels, maxTextureBufferTexels));
+    }
+
+    private int textureBufferTexelLimit() {
+        if (maxTextureBufferTexels < 0) {
+            maxTextureBufferTexels = GlStateManager._getInteger(GL_MAX_TEXTURE_BUFFER_SIZE);
+        }
+        return maxTextureBufferTexels;
     }
 
     public void setVertsPerParticle(int vertsPerParticle) {
@@ -125,6 +156,12 @@ public final class CpuParticleRecords {
             resource.close();
             resource = null;
         }
+        dataCapacity = 0;
+        customCapacity = 0;
+        maxTextureBufferTexels = -1;
+        setting = null;
+        writeData = false;
+        writeCustom = false;
         memoShader = null;
     }
 
@@ -150,13 +187,16 @@ public final class CpuParticleRecords {
         int floats = staging.position();
         staging.flip();
         int tbo = data ? res.dataTbo : res.customTbo;
-        if (tbo == -1) {
+        boolean newBuffer = tbo == -1;
+        if (newBuffer) {
             tbo = glGenBuffers();
             if (data) res.dataTbo = tbo; else res.customTbo = tbo;
         }
         glBindBuffer(GL_TEXTURE_BUFFER, tbo);
-        if (floats > capacity || capacity == 0) {
-            capacity = Math.max(Math.max(floats, 4), capacity + (capacity >> 1));
+        if (needsBufferAllocation(newBuffer, floats, capacity)) {
+            long maxFloats = Math.min(Integer.MAX_VALUE, (long) GlStateManager._getInteger(GL_MAX_TEXTURE_BUFFER_SIZE) * 4);
+            if (floats > maxFloats) throw new IllegalStateException("CPU particle record upload exceeded GL_MAX_TEXTURE_BUFFER_SIZE");
+            capacity = (int) Math.min(maxFloats, Math.max(Math.max((long) floats, 4L), (long) capacity + (capacity >> 1)));
             glBufferData(GL_TEXTURE_BUFFER, (long) capacity * Float.BYTES, GL_STREAM_DRAW);
         }
         if (floats > 0) glBufferSubData(GL_TEXTURE_BUFFER, 0, staging);

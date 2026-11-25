@@ -47,34 +47,69 @@ public class PhotonPostProcessing {
 //            }
         }
     }
-    private static int LAST_WIDTH, LAST_HEIGHT;
+    private static int LAST_WIDTH, LAST_HEIGHT, LAST_MIP_LEVEL;
     private static boolean bloomFailureReported;
     private static HDRTarget HIGH_LIGHT, OUTPUT;
     private static final List<Mip> MIPS = new ArrayList<>();
 
-    public static void prepareTarget(int width, int height) {
-        int mipLevel = PhotonConfig.INSTANCE.bloomMipLevel.get();
-        if (LAST_WIDTH == width && LAST_HEIGHT == height && MIPS.size() == mipLevel) return;
+    /**
+     * How many pyramid levels a {@code width}×{@code height} frame has room for, {@code configured} at most.
+     *
+     * <p>The bright pass is half the frame and every level halves again, and a level needs at least one texel on
+     * both axes: {@link HDRTarget} (like vanilla's {@code RenderTarget}) rejects a 0×0 allocation with an
+     * {@code IllegalArgumentException}, which here would come out of the level render as a crash. The config allows
+     * up to 10 levels, but a 1080p frame only holds 9 (the tenth is 1080 / 2048 = 0 rows), a 720p frame 8, and the
+     * editor's scene preview or a minimised window can be far smaller than that. 0 means no level fits, so bloom is
+     * skipped for that frame size.
+     */
+    public static int fittingMipLevels(int configured, int width, int height) {
+        int smallest = Math.min(width, height);
+        if (configured < 1 || smallest < 4) return 0;
+        int halvings = 31 - Integer.numberOfLeadingZeros(smallest); // floor(log2): how often it halves before 0
+        return Math.min(configured, halvings - 1);
+    }
 
-        HIGH_LIGHT = resize(HIGH_LIGHT, width / 2, height / 2);
-        OUTPUT = resize(OUTPUT, width, height);
+    /** The number of pyramid levels currently allocated; 0 while the frame is too small for bloom. */
+    public static int mipLevels() {
+        return MIPS.size();
+    }
+
+    public static void prepareTarget(int width, int height) {
+        int configured = PhotonConfig.INSTANCE.bloomMipLevel.get();
+        if (LAST_WIDTH == width && LAST_HEIGHT == height && LAST_MIP_LEVEL == configured) return;
+        int mipLevel = fittingMipLevels(configured, width, height);
 
         MIPS.forEach(Mip::clear);
         MIPS.clear();
-        for (int i = 0; i < mipLevel; i++) {
-            MIPS.add(new Mip());
-        }
+        if (mipLevel == 0) {
+            // Too small for even one level: free the chain so postTarget() hands the frame back untouched.
+            HIGH_LIGHT = release(HIGH_LIGHT);
+            OUTPUT = release(OUTPUT);
+        } else {
+            HIGH_LIGHT = resize(HIGH_LIGHT, width / 2, height / 2);
+            OUTPUT = resize(OUTPUT, width, height);
+            for (int i = 0; i < mipLevel; i++) {
+                MIPS.add(new Mip());
+            }
 
-        var w = width / 2;
-        var h = height / 2;
-        for (Mip mip : MIPS) {
-            w = w / 2;
-            h = h / 2;
-            mip.updateScreenSize(w, h);
+            var w = width / 2;
+            var h = height / 2;
+            for (Mip mip : MIPS) {
+                w = w / 2;
+                h = h / 2;
+                mip.updateScreenSize(w, h);
+            }
         }
 
         LAST_WIDTH = width;
         LAST_HEIGHT = height;
+        LAST_MIP_LEVEL = configured;
+    }
+
+    @Nullable
+    private static HDRTarget release(@Nullable HDRTarget target) {
+        if (target != null) target.destroyBuffers();
+        return null;
     }
 
     public static RenderTarget postTarget(RenderTarget srcTarget) {
@@ -91,6 +126,7 @@ public class PhotonPostProcessing {
             bloomFailureReported = false;
             return srcTarget;
         }
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.begin("fx.bloom");
         try {
             if (!renderBloom(srcTarget)) {
                 bloomFailureReported = false;
@@ -113,6 +149,8 @@ public class PhotonPostProcessing {
             RenderSystem.blendEquation(GL30.GL_FUNC_ADD);
             RenderSystem.defaultBlendFunc();
             return srcTarget;
+        } finally {
+            com.lowdragmc.photon.client.compat.gpu.GpuCompat.end("fx.bloom");
         }
     }
 

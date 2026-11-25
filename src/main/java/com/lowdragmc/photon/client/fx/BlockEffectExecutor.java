@@ -52,7 +52,7 @@ public class BlockEffectExecutor extends FXEffectExecutor {
             neu.copyPlacementFrom(old);
             neu.setCheckState(old.isCheckState());
             if (old.runtime != null) {
-                old.runtime.destroy(true);
+                old.runtime.discard();
             }
             old.retire(CACHE, old.pos);
             neu.start();

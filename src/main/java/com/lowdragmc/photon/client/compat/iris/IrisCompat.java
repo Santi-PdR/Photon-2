@@ -10,13 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Photon's single entry point to Iris.
+ * Photon's single entry point to Iris and Oculus.
  *
  * <p>Everything Iris-shaped goes through here; the implementation lives behind {@link IrisBridge} so
- * that no {@code net.irisshaders} class is ever referenced from a class that loads without Iris.
+ * that no {@code net.irisshaders} class is ever referenced from a class that loads without either loader.
  */
 public final class IrisCompat {
     public static final String MOD_ID = "iris";
+    public static final String OCULUS_MOD_ID = "oculus";
 
     private static final IrisBridge BRIDGE = createBridge();
 
@@ -38,7 +39,7 @@ public final class IrisCompat {
     }
 
     private static IrisBridge createBridge() {
-        if (!LDLib2.isModLoaded(MOD_ID)) {
+        if (!ShaderModPresence.isLoaded(LDLib2.isModLoaded(MOD_ID), LDLib2.isModLoaded(OCULUS_MOD_ID))) {
             return IrisBridge.NOOP;
         }
         try {
@@ -47,7 +48,7 @@ public final class IrisCompat {
                     .getDeclaredConstructor()
                     .newInstance();
         } catch (Throwable t) {
-            Photon.LOGGER.warn("Iris is present but the Photon bridge failed to load; "
+            Photon.LOGGER.warn("Iris/Oculus is present but the Photon bridge failed to load; "
                     + "FX will render on the unshaded path", t);
             return IrisBridge.NOOP;
         }

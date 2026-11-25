@@ -56,4 +56,26 @@ public final class ParticleLifetime {
         var cycle = Math.round(endAge / lifetime) - 1;
         return (cycle & 1) == 0 ? 1 : 0;
     }
+
+    /**
+     * The most a once-only particle outlives its emitter's wind-down, in ticks (two seconds). An unforced removal
+     * stops the emitting and lets what shows finish on its own — the fade the effect was built with — but a particle
+     * with more life left than this ends at the window instead, the rest of its {@code T} compressed into it so its
+     * over-lifetime curves still run to their end: its own fade, played faster. The upstream rule alone (an infinite
+     * particle ends now, a cyclic one at the end of its cycle) left a once-only particle with a huge lifetime — the
+     * Photon 1 way of writing "forever", a shield's ten million ticks — on screen for good after
+     * {@code /photon fx remove}, which is why an interim build made every remove immediate.
+     */
+    public static final int WIND_DOWN_TICKS = 40;
+
+    /**
+     * T of a once-only particle whose remaining life was compressed into a wind-down window: it was at {@code fromT}
+     * when the window opened at {@code fromAge}, and reaches 1 at {@code endAge} (holding it from there on).
+     */
+    public static float windDownT(float fromT, float fromAge, float endAge, float age) {
+        if (endAge <= fromAge) return 1;
+        var into = (age - fromAge) / (endAge - fromAge);
+        if (into >= 1) return 1;
+        return fromT + (1 - fromT) * Math.max(into, 0);
+    }
 }

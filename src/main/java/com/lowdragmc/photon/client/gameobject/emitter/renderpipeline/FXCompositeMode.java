@@ -54,11 +54,23 @@ public enum FXCompositeMode {
         return Component.translatable("photon.enum.fx_composite_mode." + name().toLowerCase(Locale.ROOT));
     }
 
-    /** Collapse {@link #INHERIT} against the global config; never returns {@code INHERIT}. */
+    /**
+     * Collapse {@link #INHERIT} against the global config; never returns {@code INHERIT}. Under Photon's conservative
+     * GPU profile ({@code GpuCompat}) the answer is never {@link #LATE}: that path needs the opaque-depth snapshot and
+     * a foreign depth attachment, which are kept off the drivers the profile is for.
+     */
     public FXCompositeMode resolve() {
-        if (this != INHERIT) return this;
-        var global = PhotonConfig.INSTANCE.fxCompositeMode.get();
-        // a hand-edited config could name INHERIT, which would mean nothing at global scope
-        return global == INHERIT ? VANILLA : global;
+        var mode = this;
+        if (mode == INHERIT) {
+            mode = PhotonConfig.INSTANCE.fxCompositeMode.get();
+            // a hand-edited config could name INHERIT, which would mean nothing at global scope
+            if (mode == INHERIT) mode = VANILLA;
+        }
+        return com.lowdragmc.photon.client.compat.gpu.GpuCompat.compositeMode(mode);
+    }
+
+    /** The global default after the GPU profile, for callers that look at the config instead of an emitter. */
+    public static FXCompositeMode globalDefault() {
+        return INHERIT.resolve();
     }
 }

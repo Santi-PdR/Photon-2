@@ -37,15 +37,19 @@ public class GameRendererMixin {
         FXPreloader.onFrameStart();
     }
 
+    // A renderer mod may redirect/replace this call site. If it does, keep the game launchable
+    // rather than failing Mixin's required-injection check; the client smoke verifies the vanilla path.
     @Inject(method = "renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V"))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V"),
+            require = 0, expect = 1)
     private void photon$prepareTimelinePostEffects(float partialTick, long finishTimeNano, PoseStack poseStack, CallbackInfo ci) {
         ParticleEngine engine = Minecraft.getInstance().particleEngine;
         FXPostProcessPreparation.prepare(((ParticleEngineAccessor) engine).getParticles(), partialTick);
     }
 
     @Inject(method = "renderLevel(FJLcom/mojang/blaze3d/vertex/PoseStack;)V",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V", shift = At.Shift.AFTER))
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lcom/mojang/blaze3d/vertex/PoseStack;FJZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;)V", shift = At.Shift.AFTER),
+            require = 0, expect = 1)
     private void photon$afterLevelRender(float partialTick, long finishTimeNano, PoseStack poseStack, CallbackInfo ci) {
         DynamicLightRenderer.onLevelRendered();
         PhotonPostFX.onLevelRenderComplete();

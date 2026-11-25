@@ -13,6 +13,11 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    // Relocates the pure-Java audio codecs into Photon's own package before they go into the -all jar.
+    // As Jar-in-Jar modules they exported their original packages (net.sourceforge.jaad, javazoom,
+    // biniu): a JPMS split package as soon as another mod carries the same library, and the game does
+    // not start ("Modules citadel and jaad.MILESTONE export package net.sourceforge.jaad.spi.javasound").
+    id 'com.gradleup.shadow' version '8.3.6'
 }
 
 apply plugin: 'org.spongepowered.mixin'
@@ -26,7 +31,18 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+// The -all jar takes Photon's classes from shadowJar (codec references relocated), not from the
+// unrelocated main output; this must precede enable(), which realizes the task.
+jarJar.disableDefaultSources()
 jarJar.enable()
+
+configurations {
+    // Codecs relocated into com.lowdragmc.photon.internal.embedded and merged into the -all jar by
+    // shadowJar. Compilation and the dev game classpath (minecraftLibrary) see the original packages;
+    // only the packaged jar carries the relocated copies, so code must never name the relocated package.
+    shade { transitive = false }
+    minecraftLibrary.extendsFrom shade
+}
 
 // This accessor targets private Oculus implementation fields that are intentionally absent from
 // some supported compile-time Oculus APIs. Compile it without the Mixin AP; its config is gated
@@ -80,6 +96,7 @@ repositories {
     mavenCentral()
     maven { url = 'https://maven.firstdark.dev/snapshots' }
     maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://jitpack.io' }
     flatDir { dirs 'libs' }
 }
 
@@ -87,6 +104,11 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // Compile against the matching Forge 1.20.1 dependencies recovered from the
     // previous 2.2.2.3 port. The local artifacts are also used in Jar-in-Jar.
+    // libs/ldlib2-2.2.39.a.jar is the upstream LDLib2 build with its Kotlin runtime relocated under
+    // com.lowdragmc.photon.internal.embedded (see libs/upstream/README.md): a loose kotlin-stdlib
+    // nested in the distributable is a JPMS module exporting kotlin.*, which splits packages with
+    // Kotlin for Forge and stops the game from starting. The pin below must keep resolving to that
+    // file (flatDir picks the jar by "<name>-<version>.jar"); CI checks the packaged result.
     implementation fg.deobf('local:ldlib2:2.2.39.a')
     jarJar(fg.deobf('local:ldlib2:2.2.39.a'))
     compileOnly fg.deobf('local:ldlib1:1.0.52.a')
@@ -95,6 +117,15 @@ dependencies {
     jarJar(fg.deobf('local:kilagraph:20.1.0.15'))
     // Generate the production refmap for the Forge mixin configs.
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    // Automatic audio → Ogg Vorbis conversion for timeline audio clips (pure-Java codecs, no ffmpeg).
+    // jVorbisEnc (libvorbis encoder port) and jLayer (mp3) come from JitPack; JAAD decodes AAC/MP4.
+    // `shade` feeds shadowJar (relocated into the -all jar) and, through minecraftLibrary, the dev game
+    // classpath (the minecraft_classpath token; plain implementation only reaches compilation).
+    shade('com.github.umjammer:jVorbisEnc:0.0.2') {
+        exclude group: 'com.github.umjammer', module: 'vavi-commons' // test-only in jVorbisEnc
+    }
+    shade 'com.github.umjammer:jlayer:1.0.6'
+    shade 'io.vacco.jaad:jaad:0.8.8-MILESTONE-202111270642'
     // Photon 1.20.1 shader integration links against the Iris API shipped by Oculus.
     // Compile-only: Oculus remains an optional client-side runtime dependency.
     compileOnly fg.deobf('maven.modrinth:GchcoXML:iQ1SwGc3')
@@ -111,9 +142,41 @@ mixin {
 
 jarJar.versionInformation {
     ranged(dependency { it.group == 'local' && it.name == 'ldlib2' }, '[2.2.39.a,2.2.40)')
-    pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a+forge.1.20.1')
+    // The JarJar task re-resolves each dependency at its pinned version, so this pin decides which
+    // file in libs/ is embedded: '2.2.39.a' is the relocated build; '2.2.39.a+forge.1.20.1' used to
+    // embed the upstream jar with its loose kotlin-stdlib (the Kotlin for Forge split-package crash).
+    pin(dependency { it.group == 'local' && it.name == 'ldlib2' }, '2.2.39.a')
     ranged(dependency { it.group == 'local' && it.name == 'kilagraph' }, '[20.1.0.15,20.1.0.16)')
     pin(dependency { it.group == 'local' && it.name == 'kilagraph' }, '20.1.0.15')
+}
+
+def embeddedPackage = 'com.lowdragmc.photon.internal.embedded'
+shadowJar {
+    // Intermediate archive: Photon's main output plus the codecs, every reference to them rewritten to
+    // the relocated package. Not a mod jar to install; the -all jar is built from its content.
+    archiveClassifier = 'relocated'
+    configurations = [project.configurations.shade]
+    relocate 'net.sourceforge.jaad', "${embeddedPackage}.jaad"
+    relocate 'javazoom', "${embeddedPackage}.javazoom"
+    relocate 'biniu', "${embeddedPackage}.biniu"
+    // The codecs' module descriptors, javax.sound/javazoom service registrations and Maven metadata
+    // have no place inside the mod jar (Photon drives the codecs directly, never through the SPI).
+    exclude 'module-info.class'
+    exclude 'META-INF/versions/**'
+    exclude 'META-INF/services/javax.sound.*'
+    exclude 'META-INF/services/javazoom.*'
+    exclude 'META-INF/maven/**'
+}
+
+tasks.named('jarJar') {
+    dependsOn tasks.named('shadowJar')
+    // What disableDefaultSources() left out: the manifest of the slim jar and the mod's own classes,
+    // the latter now in their relocated form. MixinGradle still adds the refmap and MixinConfigs here,
+    // and reobfJarJar still runs on the result.
+    manifest.inheritFrom(tasks.named('jar').get().manifest)
+    from(zipTree(tasks.named('shadowJar').flatMap { it.archiveFile })) {
+        exclude 'META-INF/MANIFEST.MF'
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {

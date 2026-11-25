@@ -124,10 +124,14 @@ public class Timeline {
     /**
      * Ripple-insert {@code deltaTicks} of empty time at {@code atTick} across the whole timeline: every
      * marker and every track's content at or after the insertion point shifts later by {@code delta}
-     * (each track decides how — see {@link Track#insertTime}). A no-op for {@code delta == 0}.
+     * (each track decides how — see {@link Track#insertTime}). A no-op for {@code delta == 0} and for a
+     * non-finite point or delta: a NaN/infinite shift would poison every clip start, keyframe x, marker
+     * and signal time after the point, and nothing (not even the inverse ripple) could bring them back.
+     * A negative delta is the inverse of an earlier positive insert at the same point and is only exact
+     * as such; the editor's dialog never asks for one directly.
      */
     public void insertTime(double atTick, double deltaTicks) {
-        if (deltaTicks == 0) {
+        if (deltaTicks == 0 || !Double.isFinite(atTick) || !Double.isFinite(deltaTicks)) {
             return;
         }
         Marker.insertTime(markers, atTick, deltaTicks);

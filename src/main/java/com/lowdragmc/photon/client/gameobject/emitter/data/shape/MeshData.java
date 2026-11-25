@@ -299,6 +299,9 @@ public final class MeshData implements INBTSerializable<CompoundTag>, IConfigura
         var scene = new Scene();
         scene.setRenderFacing(false);
         scene.setRenderSelect(false);
+        // a static mesh preview: nothing in its level needs ticking, and a ticked LDLib2 virtual level used to post
+        // Forge's LevelTickEvent to every mod (see VirtualLevelTickGuard)
+        scene.setTickWorld(false);
         scene.createScene(level);
         assert scene.getRenderer() != null;
         scene.getRenderer().setOnLookingAt(null); // better performance

@@ -26,6 +26,8 @@ import java.util.function.Supplier;
 
 public class AraTrailParticle implements IParticle {
     public final static float EPSILON = 0.00001f;
+    /** Prevent unbounded trail history when authored lifetime/min-distance values are extreme. */
+    public static final int MAX_POINTS = 2046;
 
     public final IParticleEmitter emitter;
     public final AraTrailConfig config;
@@ -260,9 +262,23 @@ public class AraTrailParticle implements IParticle {
         }
     }
 
+    /**
+     * How long a warmup may pre-simulate, in seconds: the loop runs a physics and emission step per fixed delta
+     * (20 a second) synchronously when the trail is created, and the field had no bound, so an authored, loaded or
+     * timeline value such as 1e9 kept the client in that loop for good. 60 s is 1200 steps, far beyond what a
+     * trail needs to look "already running".
+     */
+    public static final float MAX_WARMUP_SECONDS = 60f;
+
+    /** The warmup actually simulated for a requested value: bounded above, and nothing for NaN or negatives. */
+    public static float warmupSeconds(float requested) {
+        if (!(requested > 0) || !Float.isFinite(requested)) return 0f;
+        return Math.min(requested, MAX_WARMUP_SECONDS);
+    }
+
     private void warmup() {
         if (!runtime.physics.isEnable()) return;
-        float simulatedTime = runtime.physics.warmup.get();
+        float simulatedTime = warmupSeconds(runtime.physics.warmup.get());
         var fixedDeltaTime = getFixedDeltaTime();
         updateDynamicData(0);
         while (simulatedTime > fixedDeltaTime) {
@@ -338,6 +354,7 @@ public class AraTrailParticle implements IParticle {
      * Spawns a new point in the trail.
      */
     public void emitPoint(Vector3f position, boolean skipLast) {
+        trimOldestForEmission(points);
         // Adjust the current end of the trail, if any:
 //        if (adjustEnd && points.size() > 1) {
 //            Point lastPoint = points[points.Count - 1];
@@ -362,6 +379,13 @@ public class AraTrailParticle implements IParticle {
         } else {
             points.add(point);
         }
+    }
+
+    /** Drop the oldest sample before insertion so a non-expiring authored trail stays bounded. */
+    static boolean trimOldestForEmission(ElasticArray<Point> points) {
+        if (points.size() < MAX_POINTS) return false;
+        points.removeAt(0);
+        return true;
     }
 
     /**
@@ -411,7 +435,7 @@ public class AraTrailParticle implements IParticle {
                 // Unsmoothed trails: wait until the next (newer) point is also dead, so the render-time tail
                 // retract can shrink this segment to zero (f reaches 1 only when next.life hits 0) before
                 // removal. Removing at life<=0 would pop a whole segment when the emission interval > 1 tick.
-                if (config.smoothness <= 1)
+                if (AraTrailConfig.safeSmoothness(config.smoothness) <= 1)
                 {
                     if (points.get(Math.min(i + 1, points.size() - 1)).life <= 0)
                         points.removeAt(i);

@@ -57,6 +57,11 @@ public final class LooseTextures {
     /** Vanilla's own namespaces are never resolved from a loose folder. */
     private static final Set<String> BUILTIN = Set.of("minecraft", "realms", "brigadier");
 
+    /** Namespaces the game owns: a picked file under {@code assets/minecraft/...} is never adopted into the workspace. */
+    public static boolean isBuiltinNamespace(String namespace) {
+        return BUILTIN.contains(namespace);
+    }
+
     private static boolean safeAssetId(ResourceLocation id) {
         return PhotonPaths.isSafeAssetLocation(id);
     }
@@ -184,6 +189,18 @@ public final class LooseTextures {
         looseCatalogueMayBeIncomplete = false;
         assetIndexMayBeIncomplete = false;
         looseCatalogueWarningLogged = false;
+    }
+
+    /**
+     * Drop the cached answers for these ids only: a pack that serves them was mounted or unmounted in the running
+     * resource manager ({@code FxPackHotMount}), which changes who answers for them and nothing else.
+     */
+    public static void invalidate(java.util.Collection<ResourceLocation> ids) {
+        for (var id : ids) {
+            RESOLVED.remove(id.toString());
+            PACK_SERVES.remove(id);
+            FAILED_UPLOADS.remove(id);
+        }
     }
 
     /**

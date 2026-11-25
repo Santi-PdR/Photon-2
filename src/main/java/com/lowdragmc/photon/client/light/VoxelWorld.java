@@ -1,5 +1,6 @@
 package com.lowdragmc.photon.client.light;
 
+import com.lowdragmc.photon.client.compat.gpu.GlUploads;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.TextureUtil;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
@@ -261,13 +262,12 @@ public final class VoxelWorld {
                 return false;
             }
         }
-        LightClusters.resetUnpack();
-        GlStateManager._bindTexture(brickTexture);
+        long token = GlUploads.bind(brickTexture);
         UPLOAD.position(0).limit(SLOT * SLOT);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, (brick.slot % SLOTS_PER_ROW) * SLOT, (brick.slot / SLOTS_PER_ROW) * SLOT,
                 SLOT, SLOT, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE, UPLOAD);
         UPLOAD.clear();
-        GlStateManager._bindTexture(0);
+        GlUploads.restore(token);
         brick.kind = MIXED;
         return true;
     }
@@ -308,21 +308,28 @@ public final class VoxelWorld {
                 }
             }
         }
-        LightClusters.resetUnpack();
-        GlStateManager._bindTexture(pageTexture);
+        long token = GlUploads.bind(pageTexture);
         PAGES.position(0).limit(PAGE_SIZE * PAGE_SIZE);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, PAGE_SIZE, PAGE_SIZE, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_INT, PAGES);
         PAGES.clear();
-        GlStateManager._bindTexture(0);
+        GlUploads.restore(token);
     }
 
     private void ensureTextures() {
         if (pageTexture != -1) return;
         pageTexture = LightClusters.newDataTexture();
+        long token = GlUploads.bind(pageTexture);
+        // the pages are rewritten whole on the first update; the bricks start as all-clear instead of leftover memory
         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R32UI, PAGE_SIZE, PAGE_SIZE, 0, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_INT, (IntBuffer) null);
         brickTexture = LightClusters.newDataTexture();
-        GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8UI, ATLAS, ATLAS, 0, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE, (ByteBuffer) null);
-        GlStateManager._bindTexture(0);
+        GlStateManager._bindTexture(brickTexture);
+        var clear = MemoryUtil.memCalloc(ATLAS * ATLAS);
+        try {
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8UI, ATLAS, ATLAS, 0, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_BYTE, clear);
+        } finally {
+            MemoryUtil.memFree(clear);
+        }
+        GlUploads.restore(token);
         pagesDirty = true;
     }
 
@@ -340,9 +347,9 @@ public final class VoxelWorld {
 
     private static int emptyTexture(int internalFormat, int type) {
         int id = LightClusters.newDataTexture();
-        LightClusters.resetUnpack();
+        long token = GlUploads.bind(id);
         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, internalFormat, 1, 1, 0, GL30.GL_RED_INTEGER, type, new int[1]);
-        GlStateManager._bindTexture(0);
+        GlUploads.restore(token);
         return id;
     }
 

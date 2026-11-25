@@ -135,7 +135,9 @@ public class GltfModelSource implements IModelSource {
                     }, r -> {
                         if (r != null && r.isFile()) {
                             var location = IModelSource.getAssetLocationFromFile(r);
-                            if (location == null || location.equals(modelLocation)) return;
+                            if (!com.lowdragmc.photon.client.util.AssetPickRejection.accepted(location,
+                                    PhotonPaths.getAssetsDir().toPath(), r.toPath(), mui.ui.rootElement)) return;
+                            if (location.equals(modelLocation)) return;
                             setModelLocation(location);
                             buttonConfigurator.notifyChanges();
                         }

@@ -4,6 +4,8 @@ import com.lowdragmc.lowdraglib2.gui.ui.rendering.UISurface;
 import com.lowdragmc.photon.PhotonConfig;
 import com.lowdragmc.photon.client.PhotonShaders;
 import com.lowdragmc.photon.client.fx.EntityEffectExecutor;
+import com.lowdragmc.photon.client.compat.gpu.GlUploads;
+import com.lowdragmc.photon.client.compat.gpu.GpuCompat;
 import com.lowdragmc.photon.client.compat.iris.IrisCompat;
 import com.lowdragmc.photon.client.postfx.graph.TargetFormat;
 import com.lowdragmc.photon.client.postfx.runtime.FormatTarget;
@@ -71,6 +73,10 @@ public final class DynamicLightRenderer {
     /** Ticks since lit particles last drew during which every shadowed light keeps a visibility map. */
     private static final int LIT_PARTICLE_TICKS = 20;
     private static final FloatBuffer VISIBILITY_LIGHTS = MemoryUtil.memAllocFloat(PhotonConfig.MAX_SHADOWED_LIGHTS * 4);
+    /** Zeros for a data texture's whole storage, the largest being the light data's four rows. */
+    private static final FloatBuffer ZEROS = MemoryUtil.memCallocFloat(LIGHTS_PER_ROW * 4 * (MAX_LIGHTS / LIGHTS_PER_ROW) * 4);
+    /** The shadow mode the frame was prepared with, after the GPU profile; what the pass shader is told. */
+    private static ShadowMode shadowMode = ShadowMode.OFF;
     /** Scattering per block of a fog volume's density 1: a light mist. */
     private static final float FOG_SCALE = 0.1f;
     private static final int MAX_FOG = 32;
@@ -317,7 +323,7 @@ public final class DynamicLightRenderer {
             scene.ambient.clear();
             scene.ambientAge = 0;
         }
-        var shadowMode = config.lightShadowMode.get();
+        shadowMode = GpuCompat.shadowMode(config.lightShadowMode.get());
         int shadowBudget = shadowMode == ShadowMode.OFF ? 0 : config.lightShadowedLights.get();
         SHADOWED.clear();
         SHADOWED_RANK.clear();
@@ -356,6 +362,7 @@ public final class DynamicLightRenderer {
             // shadowed: the light's map + 1, whether or not the map is drawn this frame
             for (int map = 0; map < MAP_RANK.size(); map++) DATA.put(MAP_RANK.getInt(map) * 16 + 13, map + 1f);
         }
+        GpuCompat.begin("light.prepare");
         LightClusters.build(VIEW, count, frame.projection(), frame.width(), frame.height());
         if (!VOLUMETRIC.isEmpty()) LightClusters.buildVolume(VOLUME_INDEX, count);
         uploadData(count);
@@ -368,6 +375,7 @@ public final class DynamicLightRenderer {
             boolean everyLight = ticks - litParticleTick < LIT_PARTICLE_TICKS || !FOG.isEmpty();
             buildVisibilityMaps(frame, everyLight ? MAP_RANK.size() : volumeShadowedCount);
         }
+        GpuCompat.end("light.prepare");
         lightCount = count;
         shadowedCount = SHADOWED.size();
         volumeCount = VOLUMETRIC.size();
@@ -429,7 +437,7 @@ public final class DynamicLightRenderer {
     /** Whether halos, beams and fog volumes are drawn: in the world's frame, or an editor scene's. */
     static boolean volumetricEnabled(boolean world) {
         var config = PhotonConfig.INSTANCE;
-        return config.volumetricLights.get() && config.volumetricDensity.get() > 0
+        return config.volumetricLights.get() && config.volumetricDensity.get() > 0 && GpuCompat.volumetrics()
                 && (!world || !IrisCompat.isUsingShaderPack() || config.volumetricWithShaderPacks.get());
     }
 
@@ -492,15 +500,19 @@ public final class DynamicLightRenderer {
 
     /** The first {@code rows} rows of {@code data} into an RGBA32F texture, made on first use. */
     private static int upload(int texture, int width, int height, int rows, FloatBuffer data) {
-        if (texture == -1) {
-            texture = LightClusters.newDataTexture();
-            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA32F, width, height, 0, GL11.GL_RGBA, GL11.GL_FLOAT, (FloatBuffer) null);
+        boolean fresh = texture == -1;
+        if (fresh) texture = LightClusters.newDataTexture();
+        long token = GlUploads.bind(texture);
+        if (fresh) {
+            // defined everywhere from the start: a row no light was packed into reads as zeros, not as leftover memory
+            int floats = width * height * 4;
+            ZEROS.position(0).limit(Math.min(floats, ZEROS.capacity()));
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RGBA32F, width, height, 0, GL11.GL_RGBA, GL11.GL_FLOAT,
+                    floats <= ZEROS.capacity() ? ZEROS : null);
         }
         data.position(0).limit(rows * width * 4);
-        LightClusters.resetUnpack();
-        GlStateManager._bindTexture(texture);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, width, rows, GL11.GL_RGBA, GL11.GL_FLOAT, data);
-        GlStateManager._bindTexture(0);
+        GlUploads.restore(token);
         data.clear();
         return texture;
     }
@@ -650,6 +662,7 @@ public final class DynamicLightRenderer {
             return;
         }
         long start = System.nanoTime();
+        GpuCompat.begin("light.apply");
         var config = PhotonConfig.INSTANCE;
         var scene = frame.scene();
         var level = frame.level();
@@ -687,7 +700,7 @@ public final class DynamicLightRenderer {
             bindLights(passShader, 0, 0);
             passShader.setSampler("VoxelPages", voxels.pageTexture());
             passShader.setSampler("VoxelBricks", voxels.brickTexture());
-            passShader.safeGetUniform("ShadowParams").set((float) config.lightShadowMode.get().ordinal(),
+            passShader.safeGetUniform("ShadowParams").set((float) shadowMode.ordinal(),
                     (float) config.lightScreenShadowSteps.get(), config.lightScreenShadowThickness.get().floatValue(),
                     config.lightScreenShadowDistance.get().floatValue());
             passShader.safeGetUniform("ContactParams").set((float) config.lightContactShadowSteps.get(),
@@ -793,6 +806,7 @@ public final class DynamicLightRenderer {
         }
 
         restore(framebuffer, viewportX, viewportY, viewportWidth, viewportHeight);
+        GpuCompat.end("light.apply");
         LightPassTimer.cpu((System.nanoTime() - start) / 1e6);
     }
 
@@ -800,6 +814,7 @@ public final class DynamicLightRenderer {
         var haze = pendingHaze;
         pendingHaze = null;
         if (haze == null) return;
+        GpuCompat.begin("light.haze");
         int framebuffer = GlStateManager.getBoundFramebuffer();
         int viewportX = GlStateManager.Viewport.x();
         int viewportY = GlStateManager.Viewport.y();
@@ -809,6 +824,7 @@ public final class DynamicLightRenderer {
         drawHaze(haze, 0);
         LightPassTimer.mark(LightPassTimer.Stage.HAZE);
         restore(framebuffer, viewportX, viewportY, viewportWidth, viewportHeight);
+        GpuCompat.end("light.haze");
     }
 
     /**

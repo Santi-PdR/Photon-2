@@ -5,6 +5,7 @@ import com.lowdragmc.lowdraglib2.LDLib2;
 import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.gui.editor.FXProject;
 import net.minecraft.nbt.*;
+import net.minecraft.network.chat.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,7 +34,7 @@ public class FXCompat {
      * @param failed    files that threw, with the reason
      * @param sources   the folders that were read, so an empty run says where it looked
      */
-    public record Report(int converted, List<String> skipped, List<String> failed, List<String> sources) {
+    public record Report(int converted, List<Component> skipped, List<Component> failed, List<String> sources) {
         public static Report empty() {
             return new Report(0, List.of(), List.of(), List.of());
         }
@@ -48,12 +49,16 @@ public class FXCompat {
             return new Report(converted + other.converted, mergedSkipped, mergedFailed, mergedSources);
         }
 
-        /** Everything worth showing, converted first: a player who asked for a conversion wants the whole story. */
-        public List<String> lines() {
-            var lines = new ArrayList<String>();
-            lines.add("converted " + converted + " effect(s) from " + (sources.isEmpty() ? "no folder" : String.join(", ", sources)));
-            for (var failure : failed) lines.add("failed: " + failure);
-            for (var skip : skipped) lines.add("skipped: " + skip);
+        /**
+         * Everything worth showing, converted first: a player who asked for a conversion wants the whole story.
+         * Chat components, so the player reads them in their own language.
+         */
+        public List<Component> lines() {
+            var lines = new ArrayList<Component>();
+            lines.add(Component.translatable("photon.command.convert.summary", converted, sources.isEmpty()
+                    ? Component.translatable("photon.command.convert.no_folder") : Component.literal(String.join(", ", sources))));
+            for (var failure : failed) lines.add(Component.translatable("photon.command.convert.failed", failure));
+            for (var skip : skipped) lines.add(Component.translatable("photon.command.convert.skipped", skip));
             return lines;
         }
     }
@@ -84,14 +89,14 @@ public class FXCompat {
      * made on purpose must not be rewritten silently.
      */
     private static Report reportNestedLeftovers(Path destination) {
-        var skipped = new ArrayList<String>();
+        var skipped = new ArrayList<Component>();
         if (!Files.isDirectory(destination)) return Report.empty();
         try (var paths = Files.walk(destination)) {
             paths.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".fx"))
                     .filter(path -> path.getParent() != null && !path.getParent().equals(destination))
-                    .forEach(path -> skipped.add(path.getFileName() + ": sits in a subfolder of the effect folder, "
-                            + "so its id has an extra path segment and the picker cannot list it"));
+                    .forEach(path -> skipped.add(Component.translatable("photon.command.convert.skipped.nested",
+                            path.getFileName().toString())));
         } catch (IOException ignored) {
             // nothing to report
         }
@@ -121,8 +126,8 @@ public class FXCompat {
 
     /** Convert a legacy tree without overwriting any existing Photon 2 effects. */
     public static Report convertFX(Path source, Path destination) {
-        var skipped = new ArrayList<String>();
-        var failed = new ArrayList<String>();
+        var skipped = new ArrayList<Component>();
+        var failed = new ArrayList<Component>();
         if (!Files.isDirectory(source)) return Report.empty();
         AtomicInteger count = new AtomicInteger();
         try (var paths = Files.walk(source)) {
@@ -132,8 +137,8 @@ public class FXCompat {
                     // into the id (photon:fx_old/matrix) and make the effect unreachable from the picker
                     var target = destination.resolve(path.getFileName().toString());
                     if (Files.exists(target)) {
-                        var reason = path.getFileName() + ": already converted (" + target.getFileName() + " exists)";
-                        skipped.add(reason);
+                        skipped.add(Component.translatable("photon.command.convert.skipped.exists",
+                                path.getFileName().toString(), target.getFileName().toString()));
                         Photon.LOGGER.warn("Skipping Photon 1 FX {}: destination already exists", path);
                         return;
                     }
@@ -143,8 +148,7 @@ public class FXCompat {
                         photon1FX = FXHelper.readNbt(input);
                     }
                     if (!isLegacyEffect(photon1FX)) {
-                        var reason = path.getFileName() + ": not a Photon 1 effect";
-                        skipped.add(reason);
+                        skipped.add(Component.translatable("photon.command.convert.skipped.not_legacy", path.getFileName().toString()));
                         Photon.LOGGER.warn("Skipping {}: not a recognized Photon 1 effect", path);
                         return;
                     }
@@ -155,14 +159,13 @@ public class FXCompat {
                     count.getAndIncrement();
                 }
                 catch(Exception e){
-                    var reason = path.getFileName() + ": " + e.getClass().getSimpleName()
-                            + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")");
-                    failed.add(reason);
+                    failed.add(Component.literal(path.getFileName() + ": " + e.getClass().getSimpleName()
+                            + (e.getMessage() == null ? "" : " (" + e.getMessage() + ")")));
                     Photon.LOGGER.error("Failed to convert Photon 1 FX {}", path, e);
                 }
             });
         } catch (IOException e) {
-            failed.add(source + ": " + e.getClass().getSimpleName());
+            failed.add(Component.literal(source + ": " + e.getClass().getSimpleName()));
             Photon.LOGGER.error("Failed to read Photon 1 FX directory {}", source, e);
         }
         return new Report(count.get(), List.copyOf(skipped), List.copyOf(failed), List.of(source.toString()));

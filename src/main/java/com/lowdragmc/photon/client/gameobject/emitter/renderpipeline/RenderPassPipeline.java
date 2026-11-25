@@ -237,6 +237,7 @@ public class RenderPassPipeline {
         // it. (That is exactly what the missing-water bug looked like.) The frame is lost either way;
         // the point is that the frame after it is not.
         boolean completed = false;
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.begin("fx.build");
         try {
             if (!inlineGroup.isEmpty()) {
                 renderGroup(inlineGroup, false, lateGroup == null);
@@ -253,6 +254,7 @@ public class RenderPassPipeline {
             }
             clearRenderingState();
             current = null;
+            com.lowdragmc.photon.client.compat.gpu.GpuCompat.end("fx.build");
         }
     }
 
@@ -1250,6 +1252,7 @@ public class RenderPassPipeline {
         var layer = pendingLateLayer;
         if (layer == null) return;
         pendingLateLayer = null;
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.begin("fx.lateComposite");
         // Nothing else will ever see these pixels, so no other bloom can reach them — ours is the
         // only one they can get. It runs here, once, on the layer both queues finished accumulating.
         int colorTexture = bloomedColorOf(layer, pendingLateBloom);
@@ -1259,6 +1262,7 @@ public class RenderPassPipeline {
         // after the composite, so the stacked distortions bend the layer together with the frame
         var frame = UISurface.currentTarget();
         StackedDistortion.bend(frame, frame.getDepthTextureId());
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.end("fx.lateComposite");
     }
 
     /**

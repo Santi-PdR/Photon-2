@@ -1,13 +1,13 @@
 package com.lowdragmc.photon.client.gameobject.emitter.data.shape;
 
 import com.lowdragmc.lowdraglib2.configurator.annotation.Configurable;
+import com.lowdragmc.lowdraglib2.configurator.ui.ConfiguratorGroup;
+import com.lowdragmc.lowdraglib2.configurator.ui.StringConfigurator;
 import com.lowdragmc.lowdraglib2.registry.annotation.LDLRegisterClient;
 import com.lowdragmc.lowdraglib2.utils.Vector3fHelper;
 import com.lowdragmc.photon.client.gameobject.emitter.IParticleEmitter;
 import com.lowdragmc.photon.client.gameobject.particle.TileParticle;
-import expr.Expr;
-import expr.Parser;
-import expr.SyntaxException;
+import com.lowdragmc.photon.client.util.CachedExpression;
 import expr.Variable;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,7 +17,7 @@ import org.joml.Vector3f;
 public class Function implements IShape {
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.x", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -26,7 +26,7 @@ public class Function implements IShape {
     private String x = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.y", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -35,7 +35,7 @@ public class Function implements IShape {
     private String y = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.z", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -45,7 +45,7 @@ public class Function implements IShape {
 
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedX", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -54,7 +54,7 @@ public class Function implements IShape {
     private String speedX = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedY", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -63,7 +63,7 @@ public class Function implements IShape {
     private String speedY = "0";
     @Getter
     @Setter
-    @Configurable(tips = {
+    @Configurable(name = "Function.speedZ", tips = {
             "photon.gui.editor.shape.function.tooltips.0",
             "photon.gui.editor.shape.function.tooltips.1",
             "photon.gui.editor.shape.function.tooltips.2",
@@ -72,17 +72,22 @@ public class Function implements IShape {
     private String speedZ = "0";
 
     // runtime
-    private Expr xCache, yCache, zCache, sXCache, sYCache, sZCache;
     private static final Variable T = Variable.make("t");
-    private static final Variable PI = Variable.make("PI");
     private static final Variable randomA = Variable.make("randomA");
     private static final Variable randomB = Variable.make("randomB");
     private static final Variable randomC = Variable.make("randomC");
     private static final Variable randomD = Variable.make("randomD");
     private static final Variable randomE = Variable.make("randomE");
-    static {
-        PI.setValue(Math.PI);
-    }
+    /** The identifiers a formula may use, as the tooltips document them (plus {@code PI}/{@code pi}). */
+    public static final Variable[] VARIABLES = {T, randomA, randomB, randomC, randomD, randomE};
+    // one cache per axis: a formula is parsed once per distinct source, a broken one is remembered as broken
+    // (it used to be re-parsed, exception and all, for every particle spawned while the author was typing)
+    private final CachedExpression xExpr = new CachedExpression(VARIABLES);
+    private final CachedExpression yExpr = new CachedExpression(VARIABLES);
+    private final CachedExpression zExpr = new CachedExpression(VARIABLES);
+    private final CachedExpression sXExpr = new CachedExpression(VARIABLES);
+    private final CachedExpression sYExpr = new CachedExpression(VARIABLES);
+    private final CachedExpression sZExpr = new CachedExpression(VARIABLES);
 
     private void prepareExpr(IParticleEmitter emitter) {
         T.setValue(emitter.getT());
@@ -93,50 +98,37 @@ public class Function implements IShape {
         randomD.setValue(emitter.getRandomSource().nextFloat());
         randomE.setValue(emitter.getRandomSource().nextFloat());
 
-        if (xCache == null || !x.equals(xCache.getInput())) {
-            try {
-                xCache = Parser.parse(x);
-            } catch (SyntaxException ignored) {
-            }
-        }
-        if (yCache == null || !y.equals(yCache.getInput())) {
-            try {
-                yCache = Parser.parse(y);
-            } catch (SyntaxException ignored) {
-            }
-        }
-        if (zCache == null || !z.equals(zCache.getInput())) {
-            try {
-                zCache = Parser.parse(z);
-            } catch (SyntaxException ignored) {
-            }
-        }
+        xExpr.update(x);
+        yExpr.update(y);
+        zExpr.update(z);
+        sXExpr.update(speedX);
+        sYExpr.update(speedY);
+        sZExpr.update(speedZ);
+    }
 
-        if (sXCache == null || !speedX.equals(sXCache.getInput())) {
-            try {
-                sXCache = Parser.parse(speedX);
-            } catch (SyntaxException ignored) {
-            }
-        }
-        if (sYCache == null || !speedY.equals(sYCache.getInput())) {
-            try {
-                sYCache = Parser.parse(speedY);
-            } catch (SyntaxException ignored) {
-            }
-        }
-        if (sZCache == null || !speedZ.equals(sZCache.getInput())) {
-            try {
-                sZCache = Parser.parse(speedZ);
-            } catch (SyntaxException ignored) {
-            }
+    /** Whether {@code source} is a formula this shape can use (blank reads as 0). */
+    public static boolean isUsableFormula(String source) {
+        return CachedExpression.problem(source, VARIABLES) == null;
+    }
+
+    @Override
+    public void buildConfigurator(ConfiguratorGroup father) {
+        int before = father.getConfigurators().size();
+        IShape.super.buildConfigurator(father);
+        // the six formula fields: a source that does not parse (or names an unknown variable) shows as invalid
+        // and is not applied, instead of being accepted and silently reading as the previous formula or 0
+        var all = father.getConfigurators();
+        for (var configurator : all.subList(before, all.size())) {
+            if (configurator instanceof StringConfigurator field) field.setTextValidator(Function::isUsableFormula);
         }
     }
 
     @Override
     public void nextPosVel(TileParticle particle, IParticleEmitter emitter, Vector3f position, Vector3f rotation, Vector3f scale) {
         prepareExpr(emitter);
-        var pos = new Vector3f(xCache != null ? (float) xCache.value() : 0, yCache != null ? (float) yCache.value() : 0, zCache != null ? (float) zCache.value() : 0);
-        var speed = new Vector3f(sXCache != null ? (float) sXCache.value() : 0, sYCache != null ? (float) sYCache.value() : 0, sZCache != null ? (float) sZCache.value() : 0);
+        // a formula that is blank, broken or not finite here (1/t at 0, sqrt(-1)) reads as 0, never as NaN
+        var pos = new Vector3f((float) xExpr.value(0), (float) yExpr.value(0), (float) zExpr.value(0));
+        var speed = new Vector3f((float) sXExpr.value(0), (float) sYExpr.value(0), (float) sZExpr.value(0));
         particle.setSimPos(Vector3fHelper.rotateYXY(new Vector3f(pos), rotation).add(position).add(particle.getSimPosWithoutNoise()), true);
         particle.setInternalVelocity(Vector3fHelper.isZero(speed) ? speed : Vector3fHelper.rotateYXY(speed.normalize().mul(0.05f), rotation));
     }

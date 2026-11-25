@@ -55,6 +55,8 @@ public final class PhotonFXEditorSmokeTest {
     private static boolean bloomSmokeLogged;
     private static int ticks;
     private static int tornadoFrameWait;
+    /** Ticks held at 225 waiting for the frame that lays the window-mode dialog out. */
+    private static int dialogFrameWait;
     private static FXEditor editor;
     private static Screen previousScreen;
     private static Path projectFile;
@@ -69,10 +71,28 @@ public final class PhotonFXEditorSmokeTest {
     private static com.lowdragmc.photon.client.fx.EntityEffectExecutor firstPersonEffect;
     private static boolean exportReloadComplete;
     private static boolean exportServerCommandVerified;
+    private static int removeIssuedTick = -1;
+    private static boolean removeWindDownSeen;
     private static boolean exportRemoveVerified;
     private static Throwable exportReloadFailure;
     private static boolean serverFxPackSyncLogged;
     private static int serverFxPackSyncTicks;
+    /** A pack copied into photon/fxpacks near the end of the run: the folder watcher has to mount it by itself. */
+    private static File watcherPack;
+    private static int watcherPackTick;
+    private static boolean watcherMountLogged;
+    private static int twinSessionsBefore;
+    /** The server-only fixture, rewritten in place the way an admin replaces a pack on a running server. */
+    private static File updatedServerPack;
+    /** The client's server-<hash> copy of the fixture's first version: has to be unmounted and removed by the update. */
+    private static File supersededServerCopy;
+    private static int updatedServerPackTick;
+    private static final String UPDATED_SERVER_SYNC_MARKER = "replaced by the admin while players were online";
+    /** Resource reloads seen when the hot-mount checks start: none may be added by the watcher or the server sync. */
+    private static int reloadsBaseline = -1;
+    /** The sound events the server-only fixture declares: the first version's (workflow) and the replacement's. */
+    private static final ResourceLocation SERVER_SYNC_SOUND = new ResourceLocation("photon_sync_probe", "hot_probe");
+    private static final ResourceLocation UPDATED_SERVER_SYNC_SOUND = new ResourceLocation("photon_sync_probe", "hot_probe_v2");
 
     private PhotonFXEditorSmokeTest() {}
 
@@ -439,7 +459,6 @@ public final class PhotonFXEditorSmokeTest {
         var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
         var oldEnabled = config.enableBloom.get();
         var oldThreshold = config.bloomThreshold.get();
-        var oldIntensity = config.bloomIntensity.get();
         int previousFramebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
         int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
         int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
@@ -450,7 +469,6 @@ public final class PhotonFXEditorSmokeTest {
         try {
             config.enableBloom.set(true);
             config.bloomThreshold.set(0.5);
-            config.bloomIntensity.set(0.18);
             source.setClearColor(0.3f, 0.3f, 0.3f, 1);
             source.clear(Minecraft.ON_OSX);
             source.bindWrite(false);
@@ -482,7 +500,6 @@ public final class PhotonFXEditorSmokeTest {
         } finally {
             config.enableBloom.set(oldEnabled);
             config.bloomThreshold.set(oldThreshold);
-            config.bloomIntensity.set(oldIntensity);
             source.destroyBuffers();
             com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
                     previousFramebuffer);
@@ -701,6 +718,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyEntityFxReplaysWhenTracked();
         verifyAddFxInstanceSurvivesBlankEncode();
         verifyPlayingFxBloomContribution();
+        verifyBloomMipChainFitsTheFrame();
         verifyDestroyKeepsRemnants();
         verifyVisibleRemnants();
         verifyInspectorPersistedKeys();
@@ -1045,6 +1063,78 @@ public final class PhotonFXEditorSmokeTest {
         }
         com.lowdragmc.photon.client.fx.FXBloom.endFrame();
         Photon.LOGGER.info("[playing-bloom-smoke] in-world FX contribute their authored bloom intensity");
+    }
+
+    /**
+     * {@code bloom_mip_level} goes up to 10, but the pyramid halves the frame once for the bright pass and once per
+     * level, and {@code HDRTarget} rejects a 0×0 allocation: a 1080p frame only holds 9 levels, a 720p frame 8, so
+     * the tenth (or ninth) level used to throw {@code IllegalArgumentException} out of the level render — a crash
+     * from a value the config screen offers. The chain is now clamped to what fits, and a frame too small for a
+     * single level (the editor preview collapsed, a minimised window) skips bloom instead of allocating.
+     */
+    private static void verifyBloomMipChainFitsTheFrame() {
+        int[][] cases = {
+                // configured, width, height, expected levels
+                {10, 1920, 1080, 9}, {10, 2560, 1440, 9}, {10, 3840, 2160, 10}, {10, 1280, 720, 8},
+                {5, 1920, 1080, 5}, {5, 64, 64, 5}, {10, 64, 64, 5}, {5, 4, 4, 1}, {5, 7, 500, 1},
+                {5, 3, 3, 0}, {5, 1, 1, 0}, {5, 0, 0, 0}, {2, 8, 8, 2}, {2, 6, 6, 1},
+        };
+        for (int[] c : cases) {
+            int levels = com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.fittingMipLevels(c[0], c[1], c[2]);
+            if (levels != c[3]) {
+                throw new IllegalStateException("fittingMipLevels(" + c[0] + ", " + c[1] + "x" + c[2] + ") = " + levels
+                        + ", expected " + c[3]);
+            }
+            // every level, and the half-size bright pass before it, keeps at least one texel on both axes
+            if (levels > 0 && (Math.min(c[1], c[2]) >> (levels + 1)) < 1) {
+                throw new IllegalStateException("fittingMipLevels(" + c[0] + ", " + c[1] + "x" + c[2]
+                        + ") = " + levels + " still ends in an empty level");
+            }
+        }
+        var config = com.lowdragmc.photon.PhotonConfig.INSTANCE;
+        int oldMipLevel = config.bloomMipLevel.get();
+        // releasing a chain unbinds the framebuffer (vanilla destroyBuffers); put the caller's state back after
+        int previousFramebuffer = com.mojang.blaze3d.platform.GlStateManager.getBoundFramebuffer();
+        int vx = com.mojang.blaze3d.platform.GlStateManager.Viewport.x();
+        int vy = com.mojang.blaze3d.platform.GlStateManager.Viewport.y();
+        int vw = com.mojang.blaze3d.platform.GlStateManager.Viewport.width();
+        int vh = com.mojang.blaze3d.platform.GlStateManager.Viewport.height();
+        var source = com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline
+                .resize(null, 2, 2, false);
+        try {
+            config.bloomMipLevel.set(10);
+            // 64x64 fits 5 of the 10 configured levels: used to throw at the sixth (64 / 128 = 0)
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(64, 64);
+            if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() != 5) {
+                throw new IllegalStateException("A 64x64 frame with bloom_mip_level=10 allocated "
+                        + com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() + " levels, expected 5");
+            }
+            // 2x2 holds none: the chain is released and the frame is handed back as it came
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(2, 2);
+            if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.mipLevels() != 0) {
+                throw new IllegalStateException("A 2x2 frame allocated a bloom pyramid");
+            }
+            com.lowdragmc.photon.client.fx.FXBloom.beginFrame();
+            var data = new com.lowdragmc.photon.client.fx.FXData();
+            data.setBloomIntensity(1f);
+            com.lowdragmc.photon.client.fx.FXBloom.contribute(data);
+            try {
+                if (com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.postTarget(source) != source) {
+                    throw new IllegalStateException("A 2x2 frame did not come back untouched from the bloom pass");
+                }
+            } finally {
+                com.lowdragmc.photon.client.fx.FXBloom.endFrame();
+            }
+        } finally {
+            config.bloomMipLevel.set(oldMipLevel);
+            source.destroyBuffers();
+            // leave the chain as the earlier bloom smoke built it (64x64 at the configured level count)
+            com.lowdragmc.photon.client.postprocessing.PhotonPostProcessing.prepareTarget(64, 64);
+            com.mojang.blaze3d.platform.GlStateManager._glBindFramebuffer(org.lwjgl.opengl.GL30.GL_FRAMEBUFFER,
+                    previousFramebuffer);
+            com.mojang.blaze3d.systems.RenderSystem.viewport(vx, vy, vw, vh);
+        }
+        Photon.LOGGER.info("[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)");
     }
 
     /** The audio inspector's loop checkbox must survive save/load, while older clips keep the looping default. */
@@ -1558,6 +1648,7 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Texture file path selected an earlier assets folder instead of its resource root: "
                     + nestedId);
         }
+        verifyAssetPickRejections();
         var loaded = com.lowdragmc.photon.client.util.PhotonTextureCatalogue.listLoaded();
         boolean hasParticle = loaded.stream().anyMatch(id -> id.getNamespace().equals("photon")
                 && id.getPath().contains("particle"));
@@ -1579,6 +1670,75 @@ public final class PhotonFXEditorSmokeTest {
         }
         Photon.LOGGER.info("[loaded-texture-catalogue-smoke] editor can pick {} loaded textures; bounded search returned {}, filtered search returned {}",
                 loaded.size(), matches.size(), filtered.size());
+    }
+
+    /**
+     * A picked file whose path a resource id cannot carry ({@code Fire Ball.png}, an accented folder) used to make
+     * the picker do nothing: {@link com.lowdragmc.photon.client.util.PhotonAssetPath#fromFile} is null for it, exactly
+     * as for a file outside any assets tree. The two must now be told apart, the bad name must come with the rename
+     * that fixes it, and an acceptable file must not be flagged.
+     */
+    private static void verifyAssetPickRejections() {
+        var root = java.nio.file.Path.of("photon", "assets");
+        var shouted = root.resolve(java.nio.file.Path.of("MyFX", "textures", "particle", "Fire Ball.png"));
+        var raw = com.lowdragmc.photon.client.util.PhotonAssetPath.rawId(root, shouted);
+        if (!"MyFX:textures/particle/Fire Ball.png".equals(raw)
+                || com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, shouted) != null) {
+            throw new IllegalStateException("Raw asset id of a badly named file was not reported, or it parsed: " + raw);
+        }
+        var badName = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, shouted);
+        if (badName == null || badName.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.INVALID_NAME
+                || !"myfx:textures/particle/fire_ball.png".equals(badName.suggestedId())) {
+            throw new IllegalStateException("Badly named asset was not explained with a rename: " + badName);
+        }
+        var accented = root.resolve(java.nio.file.Path.of("photon", "textures", "humo añil.png"));
+        var accentedRejection = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, accented);
+        if (accentedRejection == null || !"photon:textures/humo_anil.png".equals(accentedRejection.suggestedId())) {
+            throw new IllegalStateException("Accented asset name was not folded into a valid rename: " + accentedRejection);
+        }
+        var outside = java.nio.file.Path.of("downloads", "fire.png");
+        var outsideRejection = com.lowdragmc.photon.client.util.AssetPickRejection.of(root, outside);
+        if (outsideRejection == null
+                || outsideRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.NOT_UNDER_ASSETS) {
+            throw new IllegalStateException("File outside every assets tree was not reported as such: " + outsideRejection);
+        }
+        var fine = root.resolve(java.nio.file.Path.of("myfx", "textures", "particle", "fire_ball.png"));
+        var fineId = com.lowdragmc.photon.client.util.PhotonAssetPath.fromFile(root, fine);
+        if (com.lowdragmc.photon.client.util.AssetPickRejection.of(root, fine) != null
+                || !new ResourceLocation("myfx", "textures/particle/fire_ball.png").equals(fineId)
+                || com.lowdragmc.photon.client.util.AssetPickRejection.explain(fineId, root, fine) != null) {
+            throw new IllegalStateException("A valid asset file was refused by the pick explainer");
+        }
+        // mapped fine but never adopted: a file parked in the game's own namespace, versus one that failed to decode
+        var vanilla = root.resolve(java.nio.file.Path.of("minecraft", "textures", "particle", "flame.png"));
+        var vanillaRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explain(null, root, vanilla);
+        var unreadable = com.lowdragmc.photon.client.util.AssetPickRejection.explain(null, root, fine);
+        if (vanillaRejection == null
+                || vanillaRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.RESERVED_NAMESPACE
+                || !vanillaRejection.message().getString().contains("assets/minecraft/")
+                || unreadable == null
+                || unreadable.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.UNREADABLE) {
+            throw new IllegalStateException("Adoption refusals were not told apart: " + vanillaRejection + " / " + unreadable);
+        }
+        // pickers that also demand a folder: a well-named JSON outside it is "wrong folder", with the folder named
+        var strayShader = root.resolve(java.nio.file.Path.of("myfx", "textures", "glow.json"));
+        var strayRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explainUnder(null, root, strayShader, "shaders/core/");
+        var placedShader = root.resolve(java.nio.file.Path.of("myfx", "shaders", "core", "glow.json"));
+        var placedRejection = com.lowdragmc.photon.client.util.AssetPickRejection.explainUnder(null, root, placedShader, "shaders/core/");
+        if (strayRejection == null
+                || strayRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.WRONG_FOLDER
+                || !"assets/myfx/shaders/core/".equals(strayRejection.suggestedId())
+                || !strayRejection.message().getString().contains("assets/myfx/shaders/core/")
+                || placedRejection == null
+                || placedRejection.kind() != com.lowdragmc.photon.client.util.AssetPickRejection.Kind.UNREADABLE) {
+            throw new IllegalStateException("Folder-bound pick refusals were not explained: " + strayRejection + " / " + placedRejection);
+        }
+        // the explanation itself must be translated, not a raw key, and must carry the rename
+        var message = badName.message().getString();
+        if (message.startsWith("photon.") || !message.contains("myfx:textures/particle/fire_ball.png")) {
+            throw new IllegalStateException("Asset pick rejection message is raw or lacks the rename: " + message);
+        }
+        Photon.LOGGER.info("[asset-pick-rejection-smoke] badly named, accented, outside-assets and reserved-namespace picks are explained; valid files pass");
     }
 
     /** Material previews are retained textures; asking for one each frame must not allocate a new wrapper. */
@@ -1666,6 +1826,14 @@ public final class PhotonFXEditorSmokeTest {
                 || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.finalT(pingPong, endAge, lifetime)) > 1e-4
                 || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.t(loop, 41, lifetime, endAge) - 1f) > 1e-4) {
             throw new IllegalStateException("A cyclic particle did not finish and hold its last cycle value");
+        }
+        // a once-only particle with more life left than the wind-down window ends at the window, the rest of its T
+        // compressed into it: from 0.25 when the window opens at age 10 to 1 at its end, holding 1 from there on
+        var windowEnd = 10 + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS;
+        if (Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 10) - 0.25f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 30) - 0.625f) > 1e-4
+                || Math.abs(com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.windDownT(0.25f, 10, windowEnd, 60) - 1f) > 1e-4) {
+            throw new IllegalStateException("A long-lived particle's remaining T was not compressed into the wind-down window");
         }
         Photon.LOGGER.info("[lifetime-mode-smoke] Once holds at 1, Loop wraps to the same phase and PingPong returns "
                 + "({} -> {} -> {})", out, back, returned);
@@ -2044,8 +2212,10 @@ public final class PhotonFXEditorSmokeTest {
             var path = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("photon-client.toml");
             if (!java.nio.file.Files.isRegularFile(path)) return "no config file at " + path;
             var text = java.nio.file.Files.readString(path);
-            var line = text.lines().filter(l -> l.startsWith("bloom_intensity"))
-                    .findFirst().orElse("<bloom_intensity missing>");
+            // Any live double entry proves the file has been rewritten or reloaded; bloom_threshold
+            // is the sibling of the retired bloom_intensity and always present.
+            var line = text.lines().filter(l -> l.startsWith("bloom_threshold"))
+                    .findFirst().orElse("<bloom_threshold missing>");
             return "file " + path.getFileName() + " (" + text.length() + " chars) says " + line
                     + ", watcher threads=" + Thread.getAllStackTraces().keySet().stream()
                     .map(Thread::getName)
@@ -2341,16 +2511,27 @@ public final class PhotonFXEditorSmokeTest {
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) {
                 serverFxPackSyncTicks++;
                 var marker = new ResourceLocation("photon_sync_probe", "textures/server_sync_marker.txt");
-                if (minecraft.getResourceManager().getResource(marker).isPresent()) {
-                    Photon.LOGGER.info("[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload");
+                // Round 24: the pack is mounted in the running resource manager, not by a resource reload, and its
+                // sounds.json has to reach the sound manager all the same (a reload is the only time vanilla reads it)
+                boolean served = minecraft.getResourceManager().getResource(marker).isPresent();
+                boolean heard = minecraft.getSoundManager().getSoundEvent(SERVER_SYNC_SOUND) != null;
+                if (served && heard) {
+                    if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() != 0) {
+                        throw new IllegalStateException("The server FX pack sync fell back to a resource reload");
+                    }
+                    Photon.LOGGER.info("[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted in the running resource manager, sounds included, without a resource reload");
                     serverFxPackSyncLogged = true;
                 } else if (serverFxPackSyncTicks >= 600) {
-                    throw new IllegalStateException("Server FX pack did not reach the client after login");
+                    throw new IllegalStateException(served
+                            ? "The server FX pack is served but its sound event " + SERVER_SYNC_SOUND + " is unknown to the sound manager"
+                            : "Server FX pack did not reach the client after login");
                 }
             }
-            // Server pack sync reloads the resource manager. Let it finish before starting editor particle checks.
+            // Server pack sync mounts its packs on the game thread. Let it finish before starting editor particle checks.
             if (Boolean.getBoolean("photon.serverFxPackSyncSmoke") && !serverFxPackSyncLogged) return;
             if (!bloomSmokeLogged) {
+                // the LDLib2 in this run must link against the relocated Kotlin runtime, as the distributable does
+                com.lowdragmc.photon.integration.KotlinRuntimeIsolationRegression.verify();
                 verifyLegacyBlendSafety();
                 verifyBloomSceneMask();
                 verifyBloomDefaults();
@@ -2367,6 +2548,15 @@ public final class PhotonFXEditorSmokeTest {
                     return;
                 }
                 tornadoFrameWait = 0;
+            }
+            if (started && smokeTrail != null && ticks == 225
+                    && !com.lowdragmc.photon.gui.editor.DialogSizeRegression.laidOut()) {
+                // the window-mode dialog opened at tick 220 is measured at 226, once the UI has laid it out — which a
+                // rendered frame does, and the software renderer may run up to ten ticks between two frames: hold
+                // the clock until that frame has happened (round 24: with no resource reload at login the frames
+                // around here are the first busy ones of the session, and six ticks were not always a frame)
+                if (++dialogFrameWait > 200) throw new IllegalStateException("No rendered frame laid out the window-mode dialog");
+                return;
             }
             if (started && smokeTrail != null) {
                 ticks++;
@@ -2542,6 +2732,12 @@ public final class PhotonFXEditorSmokeTest {
                 if (editor.getCurrentProject() != realShield || editor.runtime == null)
                     throw new IllegalStateException("Real shield project did not initialize in the editor");
                 System.setProperty("photon.realShieldSmoke", "true");
+            } else if (ticks == 220) {
+                // a window-mode dialog over the live editor, while nothing reloads; closed and measured six frames
+                // later, once the UI has laid it out (a resource reload's overlay would stop the frames)
+                com.lowdragmc.photon.gui.editor.DialogSizeRegression.open(editor);
+            } else if (ticks == 226) {
+                com.lowdragmc.photon.gui.editor.DialogSizeRegression.verify();
             } else if (ticks == 240) {
                 var shield = editor.runtime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
                         .map(ParticleEmitter.class::cast).findFirst().orElseThrow();
@@ -2744,6 +2940,7 @@ public final class PhotonFXEditorSmokeTest {
                 Photon.LOGGER.info("[export-server-command-smoke] server command delivered exported FX over Forge networking");
                 exportServerCommandVerified = true;
                 removedEntityRuntime = attached.get(attached.size() - 1).getRuntime();
+                removeIssuedTick = ticks;
                 var server = minecraft.getSingleplayerServer();
                 var playerId = minecraft.player.getUUID();
                 server.execute(() -> {
@@ -2755,13 +2952,19 @@ public final class PhotonFXEditorSmokeTest {
                 if (realArrowTrail == null || trailParticle(realArrowTrail).getTails().size() < 3)
                     throw new IllegalStateException("Real arrow trail did not accumulate moving segments");
                 Photon.LOGGER.info("[real-arrow-trail-project-smoke] original trail accumulated moving segments");
-            } else if (ticks >= 325 && exportServerCommandVerified && !exportRemoveVerified) {
-                if (removedEntityRuntime == null || !removedEntityRuntime.isFinished()
-                        || removedEntityRuntime.objects.values().stream().filter(ParticleEmitter.class::isInstance)
-                        .map(ParticleEmitter.class::cast).anyMatch(emitter -> emitter.getParticleAmount() != 0))
-                    throw new IllegalStateException("Remove command left the long-lived shield particles visible");
-                Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
-                exportRemoveVerified = true;
+            } else if (exportServerCommandVerified && !removeWindDownSeen && ticks >= removeIssuedTick + 10 && ticks < 335) {
+                // an unqualified remove is the graceful one: a dozen ticks after the command the runtime has been told to
+                // go, and the shield (one particle of ten million ticks) is still there, winding down rather than cut
+                if (removedEntityRuntime == null || removedEntityRuntime.isValid()) {
+                    if (ticks < 334) return;
+                    throw new IllegalStateException("Remove command did not reach the client's effect");
+                }
+                if (removedEntityRuntime.isFinished() || removedEntityRuntime.objects.values().stream()
+                        .filter(ParticleEmitter.class::isInstance).map(ParticleEmitter.class::cast)
+                        .noneMatch(emitter -> emitter.getParticleAmount() != 0))
+                    throw new IllegalStateException("Default remove dropped the shield at once instead of winding it down");
+                Photon.LOGGER.info("[remove-server-command-smoke] default remove winds the shield down instead of cutting it");
+                removeWindDownSeen = true;
             } else if (ticks == 335) {
                 Screenshot.grab(new File("."), minecraft.getMainRenderTarget(),
                         message -> Photon.LOGGER.info("[real-arrow-trail-project-smoke] screenshot: {}", message.getString()));
@@ -2792,14 +2995,138 @@ public final class PhotonFXEditorSmokeTest {
                 firstPersonEffect = new com.lowdragmc.photon.client.fx.EntityEffectExecutor(gpuScan.getFx(), minecraft.level,
                         minecraft.player, com.lowdragmc.photon.client.fx.EntityEffectExecutor.AutoRotate.NONE);
                 firstPersonEffect.start();
+            } else if (removeWindDownSeen && !exportRemoveVerified && ticks >= removeIssuedTick + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS + 8) {
+                // ... and within the wind-down window the long-lived particle has ended with its emitter: the graceful
+                // remove must not leave a shield on screen for good (its lifetime is as good as infinite)
+                if (!removedEntityRuntime.isFinished() || removedEntityRuntime.objects.values().stream()
+                        .filter(ParticleEmitter.class::isInstance).map(ParticleEmitter.class::cast)
+                        .anyMatch(emitter -> emitter.getParticleAmount() != 0)) {
+                    if (ticks < removeIssuedTick + com.lowdragmc.photon.client.gameobject.particle.ParticleLifetime.WIND_DOWN_TICKS + 30) return;
+                    throw new IllegalStateException("Remove command left the long-lived shield particles visible");
+                }
+                Photon.LOGGER.info("[remove-server-command-smoke] default remove cleared long-lived entity particles");
+                exportRemoveVerified = true;
             } else if (ticks == 425) {
                 if (!Boolean.getBoolean("photon.firstPersonBillboardSeen") || !Boolean.getBoolean("photon.firstPersonScanPixels"))
                     throw new IllegalStateException("GPU first-person scan did not draw a camera-centred owner billboard");
                 Photon.LOGGER.info("[first-person-scan-gpu-smoke] owner billboard rendered");
                 System.clearProperty("photon.firstPersonSmoke");
                 System.clearProperty("photon.firstPersonGpuSmoke");
-                finished = true;
-                minecraft.stop();
+                if (firstPersonEffect.getRuntime() != null) firstPersonEffect.getRuntime().destroy(true);
+                com.lowdragmc.photon.client.fx.EntityEffectExecutor.CACHE.remove(minecraft.player);
+                // Last: a pack that lands in photon/fxpacks the way a player copies one in. Nothing here reloads
+                // the resources; the folder watcher has to notice the file, wait for it to stop changing, reload,
+                // and the pack has to be mounted afterwards — the whole point of not needing F3+T.
+                watcherPack = new File(com.lowdragmc.photon.client.fx.fxpack.FXPacks.getFxPacksDir(), "ci_watcher.fxpack");
+                writeMarkerPack(watcherPack);
+                watcherPackTick = ticks;
+                // Round 24: from here on nothing may reload the resources — the watcher and the server sync mount
+                // in place; the export reload above (tick 260) is the last one and is already counted
+                reloadsBaseline = com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen();
+                // The integrated server scans this same folder. Asked for its list again it offers ci_watcher.fxpack
+                // (and the server-only fixture): the client has to recognise the installed file and not download it
+                // back as a server-<hash> copy, which is what singleplayer did ("why are there two random files").
+                twinSessionsBefore = com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions();
+                com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(com.lowdragmc.photon.network.FxPackSync.refreshRequest());
+            } else if (updatedServerPack != null) {
+                var marker = new ResourceLocation("photon_sync_probe", "textures/server_sync_marker.txt");
+                String served = null;
+                var resource = minecraft.getResourceManager().getResource(marker).orElse(null);
+                if (resource != null) {
+                    try (var input = resource.open()) {
+                        served = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                }
+                boolean updated = UPDATED_SERVER_SYNC_MARKER.equals(served);
+                boolean oldGone = !supersededServerCopy.isFile()
+                        && !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(supersededServerCopy);
+                if (updated && oldGone) {
+                    var fresh = new File(updatedServerPack.getParentFile(), "server-" + sha256Hex(updatedServerPack.toPath()) + ".fxpack");
+                    if (!fresh.isFile() || !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(fresh)) {
+                        throw new IllegalStateException("The updated server pack is served, but not from its own copy " + fresh.getName());
+                    }
+                    Photon.LOGGER.info("[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T");
+                    // Round 24: all of that happened in the running resource manager. The superseded copy was mounted
+                    // by the export reload at tick 260 (a reload's own entry, not one Photon put there), so its removal
+                    // exercised the unmount of a reload-mounted pack, and the sound manager has to follow: the new
+                    // version's event registered, the old version's taken out, with no reload and no fallback.
+                    var reloads = com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen();
+                    if (reloads != reloadsBaseline) {
+                        throw new IllegalStateException("Mounting packs in place still reloaded the resources " + (reloads - reloadsBaseline) + " time(s)");
+                    }
+                    if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() != 0
+                            || com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() != 0) {
+                        throw new IllegalStateException("A pack mount fell back to a resource reload (sync "
+                                + com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.fullReloads() + ", watcher "
+                                + com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() + ")");
+                    }
+                    if (com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.hotMounts() == 0) {
+                        throw new IllegalStateException("The folder watcher did not mount ci_watcher.fxpack in place");
+                    }
+                    var soundManager = minecraft.getSoundManager();
+                    if (soundManager.getSoundEvent(UPDATED_SERVER_SYNC_SOUND) == null) {
+                        throw new IllegalStateException("The updated server pack's sound event " + UPDATED_SERVER_SYNC_SOUND + " is unknown to the sound manager");
+                    }
+                    if (soundManager.getSoundEvent(SERVER_SYNC_SOUND) != null) {
+                        throw new IllegalStateException("The superseded server pack's sound event " + SERVER_SYNC_SOUND + " is still registered");
+                    }
+                    Photon.LOGGER.info("[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack's sounds.json events were registered and the old pack's taken out");
+                    finished = true;
+                    minecraft.stop();
+                } else if (ticks >= updatedServerPackTick + 1200) {
+                    throw new IllegalStateException(updated
+                            ? "The updated server pack is served, but the superseded copy " + supersededServerCopy.getName()
+                            + (supersededServerCopy.isFile() ? " is still on disk" : " is still mounted")
+                            : "The pack replaced on the server did not reach the client by itself; it still serves: " + served);
+                }
+            } else if (watcherPack != null) {
+                var marker = new ResourceLocation("ci_watcher", "textures/watcher_marker.txt");
+                boolean mounted = com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(watcherPack)
+                        && minecraft.getResourceManager().getResource(marker).isPresent();
+                if (!watcherMountLogged && mounted) {
+                    if (com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.reloadsSeen() != reloadsBaseline
+                            || com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.fullReloads() != 0) {
+                        throw new IllegalStateException("The folder watcher mounted ci_watcher.fxpack through a resource reload");
+                    }
+                    Photon.LOGGER.info("[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T");
+                    watcherMountLogged = true;
+                }
+                if (com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions() <= twinSessionsBefore
+                        && (ticks - watcherPackTick) % 120 == 0) {
+                    // the server answers a requested offer at most once every five seconds; ask again if the first was too soon
+                    com.lowdragmc.photon.PhotonNetworking.CHANNEL.sendToServer(com.lowdragmc.photon.network.FxPackSync.refreshRequest());
+                }
+                if (watcherMountLogged && com.lowdragmc.photon.client.fx.fxpack.ClientFxPackSync.finishedSessions() > twinSessionsBefore) {
+                    var copy = new File(watcherPack.getParentFile(), "server-" + sha256Hex(watcherPack.toPath()) + ".fxpack");
+                    if (copy.isFile()) {
+                        throw new IllegalStateException("The server's offer of the installed pack was downloaded again as " + copy.getName());
+                    }
+                    if (!mounted) {
+                        throw new IllegalStateException("The installed pack stopped being mounted after the server offered it");
+                    }
+                    Photon.LOGGER.info("[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy");
+                    if (!Boolean.getBoolean("photon.serverFxPackSyncSmoke")) {
+                        finished = true;
+                        minecraft.stop();
+                        return;
+                    }
+                    // Last: the admin replaces a pack on the server while players are online. Nothing here asks the
+                    // server for its list: its folder watcher has to notice the changed file, let it settle and offer
+                    // the list again by itself, and the client has to download the new version, reload, serve the
+                    // new content and drop its copy of the old one — no command, no reinstall, no F3+T.
+                    var fixture = new File(watcherPack.getParentFile(), "server-ci-server-sync.fxpack");
+                    supersededServerCopy = new File(watcherPack.getParentFile(), "server-" + sha256Hex(fixture.toPath()) + ".fxpack");
+                    if (!supersededServerCopy.isFile() || !com.lowdragmc.photon.client.fx.fxpack.FXPacks.isMounted(supersededServerCopy)) {
+                        throw new IllegalStateException("The server-only fixture is not mounted as " + supersededServerCopy.getName() + " before its update");
+                    }
+                    writeServerSyncFixture(fixture, UPDATED_SERVER_SYNC_MARKER);
+                    updatedServerPack = fixture;
+                    updatedServerPackTick = ticks;
+                } else if (ticks >= watcherPackTick + 600) {
+                    throw new IllegalStateException(watcherMountLogged
+                            ? "The server's re-offer did not finish on the client after an installed pack appeared"
+                            : "The folder watcher did not mount a pack copied into photon/fxpacks");
+                }
             }
         } catch (Throwable failure) {
             finished = true;
@@ -2828,6 +3155,73 @@ public final class PhotonFXEditorSmokeTest {
         minecraft.screen.mouseMoved(pos.x, pos.y);
         minecraft.screen.mouseClicked(pos.x, pos.y, 0);
         minecraft.screen.mouseReleased(pos.x, pos.y, 0);
+    }
+
+    private static String sha256Hex(java.nio.file.Path path) throws java.io.IOException {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(path)) {
+                var buffer = new byte[64 * 1024];
+                int count;
+                while ((count = input.read(buffer)) >= 0) digest.update(buffer, 0, count);
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required by Java", e);
+        }
+    }
+
+    /**
+     * A pack holding one marker resource, written the way a file copy lands: built beside its destination and moved
+     * into place whole, so the watcher sees a finished file rather than one being written. It also carries an fx
+     * entry, which is what the server's scan requires of a pack it offers: the integrated server has to offer this
+     * one for the installed-copy check at the end of the smoke to mean anything.
+     */
+    /**
+     * Rewrite the server-only sync fixture the workflow created, the way an admin replaces a pack on a running
+     * server: written beside it, then moved over it in one step.
+     */
+    private static void writeServerSyncFixture(File pack, String markerText) throws java.io.IOException {
+        var part = new File(pack.getParentFile(), pack.getName() + ".part");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(part.toPath()))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/fx/server_sync.fx"));
+            zip.write("server fx pack sync probe, second version".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/textures/server_sync_marker.txt"));
+            zip.write(markerText.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            // a sound event the first version (written by the workflow) does not declare, and not the one it does:
+            // the sound manager has to pick this one up and let go of the other without a reload
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/sounds.json"));
+            zip.write("{\"hot_probe_v2\": {\"sounds\": [\"photon_sync_probe:hot_probe_v2\"]}}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/photon_sync_probe/sounds/hot_probe_v2.ogg"));
+            zip.write("not decoded: only its presence is checked".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        try {
+            Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+            Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static void writeMarkerPack(File pack) throws java.io.IOException {
+        var folder = pack.getParentFile();
+        if (!folder.isDirectory() && !folder.mkdirs()) {
+            throw new IllegalStateException("Could not create " + folder);
+        }
+        var part = new File(folder, pack.getName() + ".part");
+        try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(part.toPath()))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/ci_watcher/textures/watcher_marker.txt"));
+            zip.write("copied in while the game was running".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("assets/ci_watcher/fx/watcher_probe.fx"));
+            zip.write("folder watcher probe; never played".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        Files.move(part.toPath(), pack.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static void verifyBlendPresetClassification() {
@@ -2943,10 +3337,61 @@ public final class PhotonFXEditorSmokeTest {
         verifyPhoton1Compatibility();
         verifyPlaybackRateBounds();
         verifyBlendPresetClassification();
+        com.lowdragmc.photon.client.util.LDLibPersistenceCompatRegression.verify();
+        com.lowdragmc.photon.client.gameobject.emitter.data.model.GltfAccessorBoundsRegression.verify();
         com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterialRegression.verify();
         Photon.LOGGER.info("[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely");
+        com.lowdragmc.photon.gui.editor.resource.MaterialPersistenceRegression.verify();
         com.lowdragmc.photon.client.fx.LooseTexturePathRegression.verify();
         com.lowdragmc.photon.client.fx.fxpack.FXPackDependencyRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackStallRegression.verify();
+        com.lowdragmc.photon.network.UploadTimeoutRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackWatcherRegression.verify();
+        com.lowdragmc.photon.network.ServerFxPackWatcherRegression.verify();
+        com.lowdragmc.photon.client.compat.gpu.GpuCompatRegression.verify();
+        com.lowdragmc.photon.client.compat.iris.ShaderModPresenceRegression.verify();
+        com.lowdragmc.photon.client.compat.MixinAuditRegression.verify();
+        com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailPointBoundsRegression.verify();
+        com.lowdragmc.photon.client.gameobject.particle.renderer.PointBufferCapacityRegression.verify();
+        com.lowdragmc.photon.client.gameobject.particle.renderer.CpuParticleRecordCapacityRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.InstalledCopyRegression.verify();
+        com.lowdragmc.photon.client.fx.fxpack.LocalFxResourceUploadRegression.verify();
+        com.lowdragmc.photon.command.LateReplayRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.AudioConversionRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.SoundLengthRegression.verify();
+        com.lowdragmc.photon.client.fx.timeline.AnimatedPropertyLoadRegression.verify();
+        Photon.LOGGER.info("[animated-property-load-smoke] unreadable animated properties are skipped without failing the track");
+        com.lowdragmc.photon.gui.editor.view.TimelineInsertTimeRegression.verify();
+        Photon.LOGGER.info("[timeline-insert-time-smoke] insert time only accepts a finite positive gap and its undo is exact");
+        com.lowdragmc.photon.client.fx.timeline.ExpressionSafetyRegression.verify();
+        Photon.LOGGER.info("[expression-safety-smoke] formulas parse once per source, reject unknown identifiers and never yield NaN");
+        com.lowdragmc.photon.client.gameobject.emitter.data.SubEmitterCycleRegression.verify(minecraft.level);
+        Photon.LOGGER.info("[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run");
+        com.lowdragmc.photon.client.fx.MissingEffectRegression.verify(minecraft.level);
+        Photon.LOGGER.info("[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload");
+        // A particle emitter's prewarm runs one full emission and update per tick synchronously before its first
+        // frame; the field had no upper bound, so a looping emitter with millions of ticks froze the client.
+        if (ParticleEmitter.prewarmTicks(Integer.MAX_VALUE, true, 100) != ParticleEmitter.MAX_PREWARM_TICKS
+                || ParticleEmitter.prewarmTicks(50, true, 20) != 50
+                || ParticleEmitter.prewarmTicks(50, false, 20) != 19
+                || ParticleEmitter.prewarmTicks(-5, true, 100) != 0) {
+            throw new IllegalStateException("Particle prewarm was not bounded");
+        }
+        var prewarmed = new ParticleEmitter();
+        prewarmed.config.setPrewarm(Integer.MAX_VALUE);
+        prewarmed.config.setMaxParticles(20);
+        prewarmed.config.emission.setEmissionRate(com.lowdragmc.photon.client.gameobject.emitter.data.number.NumberFunction.constant(1));
+        prewarmed.setLevel(minecraft.level);
+        long prewarmStarted = System.nanoTime();
+        prewarmed.update(1f);
+        long prewarmMillis = (System.nanoTime() - prewarmStarted) / 1_000_000L;
+        int prewarmedParticles = prewarmed.getParticleAmount();
+        prewarmed.remove(true);
+        if (prewarmedParticles == 0 || prewarmMillis > 10_000L) {
+            throw new IllegalStateException("A looping emitter with an unbounded prewarm did not come up bounded: particles="
+                    + prewarmedParticles + " ms=" + prewarmMillis);
+        }
+        Photon.LOGGER.info("[prewarm-bound-smoke] a looping emitter pre-simulates at most 1200 ticks ({} ms for an unbounded request)", prewarmMillis);
         Photon.LOGGER.info("[loose-texture-path-smoke] loose texture copies reject symlink escapes and catalogue scans honor global bounds");
         Photon.LOGGER.info("[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected");
         Photon.LOGGER.info("[fxpack-path-smoke] exported fx ids keep nested names while rejecting path traversal");
@@ -3076,6 +3521,128 @@ public final class PhotonFXEditorSmokeTest {
             throw new IllegalStateException("Trail colour gradient did not reach its rendered endpoints");
         }
         Photon.LOGGER.info("[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours");
+        // Smoothing splits each raw segment by the square of its length over the minimum vertex distance; a far
+        // teleport of the followed entity leaves a raw gap of hundreds of blocks, so without a bound one tick
+        // asked for millions of interpolated points and the client froze or ran out of memory.
+        if (TrailParticle.smoothStepCount(0.2f, 0.1f) != 4
+                || TrailParticle.smoothStepCount(0.1f, 0.1f) != 1
+                || TrailParticle.smoothStepCount(1_000f, 0.1f) != 64
+                || TrailParticle.smoothStepCount(Float.NaN, 0.1f) != 1
+                || TrailParticle.smoothStepCount(1f, Float.NaN) != 64) {
+            throw new IllegalStateException("Trail smoothing changed its density below the bound or did not bound a teleport gap");
+        }
+        var smoothEmitter = new TrailEmitter(); // the editor's default trail: smoothing on, 0.1 minimum vertex distance
+        var smoothTrail = new TrailParticle(smoothEmitter, smoothEmitter.config);
+        com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(true);
+        try {
+            smoothTrail.updateTick(1f);
+            smoothEmitter.transform().localPosition(new org.joml.Vector3f(1f, 0f, 0f));
+            smoothTrail.updateTick(1f);
+            smoothEmitter.transform().localPosition(new org.joml.Vector3f(1f, 0f, 100_000f)); // /tp far along z: a corner, then a 100 000-block gap
+            smoothTrail.updateTick(1f);
+        } finally {
+            com.lowdragmc.photon.client.PhotonParticleManager.setFastSimulation(oldFastSimulation);
+        }
+        int smoothRaw = smoothTrail.getRawTails().size();
+        int smoothed = smoothTrail.getTails().size();
+        if (smoothRaw > 2 + 64 + 10 || smoothed <= smoothRaw || smoothed > smoothRaw + 2 * 64) {
+            throw new IllegalStateException("A teleported trail was not smoothed within its bound: raw=" + smoothRaw + " smoothed=" + smoothed);
+        }
+        Photon.LOGGER.info("[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere");
+        com.lowdragmc.photon.client.gameobject.particle.TrailHistoryBoundsRegression.verify(smoothTrail);
+        // An Ara trail's physics warmup runs 20 synchronous steps per second when the trail is created; the field had
+        // no bound, so 1e9 seconds kept the client in that loop for good.
+        if (com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(1e9f) != 60f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(5f) != 5f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(Float.NaN) != 0f
+                || com.lowdragmc.photon.client.gameobject.particle.aratrail.AraTrailParticle.warmupSeconds(-1f) != 0f) {
+            throw new IllegalStateException("Ara trail warmup was not bounded to 60 seconds");
+        }
+        Photon.LOGGER.info("[aratrail-warmup-bound-smoke] an Ara trail pre-simulates at most 60 seconds, nothing for NaN or negative values");
+        // The curve inspector's bound fields: "NaN"/"Infinity" parse as floats, so they used to become the curve's
+        // range and poison every sample; the responder now keeps the previous bound for anything non-finite.
+        var curveBounds = com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.class;
+        if (!Float.valueOf(2.5f).equals(com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound(" 2.5 "))
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("NaN") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("Infinity") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("-Infinity") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("") != null
+                || com.lowdragmc.photon.client.gameobject.emitter.data.number.curve.CurveConfigurator.finiteBound("abc") != null) {
+            throw new IllegalStateException("Curve bound fields accept a non-finite bound");
+        }
+        Photon.LOGGER.info("[curve-bound-finite-smoke] curve range fields keep their bound for NaN, Infinity and non-numeric text ({})", curveBounds.getSimpleName());
+        // A beam's renderer Layer used to be ignored: every beam drew in the translucent queue, so an Opaque
+        // beam could never be ordered among opaque meshes (upstream #56). It now picks the queue like the rest.
+        var opaqueBeamConfig = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamConfig();
+        opaqueBeamConfig.renderer.setLayer(com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting.Layer.Opaque);
+        var opaqueBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter(opaqueBeamConfig);
+        var translucentBeam = new com.lowdragmc.photon.client.gameobject.emitter.beam.BeamEmitter();
+        if (opaqueBeam.getRenderType() != com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType.OPAQUE_QUEUE
+                || translucentBeam.getRenderType() != com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.ParticleQueueRenderType.TRANSLUCENT_QUEUE) {
+            throw new IllegalStateException("A beam's renderer Layer does not choose its render queue");
+        }
+        Photon.LOGGER.info("[beam-layer-queue-smoke] an Opaque beam joins the opaque queue and a Translucent one the translucent queue");
+        // Sub-emitter "Inherit Duration": every emitter type must take the parent's lifetime into its runtime
+        // duration slot. The Ara trail used the interface default, which its updateOrigin() overwrote at once.
+        var inheritingAra = new com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter();
+        inheritingAra.reset();
+        int authoredAraDuration = inheritingAra.getLifetime();
+        inheritingAra.inheritDuration(authoredAraDuration + 37);
+        if (inheritingAra.getLifetime() != authoredAraDuration + 37) {
+            throw new IllegalStateException("An Ara trail ignores an inherited duration: " + inheritingAra.getLifetime());
+        }
+        inheritingAra.reset();
+        if (inheritingAra.getLifetime() != authoredAraDuration) {
+            throw new IllegalStateException("An Ara trail kept an inherited duration across reset: " + inheritingAra.getLifetime());
+        }
+        Photon.LOGGER.info("[aratrail-inherit-duration-smoke] an Ara trail takes the parent duration and drops it on reset");
+        // Audio import: a source that fails to open must release its file. The mp3/aac/mp4 openers threw
+        // past their open stream, which kept the file locked on Windows and, for an mp4, made the caller fail
+        // on deleting its scrubbed temp copy instead of reporting what was wrong with the audio.
+        var brokenAudioDir = Files.createTempDirectory("photon-broken-audio-smoke");
+        try {
+            var brokenMp3 = brokenAudioDir.resolve("broken.mp3");
+            Files.write(brokenMp3, new byte[64]); // no frame sync anywhere: "no decodable MP3 frames"
+            var brokenAac = brokenAudioDir.resolve("broken.aac");
+            Files.write(brokenAac, new byte[64]); // no ADTS header
+            var brokenM4a = brokenAudioDir.resolve("broken.m4a");
+            Files.write(brokenM4a, new byte[]{ // ftyp(isom) + free: a well-formed container with no moov/AAC track
+                    0, 0, 0, 16, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm', 0, 0, 0, 0,
+                    0, 0, 0, 8, 'f', 'r', 'e', 'e'});
+            for (var broken : new Path[]{brokenMp3, brokenAac, brokenM4a}) {
+                java.io.IOException refusal = null;
+                try {
+                    com.lowdragmc.photon.client.fx.timeline.AudioConverter.toOgg(broken.toFile(),
+                            java.io.OutputStream.nullOutputStream());
+                } catch (java.io.IOException expected) {
+                    refusal = expected;
+                }
+                if (refusal == null) {
+                    throw new IllegalStateException("The audio converter accepted " + broken.getFileName());
+                }
+                int stillOpen = openDescriptorsTo(broken);
+                if (stillOpen > 0) { // -1: no /proc/self/fd on this kernel, nothing to check
+                    throw new IllegalStateException("A rejected " + broken.getFileName() + " is still open "
+                            + stillOpen + " time(s) after: " + refusal.getMessage());
+                }
+            }
+            try (var leftovers = Files.list(brokenAudioDir)) {
+                if (leftovers.count() != 3) {
+                    throw new IllegalStateException("Rejecting broken audio left temp files next to it");
+                }
+            }
+        } finally {
+            try (var files = Files.list(brokenAudioDir)) {
+                for (var file : files.toList()) Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(brokenAudioDir);
+        }
+        Photon.LOGGER.info("[audio-source-release-smoke] a broken mp3, aac and m4a are refused with their file released");
+        // How an effect sounds from afar and on its way out: a 3D clip without a bound target was heard at the same
+        // volume everywhere (it silently needed a target), there was no sound for an effect being removed, and an
+        // unqualified /photon fx remove cut the effect in one frame instead of letting it fade out as built.
+        com.lowdragmc.photon.client.fx.timeline.AudioRemovalRegression.verify(minecraft);
+        Photon.LOGGER.info("[audio-3d-remove-smoke] a 3D clip plays from the effect and fades over its range, the on-remove sound starts once per removal, and an unforced remove fades the effect out");
         var burstTrigger = EmissionSetting.Runtime.class.getDeclaredMethod("burstTriggers",
                 EmissionSetting.Burst.class, int.class, net.minecraft.util.RandomSource.class, float.class, float.class);
         burstTrigger.setAccessible(true);
@@ -3615,6 +4182,8 @@ public final class PhotonFXEditorSmokeTest {
 
         projectFile = Files.createTempFile("photon-editor-v3-", ".fxproj");
         FXProject.TYPE.saveProjectToFile(source, projectFile.toFile());
+        // every saved project and workspace .fx into one pack at once (File > Export > Export All Effects to FXPack...)
+        com.lowdragmc.photon.gui.editor.ExportAllRegression.verify(source);
         var encoded = NbtIo.read(projectFile.toFile());
         var fixtureConfig = encoded.getCompound("data").getCompound("fx").getCompound("fxData")
                 .getList("fxObjects", Tag.TAG_COMPOUND).getCompound(0).getCompound("data").getCompound("config");
@@ -3751,6 +4320,8 @@ public final class PhotonFXEditorSmokeTest {
                 .map(com.lowdragmc.photon.client.gameobject.emitter.aratrail.AraTrailEmitter.class::cast).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Editor runtime did not instantiate the AraTrail"));
         Photon.LOGGER.info("[fxproj-editor-smoke] initialized v3 project with materials, bursts and sub-emitters");
+        // the editor scene is ticking on screen from here on: its virtual level must reach no LevelTickEvent listener
+        com.lowdragmc.photon.client.virtuallevel.VirtualLevelTickRegression.verify(editor.sceneView.level);
     }
 
     /** Photon 1's original FX wrapper and enabled emission modules survive conversion. */
@@ -5067,6 +5638,16 @@ public final class PhotonFXEditorSmokeTest {
                 || mappedGradient.getCompound("data").getCompound("gradientColor0").getList("rgb", Tag.TAG_FLOAT).size() != 8
                 || mappedGradient.getCompound("data").getCompound("gradientColor1").getList("rgb", Tag.TAG_FLOAT).size() != 8)
             throw new IllegalStateException("Photon 1 random gradients were not preserved");
+        // two Photon 1 stops on the same t (both dragged to the left edge) used to convert to a NaN colour stop (0/0)
+        var doubledStops = com.lowdragmc.photon.client.fx.compat.MapperUtils.gradient(floatList(0f, 1f, 1f, 1f),
+                floatList(0f, 0.2f, 0f, 0.8f, 1f, 1f), floatList(0f, 0.5f, 1f, 0.5f), floatList(0f, 0.25f, 1f, 0.75f));
+        var doubledRgb = doubledStops.getList("rgb", Tag.TAG_FLOAT);
+        for (int i = 0; i < doubledRgb.size(); i++) {
+            if (!Float.isFinite(doubledRgb.getFloat(i)))
+                throw new IllegalStateException("Photon 1 gradient with two stops on the same t converted to NaN: " + doubledRgb);
+        }
+        if (doubledRgb.size() != 8 || Math.abs(doubledRgb.getFloat(1) - 0.8f) > 0.0001f)
+            throw new IllegalStateException("Photon 1 gradient with two stops on the same t lost its later stop: " + doubledRgb);
         // a skipped file is reported by name, not swallowed: "converted everything and nothing appears" needs an answer
         Photon.LOGGER.info("[photon1-conversion-report-smoke] a second pass reported {} skip(s)", second.skipped().size());
         Photon.LOGGER.info("[photon1-conversion-smoke] legacy effects, bursts and enabled modules converted");
@@ -5197,6 +5778,31 @@ public final class PhotonFXEditorSmokeTest {
         } finally {
             cache.invalidate(parent);
             cache.invalidate(child);
+        }
+    }
+
+    /**
+     * How many of this process's file descriptors point at {@code file}, read from {@code /proc/self/fd};
+     * {@code -1} where the kernel does not expose that (then the check is skipped, not failed).
+     */
+    private static int openDescriptorsTo(Path file) {
+        var descriptors = Path.of("/proc/self/fd");
+        if (!Files.isDirectory(descriptors)) return -1;
+        try {
+            var target = file.toRealPath();
+            int count = 0;
+            try (var entries = Files.list(descriptors)) {
+                for (var entry : entries.toList()) {
+                    try {
+                        if (Files.readSymbolicLink(entry).equals(target)) count++;
+                    } catch (java.io.IOException | UnsupportedOperationException ignored) {
+                        // a descriptor that closed meanwhile, or one that is not a file
+                    }
+                }
+            }
+            return count;
+        } catch (java.io.IOException failure) {
+            return -1;
         }
     }
 }

@@ -14,25 +14,46 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
-/** Imports user .ogg files into Photon's workspace and registers them through Minecraft's sounds.json format. */
+/** Imports user sound files into Photon's workspace and registers them through Minecraft's sounds.json format. */
 public final class AudioAssetImporter {
     private static final String NAMESPACE = "photon";
 
     private AudioAssetImporter() {}
 
-    /** Copies {@code source} to photon/assets and returns the dynamic sound event id to store in the FX. */
+    /**
+     * Imports any supported user sound — mp3, wav/aiff, the audio of an mp4/m4a, aac, or an
+     * .ogg — converting it to mono Ogg Vorbis when needed, and returns the dynamic sound event id to
+     * store in the FX. Conversion is automatic: users pick the file they have. Mono because that is the
+     * only kind of sound the game can place in the world (see {@link AudioConverter}); a stereo file
+     * imported by an earlier build keeps playing everywhere until it is imported again.
+     */
+    public static ResourceLocation importSound(File source) throws IOException {
+        if (source == null || !source.isFile()) {
+            throw new IOException("Select an audio file");
+        }
+        var temp = AudioConverter.convertToOgg(source);
+        try {
+            return registerOgg(temp.toFile(), baseName(source));
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+
+    /** Imports a Minecraft .ogg (folded down to mono when stereo) and returns the dynamic sound event id to store in the FX. */
     public static ResourceLocation importOgg(File source) throws IOException {
         if (source == null || !source.isFile() || !source.getName().toLowerCase(Locale.ROOT).endsWith(".ogg")) {
             throw new IOException("Select a Minecraft .ogg sound file");
         }
+        return importSound(source);
+    }
+
+    private static ResourceLocation registerOgg(File source, String baseName) throws IOException {
         if (source.length() < 4) throw new IOException("The selected file is not a valid OGG stream");
         try (var input = Files.newInputStream(source.toPath())) {
             if (!java.util.Arrays.equals(input.readNBytes(4), new byte[]{'O', 'g', 'g', 'S'})) {
                 throw new IOException("The selected file does not have an OGG container header");
             }
         }
-        var baseName = source.getName().substring(0, source.getName().length() - 4)
-                .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9/._-]", "_");
         if (baseName.isBlank()) baseName = "sound";
         var soundPath = "user/" + baseName;
         var id = new ResourceLocation(NAMESPACE, soundPath);
@@ -100,5 +121,14 @@ public final class AudioAssetImporter {
         sounds.add(sound);
         definition.add("sounds", sounds);
         return definition;
+    }
+
+    /** File name without its extension, sanitized for the sounds.json path. */
+    private static String baseName(File source) {
+        var name = source.getName();
+        var dot = name.lastIndexOf('.');
+        var baseName = (dot > 0 ? name.substring(0, dot) : name)
+                .toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9/._-]", "_");
+        return baseName.isBlank() ? "sound" : baseName;
     }
 }

@@ -18,16 +18,16 @@ public final class SendFxResourcesCommand {
                 .then(Commands.argument("player", EntityArgument.player())
                         .executes(context -> {
                             if (!(context.getSource().getEntity() instanceof ServerPlayer sender)) {
-                                context.getSource().sendFailure(Component.literal("Photon: run this command in-game."));
+                                context.getSource().sendFailure(Component.translatable("photon.command.send.in_game_only"));
                                 return 0;
                             }
                             var recipient = EntityArgument.getPlayer(context, "player");
                             if (!FxPackSync.beginLocalResourceUpload(sender, recipient)) {
-                                context.getSource().sendFailure(Component.literal("Photon: could not start the resource transfer."));
+                                context.getSource().sendFailure(Component.translatable("photon.command.send.could_not_start"));
                                 return 0;
                             }
-                            context.getSource().sendSuccess(() -> Component.literal("Photon: asking your client to package ldlib2/assets for "
-                                    + recipient.getGameProfile().getName() + "…"), false);
+                            context.getSource().sendSuccess(() -> Component.translatable("photon.command.send.asking_client",
+                                    recipient.getGameProfile().getName()), false);
                             return 1;
                         }));
     }

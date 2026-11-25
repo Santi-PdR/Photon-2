@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 public class GradientTexture implements AutoCloseable, IConfigurable, IProviderAwareNBTSerializable<ListTag> {
     private final int width;
     private final int height;
-    @Configurable(name = "gradients", canCollapse = false, collapse = false)
+    @Configurable(name = "GradientTexture.gradients", canCollapse = false, collapse = false)
     @ConfigList(configuratorMethod = "buildGradientConfigurator", addDefaultMethod = "addDefaultGradient")
     private final List<GradientColor> gradients = new ArrayList<>();
     // Upload once on first use, even when the gradient list is empty: shader samplers must never receive null.

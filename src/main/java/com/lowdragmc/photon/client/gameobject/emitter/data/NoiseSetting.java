@@ -169,7 +169,7 @@ public class NoiseSetting extends ToggleGroup {
     public static class Remap extends ToggleGroup {
         @Setter
         @Getter
-        @Configurable
+        @Configurable(name = "NoiseSetting.remap.remapCurve")
         @NumberFunctionConfig(types = {Curve.class}, defaultValue = 1f, curveConfig = @CurveConfig(bound = {-1, 1}, xAxis = "base noise", yAxis = "remap result"))
         protected NumberFunction remapCurve = new Curve(Integer.MIN_VALUE, Integer.MAX_VALUE, -1, 1, 1f, "base noise", "remap result");
     }

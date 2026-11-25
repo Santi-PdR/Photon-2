@@ -75,9 +75,9 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 var root = PhotonPaths.getDataDir().toPath();
                 com.lowdragmc.photon.client.fx.timeline.AudioAssetImporter.repairLegacySoundDefinitions();
                 if (!Files.isDirectory(PhotonPaths.getAssetsDir().toPath())) return;
-                var info = new Pack.Info(Component.literal("Photon workspace"), 15, 15,
+                var info = new Pack.Info(Component.translatable("photon.resource_pack.workspace"), 15, 15,
                         FeatureFlagSet.of(), true);
-                var pack = Pack.create("photon/workspace", Component.literal("Photon workspace"), true,
+                var pack = Pack.create("photon/workspace", Component.translatable("photon.resource_pack.workspace"), true,
                         id -> new PathPackResources(id, root, false), info, PackType.CLIENT_RESOURCES,
                         Pack.Position.TOP, true, PackSource.BUILT_IN);
                 if (pack != null) consumer.accept(pack);
@@ -92,6 +92,8 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // both the loaded effects and the list of loadable ones are answers about the packs, so a reload
         // (a pack toggled, an .fxpack mounted, F3+T) is exactly when they stop being true
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
+            // the manager was rebuilt from the folder: packs mounted in the running one by hand are history
+            com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.onResourceReload();
             FXHelper.clearCache();
             // files on disk and the packs that serve them both just changed: the loose-texture answers are stale
             LooseTextures.invalidate();
@@ -106,6 +108,8 @@ public class PhotonClientProxy extends PhotonCommonProxy {
         // before the deferred work, and before anything can be played with: the migration is a one-shot at
         // startup, so it can never undo a value picked later (the knob happens to pass through 1.0, an old default)
         migrateOldBloomDefaults();
+        // who is mixing into the frame, written down once: the answer to "it was mixin X" has to be in the log
+        com.lowdragmc.photon.client.compat.MixinAudit.log();
         e.enqueueWork(() -> {
             PhotonShaders.init();
             PhotonFXProjectSmokeTest.runIfEnabled();
@@ -138,11 +142,6 @@ public class PhotonClientProxy extends PhotonCommonProxy {
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.15) == 0
                 || Double.compare(PhotonConfig.INSTANCE.bloomThreshold.get(), 0.65) == 0) {
             PhotonConfig.INSTANCE.bloomThreshold.set(0.5);
-            changed = true;
-        }
-        if (Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 0.7) == 0
-                || Double.compare(PhotonConfig.INSTANCE.bloomIntensity.get(), 1.0) == 0) {
-            PhotonConfig.INSTANCE.bloomIntensity.set(0.18);
             changed = true;
         }
         // Persist the guard even when neither value matched: the migration must not reinterpret a

@@ -10,58 +10,115 @@ import net.minecraftforge.api.distmarker.OnlyIn;
 
 import javax.annotation.Nullable;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Best-effort cache of a {@code SoundEvent}'s length in ticks, decoded off-thread from its OGG so an
- * {@link AudioClip} can draw one loop sub-division per repeat. The first lookup for an id kicks off an
- * async decode (via Minecraft's own {@link JOrbisAudioStream}) and returns 0 until it resolves; a
- * sound that can't be measured (missing / event-reference / decode error) caches 0 and is not retried.
+ * Best-effort cache of a {@code SoundEvent}'s length in ticks and channel count, read off-thread from its
+ * OGG headers so an {@link AudioClip} can draw one loop sub-division per repeat and the editor can warn
+ * about a stereo sound (which the game cannot place in the world). The first lookup for an id kicks off
+ * an async read and returns 0 until it resolves; a sound that can't be measured (missing / event-reference
+ * / decode error) caches 0 and is not retried. Code that needs the measured value rather than "what is
+ * known right now" (a clip sized to the sound it was just imported with) waits on {@link #ticksWhenKnown}.
+ * <p>
+ * Every answer belongs to the resources it was read from: {@link #clear()} (run by Photon's reload
+ * listener) starts a new generation, and a read that was still running across the reload is thrown away
+ * and repeated against the new packs instead of caching what the old ones said — or, for a sound that was
+ * being imported, that there was no such sound at all.
  */
 @OnlyIn(Dist.CLIENT)
 public class SoundLengthCache {
-    private static final Map<ResourceLocation, Double> LENGTHS = new ConcurrentHashMap<>();
-    private static final Set<ResourceLocation> PENDING = ConcurrentHashMap.newKeySet();
+    /** What one OGG told us: length in ticks and channels, 0 for whatever could not be read. */
+    private record Info(double ticks, int channels) {
+        static final Info UNKNOWN = new Info(0, 0);
+    }
+
+    private static final Map<ResourceLocation, Info> INFOS = new ConcurrentHashMap<>();
+    /** Reads in flight, so a sound asked for from several places (a draw per frame) is measured once. */
+    private static final Map<ResourceLocation, CompletableFuture<Info>> PENDING = new ConcurrentHashMap<>();
+    /** Bumped by {@link #clear()}; a read finished under an older generation describes resources that are gone. */
+    private static final AtomicLong GENERATION = new AtomicLong();
 
     /** Forget durations after resources are replaced or a server-synced sound pack changes. */
     public static void clear() {
-        LENGTHS.clear();
+        GENERATION.incrementAndGet();
+        INFOS.clear();
         PENDING.clear();
     }
 
     /** Length of {@code soundId} in ticks, or 0 when unknown / not yet decoded (triggers a load). */
     public static double getTicks(@Nullable ResourceLocation soundId) {
-        if (soundId == null) return 0;
-        var cached = LENGTHS.get(soundId);
+        return info(soundId).ticks();
+    }
+
+    /**
+     * Channels of the OGG behind {@code soundId} (1 mono, 2 stereo), or 0 when unknown / not yet read (triggers a
+     * load). Only a mono sound can be placed in the world: OpenAL plays a stereo one everywhere, unpositioned.
+     */
+    public static int getChannels(@Nullable ResourceLocation soundId) {
+        return info(soundId).channels();
+    }
+
+    /**
+     * Length of {@code soundId} in ticks once it has actually been measured: completes at once when the sound is
+     * already known, otherwise after its OGG headers were read off-thread, with 0 for a sound that cannot be
+     * measured. {@link #getTicks} answers 0 for a sound not read yet, which right after a resource reload (that
+     * forgot every length) is every sound — the wrong answer to size a clip by. Completes on the reading thread:
+     * hop to the client thread before touching the editor.
+     */
+    public static CompletableFuture<Double> ticksWhenKnown(@Nullable ResourceLocation soundId) {
+        if (soundId == null) return CompletableFuture.completedFuture(0.0);
+        return load(soundId).thenApply(Info::ticks);
+    }
+
+    private static Info info(@Nullable ResourceLocation soundId) {
+        if (soundId == null) return Info.UNKNOWN;
+        var cached = INFOS.get(soundId);
         if (cached != null) return cached;
-        requestLoad(soundId);
-        return 0;
+        load(soundId);
+        return Info.UNKNOWN;
     }
 
-    private static void requestLoad(ResourceLocation soundId) {
-        if (!PENDING.add(soundId)) return; // already loading
+    /** The cached answer, or the one read in flight for this id (started here when nobody asked before). */
+    private static CompletableFuture<Info> load(ResourceLocation soundId) {
+        var cached = INFOS.get(soundId);
+        if (cached != null) return CompletableFuture.completedFuture(cached);
+        var fresh = new CompletableFuture<Info>();
+        var inFlight = PENDING.putIfAbsent(soundId, fresh);
+        if (inFlight != null) return inFlight;
+        var generation = GENERATION.get();
         CompletableFuture
-                .supplyAsync(() -> computeTicks(soundId), Util.backgroundExecutor())
-                .whenComplete((ticks, error) -> {
-                    LENGTHS.put(soundId, error != null || ticks == null ? 0.0 : ticks);
-                    PENDING.remove(soundId);
+                .supplyAsync(() -> computeInfo(soundId), Util.backgroundExecutor())
+                .whenComplete((info, error) -> {
+                    var result = error != null || info == null ? Info.UNKNOWN : info;
+                    PENDING.remove(soundId, fresh);
+                    if (generation == GENERATION.get()) {
+                        INFOS.put(soundId, result);
+                        fresh.complete(result);
+                        return;
+                    }
+                    // the resources changed while this was being read (a reload, typically the one that
+                    // registers a sound just imported): what it found describes the old packs, measure again
+                    load(soundId).whenComplete((again, ignored) ->
+                            fresh.complete(again == null ? Info.UNKNOWN : again));
                 });
+        return fresh;
     }
 
-    private static double computeTicks(ResourceLocation soundId) {
+    private static Info computeInfo(ResourceLocation soundId) {
         try {
             var mc = Minecraft.getInstance();
             var weighed = mc.getSoundManager().getSoundEvent(soundId);
-            if (weighed == null) return 0;
+            if (weighed == null) return Info.UNKNOWN;
             var sound = weighed.getSound(RandomSource.create());
-            if (sound == null || sound.getType() != Sound.Type.FILE) return 0;
+            if (sound == null || sound.getType() != Sound.Type.FILE) return Info.UNKNOWN;
             try (var input = mc.getResourceManager().open(sound.getPath())) {
-                return oggDurationTicks(input.readAllBytes());
+                var data = input.readAllBytes();
+                return new Info(oggDurationTicks(data), AudioConverter.vorbisChannels(data));
             }
         } catch (Exception e) {
-            return 0;
+            return Info.UNKNOWN;
         }
     }
 
@@ -95,4 +152,3 @@ public class SoundLengthCache {
         return sampleRate > 0 && lastGranule > 0 ? lastGranule * 20.0 / sampleRate : 0;
     }
 }
-

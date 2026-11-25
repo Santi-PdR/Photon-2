@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 /**
  * Shared implementation of the bezier curve editors ({@link CurveGraph} / {@link RandomCurveGraph}):
@@ -78,7 +79,7 @@ public abstract class AbstractCurveGraph<T> extends BindableUIElement<T> {
 
     /** Formats the coordinate readout; input is the curve-space (x, y) where both spans are [0, 1]. */
     @Setter
-    protected BiFunction<Float, Float, String> coordFormatter = (x, y) -> "(%.2f, %.2f)".formatted(x, y);
+    protected BiFunction<Float, Float, String> coordFormatter = (x, y) -> String.format(Locale.ROOT, "(%.2f, %.2f)", x, y);
 
     protected AbstractCurveGraph() {
         getLayout().flexDirection(FlexDirection.ROW);

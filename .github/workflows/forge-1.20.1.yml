@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       distributable_uploaded: ${{ steps.distributable.outcome == 'success' }}
+      forge_server_ok: ${{ steps.forge_server.outcome == 'success' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -32,6 +33,24 @@ jobs:
 
       - name: Verify shader normal and projection safety
         run: python3 .github/scripts/verify_shader_normal_safety.py
+
+      - name: Verify language file parity
+        run: python3 .github/scripts/verify_lang_parity.py
+
+      - name: Verify referenced translation keys exist
+        run: python3 .github/scripts/verify_lang_key_usage.py
+
+      - name: Verify placeholder translation keys get their arguments
+        run: python3 .github/scripts/verify_lang_placeholders.py
+
+      - name: Verify floating-point formatting pins an explicit Locale
+        run: python3 .github/scripts/verify_locale_safe_formatting.py
+
+      - name: Verify config screen covers every top-level Photon setting
+        run: python3 .github/scripts/verify_config_screen_coverage.py
+
+      - name: Verify renderer mixin call-site hooks fail soft under third-party redirects
+        run: python3 .github/scripts/verify_renderer_mixin_fallback.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -66,8 +85,8 @@ jobs:
           [ -f "$log" ] || exit 0
           # first the compiler's own errors, then whatever the log ended on: a failure that is not a
           # javac error (a test, a plugin) still has to be readable without the log
-          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed' "$log" \
-            | head -n 25 | while IFS= read -r line; do echo "::error title=build::$line"; done
+          grep -E '\.java:[0-9]+: error|^e: |FAILURE:|What went wrong|Execution failed|Tests? .* failed|Could not |A problem occurred|Caused by' "$log" \
+            | head -n 30 | while IFS= read -r line; do echo "::error title=build::$line"; done
           echo "::group::last 25 log lines"
           tail -n 25 "$log"
           echo "::endgroup::"
@@ -81,6 +100,180 @@ jobs:
           jar tf "$jar_file" | grep -Fxq 'photon.refmap.json'
           jar tf "$jar_file" | grep -Fxq 'com/lowdragmc/photon/core/mixins/iris/IrisRenderingPipelineAccessor.class'
 
+      # What the -all jar carries must never export a package another mod can also export: the loader
+      # builds one JPMS layer from every mod jar and two modules exporting one package stop the game
+      # ("Modules thedarkcolour.kotlinforforge and kotlin.stdlib export package kotlin.contracts ...",
+      # "Modules citadel and jaad.MILESTONE export package net.sourceforge.jaad.spi.javasound ..."). So:
+      # LDLib2 ships as libs/ldlib2-2.2.39.a.jar, whose Kotlin runtime is relocated under
+      # com.lowdragmc.photon.internal.embedded, and the audio codecs are relocated by shadowJar into the
+      # same package instead of being nested. Every nested jar, two levels deep, is listed as a notice
+      # annotation so an audit can read what the distributable carries without downloading it.
+      - name: Verify the distributable isolates its embedded libraries
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          work="$RUNNER_TEMP/jarjar-audit"
+          rm -rf "$work"
+          mkdir -p "$work/level1" "$work/level2" "$work/classes"
+          unzip -p "$jar_file" META-INF/jarjar/metadata.json > "$work/photon-metadata.json"
+          python3 - "$work/photon-metadata.json" <<'PY'
+          import json, sys
+          jars = json.load(open(sys.argv[1]))["jars"]
+          for jar in jars:
+              ident = jar["identifier"]
+              print("::notice title=jar-in-jar (photon)::%s:%s %s -> %s" % (ident["group"], ident["artifact"], jar["version"]["artifactVersion"], jar["path"]))
+          idents = sorted(jar["identifier"]["group"] + ":" + jar["identifier"]["artifact"] for jar in jars)
+          assert idents == ["local:kilagraph", "local:ldlib2"], "unexpected Jar-in-Jar set (codecs are relocated into the mod jar, never nested): %r" % idents
+          ldlib2 = [jar for jar in jars if jar["identifier"]["artifact"] == "ldlib2"][0]
+          assert ldlib2["path"] == "META-INF/jarjar/ldlib2-2.2.39.a.jar", "the JarJar pin resolved LDLib2 to %s, not the relocated libs/ldlib2-2.2.39.a.jar" % ldlib2["path"]
+          PY
+          # Package roots no module of ours may contain: the Kotlin runtime and the three codecs under
+          # their original names. Listings go through files: `unzip | grep -q` under pipefail reports
+          # grep's early exit as a failure.
+          forbidden_roots='^(kotlin|kotlinx|net/sourceforge|javazoom|biniu)/'
+          unzip -Z1 "$jar_file" > "$work/all.txt"
+          for entry in \
+            com/lowdragmc/photon/internal/embedded/jaad/aac/Decoder.class \
+            com/lowdragmc/photon/internal/embedded/jaad/mp4/MP4Container.class \
+            com/lowdragmc/photon/internal/embedded/javazoom/jl/decoder/Decoder.class \
+            com/lowdragmc/photon/internal/embedded/javazoom/jl/decoder/l3reorder.ser \
+            com/lowdragmc/photon/internal/embedded/biniu/vorbis/VorbisEnc.class \
+            com/lowdragmc/photon/internal/embedded/biniu/ogg/StreamState.class \
+            com/lowdragmc/photon/client/fx/timeline/AudioConverter.class \
+            com/lowdragmc/photon/client/fx/timeline/OggVorbisWriter.class; do
+            if ! grep -Fxq "$entry" "$work/all.txt"; then
+              echo "::error title=relocated codecs::$entry is missing from the distributable"
+              exit 1
+            fi
+          done
+          if grep -Eq "$forbidden_roots" "$work/all.txt"; then
+            echo "::error title=split package::the distributable carries a library under its original package root: $(grep -E "$forbidden_roots" "$work/all.txt" | head -n 3 | tr '\n' ' ')"
+            exit 1
+          fi
+          if grep -Eq '^(module-info\.class|META-INF/versions/[0-9]+/module-info\.class|META-INF/services/javax\.sound\..*|META-INF/services/javazoom\..*)$' "$work/all.txt"; then
+            echo "::error title=relocated codecs::a codec module descriptor or service registration leaked into the distributable"
+            exit 1
+          fi
+          # Every class in the jar — Photon's and the relocated codecs' — may reference the codecs only
+          # under the relocated package: an original name left in a constant pool is a NoClassDefFoundError
+          # in production (dev runs the unrelocated originals and cannot notice).
+          unzip -q -o "$jar_file" 'com/lowdragmc/photon/*.class' -d "$work/classes"
+          python3 - "$work/classes" <<'PY'
+          import os, re, struct, sys
+          roots = re.compile(r'(?:^|L)(?:net/sourceforge/jaad|javazoom/jl|biniu/(?:ogg|vorbis)|kotlin/|kotlinx/)')
+          def utf8_entries(data):
+              n = struct.unpack('>H', data[8:10])[0]; i = 10; idx = 1
+              while idx < n:
+                  tag = data[i]; i += 1
+                  if tag == 1:
+                      l = struct.unpack('>H', data[i:i+2])[0]; i += 2
+                      yield data[i:i+l].decode('utf-8', 'replace'); i += l
+                  elif tag in (3, 4): i += 4
+                  elif tag in (5, 6): i += 8; idx += 1
+                  elif tag in (7, 8, 16, 19, 20): i += 2
+                  elif tag in (9, 10, 11, 12, 17, 18): i += 4
+                  elif tag == 15: i += 3
+                  else: raise ValueError('constant pool tag %d' % tag)
+                  idx += 1
+          offenders = []
+          scanned = 0
+          for folder, _, files in os.walk(sys.argv[1]):
+              for name in files:
+                  if not name.endswith('.class'): continue
+                  path = os.path.join(folder, name); scanned += 1
+                  for entry in utf8_entries(open(path, 'rb').read()):
+                      if roots.search(entry):
+                          offenders.append('%s: %s' % (os.path.relpath(path, sys.argv[1]), entry[:120])); break
+          print('scanned %d classes under com/lowdragmc/photon' % scanned)
+          assert scanned > 500, 'the distributable holds too few Photon classes to be real'
+          for line in offenders[:20]: print('::error title=unrelocated reference::' + line)
+          assert not offenders, '%d classes still reference a codec or Kotlin under its original package' % len(offenders)
+          PY
+          unzip -q -o "$jar_file" 'META-INF/jarjar/*.jar' -d "$work/level1"
+          offenders=0
+          inspect() { # <jar> <label>: a nested jar may not carry a forbidden package root or a kotlin.* module name
+            unzip -Z1 "$1" > "$work/listing.txt"
+            if grep -Eq "$forbidden_roots" "$work/listing.txt"; then
+              echo "::error title=split package::$2 carries $(grep -E "$forbidden_roots" "$work/listing.txt" | head -n 1 | cut -d/ -f1-2)/ under its original package root"
+              offenders=$((offenders + 1))
+            fi
+            : > "$work/manifest.txt"
+            if grep -Fxq 'META-INF/MANIFEST.MF' "$work/listing.txt"; then
+              unzip -p "$1" META-INF/MANIFEST.MF | tr -d '\r' > "$work/manifest.txt"
+            fi
+            if grep -Eq '^Automatic-Module-Name: kotlin' "$work/manifest.txt"; then
+              echo "::error title=split package::$2 declares a kotlin.* module name"
+              offenders=$((offenders + 1))
+            fi
+          }
+          for nested in "$work"/level1/META-INF/jarjar/*.jar; do
+            name=$(basename "$nested")
+            inspect "$nested" "$name"
+            if grep -Fxq 'META-INF/jarjar/metadata.json' "$work/listing.txt"; then
+              inner="$work/level2/${name%.jar}"
+              mkdir -p "$inner"
+              unzip -q -o "$nested" 'META-INF/jarjar/*' -d "$inner"
+              for deep in "$inner"/META-INF/jarjar/*.jar; do
+                [ -f "$deep" ] || continue
+                echo "::notice title=jar-in-jar ($name)::$(basename "$deep") ($(stat -c %s "$deep") B)"
+                inspect "$deep" "$name -> $(basename "$deep")"
+              done
+            fi
+          done
+          test "$offenders" -eq 0
+          ldlib2_inner="$work/level2/ldlib2-2.2.39.a/META-INF/jarjar"
+          test -f "$ldlib2_inner/metadata.json"
+          grep -Fq '"artifact": "photon-kotlin-runtime"' "$ldlib2_inner/metadata.json"
+          if grep -Fq 'kotlin-stdlib' "$ldlib2_inner/metadata.json"; then
+            echo "::error title=split package::the embedded LDLib2 still declares kotlin-stdlib in its Jar-in-Jar metadata"
+            exit 1
+          fi
+          runtime=$(find "$ldlib2_inner" -maxdepth 1 -name 'photon-kotlin-runtime-*.jar' -print -quit)
+          test -n "$runtime"
+          unzip -Z1 "$runtime" > "$work/listing.txt"
+          grep -Fxq 'com/lowdragmc/photon/internal/embedded/kotlin/Unit.class' "$work/listing.txt"
+          echo "Distributable: codecs relocated under com.lowdragmc.photon.internal.embedded, LDLib2 with $(basename "$runtime"); no library under its original package root."
+
+      # Since round 19 the -all jar is assembled from shadowJar's content rather than from the main
+      # output, and nothing in the dev runs (runClient/runServer, Gradle classpath) ever loads it. A
+      # resource dropped on the way — mods.toml, the access transformer, pack.mcmeta, a shader — would
+      # only show up on a player's instance, so every compiled class and every packaged resource must
+      # be in the distributable, with mods.toml expanded.
+      - name: Verify the distributable carries every class and packaged resource
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          python3 - "$jar_file" <<'PY'
+          import os, sys, zipfile
+          jar = zipfile.ZipFile(sys.argv[1])
+          names = set(jar.namelist())
+          roots = {"src/main/resources": None, "src/generated/resources": None,
+                   "build/classes/java/main": ".class", "build/classes/java/irisAccessors": ".class"}
+          counted, missing = {}, []
+          for root, suffix in roots.items():
+              counted[root] = 0
+              for folder, _, files in os.walk(root):
+                  for name in files:
+                      if suffix and not name.endswith(suffix): continue
+                      rel = os.path.relpath(os.path.join(folder, name), root).replace(os.sep, "/")
+                      counted[root] += 1
+                      if rel not in names: missing.append(rel)
+          for line in missing[:20]: print("::error title=distributable incomplete::" + line)
+          assert counted["src/main/resources"] > 150, "too few files under src/main/resources: %r" % counted
+          assert counted["build/classes/java/main"] > 500, "too few compiled classes: %r" % counted
+          assert counted["build/classes/java/irisAccessors"] >= 1, "the Iris accessor source set produced no class"
+          assert not missing, "%d classes or resources are missing from the distributable" % len(missing)
+          toml = jar.read("META-INF/mods.toml").decode("utf-8")
+          assert 'modId="photon"' in toml.replace(" ", ""), "mods.toml lost its modId"
+          assert "${" not in toml, "mods.toml was packaged without expanding its placeholders"
+          for required in ("META-INF/accesstransformer.cfg", "pack.mcmeta", "photon.mixins.json", "photon.refmap.json",
+                           "META-INF/jarjar/metadata.json", "META-INF/MANIFEST.MF", "icon.png"):
+              assert required in names, required + " is missing from the distributable"
+          print("Distributable carries every file: %s; %d entries in total." % (counted, len(names)))
+          PY
+
       - name: Upload distributable
         id: distributable
         uses: actions/upload-artifact@v4
@@ -89,6 +282,146 @@ jobs:
           path: build/libs/*-all.jar
           if-no-files-found: error
           retention-days: 90
+
+      # The dev smokes further down run from the Gradle classpath, where the embedded libraries are
+      # loose jars and the JPMS layer the loader builds from a mods folder never exists. Both start-up
+      # crashes reported from real instances (rounds 18 and 19) lived only in that layer: Photon's
+      # nested jars exported kotlin.* and net.sourceforge.jaad.* next to Kotlin for Forge and Citadel.
+      # So the distributable itself is installed on a real Forge server together with LDLib 1 and the
+      # newest Forge 1.20.1 builds of those two mods (Modrinth), and must reach the ready prompt with
+      # every mod file — the nested ones included — loaded. The artifact above stays available for
+      # inspection either way, but publish-preview requires this step: a jar that cannot start next
+      # to them is never handed out as a preview.
+      - name: Smoke-test the distributable on a Forge server next to Kotlin for Forge and Citadel
+        id: forge_server
+        shell: bash
+        env:
+          MODRINTH_COMPANIONS: kotlin-for-forge citadel
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          mc_version=$(sed -n 's/^minecraft_version=//p' gradle.properties | tr -d '\r[:space:]')
+          forge_version=$(sed -n 's/^forge_version=//p' gradle.properties | tr -d '\r[:space:]')
+          forge="$mc_version-$forge_version"
+          work="$RUNNER_TEMP/forge-server"
+          rm -rf "$work"
+          mkdir -p "$work/mods"
+          ua='Santi-PdR/Photon-2 CI (https://github.com/Santi-PdR/Photon-2)'
+          curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/installer.jar" \
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/$forge/forge-$forge-installer.jar"
+          if ! (cd "$work" && timeout 600s java -jar installer.jar --installServer "$work" > install.log 2>&1); then
+            tail -n 40 "$work/install.log"
+            echo "::error title=forge server::the Forge $forge server installer failed"
+            exit 1
+          fi
+          test -f "$work/libraries/net/minecraftforge/forge/$forge/unix_args.txt"
+          cp "$jar_file" "$work/mods/"
+          cp libs/ldlib1-1.0.52.a.jar "$work/mods/"
+          for project in $MODRINTH_COMPANIONS; do
+            curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/$project.json" \
+              "https://api.modrinth.com/v2/project/$project/version"
+            python3 - "$work/$project.json" "$work/$project.pick" "$mc_version" <<'PY'
+          import json, sys
+          mc = sys.argv[3]
+          versions = [v for v in json.load(open(sys.argv[1])) if "forge" in v["loaders"] and mc in v["game_versions"]]
+          assert versions, "Modrinth lists no Forge %s build of this project" % mc
+          versions.sort(key=lambda v: v["date_published"], reverse=True)
+          version = ([v for v in versions if v["version_type"] == "release"] or versions)[0]
+          file = ([f for f in version["files"] if f.get("primary")] or version["files"])[0]
+          assert file["filename"].endswith(".jar"), file["filename"]
+          open(sys.argv[2], "w").write("%s %s %s\n" % (file["url"], file["filename"], version["version_number"]))
+          PY
+            read -r url file version < "$work/$project.pick"
+            curl -fsSL --retry 5 --retry-delay 5 -A "$ua" -o "$work/mods/$file" "$url"
+            # a mod (mods.toml) or a language provider / game library (FMLModType in the manifest):
+            # Kotlin for Forge's -all jar is a LANGPROVIDER whose mods.toml lives in a nested jar
+            unzip -Z1 "$work/mods/$file" > "$work/listing.txt"
+            unzip -p "$work/mods/$file" META-INF/MANIFEST.MF 2>/dev/null | tr -d '\r' > "$work/manifest.txt" || true
+            if ! grep -Fxq 'META-INF/mods.toml' "$work/listing.txt" && ! grep -q '^FMLModType:' "$work/manifest.txt"; then
+              echo "::error title=companion mod::$file from Modrinth ($project $version) is neither a mod nor an FML library jar"
+              exit 1
+            fi
+            echo "::notice title=companion mod::$project $version ($file, $(stat -c %s "$work/mods/$file") B)"
+          done
+          printf 'eula=true\n' > "$work/eula.txt"
+          printf 'online-mode=false\nlevel-type=minecraft\\:flat\nview-distance=3\nsimulation-distance=3\nspawn-protection=0\nmax-players=1\nserver-port=25599\nsync-chunk-writes=false\n' > "$work/server.properties"
+          log="$work/server.log"
+          # The loader's "Found mod file … of type … with provider …" lines carry the SCAN marker, which
+          # Forge's log4j2.xml denies everywhere by default; they are the record of what was loaded.
+          (cd "$work" && exec java -Dforge.logging.marker.scan=ACCEPT @user_jvm_args.txt "@libraries/net/minecraftforge/forge/$forge/unix_args.txt" nogui) > "$log" 2>&1 < /dev/null &
+          pid=$!
+          ready=0
+          for _ in $(seq 1 72); do
+            sleep 5
+            if grep -Fq 'For help, type "help"' "$log"; then ready=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break
+          done
+          if kill -0 "$pid" 2>/dev/null; then
+            kill -INT "$pid" 2>/dev/null || true
+            for _ in $(seq 1 12); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
+            kill -KILL "$pid" 2>/dev/null || true
+          fi
+          wait "$pid" 2>/dev/null || true
+          tr -d '\000' < "$log" > "$log.clean" && mv "$log.clean" "$log"
+          # console output plus the loader's debug log: the mod-file record is read from both
+          cat "$log" "$work"/logs/debug.log > "$work/all.log" 2>/dev/null || cp "$log" "$work/all.log"
+          grep -aE 'Found mod file|Found [0-9]+ dependencies|Loading [0-9]+ mods' "$work/all.log" | sort -u > "$work/found.txt" || true
+          echo "::group::mod files the loader found"
+          cat "$work/found.txt"
+          echo "::endgroup::"
+          grep -aE '/(WARN|ERROR|FATAL)\]' "$log" | grep -aiE 'photon|ldlib|kila|kotlin|citadel|jaad|module|mixin' \
+            | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//' | sort | uniq -c | sort -rn | head -n 30 > "$work/warnings.txt" || true
+          if [ -s "$work/warnings.txt" ]; then
+            echo "::group::WARN/ERROR lines mentioning the libraries"
+            cat "$work/warnings.txt"
+            echo "::endgroup::"
+            encoded=$(sed 's/%/%25/g' "$work/warnings.txt" | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-3900)
+            echo "::notice title=forge server WARN/ERROR summary::$encoded"
+          fi
+          fail=0
+          if [ "$ready" -ne 1 ]; then
+            echo "::error title=forge server::the distributable did not bring the Forge $forge server to its ready prompt"
+            fail=1
+          fi
+          # Loader-level failures, plus a missing class under one of our own package roots (an unrelocated
+          # reference, or a relocated class the jar lost); other mods' optional-class probes are not ours.
+          grep -aE 'java\.lang\.module\.ResolutionException|java\.lang\.LayerInstantiationException|Incompatible mod set|Missing or unsupported mandatory dependencies|Exception in thread "main"|MixinApplyError|InvalidInjectionException|ModLoadingException|Encountered an exception during mod loading|(NoClassDefFoundError|ClassNotFoundException): ?(com[./]lowdragmc|kotlin|javazoom|biniu|net[./]sourceforge)' "$log" > "$work/fatal.txt" || true
+          if [ -s "$work/fatal.txt" ]; then
+            head -n 10 "$work/fatal.txt" | while IFS= read -r line; do echo "::error title=forge server::$line"; done
+            fail=1
+          fi
+          for needle in \
+            "Found mod file $(basename "$jar_file") of type MOD" \
+            'Found mod file ldlib2-2.2.39.a.jar of type MOD' \
+            'Found mod file kilagraph-20.1.0.15.jar of type MOD' \
+            'Found mod file photon-kotlin-runtime-2.2.21.jar of type' \
+            'Found mod file ldlib1-1.0.52.a.jar of type MOD' \
+            'Photon is initializing on platform'; do
+            if ! grep -Fq "$needle" "$work/all.log"; then
+              echo "::error title=forge server::missing from the server log: $needle"
+              fail=1
+            fi
+          done
+          for companion in "$work"/mods/*.jar; do
+            if ! grep -Fq "Found mod file $(basename "$companion") of type" "$work/all.log"; then
+              echo "::error title=forge server::the loader never picked up $(basename "$companion")"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::group::last 60 server log lines"
+            tail -n 60 "$log"
+            echo "::endgroup::"
+            for report in "$work"/crash-reports/*.txt; do
+              [ -f "$report" ] || continue
+              echo "::group::$(basename "$report")"
+              head -n 80 "$report"
+              echo "::endgroup::"
+            done
+            exit 1
+          fi
+          ready_line=$(grep -F 'For help, type "help"' "$log" | head -n 1 | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//')
+          echo "::notice title=forge server::$(basename "$jar_file") reached the ready prompt on Forge $forge next to $(ls "$work/mods" | grep -v photon-forge | tr '\n' ' ')($ready_line)"
 
       - name: Smoke-test dedicated Forge server startup
         shell: bash
@@ -99,6 +432,7 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 180s bash ./gradlew --no-daemon runServer > "$log_file" 2>&1
           result=$?
+          tr -d '\000' < "$log_file" > "$log_file.clean" && mv "$log_file.clean" "$log_file"
           if grep -Fq 'For help, type "help"' "$log_file"; then
             echo "Forge server reached the ready state."
             exit 0
@@ -135,12 +469,64 @@ jobs:
           with ZipFile("run/photon/fxpacks/server-ci-server-sync.fxpack", "w", ZIP_DEFLATED) as pack:
               pack.writestr("assets/photon_sync_probe/fx/server_sync.fx", b"server fx pack sync probe")
               pack.writestr("assets/photon_sync_probe/textures/server_sync_marker.txt", b"delivered only by the integrated server")
+              # round 24: a sound event the client has to learn without a resource reload (the file is never decoded)
+              pack.writestr("assets/photon_sync_probe/sounds.json", b'{"hot_probe": {"sounds": ["photon_sync_probe:hot_probe"]}}')
+              pack.writestr("assets/photon_sync_probe/sounds/hot_probe.ogg", b"not decoded: only its presence is checked")
           PY
 
       - name: Install virtual display and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil
+          sudo apt-get install --yes xvfb xauth libgl1-mesa-dri libglx-mesa0 python3-pil ffmpeg
+
+      - name: Generate audio conversion smoke fixtures
+        run: |
+          mkdir -p run/photon/smoke-fixtures
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a libmp3lame -b:a 128k run/photon/smoke-fixtures/beat.mp3
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k run/photon/smoke-fixtures/beat.m4a
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -ar 48000 run/photon/smoke-fixtures/beat48k.wav
+          ffmpeg -loglevel error -f lavfi -i "testsrc=size=64x64:duration=0.5" -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:v libx264 -c:a aac -shortest run/photon/smoke-fixtures/beat.mp4
+
+      # The dev-run smoke tests below exercise the original codec libraries from the Gradle classpath;
+      # only the packaged jar carries the copies shadowJar relocated under
+      # com.lowdragmc.photon.internal.embedded. Decode and encode with those, compiled against the
+      # distributable alone and with the jar as a named module, so a relocation that lost a class, a
+      # resource or a reference fails here.
+      - name: Exercise the relocated audio codecs from the distributable
+        shell: bash
+        run: |
+          jar_file=$(find build/libs -maxdepth 1 -name '*-all.jar' -print -quit)
+          test -n "$jar_file"
+          work="$RUNNER_TEMP/relocated-codecs"
+          rm -rf "$work"
+          mkdir -p "$work/classes"
+          cp run/photon/smoke-fixtures/beat.mp3 run/photon/smoke-fixtures/beat.m4a "$work/"
+          ffmpeg -loglevel error -f lavfi -i "sine=frequency=440:duration=0.5" -ac 2 -c:a aac -b:a 128k -f adts "$work/beat.aac"
+          javac -d "$work/classes" -cp "$jar_file" .github/scripts/RelocatedCodecsCheck.java
+          # The jar goes on the module path (an automatic module, as the loader makes a named module of
+          # it in the game) so that the codecs' resource lookups run under module encapsulation too.
+          if ! java -p "$jar_file" --add-modules ALL-MODULE-PATH -cp "$work/classes" RelocatedCodecsCheck "$work" > "$work/check.log" 2>&1; then
+            cat "$work/check.log"
+            # the whole trace as annotations: the step log is not always reachable from where this is read
+            grep -E 'STAGE FAILED|Exception|Error|^\s+at (com\.lowdragmc|RelocatedCodecsCheck)' "$work/check.log" > "$work/trace.txt" || true
+            head -n 24 "$work/trace.txt" | while IFS= read -r line; do
+              echo "::error title=relocated codecs::$line"
+            done
+            echo "::error title=relocated codecs::the relocated jLayer/JAAD/jVorbisEnc inside the distributable failed"
+            exit 1
+          fi
+          cat "$work/check.log"
+          # What the relocated encoder wrote must be Ogg Vorbis to an independent decoder as well
+          # (mono: AudioConverter always downmixes before encoding, and so does the check).
+          ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "$work/relocated.ogg" > "$work/probe.txt"
+          cat "$work/probe.txt"
+          grep -Fxq 'codec_name=vorbis' "$work/probe.txt"
+          grep -Fxq 'sample_rate=44100' "$work/probe.txt"
+          grep -Fxq 'channels=1' "$work/probe.txt"
+          ffmpeg -v error -xerror -i "$work/relocated.ogg" -f null -
+          duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$work/relocated.ogg")
+          python3 -c 'import sys; d = float(sys.argv[1]); assert 0.3 <= d <= 0.9, "relocated.ogg lasts %s s" % d' "$duration"
+          echo "::notice title=relocated codecs::$(tail -n 1 "$work/check.log")"
 
       - name: Smoke-test Forge client startup without a physical display
         shell: bash
@@ -149,18 +535,45 @@ jobs:
           set +e
           timeout --signal=INT --kill-after=15s 240s xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 +extension GLX +render -noreset" env LIBGL_ALWAYS_SOFTWARE=1 ALSOFT_DRIVERS=null JAVA_TOOL_OPTIONS="-Dmixin.debug.verbose=true -Dphoton.fxprojSmokeTest=true -Dphoton.serverFxPackSyncSmoke=true" bash ./gradlew --no-daemon runClient > "$log_file" 2>&1
           result=$?
+          # Some crashes dump binary bytes into stdout and grep then hides every diagnostic as
+          # "binary file matches". Strip NULs so all later greps treat the log as text.
+          tr -d '\000' < "$log_file" > "$log_file.clean" && mv "$log_file.clean" "$log_file"
           required_markers=(
             'Photon shader graph nodes loaded:'
             'Sound engine started'
             'ParticleEngineAccessor'
             'photon.mixins.json'
             '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact'
+            '[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)'
             '[fx-picker-smoke] the fx search lists every loadable effect'
             '[fx-instance-timeline-history-smoke] inspector snapshots persist FX instance timelines without crashing'
             '[bloom-control-smoke] dragging the scene bar'
             '[slider-drag-smoke] pressing and dragging the bloom slider moved it continuously'
             '[editor-open] FXEditor built in'
             '[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely'
+            '[material-persistence-smoke] created materials persist on disk and travel inside the project file'
+            '[fxpack-stall-watchdog-smoke] stalled server pack transfers are swept and live ones survive'
+            '[private-fx-upload-timeout-smoke] unanswered prompts and stalled or trickle uploads expire at bounded deadlines'
+            '[fxpack-watcher-smoke] copied, same-size replaced and removed packs each owe one reload once they stop changing, kept until a reload covers it'
+            '[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T'
+            '[upload-archive-smoke] the local LDLib2 asset archive skips unsafe names and passes pack validation'
+            '[late-replay-smoke] entity and block FX snapshots replay with their fields and per-chunk filtering'
+            '[audio-conversion-smoke] user audio formats convert to playable mono Ogg Vorbis'
+            '[sound-length-smoke] an imported sound reports its measured length once asked to wait for it instead of 0 on the first ask'
+            '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry'
+            '[kotlin-runtime-isolation-smoke] LDLib2'"'"'s Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads'
+            '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel'
+            '[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload'
+            '[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy'
+            '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself'
+            '[fxpack-server-update-smoke] a pack replaced in the server'"'"'s photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T'
+            '[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack'"'"'s sounds.json events were registered and the old pack'"'"'s taken out'
+            '[gpu-compat-smoke] vendor='
+            '[freeze-watchdog-smoke] armed'
+            '[gpu-compat-regression-smoke] AMD/Intel Windows drivers get the conservative profile, uploads restore the texture state, pass errors are counted and the freeze report is complete'
+            '[mixin-audit-smoke] configs='
+            '[mixin-audit-regression-smoke] a bundled Photon 1 is called out, the render-path line names every config on a class and the live audit sees Photon'"'"'s own hooks'
+            '[iris-oculus-gate-smoke] optional shader bridge and mixins enable for Iris or Oculus, and stay off when neither is installed'
             '[kila-texture-assets-smoke] all '
             '[kila-material-sanitize-smoke] corrupt driver and texture enum values fall back safely'
             '[kila-preset-resources-smoke] '
@@ -169,6 +582,12 @@ jobs:
             '[kila-preset-serialization-smoke] all '
             '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector'
             '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap'
+            '[trail-history-bound-smoke] classic trail history and smoothed output stay bounded, retaining newest points'
+            '[managed-list-bounds-smoke] persisted material, burst and sub-emitter lists reject unsafe counts'
+            '[gltf-accessor-bounds-smoke] accessor offsets and strides stay inside declared buffer views'
+            '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points'
+            '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits'
+            '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate'
             '[trail-colour-smoke] red-to-blue trail gradient reaches both GPU/CPU point colours'
             '[fxproj-smoke] loaded synthetic .fxproj with burst'
             '[fxproj-legacy-smoke] loaded Photon 26.2 managed-list .fxproj and preserved burst fields'
@@ -231,7 +650,7 @@ jobs:
             echo "Client smoke test did not run; no markers to report."
             exit 0
           fi
-          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]'; do
+          for marker in '[slider-drag-smoke]' '[editor-open] FXEditor built in' '[bloom-control-smoke]' '[loose-texture-smoke]' '[photon1-conversion-report-smoke]' '[lifetime-mode-smoke]' '[kila-material-sanitize-smoke]' '[drain-exit-smoke]' '[sections-smoke]' '[sections-sanitize-smoke]' '[release-section-smoke]' '[sections-save-smoke]' '[search-box-smoke]' '[section-command-smoke]' '[editfx-smoke]' '[editfx-path-smoke]' '[loose-texture-path-smoke]' '[playback-rate-sanitize-smoke]' '[blend-preset-classification-smoke]' '[fxpack-stream-validation-smoke]' '[editfx-root-smoke]' '[entity-follow-frame-smoke]' '[playing-bloom-smoke]' '[fx-instance-timeline-history-smoke]' '[animated-property-load-smoke]' '[timeline-insert-time-smoke]' '[asset-pick-rejection-smoke]' '[expression-safety-smoke]' '[sub-emitter-cycle-smoke]' '[trail-smooth-bound-smoke]' '[aratrail-warmup-bound-smoke]' '[prewarm-bound-smoke]' '[curve-bound-finite-smoke]' '[beam-layer-queue-smoke]' '[aratrail-point-bounds-smoke]' '[point-buffer-capacity-smoke]' '[cpu-record-capacity-smoke]' '[aratrail-inherit-duration-smoke]' '[audio-source-release-smoke]' '[audio-3d-remove-smoke]' '[export-all-fxpack-smoke]' '[private-fx-upload-timeout-smoke]' '[fxpack-watcher-smoke]' '[fxpack-watcher-mount-smoke]' '[sound-length-smoke]' '[dialog-size-close-smoke]' '[kotlin-runtime-isolation-smoke]' '[virtual-level-tick-smoke]' '[virtual-level-tick]' '[missing-effect-smoke]' '[fxpack-local-twin-smoke]' '[server-fxpack-watcher-smoke]' '[fxpack-server-update-smoke]' '[fxpack-hot-mount-smoke]' '[gpu-compat-smoke]' '[freeze-watchdog-smoke]' '[gpu-compat-regression-smoke]' '[mixin-audit-smoke]' '[mixin-audit-regression-smoke]' '[iris-oculus-gate-smoke]' '[bloom-mip-fit-smoke]'; do
             if grep -Fq "$marker" "$log"; then
               echo "::notice title=marker present::$marker"
             else
@@ -239,9 +658,46 @@ jobs:
             fi
           done
 
-      - name: Require server FX pack download and automatic resource reload
+      # Non-failing audit aid: the distinct WARN/ERROR lines that mention Photon, LDLib or Kila in
+      # both smoke logs (prefix stripped, numbers normalised, known authlib noise removed), printed
+      # here and published as one notice annotation per log so an audit can read them through the
+      # check-run API without downloading the log archive.
+      - name: Summarize Photon warnings from the smoke logs
+        if: always()
         shell: bash
-        run: grep -Fq '[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted after automatic resource reload' "$RUNNER_TEMP/photon-client.log"
+        run: |
+          for which in client server; do
+            log="$RUNNER_TEMP/photon-$which.log"
+            if [ ! -f "$log" ]; then
+              echo "== $which: no log"
+              continue
+            fi
+            relevant=$(grep -aE '/(WARN|ERROR)\]' "$log" \
+              | grep -aEi 'photon|ldlib|kila' \
+              | grep -avE 'authlib|Expected BEGIN_OBJECT|AuthenticationUnavailable' || true)
+            # vanilla ShaderInstance warns for every uniform/sampler a shader JSON declares but the GLSL
+            # never reads (the linker drops it); harmless, and numerous enough to crowd out the real lines
+            unused_uniforms=$(printf '%s\n' "$relevant" | grep -acE 'could not find (uniform|sampler) named' || true)
+            summary=$(printf '%s\n' "$relevant" \
+              | grep -avE 'could not find (uniform|sampler) named' \
+              | sed -E 's/^\[[^]]*\] \[[^]]*\]:? ?//; s/\b[0-9]+(\.[0-9]+)?\b/N/g' \
+              | sort | uniq -c | sort -rn | head -n 40 | cut -c1-200 || true)
+            count=$(printf '%s\n' "$summary" | grep -c . || true)
+            echo "== $which: $count distinct Photon WARN/ERROR lines ($unused_uniforms declared-but-unused uniform warnings left out)"
+            printf '%s\n' "$summary"
+            if [ "$count" -gt 0 ]; then
+              encoded=$(printf '%s' "$summary" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | cut -c1-3900)
+              echo "::notice title=photon $which WARN/ERROR summary ($count distinct, $unused_uniforms unused-uniform lines left out)::$encoded"
+            else
+              echo "::notice title=photon $which WARN/ERROR summary::none ($unused_uniforms unused-uniform lines left out)"
+            fi
+          done
+
+      # Round 24: the pack a server sends is mounted in the running resource manager — no reload, no loading screen,
+      # no sound engine restart — and its sounds.json still reaches the sound manager.
+      - name: Require server FX pack download and in-place mount without a resource reload
+        shell: bash
+        run: grep -Fq '[server-fxpack-sync-smoke] server-only FX pack transferred in chunks and mounted in the running resource manager, sounds included, without a resource reload' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require exported FX over server network
         shell: bash
@@ -261,6 +717,10 @@ jobs:
       - name: Require visible bloom from ordinary FX colors
         shell: bash
         run: grep -Fq '[bloom-smoke] red FX halo is present while non-highlight scene pixels stay intact' "$RUNNER_TEMP/photon-client.log"
+
+      - name: Require the bloom pyramid to be clamped to the frame (bloom_mip_level 10 at 1080p used to crash)
+        shell: bash
+        run: grep -Fq '[bloom-mip-fit-smoke] the bloom pyramid is clamped to the frame (1080p holds 9 levels, 2x2 none)' "$RUNNER_TEMP/photon-client.log"
 
       - name: Require built-in Photon material presets in the editor picker
         shell: bash
@@ -330,6 +790,123 @@ jobs:
         shell: bash
         run: grep -Fq '[fxpack-dialog-size-smoke] pack contents dialog size is remembered' "$RUNNER_TEMP/photon-client.log"
 
+      # Round 21: LDLib2's DummyWorld.tickWorld() posted Forge's LevelTickEvent for the editor's virtual level and a
+      # listener that casts event.level to ClientLevel (Brutality 0.8.7) crashed the FX editor with "Ticking screen".
+      # The regression ticks an EditorSceneLevel and a plain TrackedDummyWorld with such a listener registered, so
+      # this gate fails if either the editor level or the DummyWorldMixin lets the event reach the bus again.
+      - name: Require LDLib2 virtual levels to stay off the Forge level tick bus
+        shell: bash
+        run: |
+          grep -Fq '[virtual-level-tick-smoke] LDLib2 virtual levels post no Forge LevelTickEvent while a listener casts event.level to ClientLevel' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[virtual-level-tick] com.lowdragmc.lowdraglib2.utils.virtuallevel.TrackedDummyWorld is ticking inside a screen; Photon keeps Forge'"'"'s LevelTickEvent from being posted for LDLib2 virtual levels' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 22: FXHelper.getFX cached loaded effects but not failed loads, so a sub-emitter naming an effect that is
+      # not on the instance walked every pack and logged a stack trace per particle it emitted (63 traces in six
+      # minutes in a player's log). The regression asks for a missing id 200 times and runs such a sub-emitter for
+      # ten ticks: one read, one log line, forgotten by invalidate/clearCache.
+      - name: Require missing effects to be read and logged once
+        shell: bash
+        run: grep -Fq '[missing-effect-smoke] an effect id no pack provides is read and logged once, answered from memory afterwards and forgotten by a reload' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 22: in singleplayer the integrated server scans the client's own photon/fxpacks and offered the player
+      # their exports back, which the client downloaded as server-<hash>.fxpack copies ("two random files"). The smoke
+      # asks the integrated server for its list again once ci_watcher.fxpack is installed: the installed file must be
+      # used in place and no server-<sha256> copy may appear.
+      - name: Require installed packs to satisfy the server's offer without a copy
+        shell: bash
+        run: grep -Fq '[fxpack-local-twin-smoke] a pack the server offers that is already installed in photon/fxpacks is used in place, not downloaded as a server-<hash> copy' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 23: a pack replaced in the server's photon/fxpacks reached the players already online only through a
+      # reconnect, a dimension change, a respawn or /photon fxpacks, and every version a client ever downloaded stayed
+      # in its photon/fxpacks as a server-<hash> copy for good. The server now watches its folder and re-offers by
+      # itself once a change holds still; the smoke rewrites the server-only fixture after the login sync and sends no
+      # command: the client must download the new version, reload, serve the new content and drop the old copy.
+      - name: Require a pack replaced on the server to reach online players by itself
+        shell: bash
+        run: |
+          grep -Fq '[server-fxpack-watcher-smoke] a pack replaced, added or removed on the server is offered to the players online once it holds still, kept through the offer quota and never for a change that undid itself' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[fxpack-server-update-smoke] a pack replaced in the server's photon/fxpacks reached a playing client by itself: new version downloaded and mounted, old copy unmounted and removed, no command, reinstall or F3+T" "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'Photon FX packs changed on the server (' "$RUNNER_TEMP/photon-client.log"
+
+      # Round 24: none of the above may go through a resource reload any more. The server sync at login and on the
+      # update, and the folder watcher for ci_watcher.fxpack, mount and unmount in the running resource manager; the
+      # smoke counts the reloads Photon's reload listener sees from the watcher test on (zero), checks neither path
+      # fell back to one, and that the replaced pack's sounds.json event was swapped in the sound manager.
+      - name: Require packs to be mounted in place, without a resource reload
+        shell: bash
+        run: |
+          grep -Fq "[fxpack-hot-mount-smoke] server packs at login and on update, and a pack copied into photon/fxpacks, were mounted and unmounted in the running resource manager with no resource reload; the new pack's sounds.json events were registered and the old pack's taken out" "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'served in place, no resource reload' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq 'Server Photon FX packs are ready without a resource reload' "$RUNNER_TEMP/photon-client.log"
+          if grep -Fq 'reloading client assets instead' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::error::a server FX pack sync fell back to a resource reload'
+            exit 1
+          fi
+
+      # Round 25: an AMD Vega 11 (Windows driver) corrupted the terrain textures and hung the client in glfwSwapBuffers
+      # the moment any FX appeared, with Photon as the only mod; no way to bisect on that machine. Photon now reads the
+      # driver on the first frame and keeps a conservative GPU pipeline on AMD/Intel Windows drivers (gpu_profile =
+      # AUTO; FULL/SAFE override), restores the texture state after every data-texture upload, counts glGetError per
+      # pass, and a daemon thread writes photon/diagnostics/freeze-*.txt when the render thread stalls in a level. The
+      # runner's llvmpipe must stay on the full pipeline (everything above still tests it), the regression pins the
+      # detection, the profile's reach, the upload restore, the error counting and the report's contents.
+      - name: Require the GPU compatibility profile, upload restore and freeze report
+        shell: bash
+        run: |
+          grep -Fq '[gpu-compat-smoke] vendor=' "$RUNNER_TEMP/photon-client.log"
+          grep -F '[gpu-compat-smoke] vendor=' "$RUNNER_TEMP/photon-client.log" | grep -Fq 'safeMode=false'
+          grep -Fq '[freeze-watchdog-smoke] armed' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-compat-regression-smoke] AMD/Intel Windows drivers get the conservative profile, uploads restore the texture state, pass errors are counted and the freeze report is complete' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gpu-error] stage=regression glGetError=0x500 (GL_INVALID_ENUM)' "$RUNNER_TEMP/photon-client.log"
+          if grep -F '[gpu-error] stage=' "$RUNNER_TEMP/photon-client.log" | grep -Fv 'stage=regression' | grep -q .; then
+            echo '::error::a Photon GPU pass raised a GL error on the runner:'
+            grep -F '[gpu-error] stage=' "$RUNNER_TEMP/photon-client.log" | grep -Fv 'stage=regression'
+            exit 1
+          fi
+          # The tick-30 regression batch runs in one client tick, longer than the threshold on llvmpipe: the watchdog
+          # fires on a slow frame, not a hang. That is allowed, but the render thread does come back, so the report
+          # must have been closed as RESOLVED (the INFO line below); a report left open on the runner is a bug.
+          if grep -Fq '[freeze-watchdog] the render thread has produced no frame' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::warning::the freeze watchdog fired during the smoke run (llvmpipe stalls are slow frames, not GPU hangs):'
+            grep -F '[freeze-watchdog]' "$RUNNER_TEMP/photon-client.log" | head -5
+            grep -Fq '[freeze-watchdog] the render thread resumed after' "$RUNNER_TEMP/photon-client.log"
+          fi
+
+      # Round 26: "it was a mixin of Photon 1" was the user's diagnosis of the AMD freeze, and nothing in a log or a freeze
+      # report could confirm or refute it (Mixin names its targets in debug.log only; a GPU hang writes no crash report).
+      # Photon now logs, at client setup and into every freeze report, each registered mixin config with the mod file
+      # that declares it, the configs on the render-path classes, and any other mod file shipping com.lowdragmc.photon
+      # classes or Photon 1's photon-common.mixins.json. On the runner: Photon's own config must be seen on GameRenderer,
+      # LDLib 1's on ParticleEngine next to it, and no old Photon anywhere.
+      - name: Require the mixin audit
+        shell: bash
+        run: |
+          grep -Fq '[mixin-audit-smoke] configs=' "$RUNNER_TEMP/photon-client.log"
+          grep -F '[mixin-audit-smoke] configs=' "$RUNNER_TEMP/photon-client.log" | grep -Fq 'photon1Remnants=0 own=photon.mixins.json'
+          # Photon's own hooks, and LDLib 1's ParticleEngineMixin next to Photon's on the same class: the foreign mixin
+          # on the frame path the audit exists to show (read from Forge's scan of the mod files, not from a manifest)
+          grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | grep -Eq 'GameRenderer <- [^;]*photon:GameRendererMixin'
+          if ! grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | grep -Eq 'ParticleEngine <- [^;]*ldlib:ParticleEngineMixin[^;]*photon:ParticleEngineMixin'; then
+            echo '::error::the mixin audit did not see LDLib 1 next to Photon on ParticleEngine in the development client:'
+            grep -F '[mixin-audit] render path: ' "$RUNNER_TEMP/photon-client.log" | head -2
+            exit 1
+          fi
+          # the audit itself, as annotations: a later round can read who was on the frame without the log
+          grep -F '[mixin-audit' "$RUNNER_TEMP/photon-client.log" | sed -e 's/\r$//' -e 's/.*\(\[mixin-audit\)/\1/' | sort -u | while IFS= read -r line; do
+            echo "::notice title=mixin audit::${line}"
+          done
+          grep -Fq '[mixin-audit] Photon 1: no other mod file ships com.lowdragmc.photon classes' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[mixin-audit-regression-smoke] a bundled Photon 1 is called out, the render-path line names every config on a class and the live audit sees Photon's own hooks" "$RUNNER_TEMP/photon-client.log"
+          if grep -Fq '[mixin-audit] Photon 1 remnant' "$RUNNER_TEMP/photon-client.log"; then
+            echo '::error::the mixin audit found an old Photon on the runner:'
+            grep -F '[mixin-audit] Photon 1 remnant' "$RUNNER_TEMP/photon-client.log"
+            exit 1
+          fi
+
+      - name: Require Iris and Oculus to enable the optional shader mixins
+        shell: bash
+        run: grep -Fq '[iris-oculus-gate-smoke] optional shader bridge and mixins enable for Iris or Oculus, and stay off when neither is installed' "$RUNNER_TEMP/photon-client.log"
+
       - name: Require Photon 1 entity FX to stay on the torso
         shell: bash
         run: grep -Fq '[photon1-feet-smoke] converted FX follow the feet; Photon 2 FX follow the eyes' "$RUNNER_TEMP/photon-client.log"
@@ -378,6 +955,31 @@ jobs:
           grep -Fq '[playback-rate-sanitize-smoke] non-finite, negative and extreme FX rates are bounded' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[blend-preset-classification-smoke] preset factors and Kila slot-to-shader blend selection match the shader contract' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[fxpack-stream-validation-smoke] valid packs are streamed within limits and zip-slip entries are rejected' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[animated-property-load-smoke] unreadable animated properties are skipped without failing the track' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[timeline-insert-time-smoke] insert time only accepts a finite positive gap and its undo is exact' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[asset-pick-rejection-smoke] badly named, accented, outside-assets and reserved-namespace picks are explained; valid files pass' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[expression-safety-smoke] formulas parse once per source, reject unknown identifiers and never yield NaN' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[trail-history-bound-smoke] classic trail history and smoothed output stay bounded, retaining newest points' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[managed-list-bounds-smoke] persisted material, burst and sub-emitter lists reject unsafe counts' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[gltf-accessor-bounds-smoke] accessor offsets and strides stay inside declared buffer views' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[aratrail-warmup-bound-smoke] an Ara trail pre-simulates at most 60 seconds, nothing for NaN or negative values' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[curve-bound-finite-smoke] curve range fields keep their bound for NaN, Infinity and non-numeric text' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[beam-layer-queue-smoke] an Opaque beam joins the opaque queue and a Translucent one the translucent queue' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[aratrail-inherit-duration-smoke] an Ara trail takes the parent duration and drops it on reset' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[audio-source-release-smoke] a broken mp3, aac and m4a are refused with their file released' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[audio-3d-remove-smoke] a 3D clip plays from the effect and fades over its range, the on-remove sound starts once per removal, and an unforced remove fades the effect out' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[export-all-fxpack-smoke] every saved project and workspace .fx is exported into one pack under its path, editfx copies under the effect they edit, a name taken twice skipped' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[prewarm-bound-smoke] a looping emitter pre-simulates at most 1200 ticks' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[fxpack-watcher-smoke] copied, same-size replaced and removed packs each owe one reload once they stop changing, kept until a reload covers it' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[fxpack-watcher-mount-smoke] a pack copied into photon/fxpacks was mounted by the folder watcher without F3+T' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[sound-length-smoke] an imported sound reports its measured length once asked to wait for it instead of 0 on the first ask' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[dialog-size-close-smoke] a window-mode dialog stores the size it had on screen when it closes, and a damaged 0x0 entry reads as no entry' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq "[kotlin-runtime-isolation-smoke] LDLib2's Kotlin classes link only against the relocated runtime under com.lowdragmc.photon.internal.embedded and it loads" "$RUNNER_TEMP/photon-client.log"
 
       - name: Require self-contained shield FX pack
         shell: bash
@@ -528,10 +1130,12 @@ jobs:
           echo "::endgroup::"
           echo "::group::noise filter"
           echo "The headless client always logs a narrator and a netty failure; neither stops the run."
+          echo "Blocked Mojang session servers make authlib fail over a Gson parse of the HTML error page"
+          echo "('Expected BEGIN_OBJECT but was STRING'); that noise is external and must never gate or mask a run."
           echo "::endgroup::"
           # Our own assertion first: the log's first Exception is narrator/netty noise, and publishing that
           # instead of the smoke failure is why a red run used to say nothing about what broke.
-          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator' | head -n 4 | \
+          grep -oE 'IllegalStateException: .{0,300}' "$log" | grep -vE 'flite|Narrator|Expected BEGIN_OBJECT' | head -n 4 | \
             while IFS= read -r line; do echo "::error title=smoke assertion::$line"; done
           # Then one flattened window: the 25 lines of our own logging before the first line that names the
           # test, which is where the reason for the failure always is.
@@ -544,8 +1148,10 @@ jobs:
           # Finally the generic sweep, filtered, as a last resort. Include the owning Java frames for
           # Optional failures and blocked reflection, not only the exception headline.
           grep -n -A 12 -B 1 -E 'NoSuchElementException|UnsupportedOperationException' "$log" \
+            | grep -vE 'Reflective setAccessible|PlatformDependent|netty' \
             | head -n 28 | while IFS= read -r line; do echo "::error title=client exception trace::$line"; done
-          grep -E 'Exception|Caused by:|FATAL|error:' "$log" | grep -vE 'flite|Narrator|netty|Unsafe|Native library' \
+          grep -E 'Exception|Caused by:|FATAL|error:' "$log" \
+            | grep -vE 'flite|Narrator|netty|Unsafe|Native library|authlib|AuthenticationUnavailable|MinecraftClientException|Expected BEGIN_OBJECT' \
             | head -n 6 | while IFS= read -r line; do echo "::error title=client::$line"; done
 
       - name: Upload client smoke diagnostics
@@ -557,6 +1163,10 @@ jobs:
             ${{ runner.temp }}/photon-client.log
             run/logs/*.log
             run/screenshots/*.png
+            ${{ runner.temp }}/forge-server/install.log
+            ${{ runner.temp }}/forge-server/server.log
+            ${{ runner.temp }}/forge-server/logs/*.log
+            ${{ runner.temp }}/forge-server/crash-reports/*.txt
           if-no-files-found: ignore
           retention-days: 14
 
@@ -564,9 +1174,10 @@ jobs:
     needs: build
     if: >-
       always() && !cancelled() && needs.build.outputs.distributable_uploaded == 'true' &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/arena/747b04a3-photon-2') ||
+      needs.build.outputs.forge_server_ok == 'true' &&
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')) ||
        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
-        github.event.pull_request.head.ref == 'arena/747b04a3-photon-2'))
+        startsWith(github.event.pull_request.head.ref, 'arena/')))
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -581,6 +1192,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*-all.jar' -print)
@@ -589,9 +1201,13 @@ jobs:
             exit 1
           fi
           tag="preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # On pull_request runs GITHUB_SHA is the synthetic merge commit, which GitHub rebuilds on the
+          # next push to the branch; a release targeting the superseded one is refused (HTTP 403,
+          # "Resource not accessible by integration"). Target the branch commit instead.
+          target="${PR_HEAD_SHA:-$GITHUB_SHA}"
           gh release create "$tag" "${jars[0]}" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "Photon Forge 1.20.1 preview ${GITHUB_SHA:0:7}" \
-            --notes "Test build from commit $GITHUB_SHA. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
+            --repo "$GITHUB_REPOSITORY" --target "$target" --prerelease \
+            --title "Photon Forge 1.20.1 preview ${target:0:7}" \
+            --notes "Test build from commit $target. Download the .jar asset and place it in the Minecraft instance's mods folder. This is a preview, not a stable release."
           printf '### Direct JAR download\n\n[Download %s](https://github.com/%s/releases/download/%s/%s)\n' \
             "$(basename "${jars[0]}")" "$GITHUB_REPOSITORY" "$tag" "$(basename "${jars[0]}")" >> "$GITHUB_STEP_SUMMARY"

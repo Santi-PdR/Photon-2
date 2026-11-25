@@ -11,7 +11,18 @@ import java.util.List;
 
 /** Handles persistence payloads shared by Photon and the Forge 1.20.1 LDLib readers. */
 public final class LDLibPersistenceCompat {
+    /** Refuse corrupt managed-list UIDs before they can allocate or loop over attacker-sized counts. */
+    public static final int MAX_MANAGED_LIST_ENTRIES = 4096;
+
     private LDLibPersistenceCompat() {
+    }
+
+    public static int checkedManagedListCount(int count, String listName) {
+        if (count < 0 || count > MAX_MANAGED_LIST_ENTRIES) {
+            throw new IllegalArgumentException("Managed " + listName + " list count " + count
+                    + " is outside the safe range 0.." + MAX_MANAGED_LIST_ENTRIES);
+        }
+        return count;
     }
 
     public static ListTag encodePayloadList(List<CompoundTag> entries) {

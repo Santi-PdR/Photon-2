@@ -108,6 +108,11 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
     @Configurable(name = "AraTrails.smoothness", tips = "AraTrails.smoothness.tips")
     @ConfigNumber(range = {1, 8})
     public int smoothness = 1;
+
+    /** Smoothness from authored files is not constrained by the UI annotation, so keep render work bounded. */
+    public static int safeSmoothness(int requested) {
+        return Math.max(1, Math.min(8, requested));
+    }
     @Configurable(name = "AraTrails.smoothingDistance")
     @ConfigNumber(range = {0, Float.MAX_VALUE})
     public float smoothingDistance = 0.05f;
@@ -234,7 +239,7 @@ public class AraTrailConfig implements IConfigurable, IPersistedSerializable {
 
         @Override
         protected boolean useInstancing() {
-            return renderRuntime.isUseGPUInstance() && instancedContext() != null;
+            return renderRuntime.isUseGPUInstance() && com.lowdragmc.photon.client.compat.gpu.GpuCompat.gpuInstancing() && instancedContext() != null;
         }
 
         @Override

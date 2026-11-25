@@ -22,6 +22,7 @@ import oshi.util.tuples.Pair;
 import javax.annotation.Nonnull;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.Locale;
 
 public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
     public final TextField upperBound = new TextField();
@@ -41,7 +42,12 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         upperBound.setNumbersOnlyFloat(value.getMin(), value.getMax());
         upperBound.setText(value.getUpper() + "");
         upperBound.setTextResponder(text -> {
-            value.setUpper(Mth.clamp(Float.parseFloat(text), value.getMin(), value.getMax()));
+            var bound = CurveConfigurator.finiteBound(text);
+            if (bound == null) { // "NaN"/"Infinity" parse as numbers; neither is a usable bound
+                upperBound.setText(value.getUpper() + "", false);
+                return;
+            }
+            value.setUpper(Mth.clamp(bound, value.getMin(), value.getMax()));
             updateValue();
         });
         upperBound.layout(layout -> {
@@ -52,7 +58,12 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         lowerBound.setNumbersOnlyFloat(value.getMin(), value.getMax());
         lowerBound.setText(value.getLower() + "");
         lowerBound.setTextResponder(text -> {
-            value.setLower(Mth.clamp(Float.parseFloat(text), value.getMin(), value.getMax()));
+            var bound = CurveConfigurator.finiteBound(text);
+            if (bound == null) {
+                lowerBound.setText(value.getLower() + "", false);
+                return;
+            }
+            value.setLower(Mth.clamp(bound, value.getMin(), value.getMax()));
             updateValue();
         });
         lowerBound.layout(layout -> {
@@ -64,7 +75,7 @@ public class RandomCurveConfigurator extends ValueConfigurator<RandomCurve> {
         this.curveGraph.setOnCurveChangeListener(curves -> updateValue());
         // the drag readout shows the mapped value (lower..upper) instead of the normalized 0..1
         this.curveGraph.setCoordFormatter((x, y) ->
-                "(%.2f, %.2f)".formatted(x, value.getLower() + (value.getUpper() - value.getLower()) * y));
+                String.format(Locale.ROOT, "(%.2f, %.2f)", x, value.getLower() + (value.getUpper() - value.getLower()) * y));
 
         inlineContainer.addChildren(curvePreview.layout(layout -> {
             layout.height(14);

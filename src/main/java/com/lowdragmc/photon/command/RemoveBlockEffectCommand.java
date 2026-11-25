@@ -54,8 +54,9 @@ public class RemoveBlockEffectCommand {
         var command = new RemoveBlockEffectCommand();
         command.pos = BlockPosArgument.getLoadedBlockPos(context, "pos");
         command.dimension = context.getSource().getLevel().dimension().location();
-        // Explicit false keeps graceful draining; an unqualified remove is immediate.
-        command.setForce(!force || BoolArgumentType.getBool(context, "force"));
+        // unqualified: the effect fades out the way it was built to (release section, remnants drain);
+        // `true` drops it at once, long-lived particles included — see EffectRemoval.force
+        command.setForce(EffectRemoval.force(force, force && BoolArgumentType.getBool(context, "force")));
         if (location) {
             command.setLocation(ResourceLocationArgument.getId(context, "location"));
         }

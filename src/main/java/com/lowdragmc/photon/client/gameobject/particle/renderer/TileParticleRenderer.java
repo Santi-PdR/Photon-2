@@ -87,9 +87,10 @@ public class TileParticleRenderer {
     }
 
     /** Collect per-particle records during the next {@link #renderQueue}, for a {@code PHOTON_CPU_DATA} draw. */
-    public void beginCpuRecords(int particleCapacity) {
-        cpuRecords.begin(config.additionalGPUDataSetting, particleCapacity);
-        activeRecords = cpuRecords;
+    public boolean beginCpuRecords(int particleCapacity) {
+        boolean supported = cpuRecords.begin(config.additionalGPUDataSetting, particleCapacity);
+        activeRecords = supported ? cpuRecords : null;
+        return supported;
     }
 
     public void endCpuRecords() {
@@ -382,9 +383,11 @@ public class TileParticleRenderer {
                 instanceBackend.updateGeometry(); // same model, new pose
             }
         }
+        var setting = config.additionalGPUDataSetting;
+        if ((setting.hasDataRecord() && !instanceBackend.supportsDataUpload(particles.size()))
+                || (setting.hasCustomRecord() && !instanceBackend.supportsCustomUpload(particles.size()))) return false;
         var buffer = instanceBackend.beginUpload(particles.size());
         if (buffer == null) return false;
-        var setting = config.additionalGPUDataSetting;
         var dataBuffer = setting.hasDataRecord() ? instanceBackend.beginDataUpload(particles.size()) : null;
         var customBuffer = setting.hasCustomRecord() ? instanceBackend.beginCustomUpload(particles.size()) : null;
 

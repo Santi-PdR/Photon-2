@@ -214,17 +214,19 @@ public class EmissionSetting implements IConfigurable, IPersistedSerializable {
     }
 
     public IntTag burstsSerialize(List<Burst> bursts) {
-        return IntTag.valueOf(bursts.size());
+        return IntTag.valueOf(LDLibPersistenceCompat.checkedManagedListCount(bursts.size(), "emission burst"));
     }
 
     /** LDLib2's managed-list UID is either Photon 26.x's integer ID or our legacy array payload. */
     public List<Burst> burstsDeserialize(Tag uid) {
         if (uid instanceof IntTag count) {
-            var bursts = new ArrayList<Burst>();
-            for (int i = 0; i < count.getAsInt(); i++) bursts.add(addDefaultBurst());
+            int size = LDLibPersistenceCompat.checkedManagedListCount(count.getAsInt(), "emission burst");
+            var bursts = new ArrayList<Burst>(size);
+            for (int i = 0; i < size; i++) bursts.add(addDefaultBurst());
             return bursts;
         }
         if (uid instanceof ListTag legacyPayload) {
+            LDLibPersistenceCompat.checkedManagedListCount(legacyPayload.size(), "emission burst");
             var groups = new ArrayList<Burst>();
             for (CompoundTag burstTag : LDLibPersistenceCompat.decodePayloadList(legacyPayload)) {
                 var burst = addDefaultBurst();

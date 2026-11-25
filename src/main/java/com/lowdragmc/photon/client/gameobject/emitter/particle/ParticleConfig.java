@@ -61,7 +61,7 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
     @Setter
     @Getter
     @Configurable(name = "ParticleConfig.prewarm", tips = "photon.emitter.config.prewarm")
-    @ConfigNumber(range = {0, Integer.MAX_VALUE})
+    @ConfigNumber(range = {0, ParticleEmitter.MAX_PREWARM_TICKS})
     protected int prewarm = 0;
     @Setter
     @Getter
@@ -242,7 +242,8 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
 
         @Override
         protected boolean useInstancing() {
-            return renderRuntime.isUseGPUInstance() && renderRuntime.getRenderMode() != ParticleRendererSetting.Mode.None;
+            return renderRuntime.isUseGPUInstance() && com.lowdragmc.photon.client.compat.gpu.GpuCompat.gpuInstancing()
+                    && renderRuntime.getRenderMode() != ParticleRendererSetting.Mode.None;
         }
 
         @Override
@@ -253,8 +254,7 @@ public class ParticleConfig implements IConfigurable, IPersistedSerializable {
             additionalGPUDataSetting.setMaterialMask(mask);
             additionalGPUDataSetting.setCustomDataMaterialUsed(custom);
             if (mask == 0 && !custom) return false;
-            tileParticleRenderer.beginCpuRecords(particleCapacity);
-            return true;
+            return tileParticleRenderer.beginCpuRecords(particleCapacity);
         }
 
         @Override

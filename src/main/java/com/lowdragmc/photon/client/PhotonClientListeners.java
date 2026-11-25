@@ -78,14 +78,26 @@ public class PhotonClientListeners {
         }
     }
 
+    /**
+     * Every frame, menus included: the driver is read once the GL context is up, and the freeze watchdog hears that
+     * the render thread is alive. A render thread stuck in the driver stops sending these, which is what it reports.
+     */
+    @SubscribeEvent
+    public static void onRenderTick(TickEvent.RenderTickEvent event) {
+        if (event.phase != TickEvent.Phase.START) return;
+        com.lowdragmc.photon.client.compat.gpu.GpuCompat.init();
+        com.lowdragmc.photon.client.compat.gpu.RenderWatchdog.heartbeat();
+    }
+
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         PhotonLights.tick();
         DynamicLightRenderer.tick();
         PhotonMeshCache.INSTANCE.tick();
-        // a .fxpack dropped into photon/fxpacks only becomes mountable on a reload, so notice it ourselves
+        // a .fxpack dropped into photon/fxpacks is noticed by Photon and mounted in the running resource manager
         com.lowdragmc.photon.client.fx.fxpack.FxPackWatcher.tick();
+        com.lowdragmc.photon.client.fx.fxpack.FxPackHotMount.tick();
     }
 
     /**

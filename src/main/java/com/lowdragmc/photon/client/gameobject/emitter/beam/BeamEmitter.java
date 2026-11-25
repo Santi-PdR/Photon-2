@@ -16,6 +16,7 @@ import com.lowdragmc.photon.client.gameobject.IFXObject;
 import com.lowdragmc.photon.client.gameobject.RuntimeBinding;
 import com.lowdragmc.photon.client.gameobject.emitter.Emitter;
 import com.lowdragmc.photon.client.gameobject.emitter.data.CustomDataBindings;
+import com.lowdragmc.photon.client.gameobject.emitter.data.RendererSetting;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.PhotonFXRenderPass;
 import com.lowdragmc.photon.client.gameobject.emitter.renderpipeline.RenderPassPipeline;
 import com.lowdragmc.photon.client.gameobject.particle.BeamParticle;
@@ -262,6 +263,17 @@ public class BeamEmitter extends Emitter {
     public AABB getCullBox(float partialTicks) {
         var cull = runtime().renderer.getCull();
         return cull.isEnable() ? cull.getCullAABB(this, partialTicks) : null;
+    }
+
+    /**
+     * Same rule as particle, trail and Ara trail emitters: the renderer's Layer picks the queue. A
+     * beam used to be the one emitter that ignored it and always drew in the translucent queue, so an
+     * Opaque beam still landed after every opaque mesh and its Order In Layer could not place it
+     * among them (upstream #56).
+     */
+    @Override
+    public boolean useTranslucentPipeline() {
+        return runtime().renderer.getLayer() == RendererSetting.Layer.Translucent;
     }
 
     @Override

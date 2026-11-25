@@ -177,6 +177,17 @@ public class AraTrailEmitter extends Emitter {
     //*****     particle logic     *****//
     //////////////////////////////////////
 
+    /**
+     * Same as the other emitters: a parent particle's lifetime lands in the runtime duration slot. The
+     * interface default wrote the base {@code lifetime} field instead, which {@link #updateOrigin()}
+     * immediately overwrote from {@link #getLifetime()} — so "Inherit Duration" never reached an Ara
+     * trail sub-emitter.
+     */
+    @Override
+    public void inheritDuration(int duration) {
+        runtime().duration.set(duration);
+    }
+
     @Override
     public int getLifetime() {
         return runtime().duration.get();

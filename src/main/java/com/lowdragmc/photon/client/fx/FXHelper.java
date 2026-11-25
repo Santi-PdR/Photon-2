@@ -47,6 +47,17 @@ public class FXHelper {
     @Nullable
     private static volatile List<ResourceLocation> idCache = null;
     private static final AtomicInteger generation = new AtomicInteger();
+    // ids whose last load failed, with the System.nanoTime after which a load may be tried again. A sub-emitter
+    // pointing at an effect that is not on the instance asked for it on every particle it emitted, and each ask
+    // walked every pack and logged a stack trace (63 traces in six minutes in one report): the miss is kept for
+    // MISSING_RETRY_NANOS, logged once, and forgotten with the cache (reload, invalidate) so a file added
+    // meanwhile is picked up.
+    private static final Map<ResourceLocation, Long> MISSING = new ConcurrentHashMap<>();
+    static final long MISSING_RETRY_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+    /** How long a miss is remembered; the regression shortens it to see the retry. */
+    static volatile long missingRetryNanos = MISSING_RETRY_NANOS;
+    /** Per id, how often its file was opened since the client started, found or not; {@link #readAttempts}. */
+    private static final Map<ResourceLocation, Integer> READS = new ConcurrentHashMap<>();
     public static final String FX_PATH = "fx/";
     /** Maximum uncompressed NBT payload for a single effect, including legacy raw-NBT files. */
     private static final long MAX_FX_NBT_BYTES = 64L * 1024 * 1024;
@@ -54,6 +65,7 @@ public class FXHelper {
     public static int clearCache() {
         var count = CACHE.size();
         CACHE.clear();
+        MISSING.clear();
         FXInstances.clear();
         idCache = null;
         generation.incrementAndGet();
@@ -70,6 +82,7 @@ public class FXHelper {
         // and every effect that places one of them as an FX instance, at any depth
         FXInstances.invalidate(fxLocations).forEach(CACHE::remove);
         fxLocations.forEach(CACHE::remove);
+        fxLocations.forEach(MISSING::remove);
         idCache = null;
         generation.incrementAndGet();
         FXPreloader.onInvalidated();
@@ -200,18 +213,49 @@ public class FXHelper {
 
     @Nullable
     public static FX getFX(ResourceLocation fxLocation, boolean useCache) {
-        return useCache ? CACHE.computeIfAbsent(fxLocation, location -> loadFX(fxLocation)) : loadFX(fxLocation);
+        if (!useCache) return loadFX(fxLocation, true);
+        var cached = CACHE.get(fxLocation);
+        if (cached != null) return cached;
+        var retryAt = MISSING.get(fxLocation);
+        if (retryAt != null && System.nanoTime() - retryAt < 0) return null;
+        // a retry once the cool-down is over is silent: the first miss was logged and nothing was reloaded since
+        var fx = CACHE.computeIfAbsent(fxLocation, location -> loadFX(location, retryAt == null));
+        if (fx == null) {
+            MISSING.put(fxLocation, System.nanoTime() + missingRetryNanos);
+        } else {
+            MISSING.remove(fxLocation);
+        }
+        return fx;
+    }
+
+    /** Whether {@link #getFX} is currently answering null for this id without reading it, after a failed load. */
+    public static boolean isKnownMissing(ResourceLocation fxLocation) {
+        var retryAt = MISSING.get(fxLocation);
+        return retryAt != null && System.nanoTime() - retryAt < 0;
+    }
+
+    /** How many times this effect's file was opened for reading since the client started, whether or not it existed. */
+    public static int readAttempts(ResourceLocation fxLocation) {
+        return READS.getOrDefault(fxLocation, 0);
     }
 
     @Nullable
-    private static FX loadFX(ResourceLocation fxLocation) {
-        var tag = readTag(fxLocation);
+    private static FX loadFX(ResourceLocation fxLocation, boolean logFailure) {
+        var tag = readTag(fxLocation, logFailure);
         return tag == null ? null : deserialize(fxLocation, tag);
     }
 
     @Nullable
     public static CompoundTag readTag(ResourceLocation fxLocation) {
+        return readTag(fxLocation, true);
+    }
+
+    /** @param logFailure false for a silent retry of a load that already failed and was logged: neither the game log nor
+     *  the diagnostics hear of it again. */
+    @Nullable
+    private static CompoundTag readTag(ResourceLocation fxLocation, boolean logFailure) {
         var resourceLocation = fileLocation(fxLocation);
+        READS.merge(fxLocation, 1, Integer::sum);
         try (var inputStream = Minecraft.getInstance().getResourceManager().open(resourceLocation)) {
             // Photon 1's exported effects are often raw NBT, while Photon 2 .fx files use gzip NBT.
             // Accept both so old effects stored under assets/<namespace>/fx can be migrated in memory.
@@ -223,7 +267,23 @@ public class FXHelper {
                         + "supported — re-export it (assets travel in .fxpack files now)", fxLocation);
             }
             return tag;
+        } catch (StackOverflowError tooDeep) {
+            // 1.20.1's NBT reader has no nesting limit: a crafted .fx from an untrusted pack can recurse
+            // past the stack. Fail this load gracefully instead of crashing the client (a deep stack
+            // trace is not logged — building it would itself be megabytes).
+            if (!logFailure) return null;
+            Photon.LOGGER.warn("Failed to load fx {} ({}): NBT nesting is too deep", fxLocation, resourceLocation);
+            FXDiagnostics.failure(fxLocation, "read", "NBT nesting is too deep in " + resourceLocation, null, null);
+            return null;
+        } catch (java.io.FileNotFoundException missing) {
+            // the id names no file in any loaded pack, .fxpack or asset folder; a stack trace adds nothing to that
+            if (!logFailure) return null;
+            Photon.LOGGER.warn("Failed to load fx {} ({}): no such file in any loaded resource pack, .fxpack or asset folder; "
+                    + "fix the id or export that effect", fxLocation, resourceLocation);
+            FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation + ": no such file", null, missing);
+            return null;
         } catch (Exception e) {
+            if (!logFailure) return null;
             Photon.LOGGER.warn("Failed to load fx {} ({})", fxLocation, resourceLocation, e);
             FXDiagnostics.failure(fxLocation, "read", "Could not read " + resourceLocation, null, e);
             return null;
@@ -277,6 +337,7 @@ public class FXHelper {
         var fx = deserialize(fxLocation, tag);
         if (fx == null) return null;
         var existing = CACHE.putIfAbsent(fxLocation, fx);
+        MISSING.remove(fxLocation); // e.g. a preload that read a file added after a play asked for it
         return existing != null ? existing : fx;
     }
 
@@ -293,6 +354,12 @@ public class FXHelper {
                         + " objects; see preceding object decode messages", tag, null);
             }
             return fx;
+        } catch (StackOverflowError tooDeep) {
+            // same containment as readTag: deeply nested (or cyclic-reference) data must fail this one
+            // effect, not the client; the partial fx is discarded
+            Photon.LOGGER.warn("Failed to load fx {}: nested data is too deep", fxLocation);
+            FXDiagnostics.failure(fxLocation, "decode", "Nested data is too deep", null, null);
+            return null;
         } catch (Exception e) {
             Photon.LOGGER.warn("Failed to load fx {}", fxLocation, e);
             FXDiagnostics.failure(fxLocation, "decode", "Effect deserialization threw an exception", tag, e);

@@ -4,6 +4,7 @@ import com.lowdragmc.photon.Photon;
 import com.lowdragmc.photon.PhotonNetworking;
 import net.minecraft.Util;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
@@ -45,12 +46,19 @@ public final class FxPackSync {
     private static final int MAX_ZIP_ENTRIES = 20_000;
     private static final int MAX_PACK_CANDIDATES = 4_096;
     private static final Pattern FX_ENTRY = Pattern.compile("assets/[^/]+/fx/.+\\.fx");
+    /** How the client names the copies it downloads from a server: {@code server-<sha256>.fxpack}. */
+    private static final Pattern CLIENT_CACHE_FILE = Pattern.compile("server-[0-9a-f]{64}\\" + SUFFIX);
     private static final int MAX_SERVER_PACKS = 32;
     private static final int MAX_PRIVATE_PACKS = 16;
     private static final int MAX_PACKS = MAX_SERVER_PACKS + MAX_PRIVATE_PACKS;
     private static final long MAX_PRIVATE_PACK_BYTES = 2L * 1024 * 1024 * 1024;
     private static final long MAX_SERVER_PACK_BYTES = 512L * 1024 * 1024;
     private static final long REFRESH_COOLDOWN_NANOS = 5_000_000_000L;
+    static final long UPLOAD_REQUEST_TIMEOUT_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
+    static final long UPLOAD_IDLE_TIMEOUT_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
+    static final long UPLOAD_MAX_DURATION_NANOS = java.util.concurrent.TimeUnit.HOURS.toNanos(1);
+    private static final long UPLOAD_SWEEP_INTERVAL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    private static long lastUploadSweepNanos = Long.MIN_VALUE;
     private static final Map<UUID, Map<String, PackEntry>> OFFERED = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, Path>> OFFERED_FILES = new ConcurrentHashMap<>();
     private static final Map<UUID, Map<String, Long>> NEXT_CHUNK_OFFSETS = new ConcurrentHashMap<>();
@@ -67,6 +75,15 @@ public final class FxPackSync {
             new java.util.concurrent.atomic.AtomicLong();
     /** Validated expansion sizes keyed by content hash, so repeat offers avoid decompressing unchanged packs. */
     private static final Map<String, Long> VALIDATED_PACK_EXPANSIONS = new ConcurrentHashMap<>();
+    /**
+     * Content hashes keyed by {@code path|size|mtime}, so per-login offers do not rehash unchanged private packs.
+     * Private pack files are content-addressed ({@code <sha256>.fxpack}) and never rewritten in place, so the only
+     * way this entry goes stale is a same-size edit inside one millisecond — the manifest hash is then re-checked
+     * against the file on the client before use anyway.
+     */
+    private static final Map<String, String> PRIVATE_HASH_CACHE = new ConcurrentHashMap<>();
+    /** Client cache copies found in the public folder that were already pointed out in the log. */
+    private static final java.util.Set<String> IGNORED_CACHE_COPIES = ConcurrentHashMap.newKeySet();
     /** Concurrent login/refresh offers share one disk scan for a server. */
     private static MinecraftServer scanServer;
     private static CompletableFuture<List<PackEntry>> activeScan;
@@ -86,6 +103,60 @@ public final class FxPackSync {
         offer(player, true);
     }
 
+    /**
+     * The server's pack folder changed and settled ({@link ServerFxPackWatcher}): every player online gets the current
+     * list, exactly as {@code /photon fxpacks} sends it, so an update reaches them without anyone typing the command.
+     * One disk scan is shared by all the offers, and each client skips what it already has.
+     */
+    public static void onPacksChanged(MinecraftServer server, String reason) {
+        var players = List.copyOf(server.getPlayerList().getPlayers());
+        Photon.LOGGER.info("Photon FX packs changed on the server ({}); offering the current list to {} online player(s)",
+                reason, players.size());
+        for (var player : players) {
+            offer(player, false);
+        }
+    }
+
+    /** Expire abandoned prompt requests and partial uploads so a disconnected client cannot hold disk forever. */
+    public static void tickUploads(MinecraftServer server) {
+        long now = System.nanoTime();
+        if (lastUploadSweepNanos != Long.MIN_VALUE
+                && now - lastUploadSweepNanos < UPLOAD_SWEEP_INTERVAL_NANOS) return;
+        lastUploadSweepNanos = now;
+
+        for (var entry : UPLOAD_REQUESTS.entrySet()) {
+            var request = entry.getValue();
+            if (isUploadRequestExpired(request.createdAtNanos, now)
+                    && UPLOAD_REQUESTS.remove(entry.getKey(), request)) {
+                var sender = server.getPlayerList().getPlayer(entry.getKey());
+                if (sender != null) {
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_timeout"));
+                }
+            }
+        }
+        for (var entry : UPLOADS.entrySet()) {
+            var state = entry.getValue();
+            if (isUploadExpired(state.startedAtNanos, state.lastActivityNanos, now)
+                    && UPLOADS.remove(entry.getKey(), state)) {
+                deleteUpload(state);
+                var sender = server.getPlayerList().getPlayer(entry.getKey());
+                if (sender != null) {
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.transfer_timeout"));
+                }
+                Photon.LOGGER.warn("Expired abandoned private Photon FX upload from {}", entry.getKey());
+            }
+        }
+    }
+
+    static boolean isUploadRequestExpired(long createdAtNanos, long nowNanos) {
+        return nowNanos - createdAtNanos >= UPLOAD_REQUEST_TIMEOUT_NANOS;
+    }
+
+    static boolean isUploadExpired(long startedAtNanos, long lastActivityNanos, long nowNanos) {
+        return nowNanos - startedAtNanos >= UPLOAD_MAX_DURATION_NANOS
+                || nowNanos - lastActivityNanos >= UPLOAD_IDLE_TIMEOUT_NANOS;
+    }
+
     /** Ask this player's client to upload its local {@code <gameDir>/ldlib2/assets} tree for one recipient. */
     public static boolean beginLocalResourceUpload(ServerPlayer sender, ServerPlayer recipient) {
         if (sender == null || recipient == null || sender.getServer() == null
@@ -102,21 +173,21 @@ public final class FxPackSync {
         if (sender == null) return;
         if (packet.token() < 0 || packet.size() <= 0 || packet.size() > MAX_PACK_BYTES
                 || !packet.sha256().matches("[0-9a-f]{64}")) {
-            sendUploadStatus(sender, false, "The upload metadata is invalid or exceeds 512 MiB.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.invalid_metadata"));
             return;
         }
         var request = UPLOAD_REQUESTS.get(sender.getUUID());
         if (request == null || request.token != packet.token()) return;
-        if (System.nanoTime() - request.createdAtNanos > java.util.concurrent.TimeUnit.MINUTES.toNanos(10)) {
+        if (System.nanoTime() - request.createdAtNanos >= UPLOAD_REQUEST_TIMEOUT_NANOS) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
-            sendUploadStatus(sender, false, "The transfer took too long to prepare; run the send command again.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_timeout"));
             return;
         }
         var server = sender.getServer();
         var target = server == null ? null : server.getPlayerList().getPlayer(request.recipient);
         if (target == null) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
-            sendUploadStatus(sender, false, "Recipient is no longer online.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.recipient_offline"));
             return;
         }
         var tempDirectory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
@@ -134,7 +205,7 @@ public final class FxPackSync {
         } catch (IOException | RuntimeException failure) {
             UPLOAD_REQUESTS.remove(sender.getUUID(), request);
             deleteUpload(new UploadState(packet.token(), request.recipient, packet.size(), packet.sha256(), temp));
-            sendUploadStatus(sender, false, "Could not prepare the server upload file.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.prepare_failed"));
             Photon.LOGGER.warn("Could not prepare private Photon FX pack upload from {}", sender.getGameProfile().getName(), failure);
         }
     }
@@ -146,17 +217,18 @@ public final class FxPackSync {
         if (packet.offset() != state.received || packet.bytes().length > state.size - state.received) {
             UPLOADS.remove(sender.getUUID(), state);
             deleteUpload(state);
-            sendUploadStatus(sender, false, "The resource upload arrived out of order; please retry.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.out_of_order"));
             return;
         }
         try (var file = new RandomAccessFile(state.temp.toFile(), "rw")) {
             file.seek(state.received);
             file.write(packet.bytes());
             state.received += packet.bytes().length;
+            state.lastActivityNanos = System.nanoTime();
         } catch (IOException failure) {
             UPLOADS.remove(sender.getUUID(), state);
             deleteUpload(state);
-            sendUploadStatus(sender, false, "The upload failed while writing data on the server.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.write_failed"));
             Photon.LOGGER.warn("Could not receive private Photon FX pack from {}", sender.getGameProfile().getName(), failure);
             return;
         }
@@ -170,11 +242,11 @@ public final class FxPackSync {
         try {
             if (Files.size(state.temp) != state.size || !sha256(state.temp).equals(state.sha256)
                     || !inspectFxPack(state.temp, MAX_EXPANDED_PACK_BYTES).valid()) {
-                sendUploadStatus(sender, false, "The archive is invalid or does not contain a Photon FX.");
+                sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.invalid_archive"));
                 return;
             }
             if (recipient == null) {
-                sendUploadStatus(sender, false, "Recipient went offline before the transfer completed.");
+                sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.recipient_left"));
                 return;
             }
             var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
@@ -195,7 +267,7 @@ public final class FxPackSync {
                     }
                 }
                 if (existingFiles >= MAX_PRIVATE_PACKS || existingBytes + state.size > MAX_PRIVATE_PACK_BYTES) {
-                    sendUploadStatus(sender, false, "That player's private FX pack storage is full.");
+                    sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.storage_full"));
                     return;
                 }
                 Files.deleteIfExists(target);
@@ -207,20 +279,18 @@ public final class FxPackSync {
             }
             Photon.LOGGER.info("Stored private Photon FX pack {} for {} from {}", state.sha256,
                     recipient.getGameProfile().getName(), sender.getGameProfile().getName());
-            sendUploadStatus(sender, true, "Sent your ldlib2/assets resources to "
-                    + recipient.getGameProfile().getName() + ". They will reload automatically.");
-            recipient.sendSystemMessage(net.minecraft.network.chat.Component.literal("Photon: received FX/resources from "
-                    + sender.getGameProfile().getName() + "; reloading assets."));
+            sendUploadStatus(sender, true, Component.translatable("photon.fxpack.upload.sent", recipient.getGameProfile().getName()));
+            recipient.sendSystemMessage(Component.translatable("photon.fxpack.upload.received", sender.getGameProfile().getName()));
             offer(recipient, false);
         } catch (IOException | RuntimeException failure) {
-            sendUploadStatus(sender, false, "Could not validate or store the resource pack on the server.");
+            sendUploadStatus(sender, false, Component.translatable("photon.fxpack.upload.store_failed"));
             Photon.LOGGER.warn("Could not finalize private Photon FX pack upload", failure);
         } finally {
             deleteUpload(state);
         }
     }
 
-    private static void sendUploadStatus(ServerPlayer player, boolean success, String message) {
+    private static void sendUploadStatus(ServerPlayer player, boolean success, Component message) {
         PhotonNetworking.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new UploadStatusPacket(success, message));
     }
 
@@ -333,9 +403,37 @@ public final class FxPackSync {
         LAST_REFRESH_NANOS.clear();
         OFFER_TOKENS.clear();
         LATEST_OFFER_TOKENS.clear();
+        PRIVATE_HASH_CACHE.clear();
+        IGNORED_CACHE_COPIES.clear();
+        lastUploadSweepNanos = Long.MIN_VALUE;
         synchronized (FxPackSync.class) {
             activeScan = null;
             scanServer = null;
+        }
+    }
+
+    /**
+     * Drop partial uploads a crash left behind in {@code .incoming}: nothing can be in flight at startup, and each
+     * stale {@code .part} file can hold up to a full pack of disk space forever otherwise.
+     */
+    public static void onServerStarting(MinecraftServer server) {
+        PRIVATE_HASH_CACHE.clear();
+        lastUploadSweepNanos = Long.MIN_VALUE;
+        var incoming = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY).resolve(".incoming");
+        if (!Files.isDirectory(incoming)) return;
+        try (var files = Files.list(incoming)) {
+            for (var path : files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                    && file.getFileName().toString().endsWith(".part")).toList()) {
+                try {
+                    if (Files.deleteIfExists(path)) {
+                        Photon.LOGGER.info("Removed leftover Photon FX upload part {}", path.getFileName());
+                    }
+                } catch (IOException | RuntimeException failure) {
+                    Photon.LOGGER.warn("Could not remove leftover Photon FX upload part {}", path, failure);
+                }
+            }
+        } catch (IOException | RuntimeException failure) {
+            Photon.LOGGER.warn("Could not clean leftover Photon FX upload parts in {}", incoming, failure);
         }
     }
 
@@ -356,6 +454,7 @@ public final class FxPackSync {
         try (var files = Files.list(directory)) {
             var candidates = files.filter(file -> Files.isRegularFile(file, java.nio.file.LinkOption.NOFOLLOW_LINKS))
                     .filter(file -> isSafePackFileName(file.getFileName().toString()))
+                    .filter(file -> !isIgnoredCacheCopy(file.getFileName().toString()))
                     .limit(MAX_PACK_CANDIDATES + 1L).sorted().toList();
             if (candidates.size() > MAX_PACK_CANDIDATES) {
                 Photon.LOGGER.warn("Photon FX pack scan limited to {} candidate files", MAX_PACK_CANDIDATES);
@@ -416,6 +515,8 @@ public final class FxPackSync {
         var directory = server.getServerDirectory().toPath().resolve(PRIVATE_PACK_DIRECTORY)
                 .resolve(recipient.toString()).normalize();
         if (!Files.isDirectory(directory)) return List.of();
+        // the manifest budget is shared with the public packs already scanned: private work may not exceed it
+        var budget = Math.min(Math.max(0, expandedBudget), MAX_TOTAL_EXPANDED_PACK_BYTES);
         var result = new ArrayList<PrivatePack>();
         long total = 0;
         long expandedTotal = 0;
@@ -425,12 +526,22 @@ public final class FxPackSync {
                 if (result.size() >= MAX_PRIVATE_PACKS) break;
                 var size = Files.size(path);
                 if (size <= 0 || size > MAX_PACK_BYTES || total + size > MAX_PRIVATE_PACK_BYTES) continue;
-                var hash = sha256(path);
-                var remainingExpanded = MAX_TOTAL_EXPANDED_PACK_BYTES - expandedTotal;
-                if (remainingExpanded <= 0) break;
-                var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingExpanded));
-                if (!validation.valid()) continue;
-                expandedTotal += validation.expandedBytes();
+                var hash = cachedSha256(path, size);
+                // unchanged packs keep their validated expansion size: a login/respawn/dimension change must not
+                // re-decompress up to 2 GiB per recipient on the background executor
+                var expandedBytes = VALIDATED_PACK_EXPANSIONS.get(hash);
+                if (expandedBytes == null) {
+                    var remainingExpanded = budget - expandedTotal;
+                    if (remainingExpanded <= 0) break;
+                    var validation = inspectFxPack(path, Math.min(MAX_EXPANDED_PACK_BYTES, remainingExpanded));
+                    if (!validation.valid()) continue;
+                    expandedBytes = validation.expandedBytes();
+                    var previous = VALIDATED_PACK_EXPANSIONS.putIfAbsent(hash, expandedBytes);
+                    if (previous != null) expandedBytes = previous;
+                    if (VALIDATED_PACK_EXPANSIONS.size() > 512) VALIDATED_PACK_EXPANSIONS.clear();
+                }
+                if (expandedTotal > budget - expandedBytes) continue;
+                expandedTotal += expandedBytes;
                 total += size;
                 result.add(new PrivatePack(new PackEntry("private-" + hash + SUFFIX, size, hash), path));
             }
@@ -438,6 +549,18 @@ public final class FxPackSync {
             Photon.LOGGER.warn("Could not scan private Photon FX packs for {}", recipient, failure);
         }
         return List.copyOf(result);
+    }
+
+    /** {@link #sha256} behind a size+mtime memo; every caller already bounds how many files it scans. */
+    private static String cachedSha256(Path path, long size) throws IOException {
+        var modified = Files.getLastModifiedTime(path).toMillis();
+        var key = path + "|" + size + "|" + modified;
+        var cached = PRIVATE_HASH_CACHE.get(key);
+        if (cached != null) return cached;
+        var hash = sha256(path);
+        if (PRIVATE_HASH_CACHE.size() > 512) PRIVATE_HASH_CACHE.clear();
+        PRIVATE_HASH_CACHE.put(key, hash);
+        return hash;
     }
 
     /** Result of streaming an untrusted archive; {@code expandedBytes} is actual work already performed. */
@@ -498,6 +621,31 @@ public final class FxPackSync {
         } catch (IOException | RuntimeException e) {
             return new FxPackValidation(false, expanded);
         }
+    }
+
+    /**
+     * A {@code server-<sha256>.fxpack} is what the client calls a copy it downloaded from a server, never a pack an
+     * admin publishes. In singleplayer the integrated server scans the client's own folder, so without this an
+     * updated pack's old version — still there as the client's cache copy — was offered right back, kept mounted next
+     * to the new one and never cleaned up. Said once per name, for the admin who uploads such a copy to a server.
+     */
+    private static boolean isIgnoredCacheCopy(String name) {
+        if (!isClientCacheFileName(name)) return false;
+        if (IGNORED_CACHE_COPIES.add(name)) {
+            Photon.LOGGER.info("Photon FX sync ignores {}: a file named like a client cache copy is not published; "
+                    + "rename it to serve it", name);
+        }
+        return true;
+    }
+
+    /** Whether {@code name} is how the client names its downloaded copies: {@code server-<sha256>.fxpack}. */
+    public static boolean isClientCacheFileName(String name) {
+        return name != null && CLIENT_CACHE_FILE.matcher(name).matches();
+    }
+
+    /** Whether a file of this name in the public folder is one the server publishes (and the folder watcher watches). */
+    public static boolean isPublishedPackFileName(String name) {
+        return isSafePackFileName(name) && !isClientCacheFileName(name);
     }
 
     private static boolean isSafePackFileName(String name) {
@@ -606,6 +754,8 @@ public final class FxPackSync {
         private final long size;
         private final String sha256;
         private final Path temp;
+        private final long startedAtNanos = System.nanoTime();
+        private long lastActivityNanos = startedAtNanos;
         private long received;
 
         private UploadState(long token, UUID recipient, long size, String sha256, Path temp) {
@@ -669,13 +819,14 @@ public final class FxPackSync {
         }
     }
 
-    public record UploadStatusPacket(boolean success, String message) {
+    /** The outcome of a private upload, as a component so the sender's client renders it in its own language. */
+    public record UploadStatusPacket(boolean success, Component message) {
         public static void encode(UploadStatusPacket packet, FriendlyByteBuf buf) {
             buf.writeBoolean(packet.success());
-            buf.writeUtf(packet.message(), 256);
+            buf.writeComponent(packet.message());
         }
         public static UploadStatusPacket decode(FriendlyByteBuf buf) {
-            return new UploadStatusPacket(buf.readBoolean(), buf.readUtf(256));
+            return new UploadStatusPacket(buf.readBoolean(), buf.readComponent());
         }
     }
 

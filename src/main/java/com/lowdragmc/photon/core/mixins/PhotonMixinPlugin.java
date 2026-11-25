@@ -1,6 +1,7 @@
 package com.lowdragmc.photon.core.mixins;
 
 import com.lowdragmc.lowdraglib2.core.mixins.MixinPluginShared;
+import com.lowdragmc.photon.client.compat.iris.ShaderModPresence;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -22,7 +23,7 @@ public class PhotonMixinPlugin implements IMixinConfigPlugin, MixinPluginShared 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (mixinClassName.contains("com.lowdragmc.photon.core.mixins.iris")) {
-            return IS_IRIS_LOAD;
+            return ShaderModPresence.isLoaded(IS_IRIS_LOAD, IS_OCULUS_LOAD);
         }
         return true;
     }

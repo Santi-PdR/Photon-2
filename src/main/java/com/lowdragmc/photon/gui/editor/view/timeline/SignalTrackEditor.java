@@ -87,7 +87,7 @@ public class SignalTrackEditor extends TrackEditor {
             });
             return field;
         }
-        var label = new Label().setText(track.displayName().isEmpty() ? "Signal" : track.displayName());
+        var label = new Label().setText(track.displayName().isEmpty() ? "photon.timeline_track.signal.default_name" : track.displayName());
         TimelineContext.styleLabel(label);
         label.setId("timeline.trackHeader.name").layout(layout -> layout.flex(1).heightPercent(100));
         label.addEventListener(UIEvents.DOUBLE_CLICK, e -> {

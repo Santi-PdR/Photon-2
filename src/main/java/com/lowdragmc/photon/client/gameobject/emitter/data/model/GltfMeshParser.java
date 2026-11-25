@@ -76,6 +76,26 @@ public final class GltfMeshParser {
     /** Malformed files can describe a node cycle; glTF forbids it, so bail rather than recurse forever. */
     private static final int MAX_NODE_DEPTH = 64;
 
+    /** Bounds accessor arithmetic before converting back to NIO's int-indexed ByteBuffer offsets. */
+    static boolean accessorRangeFits(int viewOffset, int viewLength, int bufferLength,
+                                     int accessorOffset, int count, int stride, int elementBytes) {
+        if (viewOffset < 0 || viewLength < 0 || bufferLength < 0 || accessorOffset < 0
+                || count <= 0 || elementBytes <= 0 || stride < elementBytes) return false;
+        long viewEnd = (long) viewOffset + viewLength;
+        long first = (long) viewOffset + accessorOffset;
+        long last = first + (long) (count - 1) * stride + elementBytes;
+        return viewEnd <= bufferLength && first >= viewOffset && last <= viewEnd;
+    }
+
+    static boolean declaredBufferFits(int declaredLength, int availableLength) {
+        return declaredLength >= 0 && availableLength >= 0 && declaredLength <= availableLength;
+    }
+
+    static boolean bufferViewRangeFits(int offset, int length, int declaredBufferLength) {
+        return offset >= 0 && length >= 0 && declaredBufferLength >= 0
+                && (long) offset + length <= declaredBufferLength;
+    }
+
     /** A rigid binding is one joint at full weight. */
     private static final float[] RIGID_WEIGHTS = {1f, 0f, 0f, 0f};
 
@@ -244,6 +264,7 @@ public final class GltfMeshParser {
         private final ExternalBufferResolver externalBuffers;
         private final PhotonMesh.Builder builder = new PhotonMesh.Builder();
         private final List<byte[]> buffers = new ArrayList<>();
+        private final List<Integer> declaredBufferLengths = new ArrayList<>();
         private long bufferBytes;
 
         // reused per triangle corner so a large mesh doesn't allocate per vertex; x,y,z,u,v,nx,ny,nz,
@@ -921,10 +942,13 @@ public final class GltfMeshParser {
             var declared = array("buffers");
             for (int i = 0; i < declared.size(); i++) {
                 var buffer = declared.get(i).getAsJsonObject();
+                if (!buffer.has("byteLength")) throw new IOException("buffer " + i + " has no byteLength");
+                int declaredLength = buffer.get("byteLength").getAsInt();
+                if (declaredLength < 0) throw new IOException("buffer " + i + " has a negative byteLength");
                 if (!buffer.has("uri")) {
                     // No uri = the GLB binary chunk, which by spec can only be buffer 0.
                     if (i == 0 && glbBin != null) {
-                        addBuffer(glbBin);
+                        addBuffer(glbBin, declaredLength);
                         continue;
                     }
                     throw new IOException("buffer " + i + " has no uri and there is no glb binary chunk");
@@ -935,23 +959,28 @@ public final class GltfMeshParser {
                         throw new IOException("buffer " + i + " points at external file '" + uri
                                 + "' but no model resource location was supplied");
                     }
-                    addBuffer(externalBuffers.load(uri));
+                    addBuffer(externalBuffers.load(uri), declaredLength);
                     continue;
                 }
                 int comma = uri.indexOf(',');
                 if (comma < 0 || uri.lastIndexOf("base64", comma) < 0) {
                     throw new IOException("buffer " + i + " uses a non-base64 data uri");
                 }
-                addBuffer(Base64.getDecoder().decode(uri.substring(comma + 1)));
+                addBuffer(Base64.getDecoder().decode(uri.substring(comma + 1)), declaredLength);
             }
         }
 
-        private void addBuffer(byte[] data) throws IOException {
+        private void addBuffer(byte[] data, int declaredLength) throws IOException {
+            if (!declaredBufferFits(declaredLength, data.length)) {
+                throw new IOException("glTF buffer declares " + declaredLength
+                        + " bytes but only " + data.length + " are available");
+            }
             if (data.length > ModelInput.MAX_FILE_BYTES - bufferBytes) {
                 throw new IOException("glTF decoded buffers exceed the " + ModelInput.MAX_FILE_BYTES + " byte limit");
             }
             bufferBytes += data.length;
             buffers.add(data);
+            declaredBufferLengths.add(declaredLength);
         }
 
         /** An accessor's values as floats, {@code components} per element, or null if unreadable. */
@@ -968,13 +997,16 @@ public final class GltfMeshParser {
             int componentSize = componentSize(componentType);
             if (componentSize == 0) return null;
 
+            // With no bufferView, the accessor's base values are zero; an invalid declared view is not.
+            if (!accessor.has("bufferView")) return new float[count * components];
             var view = bufferView(accessor);
-            if (view == null) {
-                return new float[count * components]; // no bufferView = all zeroes, per spec
-            }
+            if (view == null) return null;
             int stride = view.stride() > 0 ? view.stride() : components * componentSize;
-            int base = view.offset() + (accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0);
+            int accessorOffset = accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0;
             var data = view.data();
+            if (!accessorRangeFits(view.offset(), view.length(), data.limit(), accessorOffset,
+                    count, stride, components * componentSize)) return null;
+            int base = view.offset() + accessorOffset;
             var out = new float[count * components];
             for (int i = 0; i < count; i++) {
                 int element = base + i * stride;
@@ -999,8 +1031,11 @@ public final class GltfMeshParser {
             var view = bufferView(accessor);
             if (view == null) return null;
             int stride = view.stride() > 0 ? view.stride() : componentSize;
-            int base = view.offset() + (accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0);
+            int accessorOffset = accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0;
             var data = view.data();
+            if (!accessorRangeFits(view.offset(), view.length(), data.limit(), accessorOffset,
+                    count, stride, componentSize)) return null;
+            int base = view.offset() + accessorOffset;
             var out = new int[count];
             for (int i = 0; i < count; i++) {
                 int at = base + i * stride;
@@ -1015,7 +1050,7 @@ public final class GltfMeshParser {
             return out;
         }
 
-        private record View(ByteBuffer data, int offset, int stride) {
+        private record View(ByteBuffer data, int offset, int length, int stride) {
         }
 
         private View bufferView(JsonObject accessor) {
@@ -1028,8 +1063,12 @@ public final class GltfMeshParser {
             if (bufferIndex < 0 || bufferIndex >= buffers.size()) return null;
             var data = ByteBuffer.wrap(buffers.get(bufferIndex)).order(ByteOrder.LITTLE_ENDIAN);
             int offset = view.has("byteOffset") ? view.get("byteOffset").getAsInt() : 0;
+            if (!view.has("byteLength")) return null;
+            int length = view.get("byteLength").getAsInt();
             int stride = view.has("byteStride") ? view.get("byteStride").getAsInt() : 0;
-            return new View(data, offset, stride);
+            if (stride < 0 || !bufferViewRangeFits(offset, length,
+                    declaredBufferLengths.get(bufferIndex))) return null;
+            return new View(data, offset, length, stride);
         }
 
         private static float readComponent(ByteBuffer data, int at, int componentType, boolean normalized) {

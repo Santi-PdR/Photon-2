@@ -80,7 +80,7 @@ public class TrackGroupEditor extends TrackEditor {
             field.addEventListener(UIEvents.TICK, e -> { if (!focused[0]) { focused[0] = true; field.focus(); } });
             row.addChild(field);
         } else {
-            var label = new Label().setText(track.displayName().isEmpty() ? "Group" : track.displayName());
+            var label = new Label().setText(track.displayName().isEmpty() ? "photon.timeline_track.group.default_name" : track.displayName());
             TimelineContext.styleLabel(label);
             label.setId("timeline.trackHeader.name").layout(layout -> layout.flex(1).heightPercent(100));
             label.addEventListener(UIEvents.DOUBLE_CLICK, e -> {

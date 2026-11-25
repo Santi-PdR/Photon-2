@@ -114,10 +114,12 @@ public abstract class PhotonFXRenderPass {
     }
 
     protected final boolean drawParticlesInternal(List<MaterialSetting> materials, RenderPassPipeline pipeline, Collection<IParticle> particles, Camera camera, float partialTicks) {
-        if (useInstancing()) {
-            return drawInstanced(materials, pipeline, particles, camera, partialTicks);
+        if (useInstancing() && drawInstanced(materials, pipeline, particles, camera, partialTicks)) {
+            return true;
         }
 
+        // An instanced backend may decline a batch that exceeds a device buffer-texture limit;
+        // keep the effect visible through the ordinary CPU renderer instead of silently dropping it.
         var records = beginCpuRecords(materials, particles.size());
 
         // prepare mesh data

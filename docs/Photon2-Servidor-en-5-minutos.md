@@ -46,7 +46,7 @@ Si eres operador y quieres mandar tu carpeta local `<instancia>/ldlib2/assets` a
 /photon fx send Oz
 ```
 
-El cliente del operador primero muestra **Confirm upload / Cancel**; no se lee ningún archivo hasta que confirmes. Después el servidor entrega el pack solo a Oz, lo conserva para sus próximas conexiones y su cliente recarga los recursos automáticamente.
+El cliente del operador primero muestra **[Confirmar subida] / [Cancelar]** (en el idioma del juego); no se lee ningún archivo hasta que confirmes. Después el servidor entrega el pack solo a Oz, lo conserva para sus próximas conexiones y su cliente recarga los recursos automáticamente.
 
 Para crear un archivo y compartirlo por Discord u otro servicio, ejecuta en tu cliente:
 
@@ -85,5 +85,7 @@ La galería de Kila ofrece **materiales listos para aplicar** (por ejemplo, la n
 - Comprueba el ID: `namespace:nombre`, no el nombre del ZIP.
 - Para actualizar a jugadores conectados, usa `/photon fxpacks`; para que un jugador vuelva a preguntar, `/photon_client fxpacks`.
 - Los FX personalizados necesitan todos sus recursos. Exporta con **Export FXPack...** para que Photon incluya lo que el proyecto referencia.
+- Si el juego **no arranca** y el log dice `ResolutionException: Modules thedarkcolour.kotlinforforge and kotlin.stdlib export package kotlin...`, el JAR de Photon es anterior a la ronda 18 (noviembre de 2026): esa versión llevaba una librería Kotlin suelta que chocaba con **Kotlin for Forge**. No quites Kotlin for Forge ni los mods que lo usan; actualiza el JAR de Photon (el actual lleva su propio runtime Kotlin, aislado, y convive con KFF).
+- Si el log dice `ResolutionException: Modules citadel and jaad.MILESTONE export package net.sourceforge.jaad...` (o lo mismo con `javazoom`/`biniu` y otro mod), el JAR de Photon es anterior a la ronda 19: embebía los códecs de audio (JAAD, jLayer, jVorbisEnc) como librerías sueltas y **Citadel** lleva su propia copia de JAAD. No quites Citadel; actualiza el JAR de Photon (desde la ronda 19 los códecs van dentro del propio JAR con paquetes propios y no chocan con nadie).
 
 Para la explicación técnica, tamaños máximos y diagnóstico de logs, consulta la [guía completa de FX packs](Photon2-FXPack-Guia-Servidor.md).
