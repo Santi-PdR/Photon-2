@@ -76,6 +76,17 @@ public final class GltfMeshParser {
     /** Malformed files can describe a node cycle; glTF forbids it, so bail rather than recurse forever. */
     private static final int MAX_NODE_DEPTH = 64;
 
+    /** Bounds accessor arithmetic before converting back to NIO's int-indexed ByteBuffer offsets. */
+    static boolean accessorRangeFits(int viewOffset, int viewLength, int bufferLength,
+                                     int accessorOffset, int count, int stride, int elementBytes) {
+        if (viewOffset < 0 || viewLength < 0 || bufferLength < 0 || accessorOffset < 0
+                || count <= 0 || elementBytes <= 0 || stride < elementBytes) return false;
+        long viewEnd = (long) viewOffset + viewLength;
+        long first = (long) viewOffset + accessorOffset;
+        long last = first + (long) (count - 1) * stride + elementBytes;
+        return viewEnd <= bufferLength && first >= viewOffset && last <= viewEnd;
+    }
+
     /** A rigid binding is one joint at full weight. */
     private static final float[] RIGID_WEIGHTS = {1f, 0f, 0f, 0f};
 
@@ -968,13 +979,16 @@ public final class GltfMeshParser {
             int componentSize = componentSize(componentType);
             if (componentSize == 0) return null;
 
+            // With no bufferView, the accessor's base values are zero; an invalid declared view is not.
+            if (!accessor.has("bufferView")) return new float[count * components];
             var view = bufferView(accessor);
-            if (view == null) {
-                return new float[count * components]; // no bufferView = all zeroes, per spec
-            }
+            if (view == null) return null;
             int stride = view.stride() > 0 ? view.stride() : components * componentSize;
-            int base = view.offset() + (accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0);
+            int accessorOffset = accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0;
             var data = view.data();
+            if (!accessorRangeFits(view.offset(), view.length(), data.limit(), accessorOffset,
+                    count, stride, components * componentSize)) return null;
+            int base = view.offset() + accessorOffset;
             var out = new float[count * components];
             for (int i = 0; i < count; i++) {
                 int element = base + i * stride;
@@ -999,8 +1013,11 @@ public final class GltfMeshParser {
             var view = bufferView(accessor);
             if (view == null) return null;
             int stride = view.stride() > 0 ? view.stride() : componentSize;
-            int base = view.offset() + (accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0);
+            int accessorOffset = accessor.has("byteOffset") ? accessor.get("byteOffset").getAsInt() : 0;
             var data = view.data();
+            if (!accessorRangeFits(view.offset(), view.length(), data.limit(), accessorOffset,
+                    count, stride, componentSize)) return null;
+            int base = view.offset() + accessorOffset;
             var out = new int[count];
             for (int i = 0; i < count; i++) {
                 int at = base + i * stride;
@@ -1015,7 +1032,7 @@ public final class GltfMeshParser {
             return out;
         }
 
-        private record View(ByteBuffer data, int offset, int stride) {
+        private record View(ByteBuffer data, int offset, int length, int stride) {
         }
 
         private View bufferView(JsonObject accessor) {
@@ -1028,8 +1045,11 @@ public final class GltfMeshParser {
             if (bufferIndex < 0 || bufferIndex >= buffers.size()) return null;
             var data = ByteBuffer.wrap(buffers.get(bufferIndex)).order(ByteOrder.LITTLE_ENDIAN);
             int offset = view.has("byteOffset") ? view.get("byteOffset").getAsInt() : 0;
+            if (!view.has("byteLength")) return null;
+            int length = view.get("byteLength").getAsInt();
             int stride = view.has("byteStride") ? view.get("byteStride").getAsInt() : 0;
-            return new View(data, offset, stride);
+            if (offset < 0 || length < 0 || stride < 0 || (long) offset + length > data.limit()) return null;
+            return new View(data, offset, length, stride);
         }
 
         private static float readComponent(ByteBuffer data, int at, int componentType, boolean normalized) {
