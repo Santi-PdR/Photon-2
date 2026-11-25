@@ -583,6 +583,7 @@ jobs:
             '[builtin-material-picker-smoke] Kila and all built-in material presets are listed in the material selector'
             '[trail-fast-movement-smoke] high-speed trail movement is sub-sampled with a 64-point cap'
             '[trail-history-bound-smoke] classic trail history and smoothed output stay bounded, retaining newest points'
+            '[managed-list-bounds-smoke] persisted material, burst and sub-emitter lists reject unsafe counts'
             '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points'
             '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits'
             '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate'
@@ -960,6 +961,7 @@ jobs:
           grep -Fq '[sub-emitter-cycle-smoke] an effect spawning itself by sub-emitter is refused once and ordinary spawns still run' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[trail-smooth-bound-smoke] a teleported smoothed trail adds at most 64 points per segment and keeps its density elsewhere' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[trail-history-bound-smoke] classic trail history and smoothed output stay bounded, retaining newest points' "$RUNNER_TEMP/photon-client.log"
+          grep -Fq '[managed-list-bounds-smoke] persisted material, burst and sub-emitter lists reject unsafe counts' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[aratrail-point-bounds-smoke] malformed smoothness is clamped and trail history stays within 2046 points' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[point-buffer-capacity-smoke] particle, shadergraph and custom-data uploads respect OpenGL texture-buffer and Java staging limits' "$RUNNER_TEMP/photon-client.log"
           grep -Fq '[cpu-record-capacity-smoke] oversized CPU records degrade safely and recreated TBO stores reallocate' "$RUNNER_TEMP/photon-client.log"

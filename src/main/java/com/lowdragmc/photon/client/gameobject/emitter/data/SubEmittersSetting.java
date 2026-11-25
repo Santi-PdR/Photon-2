@@ -153,18 +153,20 @@ public class SubEmittersSetting extends ToggleGroup {
     }
 
     public IntTag emittersSerialize(List<Emitter> emitters) {
-        return IntTag.valueOf(emitters.size());
+        return IntTag.valueOf(LDLibPersistenceCompat.checkedManagedListCount(emitters.size(), "sub-emitter"));
     }
 
     public List<Emitter> emittersDeserialize(Tag uid) {
         if (uid instanceof IntTag count) {
-            var values = new ArrayList<Emitter>();
-            for (int i = 0; i < count.getAsInt(); i++) values.add(new Emitter());
+            int size = LDLibPersistenceCompat.checkedManagedListCount(count.getAsInt(), "sub-emitter");
+            var values = new ArrayList<Emitter>(size);
+            for (int i = 0; i < size; i++) values.add(new Emitter());
             return values;
         }
         if (!(uid instanceof ListTag tag)) {
             throw new IllegalArgumentException("Unsupported managed SubEmittersSetting list UID: " + uid.getClass().getSimpleName());
         }
+        LDLibPersistenceCompat.checkedManagedListCount(tag.size(), "sub-emitter");
         var groups = new ArrayList<Emitter>();
         for (CompoundTag emitterTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var emitter = new Emitter();

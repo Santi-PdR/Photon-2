@@ -3337,6 +3337,7 @@ public final class PhotonFXEditorSmokeTest {
         verifyPhoton1Compatibility();
         verifyPlaybackRateBounds();
         verifyBlendPresetClassification();
+        com.lowdragmc.photon.client.util.LDLibPersistenceCompatRegression.verify();
         com.lowdragmc.photon.client.gameobject.emitter.data.material.UIResourceMaterialRegression.verify();
         Photon.LOGGER.info("[material-reference-cycle-smoke] resource material chains resolve and cycles fall back safely");
         com.lowdragmc.photon.gui.editor.resource.MaterialPersistenceRegression.verify();

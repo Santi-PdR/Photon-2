@@ -186,18 +186,20 @@ public class RendererSetting {
     }
 
     public IntTag materialSerialize(List<MaterialSetting> value) {
-        return IntTag.valueOf(value.size());
+        return IntTag.valueOf(LDLibPersistenceCompat.checkedManagedListCount(value.size(), "material"));
     }
 
     public List<MaterialSetting> materialDeserialize(Tag uid) {
         if (uid instanceof IntTag count) {
-            var values = new ArrayList<MaterialSetting>();
-            for (int i = 0; i < count.getAsInt(); i++) values.add(addDefaultMaterial());
+            int size = LDLibPersistenceCompat.checkedManagedListCount(count.getAsInt(), "material");
+            var values = new ArrayList<MaterialSetting>(size);
+            for (int i = 0; i < size; i++) values.add(addDefaultMaterial());
             return values;
         }
         if (!(uid instanceof ListTag tag)) {
             throw new IllegalArgumentException("Unsupported managed RendererSetting list UID: " + uid.getClass().getSimpleName());
         }
+        LDLibPersistenceCompat.checkedManagedListCount(tag.size(), "material");
         var materials = new ArrayList<MaterialSetting>();
         for (CompoundTag materialTag : LDLibPersistenceCompat.decodePayloadList(tag)) {
             var material = addDefaultMaterial();
